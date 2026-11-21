@@ -296,7 +296,7 @@ public struct McpOAuthFlow: Sendable {
     static let pasteRedirectPorts: ClosedRange<UInt16> = 49152...65535
 
     let http: McpOAuthHTTP
-    let resource: URL
+    var resource: URL
     let browser: any AuthorizationBrowser
     let callbackTimeout: Duration
     let diagnostics: Diagnostics

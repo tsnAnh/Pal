@@ -31,11 +31,19 @@ from tools.connectors.mcp_oauth_redirect import (
     is_registration_refusal,
 )
 from tools.mcp_accounts import registration_name
+from tools.mcp_oauth import device_sign_in_connector
 from tui_gateway import mcp_oauth_redirects
 
 
 class AdminApprovalPending(RuntimeError):
     """The vendor says an admin of the owner's organisation must approve Pal; carries no vendor text."""
+
+
+class DeviceSignInRequired(RuntimeError):
+    """The vendor registers only loopback redirects of the owner's own device, so this host's redirects are never tried."""
+
+
+DEVICE_SIGNIN_MESSAGE = "This app signs in on your own device. Sign in from the Pal app on your phone, tablet or Mac."
 
 
 # session_id -> record wrapping the shared DashboardOAuthFlow bridge plus bookkeeping.
@@ -206,6 +214,8 @@ def start_flow(
     from tools.mcp_oauth import signs_in_on_owner_app
     if signs_in_on_owner_app(cfg):
         raise RuntimeError(f"'{server_name}' signs in on your own computer, not on this host. Sign in from the Pal app on your phone, tablet or Mac.")
+    if (client_redirect_uri is None or is_app_redirect(client_redirect_uri)) and device_sign_in_connector(server_name):
+        raise DeviceSignInRequired(DEVICE_SIGNIN_MESSAGE)
     if client_redirect_uri is not None:
         client_redirect_uri = _validate_client_redirect_uri(client_redirect_uri)
     if fallback_redirect_uri is not None:

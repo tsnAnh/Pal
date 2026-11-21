@@ -126,8 +126,8 @@ public struct ConnectAppsService: Sendable {
 
     public func connect(_ app: ConnectApp, credentials: [String: String] = [:], account: ConnectorAccountTarget? = nil) async throws {
         switch app.source {
+        case .catalog where app.requiresAppSignIn: try await connectOnDevice(app, account: account)
         case .catalog(let entry): try await connectCatalog(entry, credentials: credentials, account: account)
-        case .mcp where app.requiresAppSignIn: try await connectUpwork(app, account: account)
         case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials, account: account)
         case .custom(let info):
             do { _ = try await testCustomConnector(name: info.name) } catch { throw ConnectAppsError.failed }

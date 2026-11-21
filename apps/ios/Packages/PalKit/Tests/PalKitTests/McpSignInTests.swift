@@ -13,7 +13,7 @@ private func notion(state: ConnectAppState = .disconnected) -> ConnectApp {
 }
 
 private func upwork() -> ConnectApp {
-    ConnectApp(id: "mcp:upwork", name: "Upwork", summary: "", category: "Other", source: .mcp(name: "upwork", requires: []), state: .disconnected)
+    deviceSignInApp()
 }
 
 private func refusal(_ message: String, reason: String? = nil) -> CustomRPC.Reply {

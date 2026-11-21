@@ -1016,7 +1016,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. sign_in device: the vendor registers only the owner's own device as a redirect, so the app signs in there and hands the tokens over with auth.submit_oauth_tokens; mcp.servers.oauth.start answers 4034 with reason SIGNIN_ON_DEVICE for the gateway and app redirects of such a connector.",
       "params": [
         {
           "name": "params",
@@ -17198,6 +17198,15 @@
             },
             "title": "Accounts",
             "type": "array"
+          },
+          "sign_in": {
+            "default": "gateway",
+            "enum": [
+              "gateway",
+              "device"
+            ],
+            "title": "Sign In",
+            "type": "string"
           }
         },
         "required": [
@@ -53986,7 +53995,8 @@
           "CONNECT_FAILED",
           "INVALID_TOKEN",
           "CHECK_UNAVAILABLE",
-          "ADMIN_APPROVAL_PENDING"
+          "ADMIN_APPROVAL_PENDING",
+          "SIGNIN_ON_DEVICE"
         ]
       },
       "AccountSubscription": {
@@ -67779,7 +67789,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. sign_in device: the vendor registers only the owner's own device as a redirect, so the app signs in there and hands the tokens over with auth.submit_oauth_tokens; mcp.servers.oauth.start answers 4034 with reason SIGNIN_ON_DEVICE for the gateway and app redirects of such a connector.",
       "params": [
         {
           "name": "params",

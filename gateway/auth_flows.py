@@ -462,13 +462,13 @@ class McpServerFlow:
         return entry is not None and entry.auth.type == "api_key"
 
     async def begin(self) -> None:
-        from tools.mcp_oauth import signs_in_on_owner_app
+        from tools.mcp_oauth import device_sign_in_connector, signs_in_on_owner_app
         target = await asyncio.to_thread(resolve_account_target, self._home, self._server, self._alias)
         cfg = target.cfg if target is not None else None
         kind = classify_mcp_server(cfg)
         if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
             kind = "api_key"
-        if kind == "oauth" and signs_in_on_owner_app(cfg):
+        if kind == "oauth" and (signs_in_on_owner_app(cfg) or await asyncio.to_thread(device_sign_in_connector, self._server)):
             self._inner = OwnerComputerFlow(self._server)
         elif kind == "oauth":
             paste = McpPasteFlow(self._home, self._server, self._alias)

@@ -270,7 +270,11 @@ public final class McpSignInController: Identifiable {
 
     private func run() async {
         do {
-            if app.requiresAppSignIn { try await signInUpwork() } else { try await signInPreset() }
+            do {
+                if app.requiresAppSignIn { try await signInOnDevice() } else { try await signInPreset() }
+            } catch ConnectAppsError.signInRefused(_, let fault) where McpDeviceSignIn.isRefusal(fault) {
+                try await signInOnDevice()
+            }
         } catch {
             resolve(error)
         }
@@ -286,13 +290,13 @@ public final class McpSignInController: Identifiable {
         }
     }
 
-    private func signInUpwork() async throws {
+    private func signInOnDevice() async throws {
         noteStart(privateWindowHint: account?.selectsAccount == true)
         if platform.returnsAutomatically {
-            try await service.connectUpwork(app, account: account)
+            try await service.connectOnDevice(app, account: account)
             await succeed()
         } else {
-            try await offerPaste(try await service.beginUpworkPaste(app, account: account))
+            try await offerPaste(try await service.beginDevicePaste(app, account: account))
         }
     }
 

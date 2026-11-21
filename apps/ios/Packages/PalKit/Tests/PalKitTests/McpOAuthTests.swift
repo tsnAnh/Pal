@@ -348,10 +348,7 @@ private final class FakeAuthServerIssuerMismatch: HTTPTransport {
 }
 
 private func disconnectedUpwork() -> ConnectApp {
-    ConnectApp(
-        id: "mcp:upwork", name: "Upwork", summary: "", category: "Other",
-        source: .mcp(name: "upwork", requires: []), state: .disconnected
-    )
+    deviceSignInApp()
 }
 
 @Suite("Upwork connect through the service")

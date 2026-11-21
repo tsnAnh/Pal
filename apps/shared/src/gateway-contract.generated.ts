@@ -1737,6 +1737,7 @@ export interface ConnectorCatalogRow {
   featured?: boolean
   multi_account?: boolean
   accounts?: ConnectionAccountRow[]
+  sign_in?: 'gateway' | 'device'
 }
 export type ConnectorCatalogStatus = 'connected' | 'needs_reconnect' | 'not_connected' | 'needs_setup'
 export interface SetupGuide {
@@ -1953,7 +1954,7 @@ export interface ConnectorSetupCheckResult {
   message?: string | null
   account?: string | null
 }
-export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED' | 'INVALID_TOKEN' | 'CHECK_UNAVAILABLE' | 'ADMIN_APPROVAL_PENDING'
+export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED' | 'INVALID_TOKEN' | 'CHECK_UNAVAILABLE' | 'ADMIN_APPROVAL_PENDING' | 'SIGNIN_ON_DEVICE'
 export interface ConnectorAccountsParams {
   profile?: string | null
   connector?: string | null
@@ -8614,7 +8615,7 @@ export interface RpcMethods {
   'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
   /** Name or rename one hosted connector account owned by the scoped member. */
   'connectors.accounts.rename': { params: ConnectorAccountsRenameParams; result: ConnectorAccountRow }
-  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. */
+  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. sign_in device: the vendor registers only the owner's own device as a redirect, so the app signs in there and hands the tokens over with auth.submit_oauth_tokens; mcp.servers.oauth.start answers 4034 with reason SIGNIN_ON_DEVICE for the gateway and app redirects of such a connector. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
@@ -9691,7 +9692,7 @@ export interface CanonicalRpcMethods {
   'connectors.accounts': { params: ConnectorAccountsParams; result: ConnectorAccountsResult }
   /** Remove one hosted connector account owned by the scoped member. */
   'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
-  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. */
+  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. sign_in device: the vendor registers only the owner's own device as a redirect, so the app signs in there and hands the tokens over with auth.submit_oauth_tokens; mcp.servers.oauth.start answers 4034 with reason SIGNIN_ON_DEVICE for the gateway and app redirects of such a connector. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }

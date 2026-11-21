@@ -75,6 +75,9 @@ extension ConnectAppsService {
         guard case .rpc(let rpc) = error else { return .failed }
         if rpc.code == accountExistsCode { return .accountName(.taken) }
         if McpAdminApproval.isPending(rpc.data?["reason"]?.stringValue) { return .adminApprovalPending }
+        if McpDeviceSignIn.isWireReason(rpc.data?["reason"]?.stringValue) {
+            return .signInRefused(McpSignInFailure.classify(rpc.message), McpDeviceSignIn.refusal(rpc, method: "mcp.servers.oauth.start"))
+        }
         return .signInRefused(McpSignInFailure.classify(rpc.message), GatewayFault(rpc, method: "mcp.servers.oauth.start"))
     }
 

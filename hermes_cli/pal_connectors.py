@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass
 from enum import Enum
@@ -23,6 +24,11 @@ class ConnectionMethod(str, Enum):
     API_KEY = "api_key"
     NATIVE = "native"
     NONE = "none"
+
+
+class SignIn(str, Enum):
+    GATEWAY = "gateway"
+    DEVICE = "device"
 
 
 MULTI_ACCOUNT_METHODS = frozenset({ConnectionMethod.MCP_OAUTH, ConnectionMethod.OAUTH_CLIENT, ConnectionMethod.API_KEY})
@@ -103,6 +109,7 @@ class PalConnector:
     notes: str | None = None
     setup: SetupGuide | None = None
     stdio: StdioRecipe | None = None
+    sign_in: SignIn = SignIn.GATEWAY
 
     @property
     def multi_account(self) -> bool:
@@ -115,7 +122,7 @@ class PalCatalogError(ValueError):
 
 
 _REQUIRED = ("id", "name", "description", "icon", "category", "method", "verified", "source")
-_OPTIONAL = ("mcp_url", "oauth", "scopes", "notes", "setup", "stdio")
+_OPTIONAL = ("mcp_url", "oauth", "scopes", "notes", "setup", "stdio", "sign_in")
 
 
 def _https(value: object, field: str, cid: str) -> str:
@@ -204,6 +211,18 @@ def _parse_stdio(raw: object, cid: str) -> StdioRecipe:
     return StdioRecipe(_text(raw, "command", where), tuple(args), tuple(env.items()))
 
 
+def _parse_sign_in(raw: object, cid: str, method: ConnectionMethod, mcp_url: str | None) -> SignIn:
+    if raw is None:
+        return SignIn.GATEWAY
+    try:
+        sign_in = SignIn(raw)
+    except ValueError as exc:
+        raise PalCatalogError(f"{cid}: unknown sign_in {raw!r}") from exc
+    if sign_in is SignIn.DEVICE and (method is not ConnectionMethod.MCP_OAUTH or mcp_url is None):
+        raise PalCatalogError(f"{cid}: sign_in device needs an mcp_oauth entry with an mcp_url")
+    return sign_in
+
+
 def _parse_entry(raw: object) -> PalConnector:
     if not isinstance(raw, dict):
         raise PalCatalogError("connector entry must be a mapping")
@@ -237,12 +256,13 @@ def _parse_entry(raw: object) -> PalConnector:
         raise PalCatalogError(f"{cid}: bot_token_stdio entries carry a stdio recipe")
     if stdio is not None and method not in (ConnectionMethod.BOT_TOKEN_STDIO, ConnectionMethod.OAUTH_CLIENT):
         raise PalCatalogError(f"{cid}: only bot_token_stdio and oauth_client entries carry a stdio recipe")
+    sign_in = _parse_sign_in(raw.get("sign_in"), cid, method, mcp_url)
     return PalConnector(
         id=raw["id"], name=raw["name"], icon=raw["icon"], category=raw["category"], method=method,
         verified=raw["verified"], source=_https(raw["source"], "source", cid), description=raw["description"].strip(),
         mcp_url=mcp_url, oauth=oauth,
         scopes=tuple(scopes), notes=raw.get("notes"),
-        setup=_parse_setup(raw["setup"], cid) if raw.get("setup") is not None else None, stdio=stdio,
+        setup=_parse_setup(raw["setup"], cid) if raw.get("setup") is not None else None, stdio=stdio, sign_in=sign_in,
     )
 
 
@@ -257,3 +277,8 @@ def load_pal_connectors(path: Path = CATALOG_PATH) -> tuple[PalConnector, ...]:
             raise PalCatalogError(f"duplicate connector id {entry.id}")
         seen.add(entry.id)
     return entries
+
+
+@functools.cache
+def device_sign_in_urls() -> dict[str, str]:
+    return {e.id: e.mcp_url for e in load_pal_connectors() if e.sign_in is SignIn.DEVICE and e.mcp_url}

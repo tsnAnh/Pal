@@ -63,6 +63,19 @@ public enum McpAdminApproval {
     static func isPending(_ reason: String?) -> Bool { reason == wireReason }
 }
 
+enum McpDeviceSignIn {
+    static let wireReason = "SIGNIN_ON_DEVICE"
+    static let faultReason = "signin_on_device"
+
+    static func isWireReason(_ reason: String?) -> Bool { reason == wireReason }
+
+    static func isRefusal(_ fault: GatewayFault) -> Bool { fault.reason == faultReason }
+
+    static func refusal(_ rpc: RPCError, method: String) -> GatewayFault {
+        GatewayFault(code: rpc.code, reason: faultReason, trace: rpc.trace ?? .random(), method: method, source: .gateway, gatewayVersion: rpc.gatewayVersion)
+    }
+}
+
 public protocol McpPasteSigning: Sendable {
     var authorizeURL: URL { get }
     func submit(_ pasted: String) async -> McpPasteOutcome
@@ -178,7 +191,7 @@ extension ConnectAppsService {
         let name: String
         let adding: Bool
         switch app.source {
-        case .mcp(let preset, let requires) where requires.isEmpty && !app.requiresAppSignIn:
+        case .mcp(let preset, let requires) where requires.isEmpty:
             name = preset
             adding = app.state == .disconnected
             if adding { _ = try await call("mcp.servers.add", ["name": .string(name), "preset": .string(name)]) }

@@ -18,6 +18,7 @@ transport:
 
 auth:
   type: oauth
+  signin_on: owner_app
 
 # Excluded: per-person viewer tracking (incl. emails) — privacy-sensitive
 # telemetry-grade analytics; get_gamma_analytics covers the useful case.
