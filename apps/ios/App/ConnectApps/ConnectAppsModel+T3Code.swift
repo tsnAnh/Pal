@@ -1,7 +1,7 @@
 import Foundation
 import PalConnect
 
-struct T3FlowSheet: Identifiable {
+struct AddressFlowItem: Identifiable {
     let id = UUID()
     let model: StepFlowModel
 }
@@ -17,7 +17,7 @@ extension ConnectAppsModel {
         let model = StepFlowModel(
             engine: engine, runner: T3CodeFlow.runner(service: service), classify: { T3CodeFlow.classify($0) }
         )
-        t3Flow = T3FlowSheet(model: model)
+        t3Flow = AddressFlowItem(model: model)
     }
 
     func probeT3Code() async {

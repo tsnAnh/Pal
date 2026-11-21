@@ -52,6 +52,7 @@ class DashboardOAuthFlow:
     discovery_error: str = ""
     # The user abandoned this flow: terminal for good, never re-minted (see publish_authorization_url).
     cancelled: bool = field(default=False, init=False)
+    client_metadata_url: str | None = field(default=None, init=False)
     expected_state: str | None = field(default=None, init=False)
     _callback: tuple[str, str | None, str | None] | None = field(default=None, init=False, repr=False)
     _callback_error: str | None = field(default=None, init=False, repr=False)

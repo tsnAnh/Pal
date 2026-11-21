@@ -14,6 +14,7 @@ from contextlib import suppress
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
+from tools.connectors import gateway_client_id
 from tools.connectors.mcp_oauth import (
     _pinned_loopback,
     _validate_client_redirect_uri,
@@ -150,9 +151,16 @@ def _publish(rec: dict[str, Any], url_timeout: float) -> dict[str, Any]:
             raise AdminApprovalPending(ADMIN_APPROVAL_MESSAGE) from None
         raise
     if rec["redirect"] == KIND_GATEWAY:
-        rec["gateway_state"] = parse_qs(urlparse(auth_url).query).get("state", [None])[0]
+        expect_gateway_callback(flow.flow_id, auth_url)
     return {"session_id": flow.flow_id, "auth_url": auth_url, "flow": "pkce", "redirect": rec["redirect"],
             "redirect_uri": flow.redirect_uri}
+
+
+def expect_gateway_callback(session_id: str, auth_url: str) -> None:
+    with _sessions_lock:
+        rec = _sessions[session_id]
+        rec["redirect"] = KIND_GATEWAY
+        rec["gateway_state"] = parse_qs(urlparse(auth_url).query).get("state", [None])[0]
 
 
 def _retire(rec: dict[str, Any]) -> None:
@@ -220,11 +228,22 @@ def start_flow(
         client_redirect_uri = _validate_client_redirect_uri(client_redirect_uri)
     if fallback_redirect_uri is not None:
         fallback_redirect_uri = validate_loopback_redirect_uri(fallback_redirect_uri)
+    if gateway_client_id.entry_for(server_name, cfg) is not None:
+        return _start_gateway_only(hermes_home, server_name, cfg, reconnect_live, url_timeout)
     _supersede_active(server_name, hermes_home)
     _gc_and_check_capacity(server_name, hermes_home)
     if client_redirect_uri is not None and is_app_redirect(client_redirect_uri) and not _pinned_loopback(cfg):
         return _run_chain(hermes_home, server_name, cfg, reconnect_live, url_timeout, fallback_redirect_uri)
     rec = _launch(hermes_home, server_name, cfg, reconnect_live, KIND_LOOPBACK, client_redirect_uri)
+    return _publish(rec, url_timeout)
+
+
+def _start_gateway_only(
+    hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, url_timeout: float) -> dict[str, Any]:
+    gateway = gateway_client_id.callback_url(hermes_home)
+    _supersede_active(server_name, hermes_home)
+    _gc_and_check_capacity(server_name, hermes_home)
+    rec = _launch(hermes_home, server_name, cfg, reconnect_live, KIND_GATEWAY, gateway)
     return _publish(rec, url_timeout)
 
 

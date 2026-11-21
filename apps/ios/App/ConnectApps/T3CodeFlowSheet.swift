@@ -2,7 +2,7 @@ import PalConnect
 import SwiftUI
 
 struct T3CodeFlowSheet: View {
-    let flow: T3FlowSheet
+    let flow: AddressFlowItem
     let close: () -> Void
 
     var body: some View {

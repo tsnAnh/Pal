@@ -19,16 +19,18 @@ def _(rid, _params):
 
 def _catalog_row(entry):
     from hermes_cli.pal_connectors import FEATURED_CONNECTOR_IDS
-    from tui_gateway.contracts.connectors import ConnectorCatalogRow
+    from tools.connectors.gateway_client_id import UNAVAILABLE_MESSAGE
+    from tui_gateway.contracts.connectors import ConnectorCatalogRow, ConnectorCatalogStatus
 
     from tui_gateway.connector_setup_guide import build_guide, derive_progress
     from tui_gateway.mcp_account_rpc import account_rows
 
     accounts = account_rows(entry.id) if entry.multi_account else []
+    status = _catalog_status(entry, accounts)
     return ConnectorCatalogRow(
         slug=entry.id, name=entry.name, description=entry.description, category=entry.category, icon=entry.icon,
-        method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, source=entry.source, status=_catalog_status(entry, accounts),
-        notes=entry.notes, setup_guide=build_guide(entry), setup_progress=derive_progress(entry),
+        method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, source=entry.source, status=status,
+        notes=UNAVAILABLE_MESSAGE if entry.cimd and status is ConnectorCatalogStatus.needs_setup else entry.notes, setup_guide=build_guide(entry), setup_progress=derive_progress(entry),
         featured=entry.id in FEATURED_CONNECTOR_IDS, multi_account=entry.multi_account, accounts=accounts,
         sign_in=entry.sign_in.value,
     )
@@ -49,10 +51,16 @@ def _catalog_status(entry, accounts):
     if aggregate := aggregate_status(accounts):
         return ConnectorCatalogStatus(aggregate)
     if not mcp_catalog.is_enabled(entry.id):
-        return ConnectorCatalogStatus.not_connected
+        return ConnectorCatalogStatus.needs_setup if _needs_public_address(entry) else ConnectorCatalogStatus.not_connected
     if pending_reauth_reason(entry.id):
         return ConnectorCatalogStatus.needs_reconnect
     return ConnectorCatalogStatus.connected
+
+
+def _needs_public_address(entry):
+    from hermes_constants import get_hermes_home
+    from tools.connectors.gateway_client_id import public_base
+    return entry.cimd and public_base(get_hermes_home()) is None
 
 
 def _details_call(params_model, action):

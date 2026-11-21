@@ -94,7 +94,8 @@ final class ConnectAppsModel {
     var mcpSignIn: McpSignInController?
     var ownerSetup: OwnerSetupModel?
     var showsSlackPicker = false
-    var t3Flow: T3FlowSheet?
+    var t3Flow: AddressFlowItem?
+    var shopifyFlow: AddressFlowItem?
     var t3Reach: T3Reach?
     var discordFlow: DiscordFlowSession?
     var googleAdsFlow: GoogleAdsFlowSession?

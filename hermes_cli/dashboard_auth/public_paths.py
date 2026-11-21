@@ -29,4 +29,5 @@ PUBLIC_API_PATHS: frozenset[str] = frozenset({
 # The gateway's OAuth return routes, matched exactly. Public at the sign-in gate, and the only paths
 # answered on ``webapp.public_url`` while the Webapp is off (``web_server_boundary.is_callback_only_request``).
 OAUTH_CALLBACK_PATHS: tuple[str, ...] = (
-    "/webapp/chat-install/callback", "/webapp/mcp-oauth/callback", "/webapp/google-install/callback")
+    "/webapp/chat-install/callback", "/webapp/mcp-oauth/callback", "/webapp/google-install/callback",
+    "/webapp/oauth/client-metadata.json")

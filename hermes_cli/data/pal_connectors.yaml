@@ -235,6 +235,51 @@ connectors:
       title: Choose what Pal may do
       body: Read only lets Pal read channels and messages. Read and write also lets the bot post, react and delete as
         itself.
+- id: discord_mcp
+  name: Discord (your account)
+  description: "Search and read the Discord servers and mentions your own account can see."
+  icon: plugin_glyph
+  category: Communication
+  method: oauth_client
+  mcp_url: https://mcp.discord.com/mcp
+  oauth:
+    authorization_url: https://discord.com/api/oauth2/authorize
+    token_url: https://discord.com/api/oauth2/token
+  scopes:
+  - identify
+  - guilds
+  - personal.guilds.channels.read
+  - personal.guilds.channels.messages.read
+  - personal.guilds.messages.search
+  - personal.mentions.read
+  verified: true
+  source: https://docs.discord.com/developers/topics/oauth2
+  notes: Signs in as you with your own Discord application, not a bot.
+  setup:
+    steps:
+    - id: address
+      kind: public_url
+      title: Your Pal's web address
+      body: Discord sends you back to your Pal after you sign in, so your Pal needs a public https address. Use the
+        address you already reach your Pal at, such as your Tailscale address. Without one, sign-in returns to this
+        device only.
+    - id: app
+      kind: open_page
+      title: Create a Discord application
+      body: Create an application, then open OAuth2. Under Redirects, add the address below. Copy the Client ID and
+        press Reset Secret to copy the client secret right away, because Discord shows it once.
+      links:
+      - {label: Open Discord developer portal, url: "https://discord.com/developers/applications"}
+      copies:
+      - {label: Redirect URL, value: "{mcp_redirect_url}"}
+      - {label: Scopes, value: "identify guilds personal.guilds.channels.read personal.guilds.channels.messages.read personal.guilds.messages.search personal.mentions.read"}
+    - id: client
+      kind: paste
+      title: Paste your client
+      body: Paste the Client ID and the secret Discord showed you. Pal keeps them on your Pal.
+      fields:
+      - {id: client_id, label: Client ID, secret: false}
+      - {id: client_secret, label: Client secret, secret: true}
 - id: dropbox
   name: Dropbox
   description: "Search, read and organize files and folders in your Dropbox."
@@ -462,6 +507,16 @@ connectors:
   mcp_url: https://mcp.grafana.com/mcp
   verified: true
   source: https://grafana.com/docs/grafana-cloud/ai-tools/mcp-servers/cloud-mcp/
+- id: higgsfield
+  name: Higgsfield
+  description: "Generate images and videos with Higgsfield and check on your creations."
+  icon: plugin_glyph
+  category: Design and web
+  method: mcp_oauth
+  mcp_url: https://mcp.higgsfield.ai/mcp
+  cimd: true
+  verified: true
+  source: https://higgsfield.ai/mcp
 - id: hugging_face
   name: Hugging Face
   description: "Search models, datasets, papers and Spaces on Hugging Face."
@@ -562,6 +617,65 @@ connectors:
   mcp_url: https://mcp.notion.com/mcp
   verified: true
   source: https://developers.notion.com/guides/mcp/build-mcp-client
+- id: paypal
+  name: PayPal
+  description: "Look up PayPal invoices, orders, products, subscriptions, disputes and transactions."
+  icon: plugin_glyph
+  category: Finance
+  method: mcp_oauth
+  mcp_url: https://mcp.paypal.com/mcp
+  verified: true
+  source: https://developer.paypal.com/ai-tools/mcp-server
+  notes: Reads run on their own. Other changes ask you first. Anything that moves money is never done for you.
+  action_policy:
+    read_tools:
+    - list_invoices
+    - get_invoice
+    - search_invoicing
+    - generate_invoice_number
+    - get_recurring_series
+    - list_products
+    - show_product_details
+    - list_subscription_plans
+    - show_subscription_plan_details
+    - show_subscription_details
+    - get_shipment_tracking
+    - get_order
+    - list_disputes
+    - get_dispute
+    - list_transactions
+    - get_refund
+    - get_merchant_insights
+    refused_tools:
+    - create_order
+    - pay_order
+    - create_refund
+    - record_payment_for_invoice
+    - record_refund_for_invoice
+    - send_invoice
+    - create_subscription
+    - update_subscription
+    - accept_dispute_claim
+    - activate_recurring_series
+    - capture
+    - authorize
+    - payout
+    - charge
+    - transfer
+    - withdraw
+    - disburse
+    - pay
+    refused_message: This step moves money, so Pal never does it. Do it yourself in PayPal.
+- id: posthog
+  name: PostHog
+  description: "Query your PostHog analytics, feature flags, experiments and errors."
+  icon: plugin_glyph
+  category: Monitoring and analytics
+  method: mcp_oauth
+  mcp_url: https://mcp.posthog.com/mcp
+  cimd: true
+  verified: true
+  source: https://posthog.com/docs/model-context-protocol
 - id: postman
   name: Postman
   description: "Work with the workspaces, collections and environments in your Postman account."
@@ -589,6 +703,16 @@ connectors:
   mcp_url: https://mcp.railway.com
   verified: true
   source: https://docs.railway.com/ai/mcp-server
+- id: resend
+  name: Resend
+  description: "Send and manage emails, domains and contacts in your Resend account."
+  icon: plugin_glyph
+  category: Communication
+  method: mcp_oauth
+  mcp_url: https://mcp.resend.com/mcp
+  cimd: true
+  verified: true
+  source: https://resend.com/docs/mcp-server
 - id: semgrep
   name: Semgrep
   description: "Scan code for security vulnerabilities with Semgrep."
@@ -607,6 +731,15 @@ connectors:
   mcp_url: https://mcp.sentry.dev/mcp
   verified: true
   source: https://docs.sentry.io/product/sentry-mcp/
+- id: shopify
+  name: Shopify
+  description: "Search a Shopify store's products and policies and manage a cart for your customers."
+  icon: plugin_glyph
+  category: Sales and support
+  method: none
+  verified: true
+  source: https://shopify.dev/docs/apps/build/storefront-mcp
+  notes: Needs your store address, like your-store.myshopify.com.
 - id: slack
   name: Slack
   description: "Read channels and send messages in your Slack workspace."
@@ -615,6 +748,59 @@ connectors:
   method: bot_app
   verified: true
   source: https://docs.slack.dev/ai/mcp-server
+- id: slack_mcp
+  name: Slack (your account)
+  description: "Search and read Slack conversations and send messages as yourself."
+  icon: plugin_glyph
+  category: Communication
+  method: oauth_client
+  mcp_url: https://mcp.slack.com/mcp
+  oauth:
+    authorization_url: https://slack.com/oauth/v2_user/authorize
+    token_url: https://slack.com/api/oauth.v2.user.access
+  scopes:
+  - search:read.public
+  - search:read.private
+  - search:read.mpim
+  - search:read.im
+  - search:read.users
+  - channels:history
+  - groups:history
+  - mpim:history
+  - im:history
+  - channels:read
+  - groups:read
+  - im:read
+  - mpim:read
+  - users:read
+  - chat:write
+  verified: true
+  source: https://docs.slack.dev/ai/slack-mcp-server/
+  notes: Signs in as you with your own Slack app. Slack only allows apps published in its directory or internal to your workspace.
+  setup:
+    steps:
+    - id: address
+      kind: public_url
+      title: Your Pal's web address
+      body: Slack sends you back to your Pal after you sign in, so your Pal needs a public https address. Use the
+        address you already reach your Pal at, such as your Tailscale address.
+    - id: app
+      kind: open_page
+      title: Set up your Slack app
+      body: Open your Slack app, then OAuth and Permissions. Under Redirect URLs, add the address below, and under User
+        Token Scopes add the scopes below. Then copy the Client ID and Client Secret from Basic Information.
+      links:
+      - {label: Open Slack app settings, url: "https://api.slack.com/apps"}
+      copies:
+      - {label: Redirect URL, value: "{mcp_redirect_url}"}
+      - {label: Scopes, value: "search:read.public search:read.private search:read.mpim search:read.im search:read.users channels:history groups:history mpim:history im:history channels:read groups:read im:read mpim:read users:read chat:write"}
+    - id: client
+      kind: paste
+      title: Paste your client
+      body: Paste the Client ID and the Client Secret from your Slack app. Pal keeps them on your Pal.
+      fields:
+      - {id: client_id, label: Client ID, secret: false}
+      - {id: client_secret, label: Client secret, secret: true}
 - id: stripe
   name: Stripe
   description: "Look up customers, payments and subscriptions in your Stripe account."

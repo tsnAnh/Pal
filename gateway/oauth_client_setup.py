@@ -416,6 +416,8 @@ def mcp_secret_env(provider_id: str) -> str:
 def mcp_server_config(provider_id: str, client_id: str, gateway_redirect: str | None = None) -> dict:
     entry = preregistered_mcp_entries()[provider_id]
     oauth = {"client_id": client_id, "client_secret": f"${{{mcp_secret_env(provider_id)}}}"}
+    if entry.scopes:
+        oauth["scope"] = " ".join(entry.scopes)
     oauth.update({"redirect_uri": gateway_redirect} if gateway_redirect
                  else {"redirect_host": "localhost", "redirect_port": MCP_REDIRECT_PORT})
     return {"url": entry.mcp_url, "transport": "http", "auth": "oauth", "oauth": oauth}

@@ -13,13 +13,14 @@ OWNER_PICKS = frozenset({
     "google-workspace", "google-ads", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
     "stripe", "intercom", "calendly",
     "slack", "clickhouse", "mintlify", "upwork", "discord", "t3code",
+    "posthog", "resend", "higgsfield", "shopify", "paypal", "slack_mcp", "discord_mcp",
 })
 
 
 def test_shipped_catalog_is_exactly_the_owner_picks():
     ids = {e.id for e in load_pal_connectors()}
     assert ids == OWNER_PICKS
-    assert len(ids) == 53
+    assert len(ids) == 60
 
 
 def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():

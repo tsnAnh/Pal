@@ -9,6 +9,8 @@ APP_REDIRECT_SCHEME = "dev.tsnanh.hermes.bot"
 APP_REDIRECT_URI = f"{APP_REDIRECT_SCHEME}:/mcp-oauth/callback"
 APP_DONE_URL = f"{APP_REDIRECT_SCHEME}://mcp-oauth/done"
 GATEWAY_CALLBACK_PATH = "/webapp/mcp-oauth/callback"
+CLIENT_METADATA_PATH = "/webapp/oauth/client-metadata.json"
+CLIENT_NAME = "Pal"
 
 KIND_APP = "app"
 KIND_GATEWAY = "gateway"
@@ -19,6 +21,21 @@ _REFUSAL_CODES = ("invalid_redirect_uri", "invalid_client_metadata")
 _ONLY_SECURE_REDIRECT = re.compile(
     r"redirect.{0,120}\b(only|must)\b.{0,40}\b(https|loopback|localhost)\b"
     r"|\b(only|must)\b.{0,40}\b(https|loopback)\b.{0,60}redirect", re.DOTALL)
+
+
+def client_metadata_url(public_url: str) -> str:
+    return public_url.rstrip("/") + CLIENT_METADATA_PATH
+
+
+def client_metadata_document(public_url: str) -> dict:
+    return {
+        "client_id": client_metadata_url(public_url),
+        "client_name": CLIENT_NAME,
+        "redirect_uris": [public_url.rstrip("/") + GATEWAY_CALLBACK_PATH],
+        "grant_types": ["authorization_code", "refresh_token"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
+    }
 
 
 def is_app_redirect(uri: str | None) -> bool:
