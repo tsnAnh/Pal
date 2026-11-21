@@ -22,24 +22,31 @@ def _catalog_row(entry):
     from tui_gateway.contracts.connectors import ConnectorCatalogRow
 
     from tui_gateway.connector_setup_guide import build_guide, derive_progress
+    from tui_gateway.mcp_account_rpc import account_rows
 
+    accounts = account_rows(entry.id) if entry.multi_account else []
     return ConnectorCatalogRow(
         slug=entry.id, name=entry.name, description="", category=entry.category, icon=entry.icon,
-        method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, status=_catalog_status(entry),
+        method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, status=_catalog_status(entry, accounts),
         notes=entry.notes, setup_guide=build_guide(entry), setup_progress=derive_progress(entry),
-        featured=entry.id in FEATURED_CONNECTOR_IDS,
+        featured=entry.id in FEATURED_CONNECTOR_IDS, multi_account=entry.multi_account, accounts=accounts,
     )
 
 
-def _catalog_status(entry):
+def _catalog_status(entry, accounts):
     from hermes_cli import mcp_catalog
     from hermes_cli.pal_connectors import ConnectionMethod
     from tools.mcp_oauth import pending_reauth_reason
     from tui_gateway.contracts.connectors import ConnectorCatalogStatus
+    from tui_gateway.mcp_account_rpc import aggregate_status
 
     if entry.method is ConnectionMethod.OAUTH_CLIENT:
         from tui_gateway.oauth_client_rpc import oauth_client_status
-        return oauth_client_status(entry)
+        status = oauth_client_status(entry)
+        aggregate = aggregate_status(accounts) if status is not ConnectorCatalogStatus.needs_setup else None
+        return ConnectorCatalogStatus(aggregate) if aggregate else status
+    if aggregate := aggregate_status(accounts):
+        return ConnectorCatalogStatus(aggregate)
     if not mcp_catalog.is_enabled(entry.id):
         return ConnectorCatalogStatus.not_connected
     if pending_reauth_reason(entry.id):

@@ -197,8 +197,8 @@ def test_every_app_reads_the_reason_from_the_catalog_and_the_status_until_a_new_
     expire_access_token()
     _call("search_jobs")
     catalog, status = _rows()
-    assert catalog["needs_auth_reason"] == REASON and catalog["signin_on"] == "owner_app"
-    assert status["needs_auth"] is True and status["needs_auth_reason"] == REASON
+    assert catalog["needs_auth_reason"] == ACCOUNT_REASON and catalog["signin_on"] == "owner_app"
+    assert status["needs_auth"] is True and status["needs_auth_reason"] == ACCOUNT_REASON
     assert asyncio.run(imp.import_owner_tokens(home, "upwork", _tokens(refresh_token="rt-new-3b7c"))) is None
     catalog, status = _rows()
     assert catalog["needs_auth_reason"] is None and not status["needs_auth"]

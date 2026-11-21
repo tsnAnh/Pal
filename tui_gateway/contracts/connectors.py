@@ -168,6 +168,18 @@ class ConnectorCatalogStatus(WireEnum):
     needs_setup = "needs_setup"
 
 
+class ConnectionAccountStatus(WireEnum):
+    connected = "connected"
+    needs_reconnect = "needs_reconnect"
+    not_connected = "not_connected"
+
+
+class ConnectionAccountRow(Result):
+    name: str
+    status: ConnectionAccountStatus
+    reason: str | None = None
+
+
 class SetupStepKind(WireEnum):
     public_url = "public_url"
     open_page = "open_page"
@@ -252,6 +264,8 @@ class ConnectorCatalogRow(Result):
     setup_guide: SetupGuide | None = None
     setup_progress: SetupProgress | None = None
     featured: bool = False
+    multi_account: bool = False
+    accounts: list[ConnectionAccountRow] = []
 
 
 class ConnectorsCatalogResult(Result):
@@ -265,6 +279,9 @@ method(
     params=ProfileParams,
     result=ConnectorsCatalogResult,
     doc="The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. "
+        "A connector that can hold several accounts is multi_account and lists them in accounts, each with its own "
+        "status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when "
+        "none is but one needs it, else not_connected. "
         "A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
 )
 
@@ -280,10 +297,13 @@ class OAuthClientSaveParams(OAuthClientSlugParams):
 
 class OAuthClientRemoveParams(OAuthClientSlugParams):
     remove_client: bool = False
+    account: str | None = None
 
 
 class OAuthClientConnectParams(OAuthClientSlugParams):
     client_redirect_uri: str | None = None
+    account: str | None = None
+    create: bool = False
 
 
 class OAuthClientSetupResult(Result):

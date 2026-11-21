@@ -151,6 +151,14 @@ def _target_account(slug: str, account: Optional[str]) -> tuple[Optional[str], O
         return None, INVALID_ACCOUNT if exc.code == "invalid_account" else ACCOUNT_REQUIRED
 
 
+def resolve_account(home: Path, server_name: str, account: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    from agent.runtime_scope import bind_profile_scope
+    if catalog_entry(server_name) is None:
+        return None, NOT_OAUTH_SERVICE
+    with bind_profile_scope(home, hydrate_secrets=False):
+        return _target_account(server_name, account)
+
+
 async def import_owner_tokens(home: Path, server_name: str, tokens: OwnerTokens,
                               account: Optional[str] = None) -> Optional[str]:
     from hermes_cli.mcp_accounts import add_account

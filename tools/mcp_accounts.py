@@ -12,6 +12,7 @@ ACCOUNTS_KEY = "accounts"
 DEFAULT_ACCOUNT = "default"
 SEPARATOR = "@"
 API_KEY_ENV_ATTR = "api_key_env"
+ACCOUNT_PROMPT = "select_account login"
 CONNECTOR_ALIAS_PARAM = "connector_alias"
 CONNECTOR_ALIAS_DESCRIPTION = (
     "Account name, needed only when this app has more than one connected account. "
@@ -136,6 +137,20 @@ def account_config(template: Mapping, alias: str, attrs: Mapping | None = None) 
     if isinstance(env_name, str) and env_name:
         entry["headers"] = _with_account_key(entry.get("headers"), env_name)
     return entry
+
+
+def with_account_prompt(cfg: Mapping) -> dict:
+    oauth = cfg.get("oauth")
+    return {**cfg, "oauth": {**(oauth if isinstance(oauth, Mapping) else {}), "prompt": ACCOUNT_PROMPT}}
+
+
+def without_attempt_hints(cfg: Mapping) -> dict:
+    oauth = cfg.get("oauth")
+    if not isinstance(oauth, Mapping) or oauth.get("prompt") != ACCOUNT_PROMPT:
+        return dict(cfg)
+    kept = {k: v for k, v in oauth.items() if k != "prompt"}
+    rest = {k: v for k, v in cfg.items() if k != "oauth"}
+    return {**rest, "oauth": kept} if kept else rest
 
 
 def expand(servers: Mapping[str, Any]) -> dict[str, Any]:

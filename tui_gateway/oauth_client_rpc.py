@@ -78,7 +78,23 @@ def save(request) -> OAuthClientSetupResult:
     return setup(provider)
 
 
-def _connect_mcp(provider: str, store, client_redirect_uri: str | None) -> OAuthClientConnectResult:
+def _account_target(provider: str, cfg: dict, account, create: bool):
+    from hermes_cli.mcp_config import _get_mcp_servers
+    from tui_gateway import mcp_account_rpc as accounts
+    merged = {**(_get_mcp_servers().get(provider) or {}), **cfg}
+    target, failure = accounts.resolve(provider, {provider: merged}, account, create=create, signin=True)
+    if failure:
+        _raise_account_failure(failure)
+    return target
+
+
+def _raise_account_failure(failure: tuple[int, str]):
+    code, message = failure
+    reason = ConnectorErrorReason.alias_taken if code == 4090 else ConnectorErrorReason.invalid_params
+    raise OAuthClientRpcError(code, reason, message)
+
+
+def _connect_mcp(provider: str, store, request) -> OAuthClientConnectResult:
     from tui_gateway import mcp_header_secrets as hs
     from tui_gateway import mcp_oauth_sessions
     record = store.client(provider)
@@ -86,15 +102,20 @@ def _connect_mcp(provider: str, store, client_redirect_uri: str | None) -> OAuth
         _raise("needs_setup")
     client_id, client_secret = setup_mod.resolve_client(record)
     home = str(_home().expanduser().resolve(strict=False))
-    gateway = None if client_redirect_uri else setup_mod.mcp_redirect_url(_public_url())
+    gateway = None if request.client_redirect_uri else setup_mod.mcp_redirect_url(_public_url())
     cfg = setup_mod.mcp_server_config(provider, client_id, gateway)
+    target = _account_target(provider, cfg, request.account, request.create)
     if not hs.commit(provider, cfg, {setup_mod.mcp_secret_env(provider): client_secret}, []):
         _raise("connect_failed")
-    live = {**cfg, "oauth": {**cfg["oauth"], "client_secret": client_secret}}
-    if gateway:
-        result = mcp_oauth_sessions.start_gateway_flow(home, provider, live, gateway)
+    if target.alias is None:
+        flow_cfg = {**cfg, "oauth": {**cfg["oauth"], "client_secret": client_secret}}
     else:
-        result = mcp_oauth_sessions.start_flow(home, provider, live, client_redirect_uri=client_redirect_uri)
+        flow_cfg = target.cfg
+    if gateway:
+        result = mcp_oauth_sessions.start_gateway_flow(home, target.connection, flow_cfg, gateway)
+    else:
+        result = mcp_oauth_sessions.start_flow(
+            home, target.connection, flow_cfg, client_redirect_uri=request.client_redirect_uri)
     return OAuthClientConnectResult(slug=provider, auth_url=result["auth_url"], session_id=result["session_id"])
 
 
@@ -103,7 +124,7 @@ def connect(request) -> OAuthClientConnectResult:
     store = setup_mod.build_store()
     try:
         if provider not in setup_mod.GOOGLE_PROVIDERS:
-            return _connect_mcp(provider, store, request.client_redirect_uri)
+            return _connect_mcp(provider, store, request)
         link = setup_mod.google_begin(store, _home(), _public_url(), provider)
     except setup_mod.SetupError as exc:
         _raise(exc.reason)
@@ -130,12 +151,26 @@ def _remove_sign_in(provider: str) -> bool:
     return removed
 
 
+def _remove_account(provider: str, account: str) -> bool:
+    from hermes_cli.config import remove_env_value
+    from hermes_cli.mcp_accounts import remove_account
+    from tools.mcp_accounts import AccountError
+    from tui_gateway import mcp_account_rpc as accounts
+    try:
+        outcome = remove_account(provider, account)
+    except AccountError as exc:
+        _raise_account_failure(accounts.failure_of(exc))
+    if outcome.template_removed:
+        remove_env_value(setup_mod.mcp_secret_env(provider))
+    return True
+
+
 def remove(request) -> OAuthClientRemoveResult:
     from tui_gateway.ws_legacy_fallback import connection_profile_home
     provider = _provider(request.slug)
     if request.remove_client and connection_profile_home() is not None:
         raise OAuthClientRpcError(4030, ConnectorErrorReason.not_owner, "Only the owner can remove this app's client.")
-    removed = _remove_sign_in(provider)
+    removed = _remove_account(provider, request.account) if request.account else _remove_sign_in(provider)
     if request.remove_client:
         removed = setup_mod.remove_client(setup_mod.build_store(), provider) or removed
     return OAuthClientRemoveResult(slug=provider, removed=removed)

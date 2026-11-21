@@ -1016,7 +1016,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
       "params": [
         {
           "name": "params",
@@ -3103,6 +3103,24 @@
       }
     },
     {
+      "name": "mcp.servers.accounts.rename",
+      "summary": "Rename one account of a connector; its sign-in moves with it. An unknown account is 4064, a name that is taken 4090, an invalid name 4063.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpAccountRenameParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpAccountRenameResult"
+        }
+      }
+    },
+    {
       "name": "mcp.servers.add",
       "summary": "Add a server to the profile's config from a catalog preset and/or an explicit config.",
       "params": [
@@ -3212,12 +3230,12 @@
     },
     {
       "name": "mcp.servers.remove",
-      "summary": "Drop a server from the profile's config.yaml.",
+      "summary": "Drop a server from the profile's config.yaml. With account, drop that account and its sign-in; the last account takes the whole connector with it.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/McpServerNameParams"
+            "$ref": "#/components/schemas/McpAccountParams"
           }
         }
       ],
@@ -3230,7 +3248,7 @@
     },
     {
       "name": "mcp.servers.set_api_key",
-      "summary": "Store a credential in the profile's .env and reference it from the server config (header or env).",
+      "summary": "Store a credential in the profile's .env and reference it from the server config (header or env); with account, the key of that account of the connector.",
       "params": [
         {
           "name": "params",
@@ -3248,7 +3266,7 @@
     },
     {
       "name": "mcp.servers.status",
-      "summary": "Cached runtime state per configured server; never connects, probes, or starts auth.",
+      "summary": "Cached runtime state per configured server, one row per account of a connector that holds several (name is the connector, account the account); never connects, probes, or starts auth.",
       "params": [
         {
           "name": "params",
@@ -3266,12 +3284,12 @@
     },
     {
       "name": "mcp.servers.test",
-      "summary": "Connect, list tools, disconnect \u2014 an OAuth server with no token on disk is reported as not ok.",
+      "summary": "Connect, list tools, disconnect \u2014 an OAuth server with no token on disk is reported as not ok. A connector that holds several accounts is tested through the named account (4063 when none is named).",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/McpServerNameParams"
+            "$ref": "#/components/schemas/McpAccountParams"
           }
         }
       ],
@@ -15663,6 +15681,45 @@
         "title": "ConfigShowResult",
         "type": "object"
       },
+      "ConnectionAccountRow": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ConnectionAccountStatus"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "ConnectionAccountRow",
+        "type": "object"
+      },
+      "ConnectionAccountStatus": {
+        "enum": [
+          "connected",
+          "needs_reconnect",
+          "not_connected"
+        ],
+        "title": "ConnectionAccountStatus",
+        "type": "string"
+      },
       "ConnectionActor": {
         "description": "``tools/connectors/contract.py::Actor``.",
         "enum": [
@@ -17080,6 +17137,19 @@
             "default": false,
             "title": "Featured",
             "type": "boolean"
+          },
+          "multi_account": {
+            "default": false,
+            "title": "Multi Account",
+            "type": "boolean"
+          },
+          "accounts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConnectionAccountRow"
+            },
+            "title": "Accounts",
+            "type": "array"
           }
         },
         "required": [
@@ -26047,6 +26117,105 @@
         "title": "MachineInfo",
         "type": "object"
       },
+      "McpAccountParams": {
+        "additionalProperties": false,
+        "description": "``account`` names one account of a connector that holds several. A connector with exactly one account\nmay leave it out; ``create`` makes ``account`` a new account and answers 4090 when the name is taken.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpAccountParams",
+        "type": "object"
+      },
+      "McpAccountRenameParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "account": {
+            "title": "Account",
+            "type": "string"
+          },
+          "new_account": {
+            "title": "New Account",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "account",
+          "new_account"
+        ],
+        "title": "McpAccountRenameParams",
+        "type": "object"
+      },
+      "McpAccountRenameResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "account": {
+            "title": "Account",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "name",
+          "account"
+        ],
+        "title": "McpAccountRenameResult",
+        "type": "object"
+      },
       "McpCatalogEntry": {
         "additionalProperties": false,
         "properties": {
@@ -26107,6 +26276,14 @@
             "title": "Transport",
             "type": "string"
           },
+          "accounts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ConnectionAccountRow"
+            },
+            "title": "Accounts",
+            "type": "array"
+          },
           "needs_auth_reason": {
             "anyOf": [
               {
@@ -26166,6 +26343,18 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           },
           "session_id": {
             "title": "Session Id",
@@ -26335,6 +26524,18 @@
             "title": "Name",
             "type": "string"
           },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
+          },
           "session_id": {
             "title": "Session Id",
             "type": "string"
@@ -26449,7 +26650,7 @@
       },
       "McpOauthStartParams": {
         "additionalProperties": false,
-        "description": "With ``client_redirect_uri`` the CLIENT hosts the loopback and relays the code via\n``mcp.servers.oauth.callback``.",
+        "description": "With ``client_redirect_uri`` the CLIENT hosts the loopback and relays the code via\n``mcp.servers.oauth.callback``. For an account that is not the connector's only one the authorization\nrequest carries ``prompt=select_account login`` so the vendor asks which account to use.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -26466,6 +26667,18 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           },
           "client_redirect_uri": {
             "anyOf": [
@@ -26502,6 +26715,11 @@
             ],
             "default": null,
             "title": "Client Id"
+          },
+          "create": {
+            "default": false,
+            "title": "Create",
+            "type": "boolean"
           }
         },
         "required": [
@@ -26547,6 +26765,11 @@
             ],
             "default": null,
             "title": "Notice"
+          },
+          "private_window_hint": {
+            "default": false,
+            "title": "Private Window Hint",
+            "type": "boolean"
           }
         },
         "required": [
@@ -26615,32 +26838,6 @@
         "title": "McpServerEntry",
         "type": "object"
       },
-      "McpServerNameParams": {
-        "additionalProperties": false,
-        "properties": {
-          "profile": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Profile"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "McpServerNameParams",
-        "type": "object"
-      },
       "McpServerRuntimeRow": {
         "additionalProperties": false,
         "description": "Safe projection of ``tools.mcp_tool_discovery.get_mcp_status`` rows.",
@@ -26699,6 +26896,18 @@
             ],
             "default": null,
             "title": "Needs Auth Reason"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           }
         },
         "required": [
@@ -27080,6 +27289,18 @@
             "title": "Name",
             "type": "string"
           },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
+          },
           "value": {
             "title": "Value",
             "type": "string"
@@ -27095,6 +27316,11 @@
             ],
             "default": null,
             "title": "Env Var"
+          },
+          "create": {
+            "default": false,
+            "title": "Create",
+            "type": "boolean"
           }
         },
         "required": [
@@ -27121,6 +27347,18 @@
           },
           "server": {
             "$ref": "#/components/schemas/McpServerSummary"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           }
         },
         "required": [
@@ -33572,7 +33810,6 @@
         "type": "object"
       },
       "ProfileCreateReceipt": {
-        "additionalProperties": false,
         "description": "What ``hermes profile create`` prints about a new profile, read on the machine (and in the\nprofile scope) that made it: built after a local create, or sent by the gateway that made it\n(``profiles.create`` with ``report``). The contract uses this type itself; a stdlib dataclass, so a\nlocal create never loads pydantic. A client treats a receipt missing a field, or with a wrong type,\nas an unknown outcome.",
         "properties": {
           "path": {
@@ -54165,7 +54402,7 @@
         "additionalProperties": false,
         "properties": {
           "service": {
-            "pattern": "^mcp:[a-z0-9][a-z0-9._-]{0,63}$",
+            "pattern": "^mcp:[a-z0-9][a-z0-9._-]{0,63}(:[a-z0-9][a-z0-9-]{0,31})?$",
             "title": "Service",
             "type": "string"
           },
@@ -61872,6 +62109,19 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
             "title": "Server",
             "type": "string"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           }
         },
         "required": [
@@ -61912,6 +62162,19 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
             "title": "Server",
             "type": "string"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           },
           "enabled": {
             "title": "Enabled",
@@ -63420,6 +63683,23 @@
             ],
             "default": null,
             "title": "Client Redirect Uri"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
+          },
+          "create": {
+            "default": false,
+            "title": "Create",
+            "type": "boolean"
           }
         },
         "required": [
@@ -63482,6 +63762,18 @@
             "default": false,
             "title": "Remove Client",
             "type": "boolean"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
           }
         },
         "required": [
@@ -66665,7 +66957,7 @@
     },
     {
       "name": "auth.submit_oauth_tokens",
-      "summary": "The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed.",
+      "summary": "The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. service is mcp:<slug>:<account> for one account of a connector; a bare mcp:<slug> from an older app lands in the connector's only account (the first one is named default) and ends that account's waiting request. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request, invalid_account, account_required or save_failed.",
       "params": [
         {
           "name": "params",
@@ -67187,7 +67479,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
       "params": [
         {
           "name": "params",
@@ -67979,7 +68271,7 @@
     },
     {
       "name": "mcp.actions.auto_approve.get",
-      "summary": "Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible.",
+      "summary": "Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible. account names one account of a multi-account connector (optional with one account); the switch is kept per account.",
       "params": [
         {
           "name": "params",
@@ -68028,6 +68320,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/McpCatalogResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.servers.accounts.rename",
+      "summary": "Rename one account of a connector; its sign-in moves with it. An unknown account is 4064, a name that is taken 4090, an invalid name 4063.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpAccountRenameParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpAccountRenameResult"
         }
       }
     },
@@ -68123,12 +68433,12 @@
     },
     {
       "name": "mcp.servers.remove",
-      "summary": "Drop a server from the profile's config.yaml.",
+      "summary": "Drop a server from the profile's config.yaml. With account, drop that account and its sign-in; the last account takes the whole connector with it.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/McpServerNameParams"
+            "$ref": "#/components/schemas/McpAccountParams"
           }
         }
       ],
@@ -68141,7 +68451,7 @@
     },
     {
       "name": "mcp.servers.set_api_key",
-      "summary": "Store a credential in the profile's .env and reference it from the server config (header or env).",
+      "summary": "Store a credential in the profile's .env and reference it from the server config (header or env); with account, the key of that account of the connector.",
       "params": [
         {
           "name": "params",

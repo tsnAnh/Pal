@@ -27,6 +27,7 @@ BRIDGED = (
     "connectors.list", "connectors.catalog", "connectors.connect", "connectors.operation.status",
     "connectors.operation.wake", "connection.respond", "connectors.accounts", "connectors.accounts.remove",
     "mcp.catalog", "mcp.servers.add", "mcp.servers.update", "mcp.servers.remove", "mcp.servers.set_api_key",
+    "mcp.servers.accounts.rename",
     "mcp.servers.oauth.start", "mcp.servers.oauth.poll", "mcp.servers.oauth.cancel", "mcp.servers.oauth.callback",
     "vault.list", "vault.sources", "vault.add", "vault.update", "vault.remove", "vault.unlock", "vault.lock",
     "skills.manage",

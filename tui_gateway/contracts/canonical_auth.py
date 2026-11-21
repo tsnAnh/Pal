@@ -172,7 +172,7 @@ canonical_method("auth.begin", params=AuthBeginParams, result=AuthBeginResult,
 
 
 class AuthSubmitOauthTokensParams(Params):
-    service: str = Field(pattern=r"^mcp:[a-z0-9][a-z0-9._-]{0,63}$")
+    service: str = Field(pattern=r"^mcp:[a-z0-9][a-z0-9._-]{0,63}(:[a-z0-9][a-z0-9-]{0,31})?$")
     client_id: str = Field(min_length=1, max_length=512)
     redirect_uri: str = Field(min_length=1, max_length=2048)
     token_endpoint: str = Field(min_length=1, max_length=2048)
@@ -193,6 +193,9 @@ canonical_method("auth.submit_oauth_tokens", params=AuthSubmitOauthTokensParams,
                  doc="The owner signed in to an MCP server on their own computer (auth.required signin_on "
                      "owner_app) and hands over the public client it registered and the tokens. The gateway "
                      "stores them for the connecting profile, connects the server and ends any waiting sign-in "
-                     "request as signed_in. Public clients only: a client_secret is not accepted. The tokens are "
+                     "request as signed_in. service is mcp:<slug>:<account> for one account of a connector; a bare "
+                     "mcp:<slug> from an older app lands in the connector's only account (the first one is named "
+                     "default) and ends that account's waiting request. "
+                     "Public clients only: a client_secret is not accepted. The tokens are "
                      "never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, "
-                     "server_mismatch, invalid_request or save_failed.")
+                     "server_mismatch, invalid_request, invalid_account, account_required or save_failed.")

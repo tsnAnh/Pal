@@ -11,6 +11,7 @@ MCP_SERVER_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
 class McpAutoApproveGetParams(Params):
     session_id: str = Field(min_length=1)
     server: str = Field(pattern=MCP_SERVER_NAME_PATTERN)
+    account: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
 
 
 class McpAutoApproveGetResult(Result):
@@ -29,7 +30,8 @@ class McpAutoApproveSetResult(Result):
 canonical_method("mcp.actions.auto_approve.get", params=McpAutoApproveGetParams, result=McpAutoApproveGetResult,
                  doc="Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: "
                      "the chat is one of the owner's own app chats and the server is action-gated; enabled is false "
-                     "whenever it is not eligible.")
+                     "whenever it is not eligible. account names one account of a multi-account connector (optional with one "
+                     "account); the switch is kept per account.")
 
 canonical_method("mcp.actions.auto_approve.set", params=McpAutoApproveSetParams, result=McpAutoApproveSetResult,
                  doc="Turn the per-chat auto-approve switch on or off. Off by default, kept in memory for this chat "

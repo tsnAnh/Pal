@@ -14,7 +14,7 @@ from hermes_cli.pal_connectors import load_pal_connectors
 from hermes_cli.shared_catalog import visible_mcp_servers
 from tools.mcp_accounts import (
     ACCOUNTS_KEY, API_KEY_ENV_ATTR, DEFAULT_ACCOUNT, AccountError, AccountRef, has_accounts, parse_alias, parse_slug,
-    server_name, template_accounts)
+    server_name, template_accounts, without_attempt_hints)
 from tools.mcp_oauth import HermesTokenStorage
 from tools.mcp_tool_common import mcp_server_enabled
 
@@ -130,7 +130,7 @@ def save_account_entry(ref: AccountRef, cfg: Mapping) -> bool:
     existing = template_accounts(_template(ref.slug, load_config())).get(ref.alias, {})
 
     def mutate(current: dict | None) -> dict | None:
-        incoming = {k: v for k, v in cfg.items() if k != ACCOUNTS_KEY}
+        incoming = {k: v for k, v in without_attempt_hints(cfg).items() if k != ACCOUNTS_KEY}
         if existing.get(API_KEY_ENV_ATTR) and isinstance(incoming.get("headers"), Mapping):
             shared = {k: v for k, v in incoming["headers"].items() if str(k).lower() != "authorization"}
             incoming["headers"] = {**((current or {}).get("headers") or {}), **shared}
@@ -261,7 +261,7 @@ def resolve_for_connect(slug: str, template: Mapping | None, alias: str | None, 
     elif not accounts:
         chosen = DEFAULT_ACCOUNT
     else:
-        raise AccountError("account_required", f"Choose which account to sign in to: {', '.join(accounts)}.")
+        raise AccountError("account_required", f"Name the account to use: {', '.join(accounts)}.")
     if create and chosen in accounts:
         raise AccountError("account_exists", f"There is already an account named '{chosen}' on this connector.")
     return chosen

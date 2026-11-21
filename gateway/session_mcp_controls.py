@@ -35,6 +35,7 @@ VERBS = {
     'mcp.servers.add': Verb('session:control', guard=catalog_preset_only),
     'mcp.servers.update': Verb('session:control', guard=url_endpoint_edit),
     'mcp.servers.remove': Verb('session:control'),
+    'mcp.servers.accounts.rename': Verb('session:control'),
     'mcp.servers.set_api_key': Verb('session:control'),
     'mcp.servers.oauth.start': Verb('session:control'),
     'mcp.servers.oauth.poll': Verb('session:control'),
