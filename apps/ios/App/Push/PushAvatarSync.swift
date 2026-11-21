@@ -11,16 +11,8 @@ final class PushAvatarSync {
     private var worker: Task<Void, Never>?
     private var pruned = false
 
-    init(cache: PushAvatarCache? = PushAvatarSync.appGroupCache) {
+    init(cache: PushAvatarCache? = PushAvatarCache.shared()) {
         self.cache = cache
-    }
-
-    private static var appGroupCache: PushAvatarCache? {
-        #if PAL_COMM_NOTIFICATIONS
-        return PushAvatarCache.shared()
-        #else
-        return nil
-        #endif
     }
 
     func sync(_ bots: [BotRow]) {

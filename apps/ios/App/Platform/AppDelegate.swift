@@ -10,6 +10,8 @@ enum PlatformApplication {
         UIApplication.shared.registerForRemoteNotifications()
     }
 
+    static let didBecomeActive = UIApplication.didBecomeActiveNotification
+
     static func followActivity(of presence: ReachPresence) {}
 }
 
@@ -33,6 +35,8 @@ enum PlatformApplication {
     static func registerForRemoteNotifications() {
         NSApplication.shared.registerForRemoteNotifications()
     }
+
+    static let didBecomeActive = NSApplication.didBecomeActiveNotification
 
     private static let activity = MacAppActivity()
 

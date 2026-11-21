@@ -98,7 +98,7 @@ async def test_a_finished_turn_with_nobody_attentive_sends_exactly_one_alert(roo
     assert claims["iss"] == TEAM_ID and abs(claims["iat"] - time.time()) < 60
     assert stub.payloads() == [{
         "aps": {"alert": {"title": "Atlas", "body": "Three files changed."}, "sound": "default",
-                "thread-id": "default", "mutable-content": 1},
+                "thread-id": "default", "mutable-content": 1, "badge": 1},
         "profile": "default", "session_id": "s"}]
     assert APNS_TOKEN not in caplog.text and "Three files changed" not in caplog.text
     await phone.close()
@@ -333,7 +333,9 @@ async def test_one_turn_alerts_once_however_often_its_completion_is_published(ro
 @pytest.mark.parametrize("row,complete,expected", [
     (row_for(principal=CRON_PRINCIPAL_ID), {"status": "complete", "text": "x"}, None),
     (row_for(), {"status": "interrupted", "text": "x"}, None),
-    (row_for(), {"status": "complete", "text": ""}, "Finished"),
+    (row_for(), {"status": "complete", "text": ""}, None),
+    (row_for(), {"status": "complete", "text": " \n\t"}, None),
+    (row_for(), {"status": "complete"}, None),
     (row_for(), {"status": "complete", "text": "\n\n  **Done**   with   it \n more"}, "**Done** with it"),
     (row_for(), {"status": "complete", "text": "w" * 400}, "w" * (push_notify.BODY_LIMIT - 1) + "…"),
     (row_for(), {"status": "error", "text": "traceback"}, "Stopped with a problem"),
@@ -491,3 +493,127 @@ def test_the_default_bots_alert_title_is_the_brand_unless_it_has_a_name(tmp_path
     assert profile == "default"
     notice = push_notify.Notice(push_notify.Kind.FINISHED, "s", "k", "Done.")
     assert push_notify._payload(notice, profile, name)["aps"]["alert"]["title"] == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reply", ["", "   ", "\n \n\t\n"])
+async def test_a_finished_turn_with_no_displayable_reply_sends_no_alert(root, stub, reply):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+
+    async def blank(event):
+        return reply
+
+    authority = await make_authority(root, answer=blank)
+    phone = await phone_with_push(authority)
+    await call(phone, "client.attention", {"state": "background"}, rid=5)
+    await finish_turn(authority, phone)
+    assert stub.requests == []
+    await phone.close()
+
+
+def badges(stub):
+    return [payload["aps"]["badge"] for payload in stub.payloads()]
+
+
+async def settle(connection, state):
+    await call(connection, "client.attention", {"state": state}, rid=20)
+    await asyncio.to_thread(drain_push)
+
+
+@pytest.mark.asyncio
+async def test_each_alert_carries_the_count_of_alerts_since_a_phone_was_last_in_the_foreground(root, stub):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+    authority = await make_authority(root, answer=answer)
+    phone = await phone_with_push(authority)
+    await call(phone, "client.attention", {"state": "background"}, rid=5)
+    await finish_turn(authority, phone, "turn-1")
+    await finish_turn(authority, phone, "turn-2")
+    assert badges(stub) == [1, 2]
+    await phone.close()
+
+
+@pytest.mark.asyncio
+async def test_a_duplicate_event_does_not_raise_the_badge(root, stub):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+    authority = await make_authority(root, answer=answer)
+    phone = await phone_with_push(authority)
+    notice = push_notify.Notice(push_notify.Kind.FINISHED, "s", "s:turn:1", REPLY)
+    assert push_notify.deliver(authority, notice, time.time()) == 1
+    assert push_notify.deliver(authority, notice, time.time()) == 0
+    assert badges(stub) == [1]
+    again = push_notify.Notice(push_notify.Kind.FINISHED, "s", "s:turn:2", REPLY)
+    assert push_notify.deliver(authority, again, time.time()) == 1
+    assert badges(stub) == [1, 2]
+    await phone.close()
+
+
+@pytest.mark.asyncio
+async def test_a_phone_coming_to_the_foreground_clears_the_badge_on_every_device_once(root, stub):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+    authority = await make_authority(root, answer=answer)
+    phone = await phone_with_push(authority)
+    mac = connect(authority)
+    await call(mac, "client.hello", MAC_APP, rid=2)
+    other_token = "cd" * 32
+    await call(mac, "push.register", {"device_id": MAC_APP["device_id"], "apns_token": other_token,
+                                      "environment": "sandbox", "bundle_id": BUNDLE}, rid=3)
+    await call(phone, "client.attention", {"state": "background"}, rid=5)
+    await finish_turn(authority, phone, "turn-1")
+    await finish_turn(authority, phone, "turn-2")
+    sent = len(stub.requests)
+    assert sent == 4
+
+    await settle(phone, "foreground")
+    cleared = stub.requests[sent:]
+    assert sorted(str(request.url).rsplit("/", 1)[1] for request in cleared) == sorted([APNS_TOKEN, other_token])
+    assert [json.loads(request.content) for request in cleared] == [{"aps": {"badge": 0}}] * 2
+    assert all(request.headers["apns-push-type"] == "alert" for request in cleared)
+
+    await settle(phone, "foreground")
+    await settle(mac, "foreground")
+    assert len(stub.requests) == sent + 2
+
+    await settle(phone, "background")
+    await settle(mac, "background")
+    await finish_turn(authority, phone, "turn-3")
+    assert stub.payloads()[-1]["aps"]["badge"] == 1
+    await phone.close()
+    await mac.close()
+
+
+@pytest.mark.asyncio
+async def test_launching_in_the_foreground_clears_the_badge(root, stub):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+    authority = await make_authority(root, answer=answer)
+    phone = await phone_with_push(authority)
+    await call(phone, "client.attention", {"state": "background"}, rid=5)
+    await finish_turn(authority, phone, "turn-1")
+    relaunched = connect(authority)
+    await call(relaunched, "client.hello", {**IPHONE, "attention": "foreground"}, rid=2)
+    await asyncio.to_thread(drain_push)
+    assert [json.loads(request.content) for request in stub.requests[1:]] == [{"aps": {"badge": 0}}]
+    await relaunched.close()
+    await phone.close()
+
+
+@pytest.mark.asyncio
+async def test_looking_away_or_a_desktop_in_the_foreground_leaves_the_badge(root, stub):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+    authority = await make_authority(root, answer=answer)
+    phone = await phone_with_push(authority)
+    desktop = connect(authority)
+    await call(desktop, "client.hello", MAC, rid=2)
+    await call(desktop, "client.attention", {"state": "background"}, rid=3)
+    await call(phone, "client.attention", {"state": "background"}, rid=5)
+    await finish_turn(authority, phone, "turn-1")
+    await settle(phone, "idle")
+    await settle(desktop, "foreground")
+    assert len(stub.requests) == 1
+    await phone.close()
+    await desktop.close()

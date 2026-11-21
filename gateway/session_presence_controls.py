@@ -9,9 +9,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from gateway import device_registry
+from gateway import device_registry, push_notify
 from gateway.reach_presence import (
     DEVICE_TOOL_KINDS,
+    PUSH_CLIENT_KINDS,
     AttentionState,
     ClientKind,
     Device,
@@ -35,6 +36,11 @@ def _same_host(connection) -> bool:
 def _require_actor(connection) -> None:
     if not connection.actor.capabilities:
         raise RuntimeStoreError('permission_denied')
+
+
+def _badge_resets(connection, slot) -> None:
+    if slot.attention is AttentionState.FOREGROUND and slot.device.kind in PUSH_CLIENT_KINDS:
+        push_notify.badge_cleared(connection.authority)
 
 
 def _clean(text: str) -> str:
@@ -70,6 +76,7 @@ async def hello(connection, ref, params):
     await _persist(connection, device_registry.record_hello, device_id=device.device_id, kind=device.kind.value,
                    label=device.label, model=device.model, os_name=device.os_name,
                    app_version=device.app_version, now=time.time())
+    _badge_resets(connection, slot)
     if slot.device_tools:
         from gateway import device_connectors
         try:
@@ -90,6 +97,7 @@ async def attention(connection, ref, params):
     slot = report_attention(connection.transport, AttentionState(parsed.state))
     if slot is not None:
         await _persist(connection, device_registry.touch, slot.device.device_id, time.time())
+        _badge_resets(connection, slot)
     return {'recorded': slot is not None}
 
 

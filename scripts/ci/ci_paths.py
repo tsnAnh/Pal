@@ -24,12 +24,6 @@ JOB_RULES: dict[str, tuple[Rule, ...]] = {
     "tooling-tests": (*_OUTSIDE_IOS, *_RUN_EVERYTHING),
     "ios-guards": (("apps/ios/*", True), *_RUN_EVERYTHING),
     "swift": (("apps/ios/*", True), (".github/workflows/python.yml", True)),
-    "swift-variant": (
-        ("apps/ios/project.yml", True), ("apps/ios/*.entitlements", True),
-        ("apps/ios/Variants/*", True), ("apps/ios/NotificationService/*", True),
-        ("apps/ios/Packages/PalKit/Package.swift", True), ("apps/ios/Packages/PalKit/Sources/PalPush/*", True),
-        ("apps/ios/App/Push/PushAvatarSync.swift", True), ("scripts/ci/check_swift_entitlements.py", True),
-        (".github/workflows/python.yml", True)),
     "faker-kit": ((".claude/skills/*", True), (".agents/skills/*", True),
                   ("scripts/link-skills.sh", True), *_RUN_EVERYTHING),
 }
@@ -69,7 +63,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "swift-bot-settings": (("apps/ios/*.swift", True),),
     "swift-perf": (("apps/ios/*.swift", True), ("apps/ios/.perf-lint-*.json", True)),
     "swift-fault-details": (("apps/ios/*.swift", True), ("scripts/ci/swift_fault_details_allowlist.txt", True)),
-    "swift-entitlements": (("apps/ios/project.yml", True), ("apps/ios/*.entitlements", True), ("apps/ios/Variants/*", True)),
+    "swift-entitlements": (("apps/ios/project.yml", True), ("apps/ios/*.entitlements", True)),
     "swift-lint": (("apps/ios/*.swift", True), ("apps/ios/.swiftlint*", True)),
     "tooling-tests": _OUTSIDE_IOS,
 }
@@ -82,7 +76,6 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
                    "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-scroll-gesture", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-glass",
                    "swift-icon-tint", "swift-connect-palette", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint"),
     "swift": (),
-    "swift-variant": (),
     "faker-kit": (),
 }
 
