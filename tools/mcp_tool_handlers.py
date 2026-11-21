@@ -355,6 +355,11 @@ def _check_circuit_breaker(server_name: str) -> Optional[str]:
                       f"this tool yet — use alternative approaches or ask the user to check the MCP server.")
 
 
+def _signed_in_again_since_park(server: Any) -> bool:
+    park = getattr(server, "_auth_park", None)
+    return isinstance(park, tuple) and park[0].credential_stamp() != park[1]
+
+
 def _acquire_call_server(server_name: str, tool_timeout: float):
     """``(server, None)`` when a call may be dispatched, else ``(None, error)``. No session: a
     reconnect may be completing, so wait briefly before a breaker strike; still down -> ask the
@@ -379,6 +384,10 @@ def _acquire_call_server(server_name: str, tool_timeout: float):
         )
     server = _discovery._get_connected_server_for_call(server_name)
     wait = min(5.0, float(tool_timeout or 5.0))
+    if server and not server.session and _signed_in_again_since_park(server):
+        if _loop._signal_reconnect_and_wait(server_name, server, op_description="tools/call after sign-in", timeout=wait):
+            _core._reset_server_error(server_name)
+            return server, None
     if server and (server.session or _loop._wait_for_server_session_ready(server, timeout=wait)):
         return server, None
     _core._bump_server_error(server_name)
@@ -458,6 +467,10 @@ def _reauth_pending_error(server_name: str) -> Optional[str]:
         return None
     from tools.auth_required import reauth_required_result
     return reauth_required_result(server_name)
+
+
+def _handle_reauth_required(server_name: str, exc: BaseException, retry_call, op_description: str):
+    return _reauth_pending_error(server_name)
 
 
 def _handle_auth_error_and_retry(server_name: str, exc: BaseException, retry_call, op_description: str):
@@ -1014,7 +1027,7 @@ def _make_connection_tool_handler(server_name: str, tool_name: str, tool_timeout
         session_expired = partial(_handle_session_expired_and_retry, call_may_have_side_effects=not read_only)
         text = _dispatch(
             server_name, server, op, _attempt, tool_timeout,
-            (_handle_stdio_child_exited_and_retry, _handle_auth_error_and_retry, session_expired),
+            (_handle_reauth_required, _handle_stdio_child_exited_and_retry, _handle_auth_error_and_retry, session_expired),
             _on_failure, record_outcome=True)
         if isinstance(text, _RefusedRetry) and all(_never_reached_server(exc) for exc in failures):
             for charge in booked:  # refused, and no earlier attempt reached the server: nothing ran
@@ -1043,7 +1056,7 @@ def _make_utility_handler(op: str, log_label: str, rpc, render, required: Option
                 return json.dumps(render(result, server_name), ensure_ascii=False)
             return _dispatch(
                 server_name, server, op, _call, tool_timeout,
-                (_handle_auth_error_and_retry, _handle_session_expired_and_retry),
+                (_handle_reauth_required, _handle_auth_error_and_retry, _handle_session_expired_and_retry),
                 lambda exc: logger.error("MCP %s/%s failed: %s", server_name, log_label, exc))
         return _handler
     return _factory

@@ -38,8 +38,8 @@ def _catalog_row(entry):
 
 def _catalog_status(entry, accounts):
     from hermes_cli import mcp_catalog
+    from hermes_cli.mcp_accounts import template_state
     from hermes_cli.pal_connectors import ConnectionMethod
-    from tools.mcp_oauth import pending_reauth_reason
     from tui_gateway.contracts.connectors import ConnectorCatalogStatus
     from tui_gateway.mcp_account_rpc import aggregate_status
 
@@ -52,9 +52,7 @@ def _catalog_status(entry, accounts):
         return ConnectorCatalogStatus(aggregate)
     if not mcp_catalog.is_enabled(entry.id):
         return ConnectorCatalogStatus.needs_setup if _needs_public_address(entry) else ConnectorCatalogStatus.not_connected
-    if pending_reauth_reason(entry.id):
-        return ConnectorCatalogStatus.needs_reconnect
-    return ConnectorCatalogStatus.connected
+    return ConnectorCatalogStatus(template_state(entry.id))
 
 
 def _needs_public_address(entry):

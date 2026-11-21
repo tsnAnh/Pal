@@ -15,6 +15,8 @@ pytest.importorskip(
     reason="MCP SDK 1.26.0+ required for OAuth support",
 )
 
+from tools.mcp_oauth import OwnerSigninRequired
+
 
 def test_manager_isolates_same_named_servers_by_profile_home(tmp_path, monkeypatch):
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
@@ -537,9 +539,9 @@ async def test_refresh_400_rejects_disk_token_without_refresh_token(
     resp = _fake_response(
         400, "https://idp.example.com/oauth/token", b'{"error":"invalid_grant"}'
     )
-    result = await provider._handle_refresh_response(resp)
+    with pytest.raises(OwnerSigninRequired):
+        await provider._handle_refresh_response(resp)
 
-    assert result is False, "a token with no refresh token must not be adopted"
     assert provider.context.current_tokens is None
 
 
@@ -561,9 +563,9 @@ async def test_refresh_400_still_clears_when_disk_is_same_token(tmp_path, monkey
     resp = _fake_response(
         400, "https://idp.example.com/oauth/token", b'{"error":"invalid_grant"}'
     )
-    result = await provider._handle_refresh_response(resp)
+    with pytest.raises(OwnerSigninRequired):
+        await provider._handle_refresh_response(resp)
 
-    assert result is False
     assert provider.context.current_tokens is None
 
 
@@ -581,9 +583,9 @@ async def test_refresh_400_does_not_recover_expired_disk_token(tmp_path, monkeyp
     resp = _fake_response(
         400, "https://idp.example.com/oauth/token", b'{"error":"invalid_grant"}'
     )
-    result = await provider._handle_refresh_response(resp)
+    with pytest.raises(OwnerSigninRequired):
+        await provider._handle_refresh_response(resp)
 
-    assert result is False
     assert provider.context.current_tokens is None
 
 
@@ -605,9 +607,9 @@ async def test_refresh_400_does_not_recover_tokenless_disk_entry(
     resp = _fake_response(
         400, "https://idp.example.com/oauth/token", b'{"error":"invalid_grant"}'
     )
-    result = await provider._handle_refresh_response(resp)
+    with pytest.raises(OwnerSigninRequired):
+        await provider._handle_refresh_response(resp)
 
-    assert result is False
     assert provider.context.current_tokens is None
 
 
@@ -864,10 +866,10 @@ async def test_refresh_400_recovery_rejects_disk_pair_from_another_issuer(tmp_pa
     storage.bind_issuer("https://other-idp.example")
     await storage.set_tokens(_token("A2", "R2"))
 
-    recovered = await provider._handle_refresh_response(
-        _fake_response(400, endpoint, b'{"error":"invalid_grant"}')
-    )
+    with pytest.raises(OwnerSigninRequired):
+        await provider._handle_refresh_response(
+            _fake_response(400, endpoint, b'{"error":"invalid_grant"}')
+        )
 
-    assert recovered is False
     assert provider.context.current_tokens is None
     assert (await storage.get_tokens()).refresh_token is None, "foreign refresh token must not survive on disk"

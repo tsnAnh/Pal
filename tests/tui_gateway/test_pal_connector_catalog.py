@@ -112,9 +112,19 @@ def test_t3code_is_not_connected_until_a_t3code_server_is_configured(work_home):
     assert (row["method"], row["mcp_url"], row["status"], row["icon"]) == ("mcp_oauth", None, "not_connected", "plugin_glyph")
 
 
-def test_t3code_shows_connected_once_its_http_server_is_added_and_needs_reconnect_when_sign_in_expired(
-        work_home, monkeypatch):
+def test_t3code_is_connected_once_signed_in_and_needs_reconnect_when_sign_in_expired(work_home, monkeypatch):
+    import asyncio
+
+    from mcp.shared.auth import OAuthToken
+
+    from tools.mcp_oauth import HermesTokenStorage
+
     _ok("mcp.servers.add", name="t3code", config={"url": T3_URL, "transport": "http"})
+
+    assert _rows()["t3code"]["status"] == "not_connected"
+
+    asyncio.run(HermesTokenStorage("t3code", hermes_home=work_home).set_tokens(
+        OAuthToken(access_token="tok", token_type="Bearer", expires_in=3600)))
 
     assert _rows()["t3code"]["status"] == "connected"
 

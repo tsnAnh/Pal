@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
+from mcp.shared.auth import OAuthToken
 
 from hermes_cli.pal_connectors import load_pal_connectors
+from tools.mcp_oauth import HermesTokenStorage
 from tui_gateway import server
 
 PROFILE = "work"
@@ -57,6 +61,8 @@ def test_a_cimd_connector_is_connectable_once_the_gateway_has_an_https_address(w
 def test_a_connected_cimd_connector_stays_connected_if_the_address_is_later_removed(work_home):
     entry = ENTRIES["posthog"]
     _ok("mcp.servers.add", name="posthog", config={"url": entry.mcp_url, "transport": "http"})
+    asyncio.run(HermesTokenStorage("posthog", hermes_home=work_home).set_tokens(
+        OAuthToken(access_token="tok", token_type="Bearer", expires_in=3600)))
 
     assert _row("posthog")["status"] == "connected"
 

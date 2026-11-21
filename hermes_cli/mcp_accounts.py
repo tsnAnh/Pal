@@ -3,18 +3,19 @@ from __future__ import annotations
 import copy
 import functools
 import logging
+import re
 import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
 from hermes_cli import mcp_config as mc
 from hermes_cli.config import (
-    _CONFIG_LOCK, is_managed, load_config, load_config_readonly, remove_env_value, save_config)
+    _CONFIG_LOCK, get_env_value, is_managed, load_config, load_config_readonly, remove_env_value, save_config)
 from hermes_cli.pal_connectors import load_pal_connectors
 from hermes_cli.shared_catalog import visible_mcp_servers
 from tools.mcp_accounts import (
-    ACCOUNTS_KEY, API_KEY_ENV_ATTR, DEFAULT_ACCOUNT, AccountError, AccountRef, has_accounts, parse_alias, parse_slug,
-    server_name, template_accounts, without_attempt_hints)
+    ACCOUNTS_KEY, API_KEY_ENV_ATTR, DEFAULT_ACCOUNT, AccountError, AccountRef, account_config, has_accounts, parse_alias,
+    parse_slug, registration_name, server_name, template_accounts, without_attempt_hints)
 from tools.mcp_oauth import HermesTokenStorage
 from tools.mcp_tool_common import mcp_server_enabled
 
@@ -25,6 +26,7 @@ NEEDS_RECONNECT = "needs_reconnect"
 NOT_CONNECTED = "not_connected"
 
 _MIGRATION_LOCK = threading.RLock()
+_ENV_REFERENCE = re.compile(r"\$\{([^}]*)\}")
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,14 @@ class AccountStatus:
 @functools.lru_cache(maxsize=1)
 def capable_slugs() -> frozenset[str]:
     return frozenset(entry.id for entry in load_pal_connectors() if entry.multi_account)
+
+
+@functools.lru_cache(maxsize=1)
+def oauth_slugs() -> frozenset[str]:
+    from hermes_cli.pal_connectors import ConnectionMethod
+
+    oauth = (ConnectionMethod.MCP_OAUTH, ConnectionMethod.OAUTH_CLIENT)
+    return frozenset(entry.id for entry in load_pal_connectors() if entry.method in oauth)
 
 
 def _entries(config: Mapping) -> dict[str, Any]:
@@ -239,17 +249,34 @@ def rename_account(slug: str, old: str, new: str) -> None:
     _reconcile_live_servers()
 
 
-def account_statuses(slug: str) -> list[AccountStatus]:
-    from tools.mcp_oauth import pending_reauth_reason
+def _missing_credential(cfg: Mapping) -> bool:
+    headers = cfg.get("headers")
+    if not isinstance(headers, Mapping):
+        return False
+    return any(not get_env_value(match.group(1).strip())
+               for value in headers.values() for match in _ENV_REFERENCE.finditer(str(value)))
 
+
+def connection_state(connection: str, cfg: Mapping | None) -> tuple[str, str | None]:
+    if not isinstance(cfg, Mapping) or not mcp_server_enabled(cfg):
+        return NOT_CONNECTED, None
+    if cfg.get("auth") == "oauth" or registration_name(connection) in oauth_slugs():
+        from tools.mcp_oauth import pending_reauth_reason
+
+        if reason := pending_reauth_reason(connection):
+            return NEEDS_RECONNECT, reason
+        return (CONNECTED, None) if HermesTokenStorage(connection).has_cached_tokens() else (NOT_CONNECTED, None)
+    return (NOT_CONNECTED, None) if _missing_credential(cfg) else (CONNECTED, None)
+
+
+def template_state(slug: str) -> str:
+    return connection_state(slug, mc._get_mcp_servers().get(slug))[0]
+
+
+def account_statuses(slug: str) -> list[AccountStatus]:
     template = mc._get_mcp_servers().get(slug)
-    enabled = isinstance(template, dict) and mcp_server_enabled(template)
-    statuses = []
-    for alias in template_accounts(template):
-        reason = pending_reauth_reason(server_name(slug, alias)) if enabled else None
-        state = NOT_CONNECTED if not enabled else NEEDS_RECONNECT if reason else CONNECTED
-        statuses.append(AccountStatus(alias, state, reason))
-    return statuses
+    return [AccountStatus(alias, *connection_state(server_name(slug, alias), account_config(template, alias, attrs)))
+            for alias, attrs in template_accounts(template).items()]
 
 
 def resolve_for_connect(slug: str, template: Mapping | None, alias: str | None, *, create: bool = False) -> str:

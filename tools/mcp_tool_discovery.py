@@ -865,6 +865,7 @@ def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runt
                       if include_runtime and _key_visible_in_scope(k, current_scope)
                       and k in _core._lazy_server_configs}
 
+    from tools.mcp_oauth import pending_reauth_reason
     result: list[dict] = []
     for name, cfg in configured.items():
         enabled = mcp_server_enabled(cfg)  # evaluated unconditionally: malformed values warn even when connected
@@ -873,17 +874,18 @@ def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runt
         # A server that connected and then parked (reconnects exhausted) records no connect error,
         # but it is down all the same; never-tried servers stay "configured".
         parked = server is not None and not live and server._park_reason is not None
+        reauth_reason = pending_reauth_reason(name)
         # An in-flight or failed first-use connect outranks "lazy": that server is no longer
         # merely waiting to be spawned, and the error is the actionable part.
-        status = ("connected" if live else "disabled" if not enabled else "connecting" if name in connecting
-                  else "failed" if name in connect_errors or parked else "lazy" if name in lazy_tools
+        status = ("connected" if live and not reauth_reason else "disabled" if not enabled else "connecting" if name in connecting
+                  else "failed" if name in connect_errors or parked or reauth_reason else "lazy" if name in lazy_tools
                   else "configured")
         entry = {"name": name, "transport": _transport_label(cfg),
                  "tools": 0, "connected": False, "disabled": status == "disabled", "status": status}
         if (ref := split(name)) is not None:
             entry["connector"], entry["account"] = ref.slug, ref.alias
         if live:
-            entry["connected"] = True
+            entry["connected"] = reauth_reason is None
             entry["tools"] = (len(server._registered_tool_names) if hasattr(server, "_registered_tool_names")
                               else len(server._tools))
             if server._sampling:
@@ -893,8 +895,6 @@ def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runt
         elif status == "lazy":
             entry["tools"] = lazy_tools[name]
         # Parked on a rejected OAuth credential: the one failure only the user can fix (sign in again).
-        from tools.mcp_oauth import pending_reauth_reason
-        reauth_reason = pending_reauth_reason(name)
         entry["needs_auth"] = reauth_reason is not None or bool(
             server is not None and not live and server._auth_park is not None)
         if reauth_reason is not None:

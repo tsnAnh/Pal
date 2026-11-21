@@ -186,7 +186,7 @@ def _legacy_google_signed_in() -> bool:
 
 def oauth_client_status(entry) -> ConnectorCatalogStatus:
     from hermes_cli import mcp_catalog
-    from tools.mcp_oauth import pending_reauth_reason
+    from hermes_cli.mcp_accounts import template_state
     store = setup_mod.build_store()
     if entry.id == setup_mod.ADS_PROVIDER:
         if store.client(setup_mod.GOOGLE_PROVIDER) is None:
@@ -210,6 +210,4 @@ def oauth_client_status(entry) -> ConnectorCatalogStatus:
         return ConnectorCatalogStatus.needs_setup
     if not mcp_catalog.is_enabled(entry.id):
         return ConnectorCatalogStatus.not_connected
-    if pending_reauth_reason(entry.id):
-        return ConnectorCatalogStatus.needs_reconnect
-    return ConnectorCatalogStatus.connected
+    return ConnectorCatalogStatus(template_state(entry.id))

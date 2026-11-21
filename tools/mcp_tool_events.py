@@ -469,7 +469,8 @@ def _make_events_handler(op: str, label: str, rpc, *, needs_name: bool = True, n
                 return json.dumps(result, ensure_ascii=False)
             return _handlers._dispatch(
                 server_name, server, op, _call, tool_timeout,
-                (_handlers._handle_auth_error_and_retry, _handlers._handle_session_expired_and_retry),
+                (_handlers._handle_reauth_required, _handlers._handle_auth_error_and_retry,
+                 _handlers._handle_session_expired_and_retry),
                 lambda exc: logger.error("MCP %s/%s failed: %s", server_name, label, exc))
         return _handler
     return _factory

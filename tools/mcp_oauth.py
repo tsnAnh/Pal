@@ -207,8 +207,9 @@ class OAuthNonInteractiveError(RuntimeError):
 
 
 class OwnerSigninRequired(OAuthNonInteractiveError):
-    """A server that signs in on the owner's computer no longer accepts the stored sign-in; only a new
-    hand-over from that computer helps, so nothing on this host retries or opens a browser."""
+    """The stored sign-in can no longer be renewed (rejected refresh token, or an access token that expired with
+    no refresh token behind it); only a new sign-in by the owner helps, so nothing on this host retries,
+    re-registers or opens a browser."""
 
 
 # Interactivity gates for OAuth stdin prompts. ContextVars, NOT threading.local: background
@@ -663,23 +664,23 @@ class HermesTokenStorage:
         except OSError as exc:  # non-fatal: the next sign-in just walks the chain again
             logger.debug("Could not record redirect preference for %s: %s", self._server_name, exc)
 
-    def mark_reauth_required(self) -> None:
-        """Durably record that the authorization server rejected the stored refresh token, so no later call,
-        reconnect or restart presents the dead token again. Cleared by ``remove()``, which every new sign-in runs."""
-        _write_json(self._reauth_path(), {"reason": "refresh_rejected", "at": time.time()})
+    def mark_reauth_required(self, reason: str = "refresh_rejected") -> None:
+        """Durably record that the stored grant can no longer be renewed (the authorization server rejected the
+        refresh token, or the server refused an access token nothing can refresh), so no later call, reconnect or
+        restart presents the dead token again. Cleared by ``remove()``, which every new sign-in runs."""
+        _write_json(self._reauth_path(), {"reason": reason, "at": time.time()})
 
     def reauth_required(self) -> bool:
-        return self._reauth_path().exists() or self._handed_over_grant_lapsed()
+        return self._reauth_path().exists() or self._grant_lapsed_without_refresh()
 
-    def _handed_over_grant_lapsed(self) -> bool:
+    def _grant_lapsed_without_refresh(self) -> bool:
         """An access token past its expiry with no refresh token behind it: nothing on this host can renew it, so
-        a connector whose sign-in the owner's device runs needs that sign-in again."""
+        the owner has to sign in again."""
         data = _read_json(self._tokens_path())
         if not isinstance(data, dict) or data.get("refresh_token") or not data.get("access_token"):
             return False
         expires_at = data.get("expires_at")
-        return (isinstance(expires_at, (int, float)) and expires_at <= time.time()
-                and server_hands_over_sign_in(self._server_name))
+        return isinstance(expires_at, (int, float)) and expires_at <= time.time()
 
     def remove(self, *, keep_metadata: bool = False) -> None:
         """Delete all stored OAuth state for this server; ``keep_metadata`` spares ``.meta.json`` so a

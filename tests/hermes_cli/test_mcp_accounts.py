@@ -233,14 +233,16 @@ def test_a_rename_interrupted_after_the_tokens_moved_completes_on_the_next_try()
 
 
 def test_account_statuses_name_each_account_and_the_one_that_needs_signing_in_again():
-    write_servers({SLUG: {**TEMPLATE, "accounts": {"work": {}, "home": {}}}})
+    write_servers({SLUG: {**TEMPLATE, "accounts": {"work": {}, "home": {}, "new": {}}}})
+    put_tokens(f"{SLUG}@home")
     HermesTokenStorage(f"{SLUG}@work").mark_reauth_required()
 
     statuses = {s.name: s for s in mcp_accounts.account_statuses(SLUG)}
 
-    assert list(statuses) == ["work", "home"]
+    assert list(statuses) == ["work", "home", "new"]
     assert statuses["work"].status == "needs_reconnect" and "Linear (work)" in statuses["work"].reason
     assert (statuses["home"].status, statuses["home"].reason) == ("connected", None)
+    assert (statuses["new"].status, statuses["new"].reason) == ("not_connected", None)
 
 
 def test_every_account_of_a_disabled_connector_is_not_connected_and_a_pending_connector_has_none():
