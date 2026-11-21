@@ -121,21 +121,21 @@ def test_oauth_start_repairs_a_stub_from_the_connector_catalog(vendor):
 
 
 def test_a_second_start_replaces_the_first_instead_of_failing_in_progress(vendor):
-    add_catalog("upwork", UPWORK)
-    first = start("upwork")["result"]
-    second = start("upwork")
+    add_catalog("cloudflare", CLOUDFLARE)
+    first = start("cloudflare")["result"]
+    second = start("cloudflare")
 
     assert "error" not in second, second
     assert second["result"]["session_id"] != first["session_id"]
-    assert sessions.poll_flow(first["session_id"], "upwork")["status"] == "error"
-    assert sessions.poll_flow(second["result"]["session_id"], "upwork")["status"] == "pending"
+    assert sessions.poll_flow(first["session_id"], "cloudflare")["status"] == "error"
+    assert sessions.poll_flow(second["result"]["session_id"], "cloudflare")["status"] == "pending"
 
 
 def test_a_loopback_only_vendor_signs_in_through_the_client_hosted_loopback(vendor):
     vendor["accepts"] = lambda uri: uri.startswith("http://127.0.0.1")
-    add_catalog("upwork", UPWORK)
+    add_catalog("cloudflare", CLOUDFLARE)
 
-    result = start("upwork")["result"]
+    result = start("cloudflare")["result"]
 
     assert (result["redirect"], result["redirect_uri"]) == ("loopback", LOOPBACK)
     assert sessions._sessions[result["session_id"]]["httpd"] is None
