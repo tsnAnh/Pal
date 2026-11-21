@@ -65,6 +65,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "swift-fault-details": (("apps/ios/*.swift", True), ("scripts/ci/swift_fault_details_allowlist.txt", True)),
     "swift-entitlements": (("apps/ios/project.yml", True), ("apps/ios/*.entitlements", True)),
     "swift-lint": (("apps/ios/*.swift", True), ("apps/ios/.swiftlint*", True)),
+    "pal-nous-boundary": (*((g, True) for g in _PY), ("apps/ios/*.swift", True)),
     "tooling-tests": _OUTSIDE_IOS,
 }
 
@@ -74,7 +75,8 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "tooling-tests": ("tooling-tests",),
     "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives", "line-endings",
                    "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-scroll-gesture", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-glass",
-                   "swift-icon-tint", "swift-connect-palette", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint"),
+                   "swift-icon-tint", "swift-connect-palette", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint",
+                   "pal-nous-boundary"),
     "swift": (),
     "faker-kit": (),
 }
