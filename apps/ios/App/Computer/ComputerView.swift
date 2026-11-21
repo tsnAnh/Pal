@@ -74,7 +74,6 @@ struct ComputerView: View {
             Button { dismiss() } label: { PalIcon("chevron.left") } // nav-chrome: ok
                 .accessibilityLabel(Text("Back"))
                 .accessibilityIdentifier("computerBackButton")
-                .tint(.primary)
         }
         #endif
         ToolbarItem(placement: .principal) {
@@ -94,7 +93,6 @@ struct ComputerView: View {
             Button { model.showsHelp = true } label: { PalIcon("questionmark") }
                 .accessibilityLabel(Text("Help"))
                 .accessibilityIdentifier("computerHelpButton")
-                .tint(.primary)
         }
     }
 

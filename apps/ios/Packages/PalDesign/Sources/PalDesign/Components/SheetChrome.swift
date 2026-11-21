@@ -198,14 +198,12 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         case .close:
             Button(role: .close, action: onLeading)
                 .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-close")
-                .tint(.primary)
         case .back:
             Button(action: onLeading) { // nav-chrome: ok
                 PalIcon("chevron.left")
             }
             .accessibilityLabel(Text(leading.accessibilityLabel))
             .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-back")
-            .tint(.primary)
         }
     }
     #endif

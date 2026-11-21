@@ -36,7 +36,7 @@ private struct PalThemeRoot: ViewModifier {
         content
             .environment(\.hermesTheme, theme)
             .preferredColorScheme(mode.preferredColorScheme)
-            .tint(Color(theme.palette.accentBlue))
+            .tint(PalTokens.textPrimary)
     }
 }
 

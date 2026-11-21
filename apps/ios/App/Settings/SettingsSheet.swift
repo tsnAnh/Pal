@@ -33,7 +33,6 @@ struct SettingsSheet: View {
                         .environment(\.sheetChromeHostedInNavigation, true)
                 }
         }
-        .tint(.primary)
         .task { await hub.refresh() }
     }
 }

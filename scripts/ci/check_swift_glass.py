@@ -9,7 +9,7 @@ reported and harmless; ``--write-baseline`` rewrites the file. A justified excep
 ``glass-lint: ok`` on the flagged line.
 
 Rules: glass-dark-tint, glass-hand-rolled, glass-pill-button, glass-container, glass-sheet-chrome,
-glass-search-field, glass-floating-bar, glass-raw-color.
+glass-search-field, glass-floating-bar, glass-raw-color, glass-system-tint.
 
 Run: python scripts/ci/check_swift_glass.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -224,6 +224,13 @@ LINE_RULES = (
         re.compile(r"\bPillButtonStyle\b|\bPalPillButtonStyle\b|\.pill\(|\.palPill\b|(?<![A-Za-z0-9_])PillButton\("),
         EVERYWHERE,
         "old pill button style. Use the shared glass or capsule button style (.buttonStyle(.glass), no blue)",
+    ),
+    LineRule(
+        "glass-system-tint",
+        re.compile(r"\.tint\(\s*(?:Color\.|\.)?(?:blue|systemBlue|accentColor)\b|\.tint\([^)]*\baccentBlue(?:Text)?\b|\.accentColor\("),
+        SCREENS,
+        "system or blue tint on a control. Controls take the app accent (the Pal ink set once on the root); "
+        "delete the .tint/.accentColor, or use PalTokens.textPrimary when a view must restate the ink",
     ),
     LineRule(
         "glass-raw-color",
