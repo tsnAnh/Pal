@@ -46,11 +46,14 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
     public var setupGuide: SetupGuide?
     public var setupProgress: SetupProgress?
     public var featured: Bool
+    public var multiAccount: Bool
+    public var accounts: [ConnectorAccount]
 
     public init(
         slug: String, name: String, category: String = "", icon: String = "", method: Method,
         verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected, notes: String? = nil,
-        setupGuide: SetupGuide? = nil, setupProgress: SetupProgress? = nil, featured: Bool = false
+        setupGuide: SetupGuide? = nil, setupProgress: SetupProgress? = nil, featured: Bool = false,
+        multiAccount: Bool = false, accounts: [ConnectorAccount] = []
     ) {
         self.slug = slug
         self.name = name
@@ -64,10 +67,13 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         self.setupGuide = setupGuide
         self.setupProgress = setupProgress
         self.featured = featured
+        self.multiAccount = multiAccount
+        self.accounts = accounts
     }
 
     enum CodingKeys: String, CodingKey {
-        case slug, name, category, icon, method, verified, status, notes, featured
+        case slug, name, category, icon, method, verified, status, notes, featured, accounts
+        case multiAccount = "multi_account"
         case mcpURL = "mcp_url"
         case setupGuide = "setup_guide"
         case setupProgress = "setup_progress"
@@ -87,6 +93,8 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         setupGuide = try? container.decodeIfPresent(SetupGuide.self, forKey: .setupGuide)
         setupProgress = try? container.decodeIfPresent(SetupProgress.self, forKey: .setupProgress)
         featured = (try? container.decodeIfPresent(Bool.self, forKey: .featured)) ?? false
+        multiAccount = (try? container.decodeIfPresent(Bool.self, forKey: .multiAccount)) ?? false
+        accounts = ConnectorAccount.lossyList(from: container)
     }
 
     private static func secure(_ url: URL) -> URL? {
@@ -99,6 +107,7 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
 
     var appState: ConnectAppState {
         guard method.isSupported else { return .needsSetup }
+        if multiAccount, status != .needsSetup, let aggregate = ConnectorAccountState.aggregate(accounts) { return aggregate }
         return switch status {
         case .connected: .connected
         case .needsReconnect: .needsAuthorization

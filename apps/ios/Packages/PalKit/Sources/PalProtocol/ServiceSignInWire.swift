@@ -55,6 +55,12 @@ public struct AuthRequiredEvent: Sendable, Hashable {
 
     public var requiresAppSignIn: Bool { signinOn == ServiceSignInWire.ownerApp }
 
+    public var mcpService: McpServiceID? { McpServiceID(service: service) }
+
+    public var account: String? { mcpService?.account }
+
+    public var displayTitle: String { mcpService?.displayTitle(vendor: serviceName) ?? serviceName }
+
     public init(
         requestID: String,
         service: String,

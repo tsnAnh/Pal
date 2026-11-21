@@ -132,24 +132,52 @@ public struct McpNativeSignIn: Sendable {
         self.service = service
     }
 
-    public func run() async throws {
-        let grant = try await flow.authorize()
-        try await McpOAuthSubmission.submit(grant, service: service, rpc: rpc)
+    private func handoffService(_ account: ConnectorAccountTarget?) -> String {
+        account.map { "\(service):\($0.name)" } ?? service
     }
 
-    public func beginPaste(rollback: (@Sendable () async -> Void)? = nil) async throws -> McpPasteSession {
-        let handshake = try await flow.beginPasted()
-        return McpPasteSession(handshake: handshake, flow: flow, rpc: rpc, service: service, rollback: rollback)
+    public func run(account: ConnectorAccountTarget? = nil) async throws {
+        let grant = try await flow.selectingAccount(account?.selectsAccount == true).authorize()
+        try await McpOAuthSubmission.submit(grant, service: handoffService(account), rpc: rpc)
+    }
+
+    public func beginPaste(account: ConnectorAccountTarget? = nil, rollback: (@Sendable () async -> Void)? = nil) async throws -> McpPasteSession {
+        let handshake = try await flow.selectingAccount(account?.selectsAccount == true).beginPasted()
+        return McpPasteSession(handshake: handshake, flow: flow, rpc: rpc, service: handoffService(account), rollback: rollback)
+    }
+
+    public func run(service requested: String) async throws {
+        try await run(account: try await reauthTarget(for: requested))
+    }
+
+    public func beginPaste(service requested: String, rollback: (@Sendable () async -> Void)? = nil) async throws -> McpPasteSession {
+        try await beginPaste(account: try await reauthTarget(for: requested), rollback: rollback)
+    }
+
+    private func reauthTarget(for requested: String) async throws -> ConnectorAccountTarget? {
+        guard let id = McpServiceID(service: requested), id.slug == McpServiceID(service: service)?.slug else {
+            throw McpOAuthError.tokenExchangeFailed
+        }
+        guard let alias = id.account else { return nil }
+        return ConnectorAccountTarget(name: alias, create: false, selectsAccount: await hasOtherAccounts(slug: id.slug, besides: alias))
+    }
+
+    private func hasOtherAccounts(slug: String, besides alias: String) async -> Bool {
+        guard let catalog = try? await rpc.call("connectors.catalog", .object([:])),
+              let row = (catalog["connectors"]?.arrayValue ?? []).first(where: { $0["slug"]?.stringValue == slug }),
+              let entry = try? row.decoded(as: PalCatalogEntry.self)
+        else { return true }
+        return entry.accounts.contains { $0.name != alias }
     }
 }
 
 extension ConnectAppsService {
-    func connectUpwork(_ app: ConnectApp) async throws {
+    func connectUpwork(_ app: ConnectApp, account: ConnectorAccountTarget? = nil) async throws {
         guard let nativeSignIn else { throw ConnectAppsError.unavailable }
         let added = try await addUpworkServer(if: app.state == .disconnected)
         let alreadyAdded = !added
         do {
-            try await nativeSignIn.run()
+            try await nativeSignIn.run(account: account)
         } catch {
             if !alreadyAdded { _ = try? await call("mcp.servers.remove", ["name": .string(UpworkConnector.presetName)]) }
             let failure = McpOAuthError.from(error)
@@ -169,7 +197,7 @@ extension ConnectAppsService {
         }
     }
 
-    public func beginUpworkPaste(_ app: ConnectApp) async throws -> McpPasteSession {
+    public func beginUpworkPaste(_ app: ConnectApp, account: ConnectorAccountTarget? = nil) async throws -> McpPasteSession {
         guard let nativeSignIn else { throw ConnectAppsError.unavailable }
         let adding = try await addUpworkServer(if: app.state == .disconnected)
         let service = self
@@ -180,7 +208,7 @@ extension ConnectAppsService {
             remove = nil
         }
         do {
-            return try await nativeSignIn.beginPaste(rollback: remove)
+            return try await nativeSignIn.beginPaste(account: account, rollback: remove)
         } catch {
             await remove?()
             throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)

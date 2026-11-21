@@ -100,11 +100,14 @@ extension ConnectApp {
 }
 
 extension ConnectAppsService {
+    private static let accountTakenReason = "ALIAS_TAKEN"
+
     func oauthClientCall(_ method: String, _ params: [String: JSONValue]) async throws -> JSONValue {
         do {
             return try await rawCall(method, params)
         } catch let error as GatewayTransportError {
             guard case .rpc(let rpc) = error else { throw ConnectAppsError.oauthClient(.unreachable) }
+            if rpc.data?["reason"]?.stringValue == Self.accountTakenReason { throw ConnectAppsError.accountName(.taken) }
             let failure = OAuthClientFailure.classify(reason: rpc.data?["reason"]?.stringValue, code: rpc.code)
             throw ConnectAppsError.oauthClient(failure, GatewayFault(rpc, method: method))
         }
@@ -157,34 +160,40 @@ extension ConnectAppsService {
         for id in ids { _ = try? await rawCall("vault.remove", ["id": .string(id)]) }
     }
 
-    public func removeOAuthClientSignIn(slug: String) async throws {
-        _ = try await oauthClientCall("connectors.oauth_client.remove", ["slug": .string(slug)])
+    public func removeOAuthClientSignIn(slug: String, account: String? = nil) async throws {
+        var params: [String: JSONValue] = ["slug": .string(slug)]
+        if let account { params["account"] = .string(account) }
+        _ = try await oauthClientCall("connectors.oauth_client.remove", params)
     }
 
     public func removeOAuthClient(slug: String) async throws {
         _ = try await oauthClientCall("connectors.oauth_client.remove", ["slug": .string(slug), "remove_client": .bool(true)])
     }
 
-    public func connectOAuthClient(_ entry: PalCatalogEntry, route: McpConnectRoute) async throws -> OAuthClientConnectOutcome {
+    public func connectOAuthClient(
+        _ entry: PalCatalogEntry, route: McpConnectRoute, account: ConnectorAccountTarget? = nil
+    ) async throws -> OAuthClientConnectOutcome {
         guard entry.status != .needsSetup else { throw ConnectAppsError.oauthClient(.needsSetup) }
         let setup = try await oauthClientSetup(slug: entry.slug)
         guard setup.configured else { throw ConnectAppsError.oauthClient(.needsSetup) }
         if setup.usesGatewayRedirect {
-            return try await connectThroughGateway(entry)
+            return try await connectThroughGateway(entry, account: account)
         }
         var listener: LoopbackRedirectListener?
         if let fixed = setup.fixedLoopback, route != .pasteAddress {
             listener = try await startLoopback(port: fixed.port, host: fixed.host)
         }
         defer { listener?.cancel() }
-        let started = try await startOAuthClient(entry.slug, redirect: setup.fixedLoopback == nil ? nil : setup.redirectURL)
+        let started = try await startOAuthClient(
+            entry.slug, redirect: setup.fixedLoopback == nil ? nil : setup.redirectURL, account: account)
         let undo = entry.status == .notConnected ? signInRollback(entry.slug) : nil
         do {
             if let listener {
                 guard let flow = started.sessionID else { throw ConnectAppsError.oauthClient(.connectFailed) }
-                try await completeLoopback(name: entry.slug, flow: flow, link: started.authURL, listener: listener, browser: browser)
+                try await completeLoopback(
+                    name: entry.slug, flow: flow, link: started.authURL, listener: listener, browser: browser, account: account?.name)
             } else if let flow = started.sessionID {
-                return .paste(try pasteSession(entry.slug, flow: flow, started: started, rollback: undo))
+                return .paste(try pasteSession(entry.slug, flow: flow, account: account?.name, started: started, rollback: undo))
             } else {
                 try await awaitOAuthClientConnected(slug: entry.slug, url: started.authURL)
             }
@@ -195,15 +204,15 @@ extension ConnectAppsService {
         }
     }
 
-    private func connectThroughGateway(_ entry: PalCatalogEntry) async throws -> OAuthClientConnectOutcome {
-        let started = try await startOAuthClient(entry.slug, redirect: nil)
+    private func connectThroughGateway(_ entry: PalCatalogEntry, account: ConnectorAccountTarget?) async throws -> OAuthClientConnectOutcome {
+        let started = try await startOAuthClient(entry.slug, redirect: nil, account: account)
         guard let flow = started.sessionID else { throw ConnectAppsError.oauthClient(.connectFailed) }
         let undo = entry.status == .notConnected ? signInRollback(entry.slug) : nil
         do {
             _ = try await authenticate(
-                McpOAuthStart(flow: flow, link: started.authURL, redirect: .gateway), name: entry.slug,
+                McpOAuthStart(flow: flow, link: started.authURL, redirect: .gateway, account: account?.name), name: entry.slug,
                 using: browser as? any CallbackAuthorizationBrowser)
-            try await awaitApproval(name: entry.slug, flow: flow)
+            try await awaitApproval(name: entry.slug, flow: flow, account: account?.name)
             return .connected
         } catch {
             await undo?()
@@ -216,9 +225,10 @@ extension ConnectAppsService {
         return { @Sendable in _ = try? await service.rawCall("connectors.oauth_client.remove", ["slug": .string(slug)]) }
     }
 
-    func startOAuthClient(_ slug: String, redirect: String?) async throws -> OAuthClientStart {
+    func startOAuthClient(_ slug: String, redirect: String?, account: ConnectorAccountTarget? = nil) async throws -> OAuthClientStart {
         var params: [String: JSONValue] = ["slug": .string(slug)]
         if let redirect { params["client_redirect_uri"] = .string(redirect) }
+        if let account { params = account.scoping(params, create: true) }
         let result = try await oauthClientCall("connectors.oauth_client.connect", params)
         guard let url = result["auth_url"]?.stringValue.flatMap(URL.init(string:)),
               url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http"
@@ -227,14 +237,15 @@ extension ConnectAppsService {
     }
 
     private func pasteSession(
-        _ slug: String, flow: String, started: OAuthClientStart, rollback: (@Sendable () async -> Void)?
+        _ slug: String, flow: String, account: String?, started: OAuthClientStart, rollback: (@Sendable () async -> Void)?
     ) throws -> any McpPasteSigning {
         let query = URLComponents(url: started.authURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
         guard let state = query.first(where: { $0.name == "state" })?.value, !state.isEmpty,
               let redirect = query.first(where: { $0.name == "redirect_uri" })?.value.flatMap(URL.init(string:))
         else { throw ConnectAppsError.oauthClient(.connectFailed) }
         return McpGatewayPasteSession(
-            service: self, name: slug, flow: flow, authorizeURL: started.authURL, state: state, redirect: redirect, rollback: rollback
+            service: self, name: slug, flow: flow, account: account, authorizeURL: started.authURL, state: state, redirect: redirect,
+            rollback: rollback
         )
     }
 

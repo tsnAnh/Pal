@@ -33,6 +33,8 @@ public enum McpSignInSteps {
         )
     }
 
+    public static let privateWindowHint = String(localized: "If the sign-in page skips the account choice, use a private window.")
+
     public static func steps(vendor: String) -> [FlowStep] {
         let waitCopy = Self.waiting(vendor: vendor)
         let doneCopy = Self.success(vendor: vendor)
@@ -126,6 +128,8 @@ public enum McpSignInStatus {
         case .signInRefused(let failure, let fault): return refused(failure, fault, vendor: vendor, device: device)
         case .faulted(let fault): return .failed(SetupStatus(fault: fault, subject: vendor, device: device))
         case .signInFailed(let reason): return plain(reason, vendor: vendor, device: device)
+        case .accountName(let problem):
+            return .failed(SetupStatus(code: "account_name", subject: vendor, device: device, detail: problem.message))
         case .failed: return .failed(SetupStatus(code: "offline", subject: vendor, device: device))
         case .unavailable, .credentialsRequired, .oauthClient:
             return .failed(SetupStatus(code: SetupStatusClass.internalFault.rawValue, subject: vendor, device: device))
@@ -179,7 +183,9 @@ public final class McpSignInController: Identifiable {
     public let app: ConnectApp
     public let id: String
     public let platform: ConnectorPlatform
+    public let account: ConnectorAccountTarget?
     public private(set) var phase: McpSignInPhase = .inBrowser
+    public private(set) var privateWindowHint: String?
     public private(set) var pasteProblem: String?
     public private(set) var isSubmitting = false
 
@@ -191,13 +197,14 @@ public final class McpSignInController: Identifiable {
     @ObservationIgnored private var started = false
 
     public init(
-        app: ConnectApp, service: ConnectAppsService, platform: ConnectorPlatform,
+        app: ConnectApp, service: ConnectAppsService, platform: ConnectorPlatform, account: ConnectorAccountTarget? = nil,
         openLink: @escaping @MainActor (URL) -> Bool, finished: @escaping @MainActor () async -> Void
     ) {
         self.app = app
         id = app.id
         self.service = service
         self.platform = platform
+        self.account = account
         self.openLink = openLink
         self.finished = finished
     }
@@ -254,6 +261,7 @@ public final class McpSignInController: Identifiable {
 
     private func execute() async {
         pasteProblem = nil
+        privateWindowHint = nil
         let task = Task { @MainActor [self] in await run() }
         runTask = task
         await task.value
@@ -269,19 +277,27 @@ public final class McpSignInController: Identifiable {
     }
 
     private func signInPreset() async throws {
-        switch try await service.signInMcp(app, platform: platform) {
+        let outcome = try await service.signInMcp(app, platform: platform, account: account) { [weak self] hint in
+            await self?.noteStart(privateWindowHint: hint)
+        }
+        switch outcome {
         case .connected: await succeed()
         case .paste(let session): try await offerPaste(session)
         }
     }
 
     private func signInUpwork() async throws {
+        noteStart(privateWindowHint: account?.selectsAccount == true)
         if platform.returnsAutomatically {
-            try await service.connectUpwork(app)
+            try await service.connectUpwork(app, account: account)
             await succeed()
         } else {
-            try await offerPaste(try await service.beginUpworkPaste(app))
+            try await offerPaste(try await service.beginUpworkPaste(app, account: account))
         }
+    }
+
+    private func noteStart(privateWindowHint hint: Bool) {
+        privateWindowHint = hint ? McpSignInSteps.privateWindowHint : nil
     }
 
     private func offerPaste(_ session: any McpPasteSigning) async throws {

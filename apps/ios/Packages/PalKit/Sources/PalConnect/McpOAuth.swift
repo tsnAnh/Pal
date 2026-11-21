@@ -300,6 +300,7 @@ public struct McpOAuthFlow: Sendable {
     let browser: any AuthorizationBrowser
     let callbackTimeout: Duration
     let diagnostics: Diagnostics
+    var selectsAccount = false
 
     public init(
         resource: URL,
@@ -378,7 +379,8 @@ public struct McpOAuthFlow: Sendable {
         guard let redirectURL = URL(string: redirectURI) else { throw McpOAuthError.listenerFailed }
         let server = try await McpOAuthDiscovery(http: http, diagnostics: diagnostics).discover(resource: resource)
         let clientID = try await register(server: server, redirectURI: redirectURI)
-        let authorizeURL = Self.authorizeURL(server: server, clientID: clientID, redirectURI: redirectURI, challenge: pkce.challenge, state: state)
+        let authorizeURL = accountPrompted(
+            Self.authorizeURL(server: server, clientID: clientID, redirectURI: redirectURI, challenge: pkce.challenge, state: state))
         return McpOAuthHandshake(
             authorizeURL: authorizeURL, redirectURI: redirectURI, redirectURL: redirectURL, clientID: clientID, server: server,
             secrets: McpOAuthHandshake.Secrets(verifier: SecretString(pkce.verifier), state: SecretString(state))
@@ -393,9 +395,7 @@ public struct McpOAuthFlow: Sendable {
         )
     }
 
-    private struct Registration: Decodable {
-        var clientId: String?
-    }
+    private struct Registration: Decodable { var clientId: String? }
 
     private func register(server: McpOAuthServer, redirectURI: String) async throws -> String {
         var body: [String: Any] = [

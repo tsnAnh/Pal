@@ -93,7 +93,7 @@ public enum T3CodeFlow {
             return SetupStatus(fault: fault, subject: subject)
         case .failed:
             return SetupStatus(code: SetupStatusClass.offline.rawValue, subject: subject)
-        case .unavailable, .cancelled, .credentialsRequired, .signInFailed, .signInRefused, .adminApprovalPending, .oauthClient:
+        case .unavailable, .cancelled, .credentialsRequired, .signInFailed, .signInRefused, .adminApprovalPending, .oauthClient, .accountName:
             return SetupStatus(code: SetupStatusClass.internalFault.rawValue, subject: subject)
         }
     }

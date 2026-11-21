@@ -76,6 +76,7 @@ public final class McpGatewayPasteSession: McpPasteSigning, CustomStringConverti
     private let service: ConnectAppsService
     private let name: String
     private let flow: String
+    private let account: String?
     private let state: SecretString
     private let redirect: URL
     private let rollback: (@Sendable () async -> Void)?
@@ -83,12 +84,13 @@ public final class McpGatewayPasteSession: McpPasteSigning, CustomStringConverti
     private let relayed = Mutex<Bool>(false)
 
     init(
-        service: ConnectAppsService, name: String, flow: String, authorizeURL: URL, state: String, redirect: URL,
+        service: ConnectAppsService, name: String, flow: String, account: String? = nil, authorizeURL: URL, state: String, redirect: URL,
         rollback: (@Sendable () async -> Void)?
     ) {
         self.service = service
         self.name = name
         self.flow = flow
+        self.account = account
         self.authorizeURL = authorizeURL
         self.state = SecretString(state)
         self.redirect = redirect
@@ -122,15 +124,15 @@ public final class McpGatewayPasteSession: McpPasteSigning, CustomStringConverti
 
     private func relay(code: String) async -> McpPasteOutcome {
         do {
-            let result = try await service.call(
-                "mcp.servers.oauth.callback",
-                ["name": .string(name), "session_id": .string(flow), "code": .string(code), "state": .string(state.reveal())]
-            )
+            var relay = service.oauthSessionParams(name: name, flow: flow, account: account)
+            relay["code"] = .string(code)
+            relay["state"] = .string(state.reveal())
+            let result = try await service.call("mcp.servers.oauth.callback", relay)
             if result["ok"]?.boolValue == false {
                 await abandon()
                 return .failed(McpSignInFailure.classify(result["error_message"]?.stringValue).reason)
             }
-            try await service.awaitApproval(name: name, flow: flow)
+            try await service.awaitApproval(name: name, flow: flow, account: account)
             settled.withLock { (value: inout Bool) in value = true }
             return .signedIn
         } catch {
@@ -148,15 +150,15 @@ public final class McpGatewayPasteSession: McpPasteSigning, CustomStringConverti
             return !was
         }
         guard first else { return }
-        _ = try? await service.call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(flow)])
+        await service.cancelSignIn(name: name, flow: flow, account: account)
         await rollback?()
     }
 }
 
 extension ConnectAppsService {
-    func awaitApproval(name: String, flow: String) async throws {
+    func awaitApproval(name: String, flow: String, account: String? = nil) async throws {
         for _ in 0..<timing.pollAttempts {
-            let poll = try await call("mcp.servers.oauth.poll", ["name": .string(name), "session_id": .string(flow)])
+            let poll = try await call("mcp.servers.oauth.poll", oauthSessionParams(name: name, flow: flow, account: account))
             switch poll["status"]?.stringValue {
             case "approved": return
             case "error":
@@ -165,11 +167,14 @@ extension ConnectAppsService {
             default: try await Task.sleep(for: timing.pollInterval)
             }
         }
-        _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(flow)])
+        await cancelSignIn(name: name, flow: flow, account: account)
         throw ConnectAppsError.signInFailed(McpSignInFailure.expired.reason)
     }
 
-    public func signInMcp(_ app: ConnectApp, platform: ConnectorPlatform) async throws -> McpConnectOutcome {
+    public func signInMcp(
+        _ app: ConnectApp, platform: ConnectorPlatform, account: ConnectorAccountTarget? = nil,
+        onStarted: (@Sendable (Bool) async -> Void)? = nil
+    ) async throws -> McpConnectOutcome {
         let name: String
         let adding: Bool
         switch app.source {
@@ -185,7 +190,9 @@ extension ConnectAppsService {
         let service = self
         let rollback: (@Sendable () async -> Void)? = adding ? { @Sendable in _ = try? await service.call("mcp.servers.remove", ["name": .string(name)]) } : nil
         do {
-            return try await signInMcp(name: name, platform: platform, browser: browser, rollback: rollback)
+            return try await signInMcp(
+                name: name, platform: platform, browser: browser, account: account, onStarted: onStarted, rollback: rollback
+            )
         } catch {
             await rollback?()
             throw error
@@ -197,11 +204,12 @@ extension ConnectAppsService {
         guard let state = query.first(where: { $0.name == "state" })?.value, !state.isEmpty,
               let redirect = query.first(where: { $0.name == "redirect_uri" })?.value.flatMap(URL.init(string:))
         else {
-            _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(started.flow)])
+            await cancelSignIn(name: name, flow: started.flow, account: started.account)
             throw ConnectAppsError.signInFailed(McpSignInFailure.other.reason)
         }
         return McpGatewayPasteSession(
-            service: self, name: name, flow: started.flow, authorizeURL: started.link, state: state, redirect: redirect, rollback: rollback
+            service: self, name: name, flow: started.flow, account: started.account, authorizeURL: started.link, state: state,
+            redirect: redirect, rollback: rollback
         )
     }
 }

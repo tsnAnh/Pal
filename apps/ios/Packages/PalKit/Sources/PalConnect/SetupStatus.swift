@@ -16,7 +16,7 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
 
     private static let incompleteCodes = [
         "sign_in_failed", "access_denied", "sign_in_expired", "sign_in_timed_out", "browser_unavailable", "discovery_failed", "listener_failed",
-        "state_mismatch", "token_exchange_failed", "unsupported_grant_type", "gateway_rejected", "server_add_failed",
+        "state_mismatch", "token_exchange_failed", "unsupported_grant_type", "gateway_rejected", "server_add_failed", "account_name",
     ]
 
     static let byCode: [String: SetupStatusClass] = {

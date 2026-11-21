@@ -62,8 +62,10 @@ extension ConnectAppsService {
         return try await connectCustomConnector(name: connector.name, clientID: connector.clientID)
     }
 
-    public func testCustomConnector(name: String) async throws -> [ConnectorTool] {
-        let result = try await customCall("mcp.servers.test", ["name": .string(name)])
+    public func testCustomConnector(name: String, account: String? = nil) async throws -> [ConnectorTool] {
+        var params: [String: JSONValue] = ["name": .string(name)]
+        if let account { params["account"] = .string(account) }
+        let result = try await customCall("mcp.servers.test", params)
         if let failure = ConnectorFailure.evaluate(testResult: result) { throw failure }
         return ConnectorFailure.tools(from: result)
     }
