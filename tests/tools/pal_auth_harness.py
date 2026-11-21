@@ -320,6 +320,20 @@ class PalEnv:
 
         return json.loads(registry.dispatch(self.tool(slug, tool), arguments))
 
+    def restart_process(self, *slugs: str) -> None:
+        from tools import mcp_tool as core
+        from tools.mcp_tool_scope import _KEYED_LEDGERS, _KEYED_SETS
+        from tools.registry import registry
+
+        self.shutdown()
+        with core._lock:
+            for attr in _KEYED_LEDGERS + _KEYED_SETS:
+                getattr(core, attr).clear()
+            core._mcp_tool_server_names.clear()
+        for slug in slugs:
+            for name in registry.get_tool_names_for_toolset(f"mcp-{slug}"):
+                registry.deregister(name)
+
     def shutdown(self) -> None:
         from hermes_cli import pal_connectors
         from tools import mcp_tool_loop as loop
