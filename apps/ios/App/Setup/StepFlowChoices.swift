@@ -126,11 +126,11 @@ struct StepSwitchGroups: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Toggle(item.title, isOn: Binding(get: { isOn }, set: { change(item, to: $0) }))
                 .labelsHidden()
-                .toggleStyle(PalToggleStyle())
+                .palSwitch()
                 .accessibilityIdentifier("stepFlowSwitch-\(item.id)")
         }
         .padding(.leading, PalMetrics.screenMargin)
-        .padding(.trailing, PalMetrics.screenMargin - (PalMetrics.toggleTouchTarget.width - PalMetrics.toggleTrackSize.width) / 2)
+        .padding(.trailing, PalMetrics.screenMargin)
         .frame(minHeight: PalMetrics.rowMinimumHeight)
     }
 

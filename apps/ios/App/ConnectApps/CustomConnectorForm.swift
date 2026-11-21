@@ -248,6 +248,7 @@ struct CustomConnectorBody: View {
                     isOn: Binding(get: { bot.isOn }, set: { on in Task { await model.setBot(bot.id, on: on) } })
                 )
                 .font(style.bodyFont)
+                .palSwitch()
                 .disabled(bot.isBusy || model.isBusy)
                 .accessibilityIdentifier("customConnectorBot-\(bot.id)")
             }

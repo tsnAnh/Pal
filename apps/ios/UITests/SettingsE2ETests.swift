@@ -154,7 +154,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         waitFor(toggle, timeout: 20, "time zone toggle")
         let initial = toggle.value as? String ?? "0"
         let flipped = initial == "1" ? "0" : "1"
-        toggle.tap()
+        toggle.flip()
         waitValue(toggle, flipped)
         settle(2.5)
         app = relaunchSignedIn()
@@ -165,7 +165,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let zone = element(app, "settingsTimeZoneRow")
         XCTAssertFalse(zone.label.isEmpty, "the device zone is shown")
         XCTAssertFalse(zone.label.contains("_"), "underscores read as spaces: \(zone.label)")
-        reloaded.tap()
+        reloaded.flip()
         waitValue(reloaded, initial)
     }
 
@@ -175,7 +175,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let global = element(app, "settingsNotificationsToggle")
         _ = scrollTo(app, "settingsNotificationsToggle")
         if global.value as? String != "1" {
-            global.tap()
+            global.flip()
             acceptNotificationPermissionIfAsked()
         }
         waitValue(global, "1")
@@ -187,7 +187,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let other = element(app, "botNotifications-cho-dinh")
         waitFor(other, timeout: 10, "other bot toggle")
         let otherInitial = other.value as? String ?? "1"
-        bot.tap()
+        bot.flip()
         waitValue(bot, flipped)
         settle(2)
         app = relaunchSignedIn()
@@ -197,7 +197,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         waitFor(reloaded, timeout: 30, "per bot toggle after relaunch")
         waitValue(reloaded, flipped, timeout: 20)
         XCTAssertEqual(element(app, "botNotifications-cho-dinh").value as? String, otherInitial, "other bots are untouched")
-        reloaded.tap()
+        reloaded.flip()
         waitValue(reloaded, initial)
     }
 
@@ -220,7 +220,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         waitFor(ruleRow, timeout: 20, "saved rule")
         let auto = element(app, "permissionsAutoReviewToggle")
         let wasOn = auto.value as? String == "1"
-        auto.tap()
+        auto.flip()
         waitValue(auto, wasOn ? "0" : "1")
         settle(2)
         app = relaunchSignedIn()
@@ -233,8 +233,8 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let reloaded = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "permissionsRule-", rule)).firstMatch
         waitFor(reloaded, timeout: 20, "rule after relaunch")
         shot(app, "permissions-after-relaunch")
-        element(app, "permissionsAutoReviewToggle").tap()
-        reloaded.tap()
+        element(app, "permissionsAutoReviewToggle").flip()
+        reloaded.flip()
         let remove = app.buttons["Remove"]
         waitFor(remove, timeout: 10, "remove rule confirmation")
         remove.tap()
@@ -369,7 +369,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let haptics = element(app, "hapticsToggle")
         waitFor(haptics, timeout: 10, "haptics toggle")
         XCTAssertEqual(haptics.value as? String, "1")
-        haptics.tap()
+        haptics.flip()
         settle()
         goBack(app, from: "hapticsScreen")
         XCTAssertTrue(app.buttons["settingsHapticsRow"].label.contains("Off"), app.buttons["settingsHapticsRow"].label)
@@ -377,7 +377,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let enabled = element(app, "dataSharingEnabledToggle")
         waitFor(enabled, timeout: 20, "sharing toggle")
         let initial = enabled.value as? String ?? "0"
-        enabled.tap()
+        enabled.flip()
         wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", initial == "1" ? "0" : "1"), object: enabled)], timeout: 15)
         settle(2)
         app = relaunchSignedIn()
@@ -387,10 +387,10 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let reloaded = element(app, "dataSharingEnabledToggle")
         waitFor(reloaded, timeout: 20, "sharing toggle after relaunch")
         wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", initial == "1" ? "0" : "1"), object: reloaded)], timeout: 15)
-        reloaded.tap()
+        reloaded.flip()
         goBack(app, from: "dataSharingScreen")
         openRow(app, "settingsHapticsRow", screen: "hapticsScreen")
-        element(app, "hapticsToggle").tap()
+        element(app, "hapticsToggle").flip()
     }
 
     func test12AccountShowsTheSignedInAccountAndGuardsSwitching() throws {

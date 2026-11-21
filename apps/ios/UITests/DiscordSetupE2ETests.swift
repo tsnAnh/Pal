@@ -87,7 +87,7 @@ final class DiscordSetupE2ETests: ConnectAppsTestCase {
         waitFor(readOnly, timeout: 20, "read-only switch")
         XCTAssertTrue(isOn(readOnly), "read only is on by default")
         XCTAssertFalse(primary(app).isEnabled, "at least one server is required")
-        element(app, "stepFlowSwitch-guild.111").hit()
+        element(app, "stepFlowSwitch-guild.111").flip()
         XCTAssertTrue(primary(app).isEnabled)
         shot(app, "discord-flow-step-5")
         primary(app).hit()
@@ -101,7 +101,7 @@ final class DiscordSetupE2ETests: ConnectAppsTestCase {
         expectStep(app, 5, "What may the bot do?")
         let again = element(app, "stepFlowSwitch-read_only")
         waitFor(again, timeout: 20, "read-only switch again")
-        again.hit()
+        again.flip()
         let confirm = app.alerts.firstMatch
         waitFor(confirm, timeout: 10, "write confirmation")
         XCTAssertTrue(confirm.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "delete")).firstMatch.exists, "names the risk")

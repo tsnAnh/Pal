@@ -1,36 +1,5 @@
 import SwiftUI
 
-public struct PalToggleStyle: ToggleStyle {
-    @Environment(\.hermesTheme) private var theme
-
-    public init() {}
-
-    public func makeBody(configuration: Configuration) -> some View {
-        let track = PalMetrics.toggleTrackSize
-        let knob = PalMetrics.toggleKnobSize
-        let travel = track.width - knob.width - PalMetrics.toggleKnobInset * 2
-        Button {
-            withAnimation(.snappy(duration: 0.18)) { configuration.isOn.toggle() }
-        } label: {
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color(configuration.isOn ? theme.palette.toggleOnTrack : theme.palette.toggleOffTrack))
-                    .frame(width: track.width, height: track.height)
-                Capsule()
-                    .fill(Color(theme.palette.toggleKnob))
-                    .frame(width: knob.width, height: knob.height)
-                    .offset(x: PalMetrics.toggleKnobInset + (configuration.isOn ? travel : 0))
-            }
-            .frame(width: track.width, height: track.height)
-            .frame(width: PalMetrics.toggleTouchTarget.width, height: PalMetrics.toggleTouchTarget.height)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityValue(Text(configuration.isOn ? "1" : "0"))
-    }
-}
-
 public struct RowIcon {
     let content: AnyView
 
@@ -146,17 +115,8 @@ public struct SettingsRow: View {
 
     public var body: some View {
         switch trailing {
-        case .toggle(let isOn):
+        case .toggle:
             rowContent
-                .accessibilityElement(children: .ignore)
-                .overlay(alignment: .trailing) {
-                    Toggle(title, isOn: isOn)
-                        .labelsHidden()
-                        .toggleStyle(PalToggleStyle())
-                        .accessibilityLabel(Text(title))
-                        .accessibilityIdentifier(accessibilityIdentifier)
-                        .padding(.trailing, PalMetrics.rowInset - (PalMetrics.toggleTouchTarget.width - PalMetrics.toggleTrackSize.width) / 2)
-                }
         default:
             if let action {
                 Button(action: action) { rowContent }
@@ -168,6 +128,11 @@ public struct SettingsRow: View {
                     .accessibilityIdentifier(accessibilityIdentifier)
             }
         }
+    }
+
+    private var isToggle: Bool {
+        if case .toggle = trailing { return true }
+        return false
     }
 
     private var titleColor: Color {
@@ -194,6 +159,7 @@ public struct SettingsRow: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityHidden(isToggle)
             if let value {
                 Text(value)
                     .hermesText(.rowValue)
@@ -222,8 +188,12 @@ public struct SettingsRow: View {
             PalIcon("arrow.up.right", ink: .tertiary)
                 .font(.system(size: 14, weight: .regular))
                 .accessibilityHidden(true)
-        case .toggle:
-            Color.clear.frame(width: PalMetrics.toggleTrackSize.width, height: PalMetrics.toggleTrackSize.height)
+        case .toggle(let isOn):
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .palSwitch()
+                .accessibilityLabel(Text(title))
+                .accessibilityIdentifier(accessibilityIdentifier)
         }
     }
 }

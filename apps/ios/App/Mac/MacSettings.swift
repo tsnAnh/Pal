@@ -307,7 +307,7 @@ private struct MacGeneralSection: View {
                         set: { enabled in Task { await notifications.set(enabled, hub: hub, openSettings: openSystemSettings) } }
                     ))
                     .labelsHidden()
-                    .toggleStyle(.macSwitch)
+                    .palSwitch()
                     .accessibilityIdentifier("settingsNotificationsToggle")
                 }
             }
@@ -326,7 +326,7 @@ private struct MacGeneralSection: View {
                         set: { enabled in Task { await hub.setTimeZoneAutomatic(enabled) } }
                     ))
                     .labelsHidden()
-                    .toggleStyle(.macSwitch)
+                    .palSwitch()
                     .accessibilityIdentifier("settingsTimeZoneAutoToggle")
                 }
                 MacRow(title: String(localized: "Time Zone"), identifier: "settingsTimeZoneRow") {
@@ -355,7 +355,7 @@ private struct MacGeneralSection: View {
                             set: { value in Task { await sharing.set(enabled: value, send: metrics.send, api: hub.api) } }
                         ))
                         .labelsHidden()
-                        .toggleStyle(.macSwitch)
+                        .palSwitch()
                         .accessibilityIdentifier("dataSharingEnabledToggle")
                     }
                     MacRow(title: String(localized: "Send reports automatically"), subtitle: String(localized: "Upload the shared usage data to Pal."), identifier: "dataSharingSendRow") {
@@ -364,7 +364,7 @@ private struct MacGeneralSection: View {
                             set: { value in Task { await sharing.set(enabled: metrics.enabled, send: value, api: hub.api) } }
                         ))
                         .labelsHidden()
-                        .toggleStyle(.macSwitch)
+                        .palSwitch()
                         .disabled(!metrics.enabled)
                         .accessibilityIdentifier("dataSharingSendToggle")
                     }
@@ -561,7 +561,7 @@ private struct MacPermissionsSection: View {
                         set: { enabled in Task { await model.setAutoReview(enabled, hub: hub) } }
                     ))
                     .labelsHidden()
-                    .toggleStyle(.macSwitch)
+                    .palSwitch()
                     .accessibilityIdentifier("permissionsAutoReviewToggle")
                 }
             }

@@ -110,7 +110,6 @@ public enum PalTokens {
     public static let scrim = PalSwatches.scrim.color
 
     public static let toggleOn = PalSwatches.toggleOn.color
-    public static let toggleOff = PalSwatches.toggleOff.color
     public static let inverseFill = PalSwatches.inverseFill.color
     public static let inverseText = PalSwatches.inverseText.color
 }

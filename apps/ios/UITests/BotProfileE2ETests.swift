@@ -19,7 +19,7 @@ final class BotProfileE2ETests: BotProfileTestCase {
         let toggle = element(app, "profileNotificationsToggle")
         waitFor(toggle, timeout: 10, "notifications toggle")
         XCTAssertTrue(toggleIsOn(toggle))
-        toggle.tap()
+        toggle.flip()
         waitUntil(10, "toggle off") { !toggleIsOn(toggle) }
         Thread.sleep(forTimeInterval: 1.5)
         goBack(app)
@@ -28,7 +28,7 @@ final class BotProfileE2ETests: BotProfileTestCase {
         waitFor(reopened, timeout: 10, "reopened toggle")
         waitUntil(15, "persisted off after reopen") { !toggleIsOn(reopened) }
         shot(app, "notifications-off-after-reopen")
-        reopened.tap()
+        reopened.flip()
         waitUntil(10, "toggle back on") { toggleIsOn(reopened) }
         Thread.sleep(forTimeInterval: 1.5)
         goBack(app)
@@ -45,7 +45,7 @@ final class BotProfileE2ETests: BotProfileTestCase {
         waitFor(toggle, timeout: 10, "routine toggle")
         XCTAssertTrue(toggleIsOn(toggle))
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "(")).firstMatch.exists, "schedule caption with zone")
-        toggle.tap()
+        toggle.flip()
         waitUntil(10, "paused") { !toggleIsOn(toggle) }
         Thread.sleep(forTimeInterval: 1.5)
         goBack(app)
@@ -55,7 +55,7 @@ final class BotProfileE2ETests: BotProfileTestCase {
         waitFor(reopened, timeout: 20, "reopened routine toggle")
         waitUntil(15, "pause persisted") { !toggleIsOn(reopened) }
         shot(app, "routine-paused")
-        reopened.tap()
+        reopened.flip()
         waitUntil(10, "resumed") { toggleIsOn(reopened) }
         Thread.sleep(forTimeInterval: 1.5)
         goBack(app)
