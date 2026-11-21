@@ -128,7 +128,7 @@ BOTS = (
             Turn("assistant", "Vì em tự rút từ 8 xuống 4 để bỏ nội dung lặp, nhưng lại thu hẹp bộ quá mức. Không phải giới hạn của store. Em sẽ lên lại mạch 8 ảnh với 8 ý riêng, không kéo dài bằng cách liệt kê từng phòng hay lặp màn hình home.", gap_before=timedelta(minutes=1)),
             Turn("user", "6 casi ddi, lam 2 bo experiment", gap_before=timedelta(minutes=1)),
             Turn("assistant", "Chốt anh: 2 bộ, mỗi bộ 6 ảnh. Em giữ cùng nội dung và thứ tự, chỉ đổi hướng thiết kế giữa hai bộ để test rõ; không ghi số lượng phòng. Làm xong em gửi cả hai bộ duyệt, chưa chạy experiment.", gap_before=timedelta(minutes=1)),
-            Turn("user", "Message from \U0001f916 chó ai image gen (@cho-ai-image-gen): Đã nhận brief 2 bộ, mỗi bộ 6 ảnh. Em bắt đầu gen ngay, bản nháp đầu sẽ có sau ít phút.", gap_before=timedelta(hours=6), display_kind="internal_notification"),
+            Turn("user", "Message from \U0001f916 chó ai image gen (@cho-ai-image-gen): Brief received: 2 sets, 6 images each. Generating now, first drafts in a few minutes.", gap_before=timedelta(hours=6), display_kind="internal_notification"),
             Turn("user", "[IMPORTANT: Background process proc_7f3a matched watch pattern \"batch complete\".\nCommand: gen_images.sh --sets 2\nMatched output:\nbatch complete: 12 files]", gap_before=timedelta(minutes=3), display_kind="internal_notification"),
             Turn("assistant", "Đã giao làm 12 ảnh: bộ A pastel sáng, bộ B Giáng sinh tông đậm. Cùng thông điệp để so thiết kế, không trộn thêm thay đổi nội dung giữa hai bộ. Chi tiết xem [bảng creative](https://www.notion.so/creative-ua-t12).", gap_before=timedelta(minutes=1)),
         ),
@@ -144,7 +144,7 @@ BOTS = (
             ("user", "Số 2, đổi tông sang xanh mint."),
             ("assistant", "Xong rồi anh, bản mint đây. Em lưu PNG 2048px và SVG trong thư mục chung của đội."),
             ("user", "Em xem tin nhắn từ chó UA đi, có brief mới."),
-            ("user", "Message from 🤖 chó UA (@cho-ua): Anh CHỐT mới: 6 ảnh mỗi bộ, bỏ bộ C tối giản, giữ bộ A và B. Em sẽ gen lại theo brief này, ước tính 20 phút. Chi tiết xem [brief mới](https://www.notion.so/creative-ua-t12)."),
+            ("user", "Message from 🤖 chó UA (@cho-ua): Updated brief: 6 images per set, drop minimalist set C, keep sets A and B. Regenerate to this brief, about 20 minutes. Details in the [new brief](https://www.notion.so/creative-ua-t12)."),
         ),
     ),
     Bot(
@@ -248,20 +248,20 @@ EXCHANGES = (
     Exchange(
         sender="cho-ua",
         target="cho-ai-image-gen",
-        body="Brief chốt: 2 bộ, mỗi bộ 6 ảnh. Bộ A pastel sáng, bộ B Giáng sinh tông đậm. Cùng nội dung, chỉ khác hướng thiết kế. Gen xong gửi lại anh duyệt.",
-        reply="Đã nhận brief. Em gen 12 ảnh ngay, bản nháp đầu sẽ có sau ít phút.",
+        body="Final brief: 2 sets, 6 images each. Set A bright pastel, set B bold Christmas. Same content, only the design direction differs. Send both back for approval when done.",
+        reply="Brief received. Generating 12 images now, first drafts in a few minutes.",
     ),
     Exchange(
         sender="cho-ua",
         target="cho-ai-image-gen",
-        body="Thêm một ý: ảnh #3 chỉ một cảnh igloo, headline “Find your cozy corner”. Không liệt kê phòng.",
-        reply="Ok anh, em cập nhật #3 theo headline mới, không liệt kê phòng.",
+        body="One more point: image #3 is a single igloo scene, headline “Find your cozy corner”. Do not list rooms.",
+        reply="Updated #3 to the new headline, no room list.",
     ),
     Exchange(
         sender="default",
         target="cho-ua",
-        body="Anh Anh hỏi tiến độ bộ ảnh tháng 12 tới đâu rồi?",
-        reply="Đã giao làm 12 ảnh: bộ A pastel sáng, bộ B Giáng sinh tông đậm. Chi tiết xem [bảng creative](https://www.notion.so/creative-ua-t12).",
+        body="The owner asks how far the December image sets are.",
+        reply="12 images in production: set A bright pastel, set B bold Christmas. Details in the [creative board](https://www.notion.so/creative-ua-t12).",
     ),
 )
 

@@ -192,6 +192,8 @@ targets:
         product: PalConnect
       - package: PalKit
         product: PalChat
+      - package: PalKit
+        product: PalBotProfile
       - package: PalDesign
         product: PalDesign
 schemes:
