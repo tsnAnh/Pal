@@ -147,9 +147,12 @@ def _server_key_for_task(server) -> object:
 
 def _sibling_account_servers(key, scope: Optional[str], tool_name: str) -> list:
     slug = registration_name(_key_name(key))
-    return [(other_key, live) for other_key, live in _core._servers.items()
-            if other_key != key and registration_name(_key_name(other_key)) == slug
-            and tool_name in (getattr(live, "_registered_tool_names", None) or ())
+    holders = {other_key: set(getattr(live, "_registered_tool_names", None) or ())
+               for other_key, live in _core._servers.items()}
+    for other_key, lazy_names in _core._lazy_server_tool_names.items():
+        holders.setdefault(other_key, set()).update(lazy_names)
+    return [(other_key, _core._servers.get(other_key)) for other_key, names in holders.items()
+            if other_key != key and registration_name(_key_name(other_key)) == slug and tool_name in names
             and scope in (_core._server_tool_scopes.get(other_key) or {_core._server_registry_scope(other_key)})]
 
 

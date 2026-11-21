@@ -262,8 +262,8 @@ def test_a_restart_where_every_account_is_dead_keeps_the_tools_and_each_account_
     pal.start_agent_tools()
     authorization.expire_access_tokens()
     for alias in ("default", "work"):
-        wait_until(lambda: pal.call(SLUG, "whoami", connector_alias=alias).get("code") == "reauth_required",
-                   what=f"{alias} to ask for a new sign-in")
+        got = pal.call(SLUG, "whoami", connector_alias=alias)
+        assert got.get("code") == "reauth_required", got
 
     pal.restart_process(SLUG)
     before = traffic_marks(authorization, mcp)
@@ -280,3 +280,61 @@ def test_a_restart_where_every_account_is_dead_keeps_the_tools_and_each_account_
 
     assert json.loads(pal.call(SLUG, "whoami", connector_alias="work")["result"])["account"] == "bob"
     assert pal.call(SLUG, "whoami", connector_alias="default")["code"] == "reauth_required"
+
+
+def test_a_live_account_going_away_leaves_the_tools_a_dead_sibling_account_still_needs(servers, pal):
+    from tools.mcp_tool_lifecycle import shutdown_mcp_servers
+
+    authorization, mcp = servers
+    pal.add_connector(SLUG, "mcp_oauth", mcp.mcp_url)
+    pal.rpc("mcp.servers.add", name=SLUG, preset=SLUG)
+    authorization.sign_in_as("alice")
+    pal.sign_in_with_app_redirect(SLUG)
+    authorization.sign_in_as("bob")
+    pal.sign_in_with_app_redirect(SLUG, account="work", create=True)
+    pal.start_agent_tools()
+    authorization.expire_access_tokens("bob")
+    assert pal.call(SLUG, "whoami", connector_alias="work")["code"] == "reauth_required"
+    pal.restart_process(SLUG)
+    registered = pal.start_agent_tools()
+    assert pal.tool(SLUG, "whoami") in registered
+
+    shutdown_mcp_servers(names={f"{SLUG}@default"})
+
+    assert all(registry.get_entry(pal.tool(SLUG, name)) is not None for name in ("whoami", "list_projects"))
+    answer = pal.call(SLUG, "whoami", connector_alias="work")
+    assert answer["code"] == "reauth_required" and answer["server"] == f"{SLUG}@work"
+
+    authorization.sign_in_as("bob")
+    pal.sign_in_with_app_redirect(SLUG, account="work")
+
+    assert json.loads(pal.call(SLUG, "whoami", connector_alias="work")["result"])["account"] == "bob"
+
+
+def test_a_call_whose_transport_failed_after_the_sign_in_check_still_gets_the_sign_in_again_error(servers, pal, monkeypatch):
+    from tools import mcp_tool_handlers as handlers
+    from tools.mcp_tool_scope import _resolve_server_key
+    from tools import mcp_tool as core
+
+    authorization, mcp = servers
+    sign_in(pal, authorization, mcp)
+    pal.call(SLUG, "whoami")
+    authorization.expire_access_tokens()
+    name = f"{SLUG}@default"
+    gate = handlers._trust_gate_check
+
+    def transport_fails_then_marker_lands(*args, **kwargs):
+        verdict = gate(*args, **kwargs)
+        server = core._servers[_resolve_server_key(name)]
+        server.session = None
+        server._ready.clear()
+        HermesTokenStorage(name).mark_reauth_required("token_rejected")
+        return verdict
+
+    monkeypatch.setattr(handlers, "_trust_gate_check", transport_fails_then_marker_lands)
+    started = time.monotonic()
+    answer = pal.call(SLUG, "whoami")
+
+    assert answer["code"] == "reauth_required" and answer["needs_reauth"] is True
+    assert time.monotonic() - started < FAST
+    assert len(mcp.traffic.calls("whoami")) == 1

@@ -384,12 +384,16 @@ def _acquire_call_server(server_name: str, tool_timeout: float):
         )
     server = _discovery._get_connected_server_for_call(server_name)
     wait = min(5.0, float(tool_timeout or 5.0))
+    if server and not server.session and (reauth := _reauth_pending_error(server_name)) is not None:
+        return None, reauth
     if server and not server.session and _signed_in_again_since_park(server):
         if _loop._signal_reconnect_and_wait(server_name, server, op_description="tools/call after sign-in", timeout=wait):
             _core._reset_server_error(server_name)
             return server, None
     if server and (server.session or _loop._wait_for_server_session_ready(server, timeout=wait)):
         return server, None
+    if (reauth := _reauth_pending_error(server_name)) is not None:
+        return None, reauth
     _core._bump_server_error(server_name)
     if server and _loop._signal_reconnect(server):
         return None, tool_error(f"MCP server '{server_name}' transport is down; "
