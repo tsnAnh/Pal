@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import ipaddress
 import json
@@ -14,6 +15,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import hermes_yaml as yaml
 import pytest
+import pytest_asyncio
 
 from hermes_constants import get_hermes_home
 from tests.tools.oauth_server_double import pkce_challenge
@@ -164,6 +166,24 @@ def gateway_callback(landed: dict[str, str]):
     return TestClient(app, base_url=PUBLIC_URL).get(GATEWAY_CALLBACK_PATH, params=landed)
 
 
+def gateway_document_fetcher(public_url: str = PUBLIC_URL):
+    def fetch(url: str) -> dict | None:
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from hermes_cli.web_routers import oauth_client_metadata
+
+        parts = urlsplit(url)
+        if f"{parts.scheme}://{parts.netloc}" != public_url:
+            return None
+        app = FastAPI()
+        app.include_router(oauth_client_metadata.router)
+        reply = TestClient(app, base_url=public_url).get(parts.path)
+        return reply.json() if reply.status_code == 200 else None
+
+    return fetch
+
+
 def device_sign_in(authorization, *, account: str | None = None, redirect_uri: str = LOOPBACK_REDIRECT,
                    scope: str = "") -> dict:
     if account:
@@ -224,7 +244,8 @@ class PalEnv:
         self.write_config({"webapp": {"public_url": url}})
 
     def add_connector(self, slug: str, method: str, mcp_url: str, *, signin_on: str | None = None,
-                      oauth_endpoints: dict | None = None, scopes: list[str] | None = None) -> None:
+                      oauth_endpoints: dict | None = None, scopes: list[str] | None = None,
+                      sign_in: str | None = None, cimd: bool = False) -> None:
         entry = {"id": slug, "name": slug.title(), "description": f"{slug} test connector", "icon": "plugin_glyph",
                  "category": "Testing", "method": method, "mcp_url": mcp_url, "verified": False,
                  "source": "https://example.invalid/pal-auth-e2e"}
@@ -232,6 +253,10 @@ class PalEnv:
             entry["oauth"] = oauth_endpoints
         if scopes:
             entry["scopes"] = scopes
+        if sign_in:
+            entry["sign_in"] = sign_in
+        if cimd:
+            entry["cimd"] = True
         self._catalog.append(entry)
         if method in {"mcp_oauth", "api_key", "none", "oauth_client"}:
             manifest = {"manifest_version": 1, "name": slug, "description": f"{slug} test connector",
@@ -251,6 +276,7 @@ class PalEnv:
 
         self._catalog_file.write_text(yaml.safe_dump({"version": 1, "connectors": self._catalog}, sort_keys=False))
         self.monkeypatch.setattr(pal_connectors.load_pal_connectors, "__defaults__", (self._catalog_file,))
+        pal_connectors.device_sign_in_urls.cache_clear()
 
     def rpc(self, method: str, **params) -> dict:
         reply = self._server.handle_request({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
@@ -295,6 +321,7 @@ class PalEnv:
         return json.loads(registry.dispatch(self.tool(slug, tool), arguments))
 
     def shutdown(self) -> None:
+        from hermes_cli import pal_connectors
         from tools import mcp_tool_loop as loop
         from tools.mcp_oauth_manager import reset_manager_for_tests
         from tools.mcp_tool_lifecycle import shutdown_mcp_servers
@@ -302,6 +329,25 @@ class PalEnv:
         shutdown_mcp_servers()
         loop._stop_mcp_loop()
         reset_manager_for_tests()
+        pal_connectors.device_sign_in_urls.cache_clear()
+
+
+async def hand_over(phone, authorization, service: str, account: str | None = None, **overrides) -> dict:
+    handover = {**device_sign_in(authorization, account=account), **overrides}
+    return await phone.call("auth.submit_oauth_tokens", {"service": service, **handover})
+
+
+async def agent(pal: PalEnv, slug: str, tool: str, **arguments) -> dict:
+    return await asyncio.to_thread(pal.call, slug, tool, **arguments)
+
+
+@pytest_asyncio.fixture
+async def phone(pal):
+    from tests.gateway.device_tools_harness import connect_phone, make_authority, release_authority
+
+    authority = await make_authority(pal.home)
+    yield await connect_phone(authority)
+    release_authority(authority)
 
 
 @pytest.fixture

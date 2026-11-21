@@ -38,6 +38,19 @@ def test_an_api_key_goes_to_the_server_as_a_bearer_header_and_never_into_the_con
     assert pal.connector_row(SLUG)["status"] == "connected"
 
 
+def test_a_connector_added_without_its_key_is_not_connected_until_the_key_is_saved(mcp, pal):
+    pal.add_connector(SLUG, "api_key", mcp.mcp_url)
+
+    pal.rpc("mcp.servers.add", name=SLUG, preset=SLUG)
+    without_key = pal.connector_row(SLUG)["status"]
+    pal.rpc("mcp.servers.set_api_key", name=SLUG, value=KEY)
+
+    assert without_key == "not_connected"
+    assert pal.connector_row(SLUG)["status"] == "connected"
+    listed = next(r for r in pal.rpc("mcp.catalog")["servers"] if r["name"] == SLUG)
+    assert all(a["status"] == "connected" for a in listed["accounts"])
+
+
 def test_a_wrong_key_is_refused_by_the_server_and_a_corrected_key_connects(mcp, pal):
     pal.add_connector(SLUG, "api_key", mcp.mcp_url)
     pal.rpc("mcp.servers.add", name=SLUG, preset=SLUG)

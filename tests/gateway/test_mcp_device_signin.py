@@ -202,7 +202,7 @@ async def test_a_lapsed_grant_is_never_refreshed_or_registered_again_and_a_new_h
 
 
 @pytest.mark.asyncio
-async def test_a_connector_the_gateway_signs_in_is_not_flagged_for_the_same_lapse(authorities):
+async def test_a_connector_the_gateway_signs_in_is_flagged_for_the_same_lapse(authorities):
     from hermes_cli.mcp_config import _save_mcp_server
     authority = await authorities('home')
     home = home_of(authority)
@@ -214,7 +214,8 @@ async def test_a_connector_the_gateway_signs_in_is_not_flagged_for_the_same_laps
         storage._tokens_path().write_text(json.dumps({
             'access_token': ACCESS, 'token_type': 'Bearer', 'expires_at': time.time() - 10}))
         return pending_reauth_reason('acme'), storage.reauth_required()
-    assert await _in_home(home, lapse) == (None, False)
+    reason, flagged = await _in_home(home, lapse)
+    assert reason and flagged is True
 
 
 @pytest.mark.asyncio

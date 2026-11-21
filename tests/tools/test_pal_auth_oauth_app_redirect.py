@@ -46,6 +46,21 @@ def test_the_device_completes_the_browser_step_and_the_agent_calls_a_tool_as_the
     assert pal.connector_row(SLUG)["status"] == "connected"
 
 
+def test_a_connector_added_but_not_signed_in_is_not_connected_anywhere(servers, pal):
+    _, mcp = servers
+    pal.add_connector(SLUG, "mcp_oauth", mcp.mcp_url)
+
+    pal.rpc("mcp.servers.add", name=SLUG, preset=SLUG)
+    pal.start_agent_tools()
+
+    listed = next(r for r in pal.rpc("mcp.catalog")["servers"] if r["name"] == SLUG)
+    row = next(r for r in pal.rpc("mcp.servers.status")["servers"] if r["name"] == SLUG)
+    assert pal.connector_row(SLUG)["status"] == "not_connected"
+    assert all(a["status"] == "not_connected" for a in listed["accounts"])
+    assert row["connected"] is False
+    assert not HermesTokenStorage(SLUG).has_cached_tokens()
+
+
 def test_a_code_returned_with_a_foreign_state_is_refused_and_the_sign_in_still_finishes_with_the_right_one(servers, pal):
     authorization, mcp = servers
     pal.add_connector(SLUG, "mcp_oauth", mcp.mcp_url)

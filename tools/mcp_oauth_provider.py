@@ -100,16 +100,11 @@ class HermesProviderMixin:
         name = getattr(self, "_hermes_server_name", "")
         return bool(name) and server_signs_in_on_owner_app(name)
 
-    def _hermes_hands_over_sign_in(self) -> bool:
-        from tools.mcp_oauth import server_hands_over_sign_in
-        name = getattr(self, "_hermes_server_name", "")
-        return bool(name) and server_hands_over_sign_in(name)
-
     def _hermes_raise_if_reauth_required(self) -> None:
         from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
         storage = self.context.storage
         if isinstance(storage, HermesTokenStorage) and storage.reauth_required():
-            raise OwnerSigninRequired("The saved sign-in was rejected and a new one must be handed over from the owner's computer")
+            raise OwnerSigninRequired("The saved sign-in can no longer be renewed and the owner has to sign in again")
 
     async def _perform_authorization(self):
         if self._hermes_signs_in_on_owner_app():
@@ -321,6 +316,7 @@ class HermesProviderMixin:
                     except BaseException as exc:
                         sent, thrown = None, exc
                     else:
+                        self._hermes_stop_on_unrenewable_grant(sent)
                         failure = _asm_discovery_failure(sent)
                         if failure:
                             discovery_failures.append(failure)
@@ -328,6 +324,16 @@ class HermesProviderMixin:
                             sent = await self._hermes_accept_origin_issued_metadata(sent)
             finally:
                 await self._hermes_release_refresh_fence()
+
+    def _hermes_stop_on_unrenewable_grant(self, response) -> None:
+        if getattr(response, "status_code", None) != 401:
+            return
+        request = getattr(response, "request", None)
+        tokens = self.context.current_tokens
+        if (request is None or "authorization" not in request.headers or tokens is None
+                or not tokens.access_token or tokens.refresh_token):
+            return
+        self._hermes_reject_grant("The server refused the saved access token and nothing can refresh it")
 
     async def _refresh_token(self):
         """Take the refresh fence, then build the request from the token we own.
@@ -506,7 +512,7 @@ class HermesProviderMixin:
                 )
                 return True
             self.context.clear_tokens()
-            if response.status_code in (400, 401) and self._hermes_hands_over_sign_in():
+            if response.status_code in (400, 401):
                 self._hermes_reject_refresh_token()
             return False
         from httpx import HTTPError
@@ -532,13 +538,16 @@ class HermesProviderMixin:
         return True
 
     def _hermes_reject_refresh_token(self) -> None:
-        """The one refresh this sign-in gets has failed for good: persist that before anything can present
-        the dead token again, then fail the call instead of falling into a browser flow nobody can finish."""
+        self._hermes_reject_grant("The authorization server rejected the saved refresh token", "refresh_rejected")
+
+    def _hermes_reject_grant(self, message: str, reason: str = "token_rejected") -> None:
+        """The grant has failed for good: persist that before anything can present the dead token again, then
+        fail the call instead of falling into a browser flow nobody can finish."""
         from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
         storage = self.context.storage
         if isinstance(storage, HermesTokenStorage):
-            storage.mark_reauth_required()
-        raise OwnerSigninRequired("The authorization server rejected the saved refresh token")
+            storage.mark_reauth_required(reason)
+        raise OwnerSigninRequired(message)
 
     async def _hermes_reload_tokens_after_refresh_failure(self) -> bool:
         """Re-read tokens from disk after a rejected refresh.

@@ -50,13 +50,14 @@ def test_the_owners_client_signs_in_through_the_gateway_callback_without_registe
     saved = save_client(pal)
     ready = pal.connector_row(SLUG)["status"]
     started = pal.rpc("connectors.oauth_client.connect", slug=SLUG)
+    waiting = pal.connector_row(SLUG)["status"]
     landed = Browser().authorize(started["auth_url"])
     page = gateway_callback(landed)
     pal.poll_until(SLUG, started["session_id"])
     pal.start_agent_tools()
     answer = pal.call(SLUG, "whoami")
 
-    assert (before, ready) == ("needs_setup", "not_connected")
+    assert (before, ready, waiting) == ("needs_setup", "not_connected", "not_connected")
     assert setup_before["configured"] is False and setup_before["redirect_url"] == GATEWAY_URI
     assert saved["configured"] is True
     assert authorization.registrations == []

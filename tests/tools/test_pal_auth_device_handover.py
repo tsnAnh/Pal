@@ -6,12 +6,10 @@ import logging
 import time
 
 import pytest
-import pytest_asyncio
 
-from tests.gateway.device_tools_harness import connect_phone, make_authority, release_authority
 from tests.tools.mcp_bearer_server_double import McpServerDouble, Protection
 from tests.tools.oauth_server_double import OAuthServerDouble
-from tests.tools.pal_auth_harness import device_sign_in
+from tests.tools.pal_auth_harness import agent, hand_over
 from tests.waiting import async_wait_until
 
 pytest_plugins = ("tests.tools.pal_auth_harness",)
@@ -26,22 +24,6 @@ def servers(monkeypatch):
         monkeypatch.setenv("SSL_CERT_FILE", str(authorization.cert_path))
         with McpServerDouble(protection=Protection.OAUTH, authorization_server=authorization) as mcp:
             yield authorization, mcp
-
-
-@pytest_asyncio.fixture
-async def phone(pal):
-    authority = await make_authority(pal.home)
-    yield await connect_phone(authority)
-    release_authority(authority)
-
-
-async def hand_over(phone, authorization, service: str, account: str | None = None, **overrides) -> dict:
-    handover = {**device_sign_in(authorization, account=account), **overrides}
-    return await phone.call("auth.submit_oauth_tokens", {"service": service, **handover})
-
-
-async def agent(pal, slug: str, tool: str, **arguments) -> dict:
-    return await asyncio.to_thread(pal.call, slug, tool, **arguments)
 
 
 @pytest.mark.asyncio

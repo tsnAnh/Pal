@@ -12,6 +12,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -108,6 +109,7 @@ class OAuthServerDouble:
         cimd: bool = False,
         tls: bool = False,
         refusal: str | None = None,
+        document_fetcher: Callable[[str], dict | None] | None = None,
     ):
         self.dcr = dcr
         self.accepted_redirects = accepted_redirects
@@ -115,6 +117,7 @@ class OAuthServerDouble:
         self.expires_in = expires_in
         self.cimd = cimd
         self.refusal = refusal
+        self.document_fetcher = document_fetcher
         self.signing_in_as = "owner"
         self.clients: dict[str, Client] = {}
         self.client_documents: dict[str, dict] = {}
@@ -278,16 +281,21 @@ class OAuthServerDouble:
     def _client_from_document(self, client_id: str, redirect_uri: str) -> Client | None:
         self.log.cimd_fetches.append(client_id)
         try:
-            context = ssl.create_default_context(cafile=str(self.cert_path)) if self.cert_path else None
-            with urllib.request.urlopen(client_id, timeout=10, context=context) as response:
-                document = json.loads(response.read())
+            document = self._fetch_document(client_id)
         except (OSError, ValueError, urllib.error.URLError):
             return None
-        if document.get("client_id") != client_id:
+        if not isinstance(document, dict) or document.get("client_id") != client_id:
             return None
         client = Client(client_id, list(document.get("redirect_uris") or []))
         self.clients[client_id] = client
         return client
+
+    def _fetch_document(self, client_id: str) -> dict | None:
+        if self.document_fetcher is not None:
+            return self.document_fetcher(client_id)
+        context = ssl.create_default_context(cafile=str(self.cert_path)) if self.cert_path else None
+        with urllib.request.urlopen(client_id, timeout=10, context=context) as response:
+            return json.loads(response.read())
 
     def _authorize(self, h) -> None:
         query = {k: v[0] for k, v in parse_qs(urlsplit(h.path).query).items()}
