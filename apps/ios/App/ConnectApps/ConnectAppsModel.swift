@@ -146,8 +146,9 @@ final class ConnectAppsModel {
         devices = DeviceConnectorsModel(pool: pool, profile: profile, surfaces: connection.surfaces)
         self.bots = bots
         self.currentBot = currentBot
+        let signInRPC = OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally)))
         let connectService = ConnectAppsService(
-            rpc: ConnectorDetailsScript.wrap(OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally)))), profile: profile,
+            rpc: ConnectorDetailsScript.wrap(ShopifyScript.wrap(signInRPC)), profile: profile,
             browser: McpSignInScript.browser(OAuthClientScript.browser(browser)),
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: NativeMcpSignIn.native(connection: connection), diagnostics: .osLog()
         )
