@@ -66,7 +66,7 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
         screenShot("kanban-card-ref")
     }
 
-    func testTicketShowsOnlyLabelledPartsAndDetailsStayBelow() throws {
+    func testTicketShowsOnlyLabelledPartsAndNoDetails() throws {
         try control("kanban-seed")
         let app = launch()
         signInIfNeeded(app)
@@ -74,8 +74,7 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
 
         waitFor(any(app, "kanbanPart-goal"), timeout: 10, "the Goal part")
         waitFor(any(app, "kanbanPart-done-means"), timeout: 10, "the Done means part")
-        let decisions = any(app, "kanbanPart-owner-decisions")
-        waitFor(decisions, timeout: 10, "the Owner decisions part")
+        waitFor(any(app, "kanbanPart-owner-decisions"), timeout: 10, "the Owner decisions part")
         XCTAssertEqual(ticketParts(app).count, 3, "only labels present in the ticket get a part")
         XCTAssertFalse(any(app, "kanbanBodyIntro").exists, "the title line is dropped, so this card has no intro")
         XCTAssertFalse(any(app, "kanbanPart-current-status").exists, "an absent label has no heading")
@@ -83,18 +82,12 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
         XCTAssertFalse(app.staticTexts["Current status"].exists, "no empty Current status caption")
         XCTAssertTrue(app.staticTexts["thank the testers"].exists, "bullets keep their text")
 
-        let toggle = any(app, "kanbanDetails-toggle")
-        waitFor(toggle, timeout: 10, "the Details control")
-        XCTAssertGreaterThan(toggle.frame.minY, decisions.frame.maxY, "Details sits below the ticket text")
-        XCTAssertFalse(any(app, "kanbanDetails").exists, "Details start collapsed")
-        XCTAssertFalse(app.staticTexts["Key: PAL-1"].exists, "machine lines are hidden while collapsed")
-
-        reveal(toggle, in: app)
-        toggle.hit()
-        waitFor(any(app, "kanbanDetails"), timeout: 10, "Details expand")
-        XCTAssertTrue(app.staticTexts["Key: PAL-1"].waitForExistence(timeout: 10), "expanding shows the machine lines")
-        XCTAssertTrue(app.staticTexts["Ref: PAL-12"].exists, "the ref line is among the machine lines")
-        screenShot("kanban-card-details")
+        for _ in 0..<6 { any(app, "kanbanCard").swipeUp() }
+        XCTAssertFalse(any(app, "kanbanDetails-toggle").exists, "the card has no Details control")
+        XCTAssertFalse(any(app, "kanbanDetails").exists, "the card has no Details section")
+        XCTAssertFalse(app.staticTexts["Key: PAL-1"].exists, "machine lines never show")
+        XCTAssertFalse(app.staticTexts["Ref: PAL-12"].exists, "the ref line stays out of the ticket body")
+        screenShot("kanban-card-bottom")
     }
 
     func testEvidenceCollapsesRepeatsAndShowsAllOnRequest() throws {
@@ -168,12 +161,6 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
         #endif
     }
 
-    #if os(iOS)
-    private func systemBack(_ app: XCUIApplication) -> XCUIElement {
-        app.navigationBars.buttons.element(boundBy: 0)
-    }
-    #endif
-
     private func assertOneWayOut(_ app: XCUIApplication, close: Bool, _ screen: String) {
         for duplicate in ["kanbanBoards-back", "kanbanBoards-close", "kanbanBoard-back", "kanbanCard-close", "kanban-close"] {
             XCTAssertFalse(any(app, duplicate).exists, "\(screen) has no \(duplicate)")
@@ -191,7 +178,7 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
         waitFor(entry, timeout: 20, "work boards button")
         entry.hit()
         openSeededBoard(app)
-        assertOneWayOut(app, close: true, "board")
+        assertOneWayOut(app, close: !pushesKanban, "board")
         show(app, column: "ready")
         let row = card(app, in: "ready")
         waitFor(row, timeout: 20, "the card in Ready")
@@ -206,8 +193,19 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
         XCTAssertFalse(any(app, "kanbanBody").exists, "the card detail is gone")
         #endif
 
+        #if os(iOS)
+        if pushesKanban {
+            let heading = app.navigationBars["Pal Kanban"]
+            waitFor(heading, timeout: 10, "the board title sits in the navigation bar")
+            XCTAssertLessThan(systemBack(app).frame.minX, heading.staticTexts["Pal Kanban"].frame.minX, "the system Back leads the board bar")
+            systemBack(app).hit()
+        } else {
+            app.buttons["kanbanBoard-close"].hit()
+        }
+        #else
         app.buttons["kanbanBoard-close"].hit()
-        waitFor(entry, timeout: 20, "close dismisses the Kanban surface")
+        #endif
+        waitFor(entry, timeout: 20, "leaving Kanban lands on the home list")
         XCTAssertFalse(any(app, "kanbanBoard").exists, "the board is gone")
     }
 }

@@ -7,6 +7,7 @@ struct KanbanBoardsView: View {
     let store: KanbanStore
     @Binding var selected: String?
     let close: (() -> Void)?
+    var back: (() -> Void)?
     let openCard: (String, String) -> Void
 
     @State private var last: String?
@@ -20,19 +21,19 @@ struct KanbanBoardsView: View {
         Group {
             if let board = selected, let unreadable = boards.first(where: { $0.scope.board == board && $0.unavailable != nil }) {
                 KanbanPage(
-                    title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoardUnavailable", back: nil, close: close, scrolls: false,
+                    title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoardUnavailable", back: back, close: close, scrolls: false,
                     picker: KanbanBoardPicker(boards: boards, selected: $selected)
                 ) {
                     KanbanStatusView(copy: .unreadableBoard(unreadable)) { Task { await store.loadBoards() } }
                 }
             } else if let board = selected {
                 KanbanBoardView(
-                    store: store, board: board, openCard: { openCard(board, $0) }, close: close,
+                    store: store, board: board, openCard: { openCard(board, $0) }, close: close, back: back,
                     picker: KanbanBoardChoice.showsPicker(boards: slugs) ? KanbanBoardPicker(boards: boards, selected: $selected) : nil
                 )
                 .id(board)
             } else {
-                KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoards", back: nil, close: close, scrolls: false) {
+                KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoards", back: back, close: close, scrolls: false) {
                     content
                 }
             }
@@ -116,10 +117,12 @@ struct KanbanBoardPicker: View {
             }
             .hermesText(.chip)
             .foregroundStyle(PalTokens.textPrimary)
+            #if os(macOS)
             .padding(.horizontal, 12)
             .frame(height: PalMetrics.sheetCloseControlSize)
             .palGlass(Capsule(), interactive: false)
             .contentShape(Capsule())
+            #endif
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

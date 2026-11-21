@@ -28,8 +28,8 @@ final class KanbanE2ETests: KanbanE2ETestCase {
         card(app, in: "done").hit()
         waitFor(any(app, "kanbanBody"), timeout: 20, "card detail description")
         XCTAssertTrue(app.staticTexts["thank the testers"].waitForExistence(timeout: 10), "list items render as text")
-        waitFor(any(app, "kanbanDetails-toggle"), timeout: 10, "machine lines sit behind one Details control")
-        XCTAssertFalse(app.staticTexts["Key: PAL-1"].exists, "machine lines are not shown while collapsed")
+        XCTAssertFalse(any(app, "kanbanDetails-toggle").exists, "the card has no Details control")
+        XCTAssertFalse(app.staticTexts["Key: PAL-1"].exists, "machine lines are never shown")
         screenShot("kanban-card-detail")
     }
 

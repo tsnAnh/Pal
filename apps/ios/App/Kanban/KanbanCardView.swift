@@ -112,7 +112,6 @@ struct KanbanCardView: View {
         ticket(document)
         text("Result", detail.result, identifier: "kanbanResult")
         evidence(detail)
-        details(document)
         activity
         lifecycle(detail)
         runs(detail)
@@ -172,13 +171,6 @@ struct KanbanCardView: View {
                     accessibilityIdentifier: "kanbanPullRequestLink-\(index)"
                 ) { ExternalLink.open(url) }
             }
-        }
-    }
-
-    @ViewBuilder
-    private func details(_ document: KanbanBodyDocument) -> some View {
-        if !document.footer.isEmpty {
-            KanbanDetailsView(lines: document.footer)
         }
     }
 

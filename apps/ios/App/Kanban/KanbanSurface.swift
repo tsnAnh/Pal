@@ -16,6 +16,15 @@ extension KanbanStore {
     }
 }
 
+extension RosterModel {
+    var kanbanRoster: KanbanRoster {
+        KanbanRoster(
+            names: KanbanBots(displayNames: Dictionary(bots.map { ($0.name, $0.displayName) }, uniquingKeysWith: { first, _ in first })),
+            specs: Dictionary(bots.map { ($0.name, $0.spec) }, uniquingKeysWith: { first, _ in first })
+        )
+    }
+}
+
 struct KanbanSurface: View {
     @State private var store: KanbanStore
     @State private var path: [KanbanRoute] = []
@@ -42,18 +51,11 @@ struct KanbanSurface: View {
                 }
         }
         .tint(.primary)
-        .environment(\.kanbanRoster, kanbanRoster)
+        .environment(\.kanbanRoster, roster.kanbanRoster)
         .task(id: target) {
             guard let board = target.followedBoard else { return }
             await store.poll(board: board)
         }
-    }
-
-    private var kanbanRoster: KanbanRoster {
-        KanbanRoster(
-            names: KanbanBots(displayNames: Dictionary(roster.bots.map { ($0.name, $0.displayName) }, uniquingKeysWith: { first, _ in first })),
-            specs: Dictionary(roster.bots.map { ($0.name, $0.spec) }, uniquingKeysWith: { first, _ in first })
-        )
     }
 
     @ViewBuilder
