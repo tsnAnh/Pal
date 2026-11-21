@@ -162,6 +162,8 @@ targets:
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift
           - MacRoomSheetE2ETests.swift
+          - ConnectAppsE2ETests.swift
+          - ConnectorDetailsE2ETests.swift
       - path: UITests
         excludes:
           - E2ESupport.swift
@@ -176,6 +178,8 @@ targets:
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift
           - MacRoomSheetE2ETests.swift
+          - ConnectAppsE2ETests.swift
+          - ConnectorDetailsE2ETests.swift
         destinationFilters: [iOS]
     settings:
       base:

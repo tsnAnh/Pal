@@ -49,6 +49,24 @@ class ConnectAppsTestCase: E2ETestCase {
         XCTFail(message, file: file, line: line)
     }
 
+    func confirmDisconnect(_ app: XCUIApplication) {
+        let format = "label == %@ AND identifier != %@"
+        let confirm = app.buttons.matching(NSPredicate(format: format, "Disconnect", "connectorDetailsDisconnect")).firstMatch
+        waitFor(confirm, timeout: 10, "disconnect confirmation")
+        confirm.hit()
+    }
+
+    func goBackFromDetails(_ app: XCUIApplication) {
+        #if os(macOS)
+        app.buttons["connectorDetailsBack"].hit()
+        #else
+        let back = app.navigationBars.buttons.firstMatch
+        waitFor(back, timeout: 10, "system back button")
+        back.tap()
+        #endif
+        waitGone(element(app, id: "connectorDetails"), timeout: 10, "details leaves")
+    }
+
     func closeSheet(_ app: XCUIApplication) {
         app.buttons["connectApps-close"].tap()
         waitGone(sheet(app), timeout: 10, "sheet closes")
@@ -97,16 +115,22 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         #endif
         XCTAssertFalse(app.buttons["connectedCountButton"].exists, "the Connected section replaces the count button")
         XCTAssertFalse(app.buttons["connectAppsChips-all"].exists, "sections replace the filter chips")
-        XCTAssertFalse(app.descendants(matching: .any)["connectAppsSection-iphone"].exists, "no device section")
-        XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "deviceConnector-")).firstMatch.exists, "no device rows")
+        let deviceSection = app.descendants(matching: .any)["connectAppsSection-device-this-device"]
+        for _ in 0..<12 where !deviceSection.exists { app.swipeUp() }
+        waitFor(deviceSection, timeout: 30, "the This device section")
+        let deviceRows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "deviceConnector-"))
+        waitFor(deviceRows.firstMatch, timeout: 10, "device connectors listed as rows")
+        XCTAssertEqual(app.switches.count, 0, "device rows offer buttons, never switches")
         let headerFormat = "identifier BEGINSWITH %@ AND NOT identifier BEGINSWITH %@"
         let headers = app.descendants(matching: .any).matching(NSPredicate(format: headerFormat, "connectAppsSection-", "connectAppsSection-device"))
+        for _ in 0..<12 where !headers.firstMatch.exists { app.swipeDown() }
         waitFor(headers.firstMatch, timeout: 30, "a section header")
         shot(app, "connect-apps-all")
 
         let search = app.descendants(matching: .any)["connectAppsSearch"]
         search.tap()
         search.typeText("Calendar")
+        waitGone(deviceSection, timeout: 10, "searching hides the device section")
         XCTAssertFalse(app.descendants(matching: .any)["deviceConnector-calendar"].exists, "search finds no device connector")
     }
 
@@ -191,12 +215,17 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         XCTAssertEqual(connect.label, "Connect")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
         connect.hit()
-        waitLabel(connect, equals: "Connected")
+        let row = app.buttons["connectApp-connector:deepwiki-open"]
+        waitFor(row, timeout: 30, "connected row opens the details")
+        waitLabel(row, contains: "Connected")
         shot(app, "connect-apps-direct-connected")
-        connect.hit()
-        let disconnect = app.buttons["Disconnect"]
-        waitFor(disconnect, timeout: 10, "disconnect confirmation")
+        row.hit()
+        let disconnect = app.buttons["connectorDetailsDisconnect"]
+        waitFor(disconnect, timeout: 15, "details Disconnect")
         disconnect.hit()
+        confirmDisconnect(app)
+        waitFor(app.buttons["connectorDetailsConnect"], timeout: 30, "details flips to not connected")
+        goBackFromDetails(app)
         waitLabel(connect, equals: "Connect")
     }
 
@@ -232,17 +261,19 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitFor(connect, timeout: 30, "Notion action")
         XCTAssertEqual(connect.label, "Connect")
         connect.hit()
-        let paste = app.descendants(matching: .any)["otherConnectorPaste"]
-        let notice = app.alerts.firstMatch
-        waitUntil(60, "paste sign-in or a plain failure") { paste.exists || notice.exists }
+        let signIn = element(app, id: "mcpSignIn")
+        waitFor(signIn, timeout: 30, "sign-in sheet")
+        let paste = element(app, id: "mcpSignInPasteTitle")
+        let failure = element(app, id: "mcpSignInStatusTitle")
+        waitUntil(60, "paste sign-in or a plain failure") { paste.exists || failure.exists }
         if paste.exists {
-            let opened = app.descendants(matching: .any)["externalLinkProbe"]
+            let opened = element(app, id: "externalLinkProbe")
             waitUntil(10, "sign-in page handed to the system browser") { opened.label.hasPrefix("https://") }
-            app.buttons["otherConnectorPasteCancel"].hit()
-            waitGone(paste, timeout: 15, "paste sheet closes")
+            element(app, id: "mcpSignInCancel").hit()
         } else {
-            notice.buttons.firstMatch.tap()
+            element(app, id: "mcpSignInClose").hit()
         }
+        waitGone(signIn, timeout: 15, "sign-in sheet closes")
         waitLabel(connect, equals: "Connect")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
         #endif
@@ -262,9 +293,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         let disconnectButton = app.buttons["connectorDetailsDisconnect"]
         waitFor(disconnectButton, timeout: 15, "details Disconnect")
         disconnectButton.hit()
-        let disconnect = app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Disconnect", "connectorDetailsDisconnect")).firstMatch
-        waitFor(disconnect, timeout: 10, "disconnect confirmation")
-        disconnect.hit()
+        confirmDisconnect(app)
         waitFor(app.buttons["connectorDetailsConnect"], timeout: 30, "details flips to not connected")
     }
 
@@ -286,110 +315,11 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         let app = launchConnectApps()
         closeSheet(app)
         openDefaultBotChat(app)
-        send(app, "IPHONE CALENDAR what is on today")
+        let window = ISO8601DateFormatter()
+        let start = window.string(from: Date().addingTimeInterval(-12 * 3600))
+        let end = window.string(from: Date().addingTimeInterval(36 * 3600))
+        send(app, "CALL-TOOL iphone {\"action\": \"calendar.list_events\", \"args\": {\"start\": \"\(start)\", \"end\": \"\(end)\"}}")
         assistantReply(app, containing: "Hermes sync review")
         shot(app, "chat-calendar-reply")
-    }
-}
-
-@MainActor
-final class ConnectAppsPhoneE2ETests: ConnectAppsTestCase {
-    func test7PhoneLayoutChipSearchManageAndBack() throws {
-        #if os(macOS)
-        throw XCTSkip("Mac has its own panel layout")
-        #else
-        let app = launchConnectApps()
-        waitForCatalog(app)
-        assertPhoneChrome(app)
-        selectChips(app)
-        searchAndConnect(app, "Deepwiki")
-        showNoResults(app, replacing: "Deepwiki")
-        openInstalledAndBack(app)
-        search(app, "Deepwiki")
-        let connect = action(app, "deepwiki")
-        waitFor(connect, timeout: 30, "Deepwiki action again")
-        connect.hit()
-        let disconnect = app.alerts.buttons["Disconnect"].firstMatch
-        waitFor(disconnect, timeout: 10, "disconnect confirmation")
-        disconnect.hit()
-        waitLabel(connect, equals: "Connect")
-        #endif
-    }
-
-    private func assertPhoneChrome(_ app: XCUIApplication) {
-        waitFor(element(app, id: "connectAppsChips"), timeout: 20, "chip row")
-        waitFor(app.buttons["connectApps-close"], timeout: 10, "close button")
-        waitFor(element(app, id: "connectAppsSearch"), timeout: 10, "floating search")
-        XCTAssertTrue(app.staticTexts["Connect apps"].exists, "title")
-    }
-
-    private func selectChips(_ app: XCUIApplication) {
-        let all = app.buttons["connectAppsChip-all"]
-        waitFor(all, timeout: 10, "All chip")
-        XCTAssertTrue(all.isSelected, "All starts selected")
-        let device = app.buttons["connectAppsChip-device"]
-        waitFor(device, timeout: 10, "This device chip")
-        device.tap()
-        XCTAssertTrue(device.isSelected, "the device chip selects")
-        XCTAssertFalse(all.isSelected, "All deselects")
-        all.tap()
-        let prefix = "connectAppsChip-"
-        let reserved = ["all", "device", "more"].map { prefix + $0 }
-        let format = "identifier BEGINSWITH %@ AND NOT identifier IN %@"
-        let categories = app.buttons.matching(NSPredicate(format: format, prefix, reserved))
-        waitFor(categories.firstMatch, timeout: 10, "a category chip")
-        let category = categories.firstMatch
-        let name = String(category.identifier.dropFirst(prefix.count))
-        category.tap()
-        XCTAssertTrue(category.isSelected, "the category chip selects")
-        waitFor(element(app, id: "connectAppsSection-\(name)"), timeout: 10, "the category section")
-        shot(app, "connect-apps-phone-category")
-        all.tap()
-    }
-
-    private func searchAndConnect(_ app: XCUIApplication, _ text: String) {
-        search(app, text)
-        waitFor(element(app, id: "connectApp-connector:deepwiki"), timeout: 30, "Deepwiki result")
-        XCTAssertFalse(app.buttons["connectAppsChip-all"].isSelected, "no chip is selected while searching")
-        let connect = action(app, "deepwiki")
-        waitFor(connect, timeout: 30, "Deepwiki action")
-        XCTAssertEqual(connect.label, "Connect")
-        connect.hit()
-        waitLabel(connect, equals: "Connected")
-    }
-
-    private func showNoResults(_ app: XCUIApplication, replacing old: String) {
-        let field = element(app, id: "connectAppsSearch")
-        let missing = "zzzz no such app"
-        field.hit()
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count))
-        field.typeText(missing)
-        let noMatches = element(app, id: "connectAppsNoMatches")
-        waitFor(noMatches, timeout: 10, "no results state")
-        let echoed = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", missing)).firstMatch
-        XCTAssertTrue(echoed.exists, "the query shows in the empty state")
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: missing.count))
-        waitGone(noMatches, timeout: 10, "no results state clears")
-        waitFor(element(app, id: "connectAppsChips"), timeout: 10, "chip row after clearing")
-    }
-
-    private func openInstalledAndBack(_ app: XCUIApplication) {
-        let installed = app.buttons["connectAppsInstalledButton"]
-        waitFor(installed, timeout: 20, "N connected pill")
-        waitLabel(installed, contains: "connected")
-        installed.tap()
-        waitFor(element(app, id: "connectAppsInstalled"), timeout: 10, "manage screen")
-        waitFor(element(app, id: "connectInstalled-connector:deepwiki"), timeout: 10, "connected Deepwiki row")
-        assertOneSystemWayOut(app, screen: "manage screen", close: "connectAppsInstalledClose", back: "connectAppsInstalledBack")
-        shot(app, "connect-apps-phone-installed")
-        #if os(iOS)
-        app.buttons["BackButton"].tap()
-        #else
-        app.buttons["connectAppsInstalledBack"].tap()
-        #endif
-        waitGone(element(app, id: "connectAppsInstalled"), timeout: 10, "manage screen leaves")
-        waitFor(element(app, id: "connectAppsChips"), timeout: 10, "list returns")
-        waitFor(element(app, id: "connectAppsSearch"), timeout: 10, "search returns once the pop settles")
-        shot(app, "connect-apps-after-back")
     }
 }

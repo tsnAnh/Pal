@@ -131,7 +131,7 @@ final class ConnectAppsModel {
     let diagnostics = Diagnostics.osLog()
     let surfaces: SurfaceCache
     private var catalogKey: SurfaceKey { .screen("connect-catalog", bot: profile ?? "") }
-    var capabilitiesKey: SurfaceKey { .screen("connect-capabilities", bot: profile ?? "") }
+    var capabilitiesKey: SurfaceKey { .screen("connect-capabilities", bot: capabilityProfile ?? "") }
 
     init(
         connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
@@ -162,7 +162,7 @@ final class ConnectAppsModel {
             catalog = held
             phase = .ready
         }
-        if profile != nil, let rows = surfaces.remembered([CapabilityRow].self, capabilitiesKey) {
+        if capabilityProfile != nil, let rows = surfaces.remembered([CapabilityRow].self, capabilitiesKey) {
             capabilitiesPhase = .ready(rows)
         }
     }
@@ -170,6 +170,8 @@ final class ConnectAppsModel {
     var customConnector: CustomConnectorModel? {
         if case .customConnector(let connector) = mode { connector } else { nil }
     }
+
+    var capabilityProfile: String? { profile ?? currentBot }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
