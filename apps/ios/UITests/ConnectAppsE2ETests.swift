@@ -4,11 +4,11 @@ import XCTest
 
 @MainActor
 class ConnectAppsTestCase: E2ETestCase {
-    func launchConnectApps(extraArguments: [String] = []) -> XCUIApplication {
+    func launchConnectApps(appearance: AppearanceMode = .dark, extraArguments: [String] = []) -> XCUIApplication {
         let app = launch(extraArguments: [
             "-hermes-open-connect-apps",
             "-hermes-record-external-links",
-            "-\(AppearanceStore.defaultsKey)", AppearanceMode.dark.rawValue,
+            "-\(AppearanceStore.defaultsKey)", appearance.rawValue,
         ] + extraArguments)
         if !sheet(app).waitForExistence(timeout: 25) { signInIfNeeded(app) }
         waitFor(sheet(app), timeout: 30, "connect apps sheet")
@@ -256,12 +256,16 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitFor(manage, timeout: 30, "Context7 action")
         waitLabel(manage, equals: "Connect")
         manage.hit()
-        waitLabel(manage, equals: "Connected")
-        manage.hit()
-        let disconnect = app.buttons["Disconnect"]
+        let row = app.buttons["connectApp-connector:context7-open"]
+        waitFor(row, timeout: 30, "connected row opens the details")
+        row.hit()
+        let disconnectButton = app.buttons["connectorDetailsDisconnect"]
+        waitFor(disconnectButton, timeout: 15, "details Disconnect")
+        disconnectButton.hit()
+        let disconnect = app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Disconnect", "connectorDetailsDisconnect")).firstMatch
         waitFor(disconnect, timeout: 10, "disconnect confirmation")
         disconnect.hit()
-        waitLabel(manage, equals: "Connect")
+        waitFor(app.buttons["connectorDetailsConnect"], timeout: 30, "details flips to not connected")
     }
 
     func test2TheBotReadsTodaysEventsWithNoSwitch() async throws {

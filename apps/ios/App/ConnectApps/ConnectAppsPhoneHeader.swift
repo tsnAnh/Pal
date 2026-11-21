@@ -36,6 +36,7 @@ struct ConnectAppsPhoneRoot: View {
                 content: { ConnectAppsList(model: model) }
             )
             .environment(\.sheetChromeHostedInNavigation, true)
+            .connectorDetailsDestination(model, origin: .root)
             .navigationDestination(isPresented: showsInstalled) {
                 ConnectAppsPhoneInstalled(model: model)
                     .environment(\.sheetChromeHostedInNavigation, true)

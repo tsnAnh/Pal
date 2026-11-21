@@ -137,7 +137,7 @@ struct ConnectorAccountStateTests {
         #expect(ConnectRowState.resolve(input) == .connected)
         let listRow = ConnectListRow(app: mixed, state: ConnectRowState.resolve(input))
         #expect(!listRow.hasProblem)
-        #expect(listRow.summary == String(localized: "Connected"))
+        #expect(listRow.summary == "work, default")
         let sections = ConnectListLayout.sections(rows: [listRow], categories: ["Communication"])
         #expect(sections.map(\.kind) == [.connected])
     }

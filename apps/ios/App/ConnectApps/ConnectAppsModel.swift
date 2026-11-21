@@ -30,6 +30,11 @@ struct CredentialPrompt: Identifiable {
     let id = UUID()
     let app: ConnectApp
     let keys: [String]
+    var account: ConnectorAccountTarget?
+}
+
+struct ConnectorDetailsRoute: Hashable {
+    let appID: String
 }
 
 struct CapabilityKeyRequest: Identifiable, Equatable {
@@ -102,8 +107,11 @@ final class ConnectAppsModel {
     var navigation = ConnectMacNavigation()
     var expandedSections: Set<String> = []
     var showsAllInstalled = false
+    var rootDetails: ConnectorDetailsRoute?
+    var installedDetails: ConnectorDetailsRoute?
     private(set) var justConnected: Set<String> = []
     @ObservationIgnored private(set) var catalogRevision = 0
+    @ObservationIgnored var detailsModels: [String: ConnectorDetailsModel] = [:]
     @ObservationIgnored var rowCache: ConnectRowCache?
     @ObservationIgnored var macCache: ConnectMacCache?
     @ObservationIgnored var rowBuilds = 0
@@ -138,7 +146,7 @@ final class ConnectAppsModel {
         self.bots = bots
         self.currentBot = currentBot
         let connectService = ConnectAppsService(
-            rpc: OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally))), profile: profile,
+            rpc: ConnectorDetailsScript.wrap(OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally)))), profile: profile,
             browser: McpSignInScript.browser(OAuthClientScript.browser(browser)),
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: NativeMcpSignIn.native(connection: connection), diagnostics: .osLog()
         )
@@ -202,26 +210,26 @@ final class ConnectAppsModel {
         }
     }
 
-    func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
-        if presentsDiscordFlow(app) || presentsSetupGuide(app) { return }
-        if app.isGoogleAds {
+    func connect(_ app: ConnectApp, credentials: [String: String] = [:], account: ConnectorAccountTarget? = nil) async {
+        if account == nil, presentsDiscordFlow(app) || presentsSetupGuide(app) { return }
+        if account == nil, app.isGoogleAds {
             await openGoogleAds(app)
             return
         }
         if app.usesMcpSignIn {
-            beginMcpSignIn(app)
+            beginMcpSignIn(app, account: account)
             return
         }
         busy.insert(app.id)
         failures[app.id] = nil
         defer { busy.remove(app.id) }
         do {
-            try await service.connect(app, credentials: credentials)
-            if let failure = await service.tokenFailure(app) {
+            try await service.connect(app, credentials: credentials, account: account)
+            if let failure = await service.tokenFailure(app, account: account?.name) {
                 report(failure == .authRefused ? "\(app.name) didn't accept that token. Check it and try again." : failure.message)
             }
         } catch let error as ConnectAppsError {
-            handle(error, app: app)
+            handle(error, app: app, account: account)
         } catch {
             fail(app, "Couldn't connect \(app.name). Try again.")
         }
@@ -229,11 +237,11 @@ final class ConnectAppsModel {
         if catalog.apps.contains(where: { $0.id == app.id && $0.state == .connected }) { justConnected.insert(app.id) }
     }
 
-    func beginMcpSignIn(_ app: ConnectApp) {
+    func beginMcpSignIn(_ app: ConnectApp, account: ConnectorAccountTarget? = nil) {
         guard mcpSignIn == nil else { return }
         failures[app.id] = nil
         mcpSignIn = McpSignInController(
-            app: app, service: service, platform: ConnectorPlatform.current,
+            app: app, service: service, platform: ConnectorPlatform.current, account: account,
             openLink: { ExternalLink.open($0) },
             finished: { [weak self] in await self?.reload() }
         )
@@ -276,13 +284,13 @@ final class ConnectAppsModel {
         }
     }
 
-    func handle(_ error: ConnectAppsError, app: ConnectApp) {
+    func handle(_ error: ConnectAppsError, app: ConnectApp, account: ConnectorAccountTarget? = nil) {
         switch error {
         case .cancelled:
             if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
         case .signInFailed(let reason): failures[app.id] = reason
         case .signInRefused(let failure, _): failures[app.id] = failure.reason
-        case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
+        case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys, account: account)
         case .unavailable, .failed, .faulted, .oauthClient, .adminApprovalPending, .accountName: fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }

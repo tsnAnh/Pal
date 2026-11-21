@@ -7,24 +7,28 @@ struct ConnectFlatRow<Icon: View, Trailing: View>: View {
     let subtitle: String
     let problem: Bool
     let identifier: String
+    var open: (() -> Void)?
+    var opensWholeRow = false
     private let icon: Icon
     private let trailing: Trailing
 
     @Environment(\.hermesTheme) private var theme
 
     init(
-        title: String, subtitle: String, problem: Bool = false, identifier: String,
+        title: String, subtitle: String, problem: Bool = false, identifier: String, open: (() -> Void)? = nil, opensWholeRow: Bool = false,
         @ViewBuilder icon: () -> Icon, @ViewBuilder trailing: () -> Trailing
     ) {
         self.title = title
         self.subtitle = subtitle
         self.problem = problem
         self.identifier = identifier
+        self.open = open
+        self.opensWholeRow = opensWholeRow
         self.icon = icon()
         self.trailing = trailing()
     }
 
-    var body: some View {
+    private var leading: some View {
         HStack(spacing: ConnectRowMetrics.tileToTextGap) {
             icon
             VStack(alignment: .leading, spacing: 2) {
@@ -42,7 +46,32 @@ struct ConnectFlatRow<Icon: View, Trailing: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            trailing
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: ConnectRowMetrics.tileToTextGap) {
+            if let open {
+                if opensWholeRow {
+                    Button(action: open) {
+                        HStack(spacing: ConnectRowMetrics.tileToTextGap) {
+                            leading
+                            trailing
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("\(identifier)-open")
+                } else {
+                    Button(action: open) { leading.contentShape(Rectangle()) }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("\(identifier)-open")
+                    trailing
+                }
+            } else {
+                leading
+                trailing
+            }
         }
         .padding(.horizontal, PalMetrics.screenMargin)
         .padding(.vertical, ConnectRowMetrics.verticalPadding)

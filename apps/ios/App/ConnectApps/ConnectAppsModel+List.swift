@@ -65,3 +65,39 @@ extension ConnectAppsModel {
         Task { await slack.load() }
     }
 }
+
+enum ConnectorDetailsOrigin {
+    case root
+    case installed
+}
+
+extension ConnectAppsModel {
+    var openDetailsRoute: ConnectorDetailsRoute? {
+        navigation.screen == .installed ? installedDetails : rootDetails
+    }
+
+    func openDetails(_ app: ConnectApp) {
+        guard app.opensDetails else { return }
+        detailsModels[app.id] = nil
+        let route = ConnectorDetailsRoute(appID: app.id)
+        if navigation.screen == .installed { installedDetails = route } else { rootDetails = route }
+    }
+
+    func closeDetails() {
+        if navigation.screen == .installed { installedDetails = nil } else { rootDetails = nil }
+        releaseUnusedDetailsModels()
+    }
+
+    func releaseUnusedDetailsModels() {
+        let open = Set([rootDetails, installedDetails].compactMap { $0?.appID })
+        detailsModels = detailsModels.filter { open.contains($0.key) }
+    }
+
+    func detailsModel(appID: String) -> ConnectorDetailsModel? {
+        if let held = detailsModels[appID] { return held }
+        guard let app = catalog.apps.first(where: { $0.id == appID }) else { return nil }
+        let created = ConnectorDetailsModel(app: app, parent: self)
+        detailsModels[appID] = created
+        return created
+    }
+}

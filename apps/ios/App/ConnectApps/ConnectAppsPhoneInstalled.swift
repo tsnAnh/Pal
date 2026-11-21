@@ -26,13 +26,18 @@ struct ConnectAppsPhoneInstalled: View {
                 .scrollIndicators(.automatic)
             }
         )
+        .connectorDetailsDestination(model, origin: .installed)
     }
 
     private func installedRow(_ item: ConnectInstalledItem) -> some View {
-        ConnectFlatRow(
-            title: item.name, subtitle: item.countLine, identifier: "connectInstalled-\(item.id)",
+        let app = item.app.flatMap { $0.opensDetails ? $0 : nil }
+        return ConnectFlatRow(
+            title: item.name, subtitle: item.subtitle, identifier: "connectInstalled-\(item.id)",
+            open: app.map { target in { model.openDetails(target) } }, opensWholeRow: app != nil,
             icon: { ConnectInstalledIcon(item: item) },
-            trailing: { ConnectConnectedMark() }
+            trailing: {
+                if app != nil { ConnectOpenMark(state: .connected) } else { ConnectConnectedMark() }
+            }
         )
     }
 

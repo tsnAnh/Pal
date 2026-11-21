@@ -70,3 +70,35 @@ struct ConnectCapsule: View {
         }
     }
 }
+
+struct ConnectOpenMark: View {
+    let state: ConnectRowState
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if case .needsAttention = state {
+                Text("Needs sign-in")
+                    .font(.system(size: ConnectRowMetrics.subtitleSize))
+                    .foregroundStyle(Color(theme.palette.destructive))
+                    .lineLimit(1)
+                    .fixedSize()
+            } else {
+                ConnectConnectedMark()
+            }
+            PalIcon("chevron.right", ink: .tertiary)
+                .font(.system(size: 12, weight: .semibold))
+                .accessibilityHidden(true)
+        }
+    }
+}
+
+extension ConnectRowState {
+    var showsOpenMark: Bool {
+        switch self {
+        case .connected, .needsAttention: true
+        default: false
+        }
+    }
+}
