@@ -1051,6 +1051,42 @@
       }
     },
     {
+      "name": "connectors.details",
+      "summary": "What a connector's details screen shows besides its catalog row: the tools already discovered for any connected account of the slug (never a live probe; tools_known is false and tools empty when none are known), each in a group, the owner's permission mode per group present, and the installed skills that name the connector. A server with a read/write policy is grouped (read, write, never); any other server lists every tool in the tool group. Policy keys exist only for groups present: read is auto, ask or off, write is ask or off, tool is on or off, and never is fixed. Defaults are read auto, write ask, tool on.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectorDetailsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorDetailsResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.details.policy.set",
+      "summary": "Set one group's mode for every account of a connector, now and for accounts added later. off hides the group's tools from new sessions only (a live session keeps its tool list); ask on read makes reads wait for the owner's approval like an action, live. A write can never be set to auto and the never group has no mode. An unknown connector answers 4041 connector_not_found, a connector that is not connected 4041 connection_not_found, an invalid group or mode combination 4000 invalid_policy, and turning writes off before the connector's tools are known 5034 tools_unavailable.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectorDetailsPolicySetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorDetailsPolicySetResult"
+        }
+      }
+    },
+    {
       "name": "connectors.discord.guilds",
       "summary": "Owner only. The servers the saved bot is in, read live from Discord, with the saved allow-list and read-only choice.",
       "params": [
@@ -17088,6 +17124,18 @@
             "default": null,
             "title": "Mcp Url"
           },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
           "status": {
             "anyOf": [
               {
@@ -17184,6 +17232,238 @@
           "enabled"
         ],
         "title": "ConnectorChange",
+        "type": "object"
+      },
+      "ConnectorDetailsParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "minLength": 1,
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "ConnectorDetailsParams",
+        "type": "object"
+      },
+      "ConnectorDetailsPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "read": {
+            "anyOf": [
+              {
+                "enum": [
+                  "auto",
+                  "ask",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Read"
+          },
+          "write": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ask",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Write"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "enum": [
+                  "on",
+                  "off"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tool"
+          }
+        },
+        "title": "ConnectorDetailsPolicy",
+        "type": "object"
+      },
+      "ConnectorDetailsPolicySetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "minLength": 1,
+            "title": "Slug",
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/components/schemas/ConnectorToolGroup"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ConnectorPolicyMode"
+          }
+        },
+        "required": [
+          "slug",
+          "group",
+          "mode"
+        ],
+        "title": "ConnectorDetailsPolicySetParams",
+        "type": "object"
+      },
+      "ConnectorDetailsPolicySetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ConnectorDetailsPolicy"
+          }
+        },
+        "required": [
+          "ok",
+          "policy"
+        ],
+        "title": "ConnectorDetailsPolicySetResult",
+        "type": "object"
+      },
+      "ConnectorDetailsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "grouped": {
+            "title": "Grouped",
+            "type": "boolean"
+          },
+          "tools_known": {
+            "title": "Tools Known",
+            "type": "boolean"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorDetailsTool"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/ConnectorDetailsPolicy"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorDetailsSkill"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "slug",
+          "grouped",
+          "tools_known",
+          "tools",
+          "policy",
+          "skills"
+        ],
+        "title": "ConnectorDetailsResult",
+        "type": "object"
+      },
+      "ConnectorDetailsSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description"
+        ],
+        "title": "ConnectorDetailsSkill",
+        "type": "object"
+      },
+      "ConnectorDetailsTool": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/components/schemas/ConnectorToolGroup"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description",
+          "group"
+        ],
+        "title": "ConnectorDetailsTool",
         "type": "object"
       },
       "ConnectorPolicyAllowBody": {
@@ -17573,6 +17853,16 @@
         "title": "ConnectorPolicyLayerKind",
         "type": "string"
       },
+      "ConnectorPolicyMode": {
+        "enum": [
+          "auto",
+          "ask",
+          "off",
+          "on"
+        ],
+        "title": "ConnectorPolicyMode",
+        "type": "string"
+      },
       "ConnectorPolicySetParams": {
         "additionalProperties": false,
         "properties": {
@@ -17784,6 +18074,16 @@
           "unclassified"
         ],
         "title": "ConnectorToolFacet",
+        "type": "string"
+      },
+      "ConnectorToolGroup": {
+        "enum": [
+          "read",
+          "write",
+          "never",
+          "tool"
+        ],
+        "title": "ConnectorToolGroup",
         "type": "string"
       },
       "ConnectorToolRow": {
@@ -67510,6 +67810,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ConnectorsConnectResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.details",
+      "summary": "What a connector's details screen shows besides its catalog row: the tools already discovered for any connected account of the slug (never a live probe; tools_known is false and tools empty when none are known), each in a group, the owner's permission mode per group present, and the installed skills that name the connector. A server with a read/write policy is grouped (read, write, never); any other server lists every tool in the tool group. Policy keys exist only for groups present: read is auto, ask or off, write is ask or off, tool is on or off, and never is fixed. Defaults are read auto, write ask, tool on.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectorDetailsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorDetailsResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.details.policy.set",
+      "summary": "Set one group's mode for every account of a connector, now and for accounts added later. off hides the group's tools from new sessions only (a live session keeps its tool list); ask on read makes reads wait for the owner's approval like an action, live. A write can never be set to auto and the never group has no mode. An unknown connector answers 4041 connector_not_found, a connector that is not connected 4041 connection_not_found, an invalid group or mode combination 4000 invalid_policy, and turning writes off before the connector's tools are known 5034 tools_unavailable.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectorDetailsPolicySetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorDetailsPolicySetResult"
         }
       }
     },

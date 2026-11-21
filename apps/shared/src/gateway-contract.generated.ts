@@ -1729,6 +1729,7 @@ export interface ConnectorCatalogRow {
   method?: string | null
   verified?: boolean | null
   mcp_url?: string | null
+  source?: string | null
   status?: ConnectorCatalogStatus | null
   notes?: string | null
   setup_guide?: SetupGuide | null
@@ -1787,6 +1788,46 @@ export interface ConnectionAccountRow {
   reason?: string | null
 }
 export type ConnectionAccountStatus = 'connected' | 'needs_reconnect' | 'not_connected'
+export interface ConnectorDetailsParams {
+  profile?: string | null
+  slug: string
+}
+export interface ConnectorDetailsResult {
+  slug: string
+  grouped: boolean
+  tools_known: boolean
+  tools: ConnectorDetailsTool[]
+  policy: ConnectorDetailsPolicy
+  skills: ConnectorDetailsSkill[]
+}
+export interface ConnectorDetailsTool {
+  name: string
+  title: string
+  description: string
+  group: ConnectorToolGroup
+}
+export type ConnectorToolGroup = 'read' | 'write' | 'never' | 'tool'
+export interface ConnectorDetailsPolicy {
+  read?: 'auto' | 'ask' | 'off' | null
+  write?: 'ask' | 'off' | null
+  tool?: 'on' | 'off' | null
+}
+export interface ConnectorDetailsSkill {
+  name: string
+  title: string
+  description: string
+}
+export interface ConnectorDetailsPolicySetParams {
+  profile?: string | null
+  slug: string
+  group: ConnectorToolGroup
+  mode: ConnectorPolicyMode
+}
+export type ConnectorPolicyMode = 'auto' | 'ask' | 'off' | 'on'
+export interface ConnectorDetailsPolicySetResult {
+  ok: boolean
+  policy: ConnectorDetailsPolicy
+}
 export interface OAuthClientSlugParams {
   profile?: string | null
   slug: string
@@ -8577,6 +8618,10 @@ export interface RpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** What a connector's details screen shows besides its catalog row: the tools already discovered for any connected account of the slug (never a live probe; tools_known is false and tools empty when none are known), each in a group, the owner's permission mode per group present, and the installed skills that name the connector. A server with a read/write policy is grouped (read, write, never); any other server lists every tool in the tool group. Policy keys exist only for groups present: read is auto, ask or off, write is ask or off, tool is on or off, and never is fixed. Defaults are read auto, write ask, tool on. */
+  'connectors.details': { params: ConnectorDetailsParams; result: ConnectorDetailsResult }
+  /** Set one group's mode for every account of a connector, now and for accounts added later. off hides the group's tools from new sessions only (a live session keeps its tool list); ask on read makes reads wait for the owner's approval like an action, live. A write can never be set to auto and the never group has no mode. An unknown connector answers 4041 connector_not_found, a connector that is not connected 4041 connection_not_found, an invalid group or mode combination 4000 invalid_policy, and turning writes off before the connector's tools are known 5034 tools_unavailable. */
+  'connectors.details.policy.set': { params: ConnectorDetailsPolicySetParams; result: ConnectorDetailsPolicySetResult }
   /** Owner only. The servers the saved bot is in, read live from Discord, with the saved allow-list and read-only choice. */
   'connectors.discord.guilds': { params: ProfileParams; result: DiscordGuildsResult }
   /** Owner only. Save the Discord stdio server with DISCORD_ALLOWED_GUILDS from guild_ids (at least one, each a server the bot is in) and DISCORD_MCP_READ_ONLY from read_only, then run the MCP handshake. A failed handshake restores the previous server config and is an error; a live server restarts with the new env. */
@@ -9260,6 +9305,8 @@ export const RPC_METHODS = [
   'connectors.accounts.rename',
   'connectors.catalog',
   'connectors.connect',
+  'connectors.details',
+  'connectors.details.policy.set',
   'connectors.discord.guilds',
   'connectors.discord.save',
   'connectors.discord.token',
@@ -9648,6 +9695,10 @@ export interface CanonicalRpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** What a connector's details screen shows besides its catalog row: the tools already discovered for any connected account of the slug (never a live probe; tools_known is false and tools empty when none are known), each in a group, the owner's permission mode per group present, and the installed skills that name the connector. A server with a read/write policy is grouped (read, write, never); any other server lists every tool in the tool group. Policy keys exist only for groups present: read is auto, ask or off, write is ask or off, tool is on or off, and never is fixed. Defaults are read auto, write ask, tool on. */
+  'connectors.details': { params: ConnectorDetailsParams; result: ConnectorDetailsResult }
+  /** Set one group's mode for every account of a connector, now and for accounts added later. off hides the group's tools from new sessions only (a live session keeps its tool list); ask on read makes reads wait for the owner's approval like an action, live. A write can never be set to auto and the never group has no mode. An unknown connector answers 4041 connector_not_found, a connector that is not connected 4041 connection_not_found, an invalid group or mode combination 4000 invalid_policy, and turning writes off before the connector's tools are known 5034 tools_unavailable. */
+  'connectors.details.policy.set': { params: ConnectorDetailsPolicySetParams; result: ConnectorDetailsPolicySetResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** The current snapshot of one open session or account operation. */
@@ -9923,6 +9974,8 @@ export const CANONICAL_RPC_METHODS = [
   'connectors.accounts.remove',
   'connectors.catalog',
   'connectors.connect',
+  'connectors.details',
+  'connectors.details.policy.set',
   'connectors.list',
   'connectors.operation.status',
   'connectors.operation.wake',

@@ -202,8 +202,10 @@ def _trust_gate_check(server_name: str, tool_name: str, booked: Optional[list] =
     # Trust and costs are the calling profile's own policy (an adopter of a shared connection keeps its own).
     key = _server_key(server_name)
     if (action_policy := _core._server_action_policies.get(key)) is not None:
-        from tools import mcp_action_gate
-        error, grant = mcp_action_gate.gate(action_policy, server_name, tool_name, args)
+        from tools import mcp_action_gate, mcp_connector_policy
+        error, grant = mcp_action_gate.gate(
+            action_policy, server_name, tool_name, args,
+            reads_ask=partial(mcp_connector_policy.reads_need_approval, server_name, key))
         if error is not None:
             return error
         if grant is not None:

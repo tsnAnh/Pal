@@ -31,6 +31,12 @@ def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
     assert all(e.mcp_url or e.oauth for e in entries if e.method is ConnectionMethod.MCP_OAUTH and e.id != "t3code")
 
 
+def test_every_entry_describes_what_the_connector_does_in_one_plain_sentence():
+    for entry in load_pal_connectors():
+        assert entry.description.strip() == entry.description and entry.description.endswith("."), entry.id
+        assert len(entry.description) <= 160 and "\n" not in entry.description, entry.id
+
+
 def test_t3code_is_a_per_user_address_mcp_oauth_connector():
     entry = next(e for e in load_pal_connectors() if e.id == "t3code")
 
@@ -70,7 +76,7 @@ def test_discord_runs_the_pinned_stdio_server_with_the_token_only_as_a_template(
 def test_a_stdio_recipe_without_an_exact_pinned_version_is_refused(tmp_path, args):
     path = tmp_path / "catalog.yaml"
     path.write_text(yaml.safe_dump({"version": 1, "connectors": [{
-        "id": "x", "name": "X", "icon": "plugin_glyph", "category": "Communication", "method": "bot_token_stdio",
+        "id": "x", "name": "X", "description": "Reads X.", "icon": "plugin_glyph", "category": "Communication", "method": "bot_token_stdio",
         "verified": True, "source": "https://example.com", "stdio": {"command": "npx", "args": args, "env": {}}}]}))
 
     with pytest.raises(PalCatalogError, match="pinned"):
@@ -86,13 +92,16 @@ def test_catalog_never_routes_through_portal_or_composio():
 @pytest.mark.parametrize(
     "body",
     [
-        "version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: mcp_oauth, verified: true, source: https://x.dev}\n"
-        "- {id: a, name: B, icon: i, category: c, method: none, verified: false, source: https://y.dev}\n",
-        "version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: portal, verified: true, source: https://x.dev}\n",
-        "version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: true}\n",
-        "version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: oauth_client, verified: false, source: https://x.dev}\n",
+        "version: 1\nconnectors:\n- {id: a, name: A, description: d, icon: i, category: c, method: mcp_oauth, verified: true, source: https://x.dev}\n"
+        "- {id: a, name: B, description: d, icon: i, category: c, method: none, verified: false, source: https://y.dev}\n",
+        "version: 1\nconnectors:\n- {id: a, name: A, description: d, icon: i, category: c, method: portal, verified: true, source: https://x.dev}\n",
+        "version: 1\nconnectors:\n- {id: a, name: A, description: d, icon: i, category: c, method: none, verified: true}\n",
+        "version: 1\nconnectors:\n- {id: a, name: A, description: d, icon: i, category: c, method: oauth_client, verified: false, source: https://x.dev}\n",
+        "version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: false, source: https://x.dev}\n",
+        "version: 1\nconnectors:\n- {id: a, name: A, description: ' ', icon: i, category: c, method: none, verified: false, source: https://x.dev}\n",
     ],
-    ids=["duplicate-id", "unknown-method", "verified-without-source", "oauth-client-without-endpoints"],
+    ids=["duplicate-id", "unknown-method", "verified-without-source", "oauth-client-without-endpoints",
+         "no-description", "blank-description"],
 )
 def test_invalid_catalog_is_refused(tmp_path, body):
     path = tmp_path / "c.yaml"
@@ -126,7 +135,7 @@ def test_setup_guides_parse_with_ordered_steps_and_valid_shapes():
 ], ids=["unknown-kind", "paste-without-fields", "check-on-open-page", "relative-link"])
 def test_invalid_setup_step_is_refused(tmp_path, step):
     path = tmp_path / "c.yaml"
-    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: false, "
+    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, description: d, icon: i, category: c, method: none, verified: false, "
                     f"source: https://x.dev, setup: {{steps: [{step}]}}}}\n")
     with pytest.raises(PalCatalogError):
         load_pal_connectors(path)
@@ -134,7 +143,7 @@ def test_invalid_setup_step_is_refused(tmp_path, step):
 
 def test_step_fallback_parses_with_links(tmp_path):
     path = tmp_path / "c.yaml"
-    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: false, "
+    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, description: d, icon: i, category: c, method: none, verified: false, "
                     "source: https://x.dev, setup: {steps: [{id: a, kind: open_page, title: T, body: B, "
                     "fallback: {label: L, body: FB, links: [{label: x, url: 'https://y.dev'}]}}]}}\n")
     step = load_pal_connectors(path)[0].setup.steps[0]
@@ -144,7 +153,7 @@ def test_step_fallback_parses_with_links(tmp_path):
 @pytest.mark.parametrize("fallback", ["{label: L}", "{label: L, body: B, extra: 1}", "nope"])
 def test_invalid_step_fallback_is_refused(tmp_path, fallback):
     path = tmp_path / "c.yaml"
-    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: false, "
+    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, description: d, icon: i, category: c, method: none, verified: false, "
                     f"source: https://x.dev, setup: {{steps: [{{id: a, kind: open_page, title: T, body: B, fallback: {fallback}}}]}}}}\n")
     with pytest.raises(PalCatalogError):
         load_pal_connectors(path)

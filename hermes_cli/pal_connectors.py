@@ -96,6 +96,7 @@ class PalConnector:
     method: ConnectionMethod
     verified: bool
     source: str
+    description: str
     mcp_url: str | None = None
     oauth: OAuthEndpoints | None = None
     scopes: tuple[str, ...] = ()
@@ -113,7 +114,7 @@ class PalCatalogError(ValueError):
     pass
 
 
-_REQUIRED = ("id", "name", "icon", "category", "method", "verified", "source")
+_REQUIRED = ("id", "name", "description", "icon", "category", "method", "verified", "source")
 _OPTIONAL = ("mcp_url", "oauth", "scopes", "notes", "setup", "stdio")
 
 
@@ -211,7 +212,7 @@ def _parse_entry(raw: object) -> PalConnector:
     unknown = sorted(set(raw) - set(_REQUIRED) - set(_OPTIONAL))
     if missing or unknown:
         raise PalCatalogError(f"{cid}: missing {missing}, unknown {unknown}")
-    for key in ("id", "name", "icon", "category"):
+    for key in ("id", "name", "description", "icon", "category"):
         if not isinstance(raw[key], str) or not raw[key].strip():
             raise PalCatalogError(f"{cid}: {key} must be a non-empty string")
     if not isinstance(raw["verified"], bool):
@@ -238,7 +239,8 @@ def _parse_entry(raw: object) -> PalConnector:
         raise PalCatalogError(f"{cid}: only bot_token_stdio and oauth_client entries carry a stdio recipe")
     return PalConnector(
         id=raw["id"], name=raw["name"], icon=raw["icon"], category=raw["category"], method=method,
-        verified=raw["verified"], source=_https(raw["source"], "source", cid), mcp_url=mcp_url, oauth=oauth,
+        verified=raw["verified"], source=_https(raw["source"], "source", cid), description=raw["description"].strip(),
+        mcp_url=mcp_url, oauth=oauth,
         scopes=tuple(scopes), notes=raw.get("notes"),
         setup=_parse_setup(raw["setup"], cid) if raw.get("setup") is not None else None, stdio=stdio,
     )

@@ -15,7 +15,7 @@ import re
 import threading
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from tools.mcp_accounts import display_name
 from tools.registry import tool_error
@@ -191,9 +191,11 @@ def approver_present() -> bool:
             and approval_context.is_viewer_turn_with_approver())
 
 
-def _gate(policy: ActionPolicy, server_name: str, tool_name: str,
-          args: Optional[Mapping], allow_auto_approve: bool) -> tuple[Optional[str], Optional[ActionGrant]]:
+def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional[Mapping],
+          allow_auto_approve: bool, reads_ask: Optional[Callable[[], bool]]) -> tuple[Optional[str], Optional[ActionGrant]]:
     kind = policy.classify(tool_name)
+    if kind == READ and reads_ask is not None and reads_ask():
+        kind = ACTION
     if kind == READ:
         return None, None
     if kind == REFUSED:
@@ -214,11 +216,13 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str,
 
 
 def gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional[Mapping], *,
-         allow_auto_approve: bool = True) -> tuple[Optional[str], Optional[ActionGrant]]:
+         allow_auto_approve: bool = True,
+         reads_ask: Optional[Callable[[], bool]] = None) -> tuple[Optional[str], Optional[ActionGrant]]:
     """``(error, None)`` blocks the call, ``(None, grant)`` lets one exact call through once, ``(None, None)``
-    is a read. Any failure blocks."""
+    is a read. ``reads_ask`` answers live whether the owner made this connector's reads ask like an action.
+    Any failure blocks."""
     try:
-        return _gate(policy, server_name, tool_name, args, allow_auto_approve)
+        return _gate(policy, server_name, tool_name, args, allow_auto_approve, reads_ask)
     except Exception as exc:  # health: allow BLE001 -- fail closed on any error; only the exception type is logged so call arguments never reach a log
         logger.error("MCP action gate failed for %s/%s (%s); call blocked", server_name, tool_name,
                      type(exc).__name__)
