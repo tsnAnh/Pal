@@ -238,6 +238,8 @@ struct AppSignInDialogTests {
         center.receive(event())
         #expect(center.current?.requiresAppSignIn == true)
         center.receive(event(service: "github", signinOn: "owner_app"))
+        #expect(center.dialogs.last?.requiresAppSignIn == true)
+        center.receive(event(service: "linear", signinOn: nil))
         #expect(center.dialogs.last?.requiresAppSignIn == false)
     }
 

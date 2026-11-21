@@ -311,7 +311,10 @@ struct RootView: View {
             .task(id: model.isConnected) {
                 guard model.isConnected else { return }
                 await hostPool.startHosts(botNames: roster.bots.map(\.name))
-                if ProcessInfo.processInfo.arguments.contains(ConnectAppsLaunch.argument) { router.presentConnectApps() }
+            }
+            .task(id: roster.isLoaded) {
+                guard roster.isLoaded, ProcessInfo.processInfo.arguments.contains(ConnectAppsLaunch.argument) else { return }
+                router.presentConnectApps()
             }
             #if os(iOS)
             .onChange(of: roster.bots, initial: true) { _, _ in settleOpenConversation() }

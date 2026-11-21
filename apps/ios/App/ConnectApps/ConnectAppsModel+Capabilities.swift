@@ -11,7 +11,7 @@ import Observation
 
 extension ConnectAppsModel {
     func loadCapabilities() async {
-        guard let profile else { return }
+        guard let profile = capabilityProfile else { return }
         if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .loading }
         do {
             let rows = try await capabilitiesService.status(profile: profile)
@@ -25,7 +25,7 @@ extension ConnectAppsModel {
         }
     }
 
-    var canSetKeys: Bool { profile != nil }
+    var canSetKeys: Bool { capabilityProfile != nil }
 
     func beginKeyEntry(_ row: CapabilityRow, keyName: String) {
         guard canSetKeys, row.settableKeys.contains(keyName) else { return }
@@ -39,7 +39,7 @@ extension ConnectAppsModel {
     }
 
     func submitKey(_ value: String) async {
-        guard let request = keyRequest, let profile, keyState.acceptsInput else { return }
+        guard let request = keyRequest, let profile = capabilityProfile, keyState.acceptsInput else { return }
         keyState = .submitting
         do {
             let rows = try await capabilitiesService.setKey(request.keyName, to: SecretString(value), profile: profile)

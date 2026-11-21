@@ -131,7 +131,7 @@ final class ConnectAppsModel {
     let diagnostics = Diagnostics.osLog()
     let surfaces: SurfaceCache
     private var catalogKey: SurfaceKey { .screen("connect-catalog", bot: profile ?? "") }
-    var capabilitiesKey: SurfaceKey { .screen("connect-capabilities", bot: profile ?? "") }
+    var capabilitiesKey: SurfaceKey { .screen("connect-capabilities", bot: capabilityProfile ?? "") }
 
     init(
         connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
@@ -146,8 +146,9 @@ final class ConnectAppsModel {
         devices = DeviceConnectorsModel(pool: pool, profile: profile, surfaces: connection.surfaces)
         self.bots = bots
         self.currentBot = currentBot
+        let signInRPC = OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally)))
         let connectService = ConnectAppsService(
-            rpc: ConnectorDetailsScript.wrap(OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally)))), profile: profile,
+            rpc: ConnectorDetailsScript.wrap(ShopifyScript.wrap(signInRPC)), profile: profile,
             browser: McpSignInScript.browser(OAuthClientScript.browser(browser)),
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: NativeMcpSignIn.native(connection: connection), diagnostics: .osLog()
         )
@@ -162,7 +163,7 @@ final class ConnectAppsModel {
             catalog = held
             phase = .ready
         }
-        if profile != nil, let rows = surfaces.remembered([CapabilityRow].self, capabilitiesKey) {
+        if capabilityProfile != nil, let rows = surfaces.remembered([CapabilityRow].self, capabilitiesKey) {
             capabilitiesPhase = .ready(rows)
         }
     }
@@ -170,6 +171,8 @@ final class ConnectAppsModel {
     var customConnector: CustomConnectorModel? {
         if case .customConnector(let connector) = mode { connector } else { nil }
     }
+
+    var capabilityProfile: String? { profile ?? currentBot }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 

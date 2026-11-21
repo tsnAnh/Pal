@@ -23,17 +23,6 @@ final class ConnectorDetailsE2ETests: ConnectAppsTestCase {
         app.descendants(matching: .any)[identifier]
     }
 
-    private func goBack(_ app: XCUIApplication) {
-        #if os(macOS)
-        app.buttons["connectorDetailsBack"].hit()
-        #else
-        let back = app.navigationBars.buttons.firstMatch
-        waitFor(back, timeout: 10, "system back button")
-        back.tap()
-        #endif
-        waitGone(element(app, "connectorDetails"), timeout: 10, "details leaves")
-    }
-
     private func reveal(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         let target = element(app, identifier)
         for _ in 0..<8 where !target.exists || !target.isHittable { app.swipeUp() }
@@ -59,7 +48,7 @@ final class ConnectorDetailsE2ETests: ConnectAppsTestCase {
         XCTAssertGreaterThan(app.navigationBars.buttons.count, 0, "system back button")
         #endif
         shot(app, "details-01b-notion-light")
-        goBack(app)
+        goBackFromDetails(app)
         waitFor(element(app, "connectApps"), timeout: 10, "Connect Apps root")
         #if os(iOS)
         XCTAssertTrue(app.buttons["connectApps-close"].isHittable, "root offers Close again")
@@ -74,7 +63,7 @@ final class ConnectorDetailsE2ETests: ConnectAppsTestCase {
         waitFor(element(app, "connectorAccount-default"), timeout: 20, "default account")
         waitFor(element(app, "connectorToolsGroup-tool"), timeout: 20, "tools group")
         shot(app, "details-02-linear-light")
-        goBack(app)
+        goBackFromDetails(app)
         waitFor(app.buttons["connectInstalled-connector:linear-open"], timeout: 10, "connected screen again")
         shot(app, "details-03-back-on-connected-light")
     }
@@ -223,13 +212,13 @@ final class ConnectorDetailsE2ETests: ConnectAppsTestCase {
         shot(app, "details-16-root-dark")
         open(app, "notion-mcp")
         shot(app, "details-17-root-origin-details-dark")
-        goBack(app)
+        goBackFromDetails(app)
         waitFor(element(app, "connectApps"), timeout: 10, "Connect Apps root")
         shot(app, "details-18-back-on-root-dark")
         open(app, "linear")
         waitFor(element(app, "connectorAccount-default"), timeout: 20, "default account")
         shot(app, "details-19-installed-origin-details-dark")
-        goBack(app)
+        goBackFromDetails(app)
         waitFor(app.buttons["connectInstalled-connector:linear-open"], timeout: 10, "connected screen again")
         shot(app, "details-20-back-on-installed-dark")
     }
