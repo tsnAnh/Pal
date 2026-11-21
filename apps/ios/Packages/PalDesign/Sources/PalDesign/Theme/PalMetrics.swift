@@ -200,7 +200,7 @@ public enum ChatMetrics {
     public static let bubbleVerticalPadding: CGFloat = 8
     public static let bubbleRadius: CGFloat = 18
     #if os(macOS)
-    public static let bubbleMaxWidth: CGFloat = 516
+    public static let bubbleMaxWidth: CGFloat = 560
     #else
     public static let bubbleWidthFraction: CGFloat = 0.78
     public static let padColumn: CGFloat = 720

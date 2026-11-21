@@ -15,7 +15,7 @@ public enum MacLayoutMetrics {
     public static let railWidth: CGFloat = 80
     public static let inspectorWidth: CGFloat = 320
     public static let chatColumnMin: CGFloat = 500
-    public static let chatColumnMax: CGFloat = 882
+    public static let chatColumnMax: CGFloat = 960
     public static let settingsColumnWidth: CGFloat = 560
     public static let windowMin: CGFloat = sidebarWidthRange.upperBound + chatColumnMin
     public static let windowMinHeight: CGFloat = 600
