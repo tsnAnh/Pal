@@ -231,6 +231,8 @@ def drop_retired_device_servers(config: dict) -> dict:
 def _get_mcp_servers(config: Optional[dict] = None) -> dict[str, dict]:
     """Return the ``mcp_servers`` dict from config, or empty dict."""
     if config is None:
+        from hermes_cli.mcp_accounts import migrate_legacy_accounts
+        migrate_legacy_accounts()
         config = drop_retired_device_servers(load_config())
     from hermes_cli.shared_catalog import visible_mcp_servers
     return visible_mcp_servers(config.get("mcp_servers"))
@@ -259,7 +261,15 @@ def _save_mcp_server(name: str, server_config: dict, *, force_shared: bool = Fal
     """
     if not _validate_or_warn(name, server_config):
         return False
+    from tools.mcp_accounts import split
+    if (ref := split(name)) is not None:
+        from hermes_cli.mcp_accounts import save_account_entry
+        return save_account_entry(ref, server_config)
     config = load_config()
+    from tools.mcp_accounts import ACCOUNTS_KEY, template_accounts
+    kept = template_accounts((config.get("mcp_servers") or {}).get(name))
+    if kept and ACCOUNTS_KEY not in server_config:
+        server_config = {**server_config, ACCOUNTS_KEY: dict((config["mcp_servers"][name]).get(ACCOUNTS_KEY))}
     from hermes_cli.shared_catalog import SharedDefinitionConflict, catalog_active, save_server
     if catalog_active():
         try:
@@ -300,11 +310,40 @@ def _lookup_server(
     return None
 
 
+def _lookup_connection(
+    name: str, servers: dict[str, dict], available_label: str = "Available servers"
+) -> Optional[tuple[str, dict]]:
+    from tools.mcp_accounts import account_config, split, template_accounts
+    ref = split(name)
+    template = servers.get(ref.slug if ref else name)
+    accounts = template_accounts(template)
+    if not accounts:
+        cfg = _lookup_server(name, servers, available_label)
+        return None if cfg is None else (name, cfg)
+    alias = ref.alias if ref else next(iter(accounts)) if len(accounts) == 1 else None
+    if alias not in accounts:
+        _error(f"Connector '{ref.slug if ref else name}' has several accounts; name one as "
+               f"'{ref.slug if ref else name}@<account>'.")
+        _info(f"Accounts: {', '.join(accounts)}")
+        return None
+    slug = ref.slug if ref else name
+    return f"{slug}@{alias}", account_config(template, alias, accounts[alias])
+
+
 def _remove_mcp_server(name: str, *, everywhere: bool = False) -> bool:
     """Remove a server from config.yaml.  Returns True if it existed."""
+    from tools.mcp_accounts import split, template_accounts
+    if (ref := split(name)) is not None:
+        from hermes_cli.mcp_accounts import remove_account_entry
+        return remove_account_entry(ref)
     config = load_config()
     servers = config.get("mcp_servers") or {}
     from hermes_cli.shared_catalog import catalog_active, remove_server
+    departing = servers.get(name)
+    accounts = template_accounts(departing)
+    if accounts:
+        from hermes_cli.mcp_accounts import _secret_vars
+        secrets = _secret_vars(name, departing, set(accounts))
     if catalog_active():
         servers, existed = remove_server(dict(servers), name, everywhere=everywhere)
         if not existed:
@@ -317,6 +356,9 @@ def _remove_mcp_server(name: str, *, everywhere: bool = False) -> bool:
     if not config.get("mcp_servers"):
         config.pop("mcp_servers", None)
     save_config(config)
+    if accounts:
+        from hermes_cli.mcp_accounts import forget_accounts
+        forget_accounts(name, list(accounts), secrets)
     return True
 
 
@@ -575,8 +617,11 @@ def _probe_single_server(
 def _oauth_tokens_present(name: str) -> bool:
     """True if an OAuth token file exists for ``name`` (a clean probe alone is not proof of auth)."""
     try:
+        from tools.mcp_accounts import server_name, split, template_accounts
         from tools.mcp_oauth import HermesTokenStorage
-        return HermesTokenStorage(name).has_cached_tokens()
+        accounts = template_accounts(_get_mcp_servers().get(name)) if split(name) is None else {}
+        connections = [server_name(name, alias) for alias in accounts] or [name]
+        return any(HermesTokenStorage(connection).has_cached_tokens() for connection in connections)
     except Exception as exc:  # pragma: no cover — defensive
         logger.debug("Could not check OAuth tokens for '%s': %s", name, exc)
         return True  # permissive: don't block a real success
@@ -788,7 +833,11 @@ def cmd_mcp_add(args):
 def cmd_mcp_remove(args):
     """Remove an MCP server from config."""
     name = args.name
-    if _lookup_server(name, _get_mcp_servers()) is None:
+    servers = _get_mcp_servers()
+    from tools.mcp_accounts import split, template_accounts
+    ref = split(name)
+    if not (ref is not None and ref.alias in template_accounts(servers.get(ref.slug))) and (
+            _lookup_server(name, servers) is None):
         return
     if not _confirm(f"Remove server '{name}'?", default=True):
         _info("Cancelled.")
@@ -918,10 +967,10 @@ def cmd_mcp_test(args):
     parsing the output: 0 connected, 1 connection failed, 3 server not in the config (argparse
     already owns 2 for usage errors, so "no such server" stays distinguishable from "bad flags").
     """
-    name = args.name
-    cfg = _lookup_server(name, _get_mcp_servers(), "Available")
-    if cfg is None:
+    target = _lookup_connection(args.name, _get_mcp_servers(), "Available")
+    if target is None:
         return 3
+    name, cfg = target
     print()
     print(color(f"  Testing '{name}'...", Colors.CYAN))
     if "url" in cfg:
@@ -1050,9 +1099,8 @@ def _reauth_oauth_server(name: str, server_config: dict, *, flow: str | None = N
 
 def cmd_mcp_login(args):
     """Run an explicit browser or device authorization for an OAuth-based MCP server."""
-    cfg = _lookup_server(args.name, _get_mcp_servers())
-    if cfg is not None:
-        _reauth_oauth_server(args.name, cfg, flow=getattr(args, "flow", None))
+    if (target := _lookup_connection(args.name, _get_mcp_servers())) is not None:
+        _reauth_oauth_server(*target, flow=getattr(args, "flow", None))
 
 
 def cmd_mcp_reauth(args):
@@ -1066,7 +1114,8 @@ def cmd_mcp_reauth(args):
     servers = _get_mcp_servers()
     name = getattr(args, "name", None)
     if getattr(args, "all", False):
-        oauth_servers = [(n, c) for n, c in servers.items() if c.get("auth") == "oauth" and c.get("url")]
+        from tools.mcp_accounts import expand
+        oauth_servers = [(n, c) for n, c in expand(servers).items() if c.get("auth") == "oauth" and c.get("url")]
         if not oauth_servers:
             _info("No OAuth-based MCP servers found in config.")
             return
@@ -1085,9 +1134,8 @@ def cmd_mcp_reauth(args):
         _error("Specify a server name, or use --all to re-auth every OAuth server.")
         _info("Usage: hermes mcp reauth <name>   |   hermes mcp reauth --all")
         return
-    cfg = _lookup_server(name, servers)
-    if cfg is not None:
-        _reauth_oauth_server(name, cfg)
+    if (target := _lookup_connection(name, servers)) is not None:
+        _reauth_oauth_server(*target)
 
 
 def _rebuild_exclude_list(

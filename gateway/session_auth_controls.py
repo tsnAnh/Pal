@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from functools import partial
 from pathlib import Path
 
@@ -54,14 +55,21 @@ async def submit_oauth_tokens(connection, ref, params):
     except ValidationError:
         raise RuntimeStoreError('invalid_params') from None
     from tools import mcp_oauth_import
+    from tools.mcp_accounts import split_service
     home = Path(connection.authority.profile_id)
-    server = parsed.service.partition(':')[2]
+    split = split_service(parsed.service)
+    if split is None:
+        return {'ok': False, 'reason': mcp_oauth_import.NOT_OAUTH_SERVICE}
+    server, account = split
     tokens = mcp_oauth_import.OwnerTokens(**{
         key: value for key, value in parsed.model_dump().items() if key != 'service'})
-    reason = await mcp_oauth_import.import_owner_tokens(home, server, tokens)
+    account, reason = await asyncio.to_thread(mcp_oauth_import.resolve_account, home, server, account)
+    if reason is None:
+        reason = await mcp_oauth_import.import_owner_tokens(home, server, tokens, account)
     if reason is not None:
         return {'ok': False, 'reason': reason}
-    await auth_prompts.complete(connection.authority, home, parsed.service)
+    for service in dict.fromkeys((parsed.service, f'mcp:{server}:{account}' if account else parsed.service)):
+        await auth_prompts.complete(connection.authority, home, service)
     return {'ok': True}
 
 

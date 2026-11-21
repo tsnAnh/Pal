@@ -384,12 +384,11 @@ def adopt_late_connections(agent: Any) -> list[str]:
         if snapshot["status"] != "approved" or snapshot.get("discovery_error"):
             continue
         try:
-            from tools.mcp_tool_config import _load_mcp_config
+            from tools.mcp_tool_config import connector_configs
             from tools.mcp_tool_discovery import register_mcp_servers
 
-            config = _load_mcp_config().get(name)
-            if isinstance(config, dict):
-                register_mcp_servers({name: config})
+            if configs := connector_configs(name):
+                register_mcp_servers(configs)
                 adopted.append(name)
         except Exception:
             logger.debug("late MCP connection %s was not adopted", name, exc_info=True)
@@ -473,13 +472,13 @@ def _fail(operation: ConnectionOperation, target: Target, detail: str) -> None:
 def _register_connected(runner: _Runner, target: Target, name: str) -> tuple[list[str], str]:
     """Register one committed server in the current profile scope and report its callable names."""
     try:
-        from tools.mcp_tool_config import _load_mcp_config
+        from tools.mcp_tool_config import connector_configs
         from tools.mcp_tool_discovery import register_mcp_servers
 
-        config = _load_mcp_config().get(name)
-        if not isinstance(config, dict):
+        configs = connector_configs(name)
+        if not configs:
             raise RuntimeError(f"no committed MCP configuration for '{name}'")
-        register_mcp_servers({name: config})
+        register_mcp_servers(configs)
         return _registered_tool_names(name), ""
     except Exception as exc:
         return [], _detail(exc, runner, target)
@@ -494,24 +493,26 @@ def _registered_tool_names(name: str, wait_seconds: float = 30.0) -> list[str]:
     before they were registered. A server that failed discovery earlier is parked with no tools
     and is woken once. A server that finished registering with no tools is a valid empty list."""
     from tools import mcp_tool as _core
+    from tools.mcp_tool_config import connector_configs
     from tools.mcp_tool_loop import reconnect_mcp_server
     from tools.mcp_tool_scope import _resolve_server_key
     from tools.registry import registry
 
-    key = _resolve_server_key(name)
+    connections = list(connector_configs(name, interpolate=False)) or [name]
+    keys = [_resolve_server_key(connection) for connection in connections]
     deadline = time.time() + wait_seconds
     woken = False
     while True:
         names = registry.get_tool_names_for_toolset(f"mcp-{name}")
         if names or time.time() >= deadline:
             return names
-        if key not in _core._server_connecting:
-            server = _core._servers.get(key)
-            finished = server is not None and getattr(server, "session", None) is not None \
-                and hasattr(server, "_registered_tool_names")
+        if not any(key in _core._server_connecting for key in keys):
+            servers = [server for key in keys if (server := _core._servers.get(key)) is not None]
+            finished = any(getattr(server, "session", None) is not None and hasattr(server, "_registered_tool_names")
+                           for server in servers)
             if finished:
                 return names
-            if woken or server is None or not reconnect_mcp_server(name):
+            if woken or not servers or not any([reconnect_mcp_server(connection) for connection in connections]):
                 return names
             woken = True
         time.sleep(0.25)

@@ -10,6 +10,7 @@ import threading
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional
+from tools.mcp_accounts import is_account_server, registration_name, split
 from tools.mcp_tool_common import _parse_boolish, _core, _resolve_tool_timeout, mcp_field, mcp_server_enabled
 from tools import mcp_tool_config as _config
 from tools import mcp_tool_events as _events
@@ -144,20 +145,41 @@ def _server_key_for_task(server) -> object:
     return _server_key(server.name)
 
 
+def _sibling_account_servers(key, scope: Optional[str], tool_name: str) -> list:
+    slug = registration_name(_key_name(key))
+    return [(other_key, live) for other_key, live in _core._servers.items()
+            if other_key != key and registration_name(_key_name(other_key)) == slug
+            and tool_name in (getattr(live, "_registered_tool_names", None) or ())
+            and scope in (_core._server_tool_scopes.get(other_key) or {_core._server_registry_scope(other_key)})]
+
+
 def _deregister_mcp_tool_all_scopes(server, tool_name: str) -> None:
     """Deregister one server tool from every profile overlay that owns it. *server* is the
     live task or a connection key."""
     from tools.registry import registry
 
     key = server if isinstance(server, (str, tuple)) else _server_key_for_task(server)
+    account = is_account_server(_key_name(key))
     with _core._lock:
         scopes = set(_core._server_tool_scopes.get(key, ()))
         if not scopes:
             scopes = {_core._server_registry_scope(key)}
+        survivors = {scope: _sibling_account_servers(key, scope, tool_name) for scope in scopes} if account else {}
+    gone_everywhere = True
     for scope in scopes:
+        if survivors.get(scope):
+            gone_everywhere = False
+            continue
         registry.deregister(tool_name, scope=scope)
-    _forget_mcp_tool_server(tool_name)
+    if gone_everywhere:
+        _forget_mcp_tool_server(tool_name)
+    else:
+        _track_mcp_tool_server(tool_name, _key_name(_surviving_key(survivors)))
     _restore_server_toolset_alias(key)
+
+
+def _surviving_key(survivors: dict):
+    return next(other_key for found in survivors.values() for other_key, _live in found)
 
 
 def _restore_server_toolset_alias(key) -> None:
@@ -166,10 +188,10 @@ def _restore_server_toolset_alias(key) -> None:
     registry deregister dropped it after checking only one scope)."""
     from tools.registry import registry
 
-    server_name = _key_name(key)
+    server_name = registration_name(_key_name(key))
     with _core._lock:
         owned = [(server, set(_core._server_tool_scopes.get(k, ())))
-                 for k, server in _core._servers.items() if _key_name(k) == server_name]
+                 for k, server in _core._servers.items() if registration_name(_key_name(k)) == server_name]
     if any(
         registry.snapshot_registration(tool_name, scope=scope) is not None
         for server, scopes in owned for scope in scopes
@@ -183,8 +205,14 @@ def _remove_server_scope(key, scope: str) -> None:
     from tools.registry import registry
 
     server_name = _key_name(key)
-    for tool_name in registry.get_tool_names_for_toolset(f"mcp-{server_name}"):
-        registry.deregister(tool_name, scope=scope)
+    registered_as = registration_name(server_name)
+    tool_names = registry.get_tool_names_for_toolset(f"mcp-{registered_as}")
+    with _core._lock:
+        kept_by_siblings = {tool_name for tool_name in tool_names
+                            if is_account_server(server_name) and _sibling_account_servers(key, scope, tool_name)}
+    for tool_name in tool_names:
+        if tool_name not in kept_by_siblings:
+            registry.deregister(tool_name, scope=scope)
     with _core._lock:
         scopes = set(_core._server_tool_scopes.get(key, ()))
         scopes.discard(scope)
@@ -246,7 +274,7 @@ def _existing_tool_names() -> list[str]:
             )
         return sorted({
             tool_name
-            for server_name in server_names
+            for server_name in {registration_name(n) for n in server_names}
             for tool_name in registry.get_tool_names_for_toolset(f"mcp-{server_name}")
         })
 
@@ -323,8 +351,10 @@ def _utility_candidates(name: str, entries: Iterable[Any], tool_timeout) -> list
     for raw in entries:
         schema, key = (raw.get("schema"), raw.get("handler_key")) if isinstance(raw, dict) else (None, None)
         if isinstance(schema, dict) and key in _UTILITY_HANDLER_FACTORIES and schema.get("name"):
-            out.append(_Candidate(schema["name"], f"{_UTILITY_ORIGIN_PREFIX}{key!r}", schema,
-                                  _UTILITY_HANDLER_FACTORIES[key](name, tool_timeout)))
+            factory = _UTILITY_HANDLER_FACTORIES[key]
+            handler = (_handlers._make_account_handler(registration_name(name), lambda server, f=factory: f(server, tool_timeout))
+                       if is_account_server(name) else factory(name, tool_timeout))
+            out.append(_Candidate(schema["name"], f"{_UTILITY_ORIGIN_PREFIX}{key!r}", schema, handler))
     return out
 
 
@@ -378,7 +408,8 @@ def _register_candidates(name: str, candidates: list[_Candidate], *, check_fn: C
     the atomic gate and its verdict is re-read after every call. *key* is the connection whose
     ``_server_tool_scopes`` records the registering scope (default: this scope's own)."""
     from tools.registry import registry
-    toolset_name = f"mcp-{name}"
+    registered_as = registration_name(name)
+    toolset_name = f"mcp-{registered_as}"
     registered: list[str] = []
     scope_value = scope()
     if key is None:
@@ -411,7 +442,7 @@ def _register_candidates(name: str, candidates: list[_Candidate], *, check_fn: C
             logger.error("MCP server '%s': registration of %s as '%s' was rejected by the registry; "
                          "skipping provenance/count updates", name, c.origin, c.registry_name)
     if registered:
-        registry.register_toolset_alias(name, toolset_name)
+        registry.register_toolset_alias(registered_as, toolset_name)
     return registered
 
 
@@ -469,7 +500,8 @@ def _register_server_tools(name: str, server: "MCPServerTask", config: dict) -> 
         name, _resolve_name_collisions(name, candidates),
         check_fn=_make_check_fn(name), scope=lambda: _core._server_registry_scope(key), lazy=False, key=key,
         execution_timeout=config.get("timeout"))
-    if registered and not (_core._server_registry_scope(key) or '').startswith('editor-session:'):
+    if (registered and not is_account_server(name)
+            and not (_core._server_registry_scope(key) or '').startswith('editor-session:')):
         _write_schema_cache(name, server, config, should_register)
     return registered
 
@@ -626,7 +658,7 @@ def _register_connected_into_current_scope(servers: dict) -> int:
         with _core._lock:
             _core._server_tool_scopes.setdefault(key, set()).add(scope)
         _record_scope_trust(name, config, scope)
-        if registry.get_tool_names_for_toolset(f"mcp-{name}"):
+        if registry.get_tool_names_for_toolset(f"mcp-{registration_name(name)}"):
             continue
         candidates = _tool_candidates(name, server._tools, _make_tool_filter(name, config), server.tool_timeout)
         candidates += _utility_candidates(

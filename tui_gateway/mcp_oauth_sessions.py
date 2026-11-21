@@ -30,6 +30,7 @@ from tools.connectors.mcp_oauth_redirect import (
     is_app_redirect,
     is_registration_refusal,
 )
+from tools.mcp_accounts import registration_name
 from tui_gateway import mcp_oauth_redirects
 
 
@@ -256,19 +257,19 @@ def _lookup(
         rec = _sessions.get(session_id)
     if rec is None:
         return None, "OAuth session not found or expired"
-    if rec["server_name"] != server_name:
+    if server_name not in (rec["server_name"], registration_name(rec["server_name"])):
         return None, "server name mismatch for session"
     if hermes_home_key(rec["hermes_home"]) != hermes_home_key(hermes_home):
         return None, "profile mismatch for session"
     return rec, None
 
 
-def poll_flow(session_id: str, server_name: str) -> dict[str, Any]:
+def poll_flow(session_id: str, server_name: str, hermes_home: Optional[str] = None) -> dict[str, Any]:
     """Poll a session → ``{status, error_message?, reason?, auth_url?, tools?}``; ``status`` is
     ``pending`` | ``approved`` | ``error`` (the bridge's ``authorization_required`` maps to
     ``pending``). ``reason`` is ``ADMIN_APPROVAL_PENDING`` with a fixed ``error_message`` when an admin
     must approve; the vendor's own text never leaves the gateway then."""
-    rec, err = _lookup(session_id, server_name)
+    rec, err = _lookup(session_id, server_name, hermes_home)
     if rec is None:
         return {"status": "error", "error_message": err}
     flow = rec["flow"]
@@ -299,11 +300,11 @@ def cancel_flow(session_id: str, server_name: str, hermes_home: str) -> dict[str
 def deliver_callback_flow(
     session_id: str, server_name: str, *, code: Optional[str], state: Optional[str],
     error: Optional[str] = None, iss: Optional[str] = None,
-    error_description: Optional[str] = None) -> dict[str, Any]:
+    error_description: Optional[str] = None, hermes_home: Optional[str] = None) -> dict[str, Any]:
     """Relay a client-captured OAuth redirect into a session's flow (remote-backend companion
     to ``start_flow(client_redirect_uri=...)``); ``deliver_callback`` still verifies ``state``
     and rejects replays. Returns ``{ok: true}`` or ``{ok: false, error_message}``."""
-    rec, err = _lookup(session_id, server_name)
+    rec, err = _lookup(session_id, server_name, hermes_home)
     if rec is None:
         return {"ok": False, "error_message": err}
     try:

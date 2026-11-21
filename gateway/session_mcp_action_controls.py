@@ -21,10 +21,19 @@ def _chat_kind(authority, session_id):
     return session_kind(authority, policy, session_id)
 
 
-def _server_is_gated(server):
+def _gated_connection(server, account):
     from hermes_cli.mcp_config import _get_mcp_servers
+    from tools.mcp_accounts import AccountError, resolve_alias, server_name, template_accounts
     from tools.mcp_action_gate import policy_from_config
-    return policy_from_config(_get_mcp_servers().get(server)) is not None
+    template = _get_mcp_servers().get(server)
+    if policy_from_config(template) is None:
+        return None
+    if not template_accounts(template):
+        return server if account is None else None
+    try:
+        return server_name(server, resolve_alias(server, template, account))
+    except AccountError:
+        return None
 
 
 async def _attached_chat(connection, ref):
@@ -37,28 +46,29 @@ async def _attached_chat(connection, ref):
     return live
 
 
-async def _eligible(connection, ref, live, server):
+async def _eligible_connection(connection, ref, params):
     from gateway.session_iphone_toolset import OWNER_APP_KINDS
     kind = await asyncio.to_thread(_chat_kind, connection.authority, ref.session_id)
-    return kind in OWNER_APP_KINDS and await asyncio.to_thread(_server_is_gated, server)
+    if kind not in OWNER_APP_KINDS:
+        return None
+    return await asyncio.to_thread(_gated_connection, params['server'], params.get('account'))
 
 
 async def get(connection, ref, params):
     from tools.mcp_action_gate import auto_approve_enabled
     live = await _attached_chat(connection, ref)
-    server = params['server']
-    eligible = await _eligible(connection, ref, live, server)
-    return {'eligible': eligible, 'enabled': eligible and auto_approve_enabled(live.route, server)}
+    target = await _eligible_connection(connection, ref, params)
+    return {'eligible': target is not None, 'enabled': target is not None and auto_approve_enabled(live.route, target)}
 
 
 async def set_(connection, ref, params):
     from tools.mcp_action_gate import set_auto_approve
     live = await _attached_chat(connection, ref)
-    server = params['server']
-    if not await _eligible(connection, ref, live, server):
+    target = await _eligible_connection(connection, ref, params)
+    if target is None:
         raise RuntimeStoreError('permission_denied', field='server',
                                 detail='auto-approve is only for the owner\'s app chats and action-gated servers')
-    set_auto_approve(live.route, server, params['enabled'])
+    set_auto_approve(live.route, target, params['enabled'])
     return {'enabled': params['enabled']}
 
 

@@ -2010,6 +2010,7 @@ from . import (
     methods_vault as _methods_vault, methods_free_tier as _methods_free_tier,
     methods_connectors as _methods_connectors, methods_connectors_account as _methods_connectors_account,
     methods_connectors_portal as _methods_connectors_portal,
+    methods_mcp_accounts as _methods_mcp_accounts,
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
     methods_teach as _methods_teach, methods_library as _methods_library, methods_permissions as _methods_permissions,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
@@ -2028,7 +2029,7 @@ for _m in (
     _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_tools_plugin_activation, _methods_profiles, _methods_profile_templates, _methods_profile_admin, _methods_messaging_slack, _methods_messaging_settings, _methods_messaging_telegram, _methods_capabilities, _methods_memory_import, _methods_account_session, _methods_images,
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
-    _methods_connectors_account, _methods_connectors_portal, _methods_display, _methods_display_watch, _methods_teach, _methods_library, _methods_permissions, _methods_onboarding,
+    _methods_connectors_account, _methods_connectors_portal, _methods_mcp_accounts, _methods_display, _methods_display_watch, _methods_teach, _methods_library, _methods_permissions, _methods_onboarding,
     _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog, _methods_account, _methods_gateway_service, _methods_github_token, _methods_google_workspace, _methods_guards, _methods_webhook_routes, _methods_bot_keys, _methods_chat, _methods_diag, _methods_public_url, _methods_host_kit, _methods_host, _methods_host_update, _methods_model_providers,
     _methods_speech_memory):
     _m.register(sys.modules[__name__])

@@ -38,9 +38,8 @@ enum NativeMcpSignIn {
         guard ConnectorPlatform.current.returnsAutomatically else { return nil }
         let native = native(connection: connection)
         return { service in
-            guard service == UpworkConnector.service else { return .failed(McpOAuthError.tokenExchangeFailed.reason) }
             do {
-                try await native.run()
+                try await native.run(service: service)
                 return .signedIn
             } catch {
                 let failure = McpOAuthError.from(error)
@@ -54,9 +53,8 @@ enum NativeMcpSignIn {
         let sessions = PasteSessions()
         return ServicePasteSignIn(
             begin: { service in
-                guard service == UpworkConnector.service else { return McpOAuthError.tokenExchangeFailed.reason }
                 do {
-                    let session = try await native.beginPaste()
+                    let session = try await native.beginPaste(service: service)
                     guard ExternalLink.open(session.authorizeURL) else {
                         await session.cancel()
                         return McpOAuthError.browserUnavailable.reason

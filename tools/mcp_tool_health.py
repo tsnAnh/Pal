@@ -7,6 +7,7 @@ import json
 import logging
 import time
 from typing import Iterable, Optional
+from tools.mcp_accounts import registration_name
 from tools.mcp_tool_errors import _is_method_not_found_error
 from tools.mcp_tool_schema import mcp_prefixed_tool_name
 from tools.mcp_tool_common import _core
@@ -124,7 +125,7 @@ class MCPServerHealthMixin:
         """Deregister *tool_names* this server's toolset still owns (never a colliding name owned by another server)."""
         from tools.registry import registry
         for tool_name in tool_names:
-            if registry.get_toolset_for_tool(tool_name) == f"mcp-{self.name}":
+            if registry.get_toolset_for_tool(tool_name) == f"mcp-{registration_name(self.name)}":
                 _registration._deregister_mcp_tool_all_scopes(self, tool_name)
 
     def _apply_tool_list(self, new_mcp_tools: list) -> None:
@@ -134,7 +135,7 @@ class MCPServerHealthMixin:
         old_tool_names = set(self._registered_tool_names)
         # Remove only stale names first — no nuke-and-repave: live turns may hold tool-call
         # IDs pointing at existing handlers; in-place replacement avoids "not connected" races.
-        self._deregister_owned(old_tool_names - {mcp_prefixed_tool_name(self.name, tool.name) for tool in new_mcp_tools})
+        self._deregister_owned(old_tool_names - {mcp_prefixed_tool_name(registration_name(self.name), tool.name) for tool in new_mcp_tools})
         # Re-register; a raw name can become ambiguous after normalization without changing
         # its normalized name, so also drop old entries the final registration no longer owns.
         self._tools = new_mcp_tools

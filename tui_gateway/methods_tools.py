@@ -1456,9 +1456,10 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     """``{servers: [{name, description, installed, enabled, requires: [env keys], transport}]}`` per profile."""
     mcp_catalog = _tools_mod("hermes_cli.mcp_catalog")
-    pending_reauth_reason = _tools_mod("tools.mcp_oauth").pending_reauth_reason
+    accounts = _tools_mod("tui_gateway.mcp_account_rpc")
     out = []
     for entry in mcp_catalog.list_catalog():
+        rows = accounts.account_rows(entry.name)
         try:
             requires = [str(k) for k in (getattr(entry, "env_keys", None) or [])]
         except Exception:
@@ -1472,7 +1473,7 @@ def _(rid, params: dict) -> dict:
             "enabled": bool(mcp_catalog.is_enabled(entry.name)), "requires": requires,
             "setup": (getattr(entry, "post_install", "") or "").strip(),
             "transport": str(getattr(transport, "kind", "") or transport or "stdio"),
-            "needs_auth_reason": pending_reauth_reason(entry.name)})
+            "accounts": rows, "needs_auth_reason": accounts.connector_reason(entry.name, rows)})
     return _ok(rid, {"servers": out})
 
 
@@ -1496,12 +1497,8 @@ def _(rid, params: dict) -> dict:
     configured, plugins = _mcp_server_rows()
     include_runtime = (_tools_mod("agent.secret_scope").is_multiplex_active()
                        or hc.hermes_home_key() == hc.hermes_home_key(hc.get_process_hermes_home()))
-    safe = ("name", "transport", "tools", "connected", "disabled", "status", "needs_auth", "needs_auth_reason")
-    servers = _tools_mod("tools.mcp_tool_discovery").get_mcp_status(configured, include_runtime=include_runtime)
-    return _ok(rid, {"servers": [
-        {**{k: e[k] for k in safe if k in e}, "source": "plugin" if plugins[e["name"]] is not None else "config",
-         "plugin": plugins[e["name"]]} for e in servers
-    ], "checked_at": int(time.time() * 1000)})
+    servers = _tools_mod("tui_gateway.mcp_account_rpc").status_rows(configured, plugins, include_runtime)
+    return _ok(rid, {"servers": servers, "checked_at": int(time.time() * 1000)})
 
 
 @_mcp_rpc("add")
@@ -1578,33 +1575,11 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     """Secret → profile .env under ``env_var`` (default ``MCP_<NAME>_API_KEY``); config.yaml gets only
     a ``${ENV}`` reference (Bearer header for http, ``env`` entry for stdio)."""
-    hc, mc = _tools_mod("hermes_cli.config"), _tools_mod("hermes_cli.mcp_config")
     name, servers, err = _mcp_config_server_or_error(rid, params)
     if err:
         return err
-    value = params.get("value")
-    env_var = _str_arg(params, "env_var") or mc._env_key_for_server(name)
-    entry = servers[name]
-    if not isinstance(entry, dict):
-        return _err(rid, 4001, "malformed server config")
-    if entry.get("url"):
-        normalized = mc._strip_bearer_prefix(str(value))
-        if not normalized or normalized.lower() == "bearer":
-            return _err(rid, 4063, "value is not a valid credential")
-        hc.save_env_value(env_var, normalized)
-        is_default = env_var == mc._env_key_for_server(name)
-        bearer = mc._bearer_auth_headers(name) if is_default else {"Authorization": f"Bearer ${{{env_var}}}"}
-        kept = {k: v for k, v in (entry.get("headers") or {}).items() if str(k).lower() != "authorization"}
-        entry["headers"] = {**kept, **bearer}
-    else:
-        hc.save_env_value(env_var, str(value))
-        env_block = entry.get("env")
-        entry["env"] = env_block if isinstance(env_block, dict) else {}
-        entry["env"][env_var] = f"${{{env_var}}}"
-    cfg = hc.load_config()
-    cfg.setdefault("mcp_servers", {})[name] = entry
-    hc.save_config(cfg)
-    return _ok(rid, {"ok": True, "name": name, "env_var": env_var, "server": _mcp_summarize_server(name, entry)})
+    saved, failure = _tools_mod("tui_gateway.mcp_account_rpc").set_api_key(name, servers[name], params)
+    return _err(rid, *failure) if failure else _ok(rid, saved)
 
 
 @_mcp_rpc("test")
@@ -1616,7 +1591,10 @@ def _(rid, params: dict) -> dict:
     name, servers, err = _mcp_named_server(rid, params)
     if err:
         return err
-    cfg = servers[name]
+    target, refusal = _tools_mod("tui_gateway.mcp_account_rpc").resolve(name, servers, params.get("account"))
+    if refusal:
+        return _err(rid, *refusal)
+    name, cfg = target.connection, target.cfg
     # An `auth: oauth` server serving tools/list anonymously would probe OK with no
     # token — a false green. Require a token on disk for it.
     needs_oauth_token = cfg.get("auth") == "oauth"
@@ -1648,9 +1626,8 @@ def _(rid, params: dict) -> dict:
     name = _str_arg(params, "name")
     if err := _mcp_plugin_write_error(rid, name, _mcp_server_rows()[1]):
         return err
-    if not _tools_mod("tui_gateway.mcp_header_secrets").remove_server(name):
-        return _err(rid, 4064, f"server '{name}' not found")
-    return _ok(rid, {"ok": True, "removed": True})
+    removed, failure = _tools_mod("tui_gateway.mcp_account_rpc").remove(name, params.get("account"))
+    return _err(rid, *failure) if failure else _ok(rid, removed)
 
 
 @_mcp_rpc("oauth.start")
@@ -1666,8 +1643,12 @@ def _(rid, params: dict) -> dict:
         name, servers, err = _mcp_config_server_or_error(rid, params)
         if err:
             return err
-        cfg = dict(servers[name])
-        cfg = _tools_mod("tui_gateway.mcp_rpc_helpers").repair_connector_stub(name, cfg) or cfg
+        accounts = _tools_mod("tui_gateway.mcp_account_rpc")
+        target, refusal = accounts.resolve(
+            name, servers, params.get("account"), create=bool(params.get("create")), signin=True)
+        if refusal:
+            return _err(rid, *refusal)
+        cfg = _tools_mod("tui_gateway.mcp_rpc_helpers").repair_connector_stub(name, target.cfg) or target.cfg
         if not cfg.get("url"):
             return _err(rid, 4001, "stdio servers authenticate via env keys, not OAuth")
         if cfg.get("headers") and cfg.get("auth") != "oauth":
@@ -1679,39 +1660,53 @@ def _(rid, params: dict) -> dict:
         sessions = _tools_mod("tui_gateway.mcp_oauth_sessions")
         try:
             result = sessions.start_flow(
-                hermes_home, name, cfg, client_redirect_uri=client_redirect_uri,
+                hermes_home, target.connection, cfg, client_redirect_uri=client_redirect_uri,
                 fallback_redirect_uri=fallback_redirect_uri)
         except sessions.AdminApprovalPending as e:
             return _err(rid, 4033, str(e), data={"reason": "ADMIN_APPROVAL_PENDING"})
     except ValueError as e:
         return _err(rid, 4001, str(e))
     keys = ("session_id", "auth_url", "flow", "redirect", "redirect_uri", "notice")
-    return _ok(rid, {"ok": True, **{k: result[k] for k in keys if k in result}})
+    return _ok(rid, {"ok": True, **{k: result[k] for k in keys if k in result}, "private_window_hint": target.others})
+
+
+def _mcp_flow_connection(rid, params):
+    connection, failure = _tools_mod("tui_gateway.mcp_account_rpc").flow_connection(params)
+    return connection, _err(rid, *failure) if failure else None
 
 
 @_mcp_rpc("oauth.poll", _NAME_SESSION)
 def _(rid, params: dict) -> dict:
     """Poll a flow → ``{ok, status: pending|approved|error, ...}``; ``approved`` persists tokens per profile."""
+    connection, err = _mcp_flow_connection(rid, params)
+    if err:
+        return err
     poll = _tools_mod("tui_gateway.mcp_oauth_sessions").poll_flow
-    return _ok(rid, {"ok": True, **poll(_str_arg(params, "session_id"), _str_arg(params, "name"))})
+    return _ok(rid, {"ok": True, **poll(_str_arg(params, "session_id"), connection)})
 
 
 @_mcp_rpc("oauth.cancel", _NAME_SESSION)
 def _(rid, params: dict) -> dict:
     """Cancel a flow owned by the resolved profile, waking its callback worker."""
+    connection, err = _mcp_flow_connection(rid, params)
+    if err:
+        return err
     home = str(_tools_mod("hermes_constants").get_hermes_home().expanduser().resolve(strict=False))
     cancel = _tools_mod("tui_gateway.mcp_oauth_sessions").cancel_flow
-    return _ok(rid, cancel(_str_arg(params, "session_id"), _str_arg(params, "name"), home))
+    return _ok(rid, cancel(_str_arg(params, "session_id"), connection, home))
 
 
 @_mcp_rpc("oauth.callback", _NAME_SESSION)
 def _(rid, params: dict) -> dict:
     """Relay a client-captured redirect (``code``/``state``/``error``/``iss``) into a ``client_redirect_uri`` flow."""
+    connection, err = _mcp_flow_connection(rid, params)
+    if err:
+        return err
     code, state, error, iss, description = (
         str(params.get(k) or "") or None for k in ("code", "state", "error", "iss", "error_description"))
     deliver = _tools_mod("tui_gateway.mcp_oauth_sessions").deliver_callback_flow
     return _ok(rid, deliver(
-        _str_arg(params, "session_id"), _str_arg(params, "name"), code=code, state=state, error=error,
+        _str_arg(params, "session_id"), connection, code=code, state=state, error=error,
         iss=iss, error_description=description))
 
 

@@ -50,6 +50,14 @@ def flow_for(home: Path, service: str) -> SigninFlow:
     return factory(home, service) if factory is not None else ManualFlow()
 
 
+def resolve_account_target(home: Path, slug: str, alias: Optional[str], *, signin: bool = False):
+    from agent.runtime_scope import bind_profile_scope
+    from hermes_cli.mcp_config import _get_mcp_servers
+    from tui_gateway import mcp_account_rpc
+    with bind_profile_scope(home, hydrate_secrets=False):
+        return mcp_account_rpc.resolve(slug, _get_mcp_servers(), alias, signin=signin)[0]
+
+
 def classify_mcp_server(cfg: object) -> str:
     if not isinstance(cfg, dict):
         return "manual"
@@ -131,8 +139,11 @@ class McpOAuthFlow:
     POLL_SECONDS = 1.5
 
     def __init__(self, home: Path, service: str) -> None:
+        from tools.mcp_accounts import server_name, split_service
         self._home = home
-        self._server = service.partition(":")[2]
+        parsed = split_service(service)
+        self._slug, self._alias = parsed if parsed is not None else (service.partition(":")[2], None)
+        self._server = server_name(self._slug, self._alias) if self._alias else self._slug
         self._session_id: Optional[str] = None
         self._started = asyncio.Event()
         self._cancelled = False
@@ -144,14 +155,13 @@ class McpOAuthFlow:
         return None
 
     async def authorize_url(self) -> Optional[str]:
-        from hermes_cli.mcp_config import _get_mcp_servers
         from tui_gateway import mcp_oauth_sessions
-        servers = await asyncio.to_thread(_get_mcp_servers)
-        cfg = servers.get(self._server)
-        if not isinstance(cfg, dict) or not cfg.get("url"):
+        target = await asyncio.to_thread(resolve_account_target, self._home, self._slug, self._alias, signin=True)
+        if target is None or not target.cfg.get("url"):
             return None
         home = await asyncio.to_thread(self._home_key)
-        started = await asyncio.to_thread(mcp_oauth_sessions.start_flow, home, self._server, {**cfg, "auth": "oauth"})
+        started = await asyncio.to_thread(
+            mcp_oauth_sessions.start_flow, home, target.connection, {**target.cfg, "auth": "oauth"})
         self._session_id = started["session_id"]
         self._started.set()
         return started["auth_url"]
@@ -160,7 +170,7 @@ class McpOAuthFlow:
         from tui_gateway import mcp_oauth_sessions
         await self._started.wait()
         while not self._cancelled and self._session_id:
-            status = mcp_oauth_sessions.poll_flow(self._session_id, self._server).get("status")
+            status = mcp_oauth_sessions.poll_flow(self._session_id, self._server, self._home_key()).get("status")
             if status == "approved":
                 return True
             if status == "error":
@@ -201,17 +211,22 @@ class KeyEntryFlow:
     verification_uri = None
     expires_in = None
 
-    def __init__(self, server: str) -> None:
+    def __init__(self, server: str, env_var: Optional[str] = None) -> None:
         self.server = server
+        self._env_var = env_var
         self._stored = asyncio.Event()
 
+    def _key_var(self) -> str:
+        from hermes_cli.mcp_config import _env_key_for_server
+        return self._env_var or _env_key_for_server(self.server)
+
     async def store(self, value: str) -> bool:
-        from hermes_cli.mcp_config import _env_key_for_server, _strip_bearer_prefix
+        from hermes_cli.mcp_config import _strip_bearer_prefix
         text = credential_text(value)
         text = _strip_bearer_prefix(text) if text else None
         if not text or text.lower() == "bearer":
             return False
-        await save_credential(_env_key_for_server(self.server), text)
+        await save_credential(self._key_var(), text)
         self._stored.set()
         return True
 
@@ -223,8 +238,7 @@ class KeyEntryFlow:
 
     async def confirm(self) -> bool:
         from hermes_cli.config import get_env_value
-        from hermes_cli.mcp_config import _env_key_for_server
-        if not await asyncio.to_thread(get_env_value, _env_key_for_server(self.server)):
+        if not await asyncio.to_thread(get_env_value, self._key_var()):
             return False
         self._stored.set()
         return True
@@ -339,10 +353,10 @@ class McpPasteFlow:
     EXCHANGE_SECONDS = 60.0
     POLL_SECONDS = 0.5
 
-    def __init__(self, home: Path, server: str) -> None:
+    def __init__(self, home: Path, server: str, alias: Optional[str] = None) -> None:
         self.server = server
         self.expires_in = int(PASTE_TTL_SECONDS)
-        self._oauth = McpOAuthFlow(home, f"mcp:{server}")
+        self._oauth = McpOAuthFlow(home, f"mcp:{server}" + (f":{alias}" if alias else ""))
         self.verification_uri: Optional[str] = None
         self.failure: Optional[str] = None
         self._attempts = 0
@@ -382,12 +396,12 @@ class McpPasteFlow:
         self._consumed = True
         delivered = await asyncio.to_thread(
             mcp_oauth_sessions.deliver_callback_flow, oauth._session_id, oauth._server,
-            code=parsed.code, state=parsed.state)
+            code=parsed.code, state=parsed.state, hermes_home=oauth._home_key())
         if not delivered["ok"]:
             return self._end(PASTE_FAILURE)
         deadline = time.monotonic() + self.EXCHANGE_SECONDS
         while time.monotonic() < deadline:
-            status = mcp_oauth_sessions.poll_flow(oauth._session_id, oauth._server).get("status")
+            status = mcp_oauth_sessions.poll_flow(oauth._session_id, oauth._server, oauth._home_key()).get("status")
             if status == "approved":
                 self._succeeded = True
                 self._done.set()
@@ -418,8 +432,11 @@ class McpServerFlow:
     user_code = None
 
     def __init__(self, home: Path, service: str) -> None:
+        from tools.mcp_accounts import split_service
         self._home = home
-        self._server = service.partition(":")[2]
+        parsed = split_service(service)
+        self._server, self._alias = parsed if parsed is not None else (service.partition(":")[2], None)
+        self._service = service
         self._inner: SigninFlow = ManualFlow()
 
     @property
@@ -434,22 +451,27 @@ class McpServerFlow:
     def signin_on(self) -> Optional[str]:
         return getattr(self._inner, "signin_on", None)
 
+    def _key_var(self, cfg: dict) -> Optional[str]:
+        from tui_gateway.mcp_header_secrets import referenced_vars
+        names = referenced_vars(cfg.get("headers")) if self._alias is not None else set()
+        return next(iter(names)) if len(names) == 1 else None
+
     def _catalog_declares_api_key(self) -> bool:
         from hermes_cli.mcp_catalog import get_entry
         entry = get_entry(self._server)
         return entry is not None and entry.auth.type == "api_key"
 
     async def begin(self) -> None:
-        from hermes_cli.mcp_config import _get_mcp_servers
-        cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
         from tools.mcp_oauth import signs_in_on_owner_app
+        target = await asyncio.to_thread(resolve_account_target, self._home, self._server, self._alias)
+        cfg = target.cfg if target is not None else None
         kind = classify_mcp_server(cfg)
         if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
             kind = "api_key"
         if kind == "oauth" and signs_in_on_owner_app(cfg):
             self._inner = OwnerComputerFlow(self._server)
         elif kind == "oauth":
-            paste = McpPasteFlow(self._home, self._server)
+            paste = McpPasteFlow(self._home, self._server, self._alias)
             try:
                 await paste.begin()
                 self._inner = paste
@@ -457,9 +479,9 @@ class McpServerFlow:
                 paste.cancel()
                 logger.warning("MCP paste sign-in for %s could not start; using the on-host redirect", self._server,
                                exc_info=True)
-                self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
+                self._inner = McpOAuthFlow(self._home, self._service)
         elif kind == "api_key":
-            self._inner = KeyEntryFlow(self._server)
+            self._inner = KeyEntryFlow(self._server, self._key_var(cfg))
         elif kind == "header":
             from tui_gateway.mcp_header_secrets import referenced_vars
             names = referenced_vars(cfg.get("headers"))

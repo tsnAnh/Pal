@@ -12,6 +12,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
+from tools.mcp_accounts import is_account_server, registration_name, split
 from tools.mcp_tool_common import _core, _parse_boolish, mcp_server_enabled
 from tools import mcp_tool_config as _config
 from tools import mcp_tool_errors as _errors
@@ -218,7 +219,7 @@ def _resolve_server_lazy(name: str, config: dict) -> bool:
     Gated per-server by ``mcp_servers.<name>.lazy`` in config (default OFF), following the same per-server
     key pattern as ``idle_timeout_seconds``. Design from #56832 (Vansh5632).
     """
-    return _parse_boolish(config.get("lazy", False), default=False)
+    return not is_account_server(name) and _parse_boolish(config.get("lazy", False), default=False)
 
 
 def _note_connect_failure(name: str, exc: BaseException) -> str:
@@ -625,7 +626,7 @@ def discover_mcp_tools(allowed_mcp_names: Optional[list[str]] = None) -> list[st
         return []
     if allowed_mcp_names is not None:
         allowed_set = {str(n) for n in allowed_mcp_names}
-        filtered = {name: cfg for name, cfg in servers.items() if name in allowed_set}
+        filtered = {name: cfg for name, cfg in servers.items() if name in allowed_set or registration_name(name) in allowed_set}
         if len(filtered) != len(servers):
             logger.debug("MCP discovery filter: spawning %d/%d configured server(s) per --toolsets filter "
                          "(skipped: %s)", len(filtered), len(servers), ",".join(sorted(set(servers) - set(filtered))))
@@ -781,7 +782,7 @@ def restart_mcp_servers_with_new_inputs(names: set[str]) -> list[str]:
         owned, borrowed = [], []
         with _owner_secret_scope():
             servers = _config._load_mcp_config()
-            for name in sorted(names):
+            for name in sorted(c for c in servers if c in names or registration_name(c) in names):
                 config = servers.get(name)
                 with _core._lock:
                     key = _resolve_server_key(name, scope, current=False)
@@ -879,6 +880,8 @@ def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runt
                   else "configured")
         entry = {"name": name, "transport": _transport_label(cfg),
                  "tools": 0, "connected": False, "disabled": status == "disabled", "status": status}
+        if (ref := split(name)) is not None:
+            entry["connector"], entry["account"] = ref.slug, ref.alias
         if live:
             entry["connected"] = True
             entry["tools"] = (len(server._registered_tool_names) if hasattr(server, "_registered_tool_names")
@@ -909,7 +912,13 @@ def mcp_server_reconnecting(name: str) -> bool:
     way every time, so callers must treat it as blocked rather than wait forever. Reads cached
     state; never connects."""
     with _core._lock:
-        server = _core._servers.get(_resolve_server_key(name))
+        accounts = [_key_name(key) for key in _core._servers
+                    if is_account_server(_key_name(key)) and registration_name(_key_name(key)) == name]
+        servers = [_core._servers.get(_resolve_server_key(connection)) for connection in (name, *accounts)]
+    return any(_is_reconnecting(server) for server in servers)
+
+
+def _is_reconnecting(server) -> bool:
     if server is None or server.session is not None or not server._ever_connected:
         return False
     if server._park_reason and "permanent" in server._park_reason:

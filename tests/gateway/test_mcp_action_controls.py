@@ -106,3 +106,61 @@ async def test_the_wire_takes_exactly_the_declared_fields(owner):
     assert reply['error']['code'] == 4001
     reply = await _rpc(connection, 'mcp.actions.auto_approve.set', session_id=sid, server='upwork')
     assert reply['error']['code'] == 4001
+
+
+@pytest.fixture
+def two_accounts(tmp_path, monkeypatch):
+    config = _config()
+    config['mcp_servers']['upwork']['accounts'] = {'default': {}, 'work': {}}
+    store, _runner, authority, connection = _owner(tmp_path / 'home', monkeypatch, config)
+    yield tmp_path, authority, connection
+    store.close_all_db_handles()
+
+
+@pytest.mark.asyncio
+async def test_the_switch_is_kept_per_account(two_accounts):
+    tmp_path, authority, connection = two_accounts
+    live, _ = await _create(connection, authority, 'one', tmp_path, source='ios')
+    sid = next(k for k, v in authority.sessions.items() if v is live)
+    try:
+        assert (await _rpc(connection, 'mcp.actions.auto_approve.set', session_id=sid, server='upwork', account='work',
+                           enabled=True))['result'] == {'enabled': True}
+        assert mcp_action_gate.auto_approve_enabled(live.route, 'upwork@work')
+        assert not mcp_action_gate.auto_approve_enabled(live.route, 'upwork@default')
+        assert not mcp_action_gate.auto_approve_enabled(live.route, 'upwork')
+        for account, enabled in (('work', True), ('default', False)):
+            assert (await _rpc(connection, 'mcp.actions.auto_approve.get', session_id=sid, server='upwork',
+                               account=account))['result'] == {'enabled': enabled, 'eligible': True}
+    finally:
+        mcp_action_gate.clear_session(live.route)
+
+
+@pytest.mark.asyncio
+async def test_several_accounts_need_a_name_and_an_unknown_account_is_not_eligible(two_accounts):
+    tmp_path, authority, connection = two_accounts
+    live, _ = await _create(connection, authority, 'one', tmp_path, source='ios')
+    sid = next(k for k, v in authority.sessions.items() if v is live)
+    for extra in ({}, {'account': 'ghost'}):
+        assert (await _rpc(connection, 'mcp.actions.auto_approve.get', session_id=sid, server='upwork', **extra))[
+            'result'] == {'enabled': False, 'eligible': False}
+        refused = await _rpc(connection, 'mcp.actions.auto_approve.set', session_id=sid, server='upwork', enabled=True,
+                             **extra)
+        assert refused['error']['data']['reason'] == 'permission_denied'
+    assert (await _rpc(connection, 'mcp.actions.auto_approve.get', session_id=sid, server='plain', account='work'))[
+        'result']['eligible'] is False
+
+
+@pytest.mark.asyncio
+async def test_a_single_account_connector_needs_no_name(tmp_path, monkeypatch):
+    config = _config()
+    config['mcp_servers']['upwork']['accounts'] = {'default': {}}
+    store, _runner, authority, connection = _owner(tmp_path / 'home', monkeypatch, config)
+    try:
+        live, _ = await _create(connection, authority, 'one', tmp_path, source='ios')
+        sid = next(k for k, v in authority.sessions.items() if v is live)
+        assert (await _rpc(connection, 'mcp.actions.auto_approve.set', session_id=sid, server='upwork', enabled=True))[
+            'result'] == {'enabled': True}
+        assert mcp_action_gate.auto_approve_enabled(live.route, 'upwork@default')
+        mcp_action_gate.clear_session(live.route)
+    finally:
+        store.close_all_db_handles()

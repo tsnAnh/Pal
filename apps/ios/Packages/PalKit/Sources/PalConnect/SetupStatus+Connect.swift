@@ -99,7 +99,7 @@ extension SetupStatus {
             return SetupStatus(code: "cancelled", subject: subject, valueName: valueName, device: device)
         case .credentialsRequired:
             return SetupStatus(code: "credentials_required", subject: subject, valueName: valueName, device: device)
-        case .failed:
+        case .failed, .accountName:
             return SetupStatus(code: "failed", subject: subject, valueName: valueName, device: device)
         }
     }

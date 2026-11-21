@@ -16,6 +16,7 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case signInRefused(McpSignInFailure, GatewayFault)
     case adminApprovalPending
     case oauthClient(OAuthClientFailure, GatewayFault? = nil)
+    case accountName(ConnectorAccountNameError)
     case failed
     case faulted(GatewayFault)
 
@@ -123,45 +124,49 @@ public struct ConnectAppsService: Sendable {
         return rows.compactMap { try? $0.decoded(as: T.self) }
     }
 
-    public func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async throws {
+    public func connect(_ app: ConnectApp, credentials: [String: String] = [:], account: ConnectorAccountTarget? = nil) async throws {
         switch app.source {
-        case .catalog(let entry): try await connectCatalog(entry, credentials: credentials)
-        case .mcp where app.requiresAppSignIn: try await connectUpwork(app)
-        case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials)
+        case .catalog(let entry): try await connectCatalog(entry, credentials: credentials, account: account)
+        case .mcp where app.requiresAppSignIn: try await connectUpwork(app, account: account)
+        case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials, account: account)
         case .custom(let info):
             do { _ = try await testCustomConnector(name: info.name) } catch { throw ConnectAppsError.failed }
         case .googleWorkspace: throw ConnectAppsError.unavailable
         }
     }
 
-    public func disconnect(_ app: ConnectApp) async throws {
+    public func disconnect(_ app: ConnectApp, account: String? = nil) async throws {
         switch app.source {
-        case .catalog(let entry) where entry.method == .oauthClient: try await removeOAuthClientSignIn(slug: entry.slug)
-        case .catalog(let entry): _ = try await call("mcp.servers.remove", ["name": .string(entry.slug)])
-        case .mcp(let name, _): _ = try await call("mcp.servers.remove", ["name": .string(name)])
+        case .catalog(let entry) where entry.method == .oauthClient: try await removeOAuthClientSignIn(slug: entry.slug, account: account)
+        case .catalog(let entry): _ = try await call("mcp.servers.remove", removalParams(entry.slug, account: account))
+        case .mcp(let name, _): _ = try await call("mcp.servers.remove", removalParams(name, account: account))
         case .custom(let info): _ = try await call("mcp.servers.remove", ["name": .string(info.name)])
         case .googleWorkspace:
             do { _ = try await GoogleWorkspaceService(rpc: rpc, diagnostics: diagnostics).signOut() } catch { throw ConnectAppsError.failed }
         }
     }
 
-    private func connectCatalog(_ entry: PalCatalogEntry, credentials: [String: String]) async throws {
+    private func connectCatalog(_ entry: PalCatalogEntry, credentials: [String: String], account: ConnectorAccountTarget?) async throws {
         switch entry.method {
         case .none: _ = try await addCatalogServer(entry)
         case .mcpOAuth:
             let added = try await addCatalogServer(entry)
             do {
-                try await authorizeMcp(name: entry.slug, browser: browser)
+                try await authorizeMcp(name: entry.slug, browser: browser, account: account)
             } catch {
                 if added { _ = try? await call("mcp.servers.remove", ["name": .string(entry.slug)]) }
                 throw error
             }
         case .apiKey:
             guard let token = credentials["token"], !token.isEmpty else { throw ConnectAppsError.credentialsRequired(["token"]) }
-            try await storeCatalogToken(entry, token: token)
+            if let account {
+                try await storeCatalogAccountToken(entry, token: token, account: account)
+            } else {
+                try await storeCatalogToken(entry, token: token)
+            }
         case .native, .botApp, .botTokenStdio, .unsupported: throw ConnectAppsError.unavailable
         case .oauthClient:
-            if case .paste(let session) = try await connectOAuthClient(entry, route: .loopback) {
+            if case .paste(let session) = try await connectOAuthClient(entry, route: .loopback, account: account) {
                 await session.cancel()
                 throw ConnectAppsError.unavailable
             }
@@ -186,7 +191,7 @@ public struct ConnectAppsService: Sendable {
         _ = try await call("mcp.servers.update", ["name": .string(entry.slug), "auth": "bearer", "bearer_token": .string(token)])
     }
 
-    private func connectMcp(name: String, requires: [String], credentials: [String: String]) async throws {
+    private func connectMcp(name: String, requires: [String], credentials: [String: String], account: ConnectorAccountTarget?) async throws {
         let missing = requires.filter { credentials[$0]?.isEmpty != false }
         guard missing.isEmpty else { throw ConnectAppsError.credentialsRequired(missing) }
         let alreadyAdded: Bool
@@ -199,10 +204,10 @@ public struct ConnectAppsService: Sendable {
         }
         do {
             if requires.isEmpty {
-                try await authorizeMcp(name: name, browser: browser)
+                try await authorizeMcp(name: name, browser: browser, account: account)
             } else {
-                for key in requires {
-                    _ = try await call("mcp.servers.set_api_key", ["name": .string(name), "value": .string(credentials[key] ?? ""), "env_var": .string(key)])
+                for (index, key) in requires.enumerated() {
+                    try await setApiKey(name: name, value: credentials[key] ?? "", envVar: key, account: account, create: index == 0)
                 }
             }
         } catch {
@@ -211,14 +216,14 @@ public struct ConnectAppsService: Sendable {
         }
     }
 
-    public func tokenFailure(_ app: ConnectApp) async -> ConnectorFailure? {
+    public func tokenFailure(_ app: ConnectApp, account: String? = nil) async -> ConnectorFailure? {
         let name: String
         switch app.source {
         case .mcp(let preset, let requires) where !requires.isEmpty: name = preset
         case .catalog(let entry) where entry.method == .apiKey: name = entry.slug
         default: return nil
         }
-        do { _ = try await testCustomConnector(name: name) } catch { return ConnectorFailure.from(error) }
+        do { _ = try await testCustomConnector(name: name, account: account) } catch { return ConnectorFailure.from(error) }
         return nil
     }
 
@@ -230,23 +235,24 @@ public struct ConnectAppsService: Sendable {
         }
     }
 
-    func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
-        if case .paste(let session) = try await signInMcp(name: name, platform: .mac, browser: browser, clientID: clientID, rollback: nil) {
+    func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil, account: ConnectorAccountTarget? = nil) async throws {
+        if case .paste(let session) = try await signInMcp(name: name, platform: .mac, browser: browser, clientID: clientID, account: account, rollback: nil) {
             await session.cancel()
             throw ConnectAppsError.unavailable
         }
     }
 
     func completeLoopback(
-        name: String, flow: String, link: URL, listener: LoopbackRedirectListener, browser: any AuthorizationBrowser
+        name: String, flow: String, link: URL, listener: LoopbackRedirectListener, browser: any AuthorizationBrowser,
+        account: String? = nil
     ) async throws {
         let parameters: [String: String]
         do {
             parameters = try await Self.awaitRedirect(listener: listener, browser: browser, url: link)
         } catch {
-            throw await failedSignIn(name: name, flow: flow, error: error)
+            throw await failedSignIn(name: name, flow: flow, error: error, account: account)
         }
-        try await relayCallback(name: name, flow: flow, parameters: parameters)
+        try await relayCallback(name: name, flow: flow, parameters: parameters, account: account)
     }
 
     private enum Step: Sendable {

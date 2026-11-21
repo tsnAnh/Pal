@@ -1734,6 +1734,8 @@ export interface ConnectorCatalogRow {
   setup_guide?: SetupGuide | null
   setup_progress?: SetupProgress | null
   featured?: boolean
+  multi_account?: boolean
+  accounts?: ConnectionAccountRow[]
 }
 export type ConnectorCatalogStatus = 'connected' | 'needs_reconnect' | 'not_connected' | 'needs_setup'
 export interface SetupGuide {
@@ -1779,6 +1781,12 @@ export interface SetupProgress {
   step_id: string
   saved: string[]
 }
+export interface ConnectionAccountRow {
+  name: string
+  status: ConnectionAccountStatus
+  reason?: string | null
+}
+export type ConnectionAccountStatus = 'connected' | 'needs_reconnect' | 'not_connected'
 export interface OAuthClientSlugParams {
   profile?: string | null
   slug: string
@@ -1799,6 +1807,8 @@ export interface OAuthClientConnectParams {
   profile?: string | null
   slug: string
   client_redirect_uri?: string | null
+  account?: string | null
+  create?: boolean
 }
 export interface OAuthClientConnectResult {
   slug: string
@@ -1809,6 +1819,7 @@ export interface OAuthClientRemoveParams {
   profile?: string | null
   slug: string
   remove_client?: boolean
+  account?: string | null
 }
 export interface OAuthClientRemoveResult {
   slug: string
@@ -5793,6 +5804,7 @@ export interface McpCatalogEntry {
   requires: string[]
   setup?: string
   transport: string
+  accounts?: ConnectionAccountRow[]
   needs_auth_reason?: string | null
 }
 export interface McpServersListResult {
@@ -5832,6 +5844,7 @@ export interface McpServerRuntimeRow {
   plugin?: string | null
   needs_auth?: boolean
   needs_auth_reason?: string | null
+  account?: string | null
 }
 export type McpRuntimeStatus = 'connected' | 'disabled' | 'connecting' | 'failed' | 'lazy' | 'configured'
 /** ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers`` {Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist; ``client_id`` is a pre-registered OAuth client id (not a secret). */
@@ -5873,18 +5886,23 @@ export interface McpServersUpdateResult {
 export interface McpServersSetApiKeyParams {
   profile?: string | null
   name: string
+  account?: string | null
   value: string
   env_var?: string | null
+  create?: boolean
 }
 export interface McpServersSetApiKeyResult {
   ok: boolean
   name: string
   env_var: string
   server: McpServerSummary
+  account?: string | null
 }
-export interface McpServerNameParams {
+/** ``account`` names one account of a connector that holds several. A connector with exactly one account may leave it out; ``create`` makes ``account`` a new account and answers 4090 when the name is taken. */
+export interface McpAccountParams {
   profile?: string | null
   name: string
+  account?: string | null
 }
 /** ``ok: false`` carries ``error`` (never a header or env secret) and ``reason``; ``prompts`` / ``resources`` are only counted on success. A server with no tools is ``ok: true`` with ``tools: []``. */
 export interface McpServersTestResult {
@@ -5906,13 +5924,26 @@ export interface McpServersRemoveResult {
   ok: boolean
   removed: boolean
 }
-/** With ``client_redirect_uri`` the CLIENT hosts the loopback and relays the code via ``mcp.servers.oauth.callback``. */
+export interface McpAccountRenameParams {
+  profile?: string | null
+  name: string
+  account: string
+  new_account: string
+}
+export interface McpAccountRenameResult {
+  ok: boolean
+  name: string
+  account: string
+}
+/** With ``client_redirect_uri`` the CLIENT hosts the loopback and relays the code via ``mcp.servers.oauth.callback``. For an account that is not the connector's only one the authorization request carries ``prompt=select_account login`` so the vendor asks which account to use. */
 export interface McpOauthStartParams {
   profile?: string | null
   name: string
+  account?: string | null
   client_redirect_uri?: string | null
   fallback_redirect_uri?: string | null
   client_id?: string | null
+  create?: boolean
 }
 export interface McpOauthStartResult {
   ok: boolean
@@ -5922,12 +5953,14 @@ export interface McpOauthStartResult {
   redirect: McpOauthRedirect
   redirect_uri: string
   notice?: string | null
+  private_window_hint?: boolean
 }
 export type McpOauthRedirect = 'app' | 'gateway' | 'loopback'
 /** ``session_id`` is the OAuth flow id returned by ``oauth.start`` (not a gateway session). */
 export interface McpOauthFlowParams {
   profile?: string | null
   name: string
+  account?: string | null
   session_id: string
 }
 export interface McpOauthPollResult {
@@ -5949,6 +5982,7 @@ export interface McpOauthCancelResult {
 export interface McpOauthCallbackParams {
   profile?: string | null
   name: string
+  account?: string | null
   session_id: string
   code?: string | null
   state?: string | null
@@ -7611,6 +7645,7 @@ export interface KanbanEvent {
 export interface McpAutoApproveGetParams {
   session_id: string
   server: string
+  account?: string | null
 }
 export interface McpAutoApproveGetResult {
   enabled: boolean
@@ -7619,6 +7654,7 @@ export interface McpAutoApproveGetResult {
 export interface McpAutoApproveSetParams {
   session_id: string
   server: string
+  account?: string | null
   enabled: boolean
 }
 export interface McpAutoApproveSetResult {
@@ -8370,6 +8406,12 @@ export interface PetHatchProgressPayload {
 }
 /** ``change_watcher._CHANGE_WATCHES`` payload fn — ``{}`` for every watch except pet.changed. */
 export type ChangeSignalPayload = Record<string, unknown>
+/** ``change_watcher._groups_changed_payload``: the rooms whose log, tasks or live status moved; absent when something process-wide moved (every open room re-reads). ``broadcast_id`` names one broadcast: the same frame reaches a window once per open socket, and a copy needs no second read. */
+export interface GroupsChangedPayload {
+  room_ids?: string[] | null
+  broadcast_id?: string | null
+  [key: string]: unknown
+}
 export interface AuthRequiredPayload {
   request_id: string
   service: string
@@ -8415,12 +8457,6 @@ export interface ReachOfferPayload {
   title: string
   body: string
   session_id?: string | null
-}
-/** ``change_watcher._groups_changed_payload``: the rooms whose log, tasks or live status moved; absent when something process-wide moved (every open room re-reads). ``broadcast_id`` names one broadcast: the same frame reaches a window once per open socket, and a copy needs no second read. */
-export interface GroupsChangedPayload {
-  room_ids?: string[] | null
-  broadcast_id?: string | null
-  [key: string]: unknown
 }
 
 // ── Client→server methods ──
@@ -8537,7 +8573,7 @@ export interface RpcMethods {
   'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
   /** Name or rename one hosted connector account owned by the scoped member. */
   'connectors.accounts.rename': { params: ConnectorAccountsRenameParams; result: ConnectorAccountRow }
-  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. */
+  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
@@ -8769,6 +8805,8 @@ export interface RpcMethods {
   'machine.facts': { params: Params; result: MachineFactsResult }
   /** Curated MCP presets with per-profile installed/enabled state and the env keys each needs. */
   'mcp.catalog': { params: ProfileParams; result: McpCatalogResult }
+  /** Rename one account of a connector; its sign-in moves with it. An unknown account is 4064, a name that is taken 4090, an invalid name 4063. */
+  'mcp.servers.accounts.rename': { params: McpAccountRenameParams; result: McpAccountRenameResult }
   /** Add a server to the profile's config from a catalog preset and/or an explicit config. */
   'mcp.servers.add': { params: McpServersAddParams; result: McpServersAddResult }
   /** Configured MCP servers for the (scoped) profile, secrets redacted to env-key names. */
@@ -8781,14 +8819,14 @@ export interface RpcMethods {
   'mcp.servers.oauth.poll': { params: McpOauthFlowParams; result: McpOauthPollResult }
   /** Begin a PKCE OAuth flow; the client opens auth_url and polls mcp.servers.oauth.poll. */
   'mcp.servers.oauth.start': { params: McpOauthStartParams; result: McpOauthStartResult }
-  /** Drop a server from the profile's config.yaml. */
-  'mcp.servers.remove': { params: McpServerNameParams; result: McpServersRemoveResult }
-  /** Store a credential in the profile's .env and reference it from the server config (header or env). */
+  /** Drop a server from the profile's config.yaml. With account, drop that account and its sign-in; the last account takes the whole connector with it. */
+  'mcp.servers.remove': { params: McpAccountParams; result: McpServersRemoveResult }
+  /** Store a credential in the profile's .env and reference it from the server config (header or env); with account, the key of that account of the connector. */
   'mcp.servers.set_api_key': { params: McpServersSetApiKeyParams; result: McpServersSetApiKeyResult }
-  /** Cached runtime state per configured server; never connects, probes, or starts auth. */
+  /** Cached runtime state per configured server, one row per account of a connector that holds several (name is the connector, account the account); never connects, probes, or starts auth. */
   'mcp.servers.status': { params: ProfileParams; result: McpServersStatusResult }
-  /** Connect, list tools, disconnect — an OAuth server with no token on disk is reported as not ok. */
-  'mcp.servers.test': { params: McpServerNameParams; result: McpServersTestResult }
+  /** Connect, list tools, disconnect — an OAuth server with no token on disk is reported as not ok. A connector that holds several accounts is tested through the named account (4063 when none is named). */
+  'mcp.servers.test': { params: McpAccountParams; result: McpServersTestResult }
   /** Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090. */
   'mcp.servers.update': { params: McpServersUpdateParams; result: McpServersUpdateResult }
   /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
@@ -9336,6 +9374,7 @@ export const RPC_METHODS = [
   'llm.oneshot',
   'machine.facts',
   'mcp.catalog',
+  'mcp.servers.accounts.rename',
   'mcp.servers.add',
   'mcp.servers.list',
   'mcp.servers.oauth.callback',
@@ -9553,7 +9592,7 @@ export interface CanonicalRpcMethods {
   'auth.submit_callback': { params: AuthSubmitCallbackParams; result: AuthSubmitCallbackResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
-  /** The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed. */
+  /** The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. service is mcp:<slug>:<account> for one account of a connector; a bare mcp:<slug> from an older app lands in the connector's only account (the first one is named default) and ends that account's waiting request. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request, invalid_account, account_required or save_failed. */
   'auth.submit_oauth_tokens': { params: AuthSubmitOauthTokensParams; result: AuthSubmitOauthTokensResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
@@ -9605,7 +9644,7 @@ export interface CanonicalRpcMethods {
   'connectors.accounts': { params: ConnectorAccountsParams; result: ConnectorAccountsResult }
   /** Remove one hosted connector account owned by the scoped member. */
   'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
-  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. */
+  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A connector that can hold several accounts is multi_account and lists them in accounts, each with its own status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when none is but one needs it, else not_connected. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
@@ -9689,12 +9728,14 @@ export interface CanonicalRpcMethods {
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }
-  /** Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible. */
+  /** Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible. account names one account of a multi-account connector (optional with one account); the switch is kept per account. */
   'mcp.actions.auto_approve.get': { params: McpAutoApproveGetParams; result: McpAutoApproveGetResult }
   /** Turn the per-chat auto-approve switch on or off. Off by default, kept in memory for this chat only (a new chat, a reset or a gateway restart starts off), and the only way to set it. Refused with permission_denied unless the caller may approve in this chat and the chat is eligible (see mcp.actions.auto_approve.get). Money steps are never auto-approved. */
   'mcp.actions.auto_approve.set': { params: McpAutoApproveSetParams; result: McpAutoApproveSetResult }
   /** Curated MCP presets with per-profile installed/enabled state and the env keys each needs. */
   'mcp.catalog': { params: ProfileParams; result: McpCatalogResult }
+  /** Rename one account of a connector; its sign-in moves with it. An unknown account is 4064, a name that is taken 4090, an invalid name 4063. */
+  'mcp.servers.accounts.rename': { params: McpAccountRenameParams; result: McpAccountRenameResult }
   /** Add a server to the profile's config from a catalog preset and/or an explicit config. */
   'mcp.servers.add': { params: McpServersAddParams; result: McpServersAddResult }
   /** Relay a client-captured redirect into a client_redirect_uri flow. */
@@ -9705,9 +9746,9 @@ export interface CanonicalRpcMethods {
   'mcp.servers.oauth.poll': { params: McpOauthFlowParams; result: McpOauthPollResult }
   /** Begin a PKCE OAuth flow; the client opens auth_url and polls mcp.servers.oauth.poll. */
   'mcp.servers.oauth.start': { params: McpOauthStartParams; result: McpOauthStartResult }
-  /** Drop a server from the profile's config.yaml. */
-  'mcp.servers.remove': { params: McpServerNameParams; result: McpServersRemoveResult }
-  /** Store a credential in the profile's .env and reference it from the server config (header or env). */
+  /** Drop a server from the profile's config.yaml. With account, drop that account and its sign-in; the last account takes the whole connector with it. */
+  'mcp.servers.remove': { params: McpAccountParams; result: McpServersRemoveResult }
+  /** Store a credential in the profile's .env and reference it from the server config (header or env); with account, the key of that account of the connector. */
   'mcp.servers.set_api_key': { params: McpServersSetApiKeyParams; result: McpServersSetApiKeyResult }
   /** Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090. */
   'mcp.servers.update': { params: McpServersUpdateParams; result: McpServersUpdateResult }
@@ -9927,6 +9968,7 @@ export const CANONICAL_RPC_METHODS = [
   'mcp.actions.auto_approve.get',
   'mcp.actions.auto_approve.set',
   'mcp.catalog',
+  'mcp.servers.accounts.rename',
   'mcp.servers.add',
   'mcp.servers.oauth.callback',
   'mcp.servers.oauth.cancel',
@@ -10118,10 +10160,10 @@ export interface BackendGatewayEventMap {
   'free_tier.challenge': FreeTierChallengePayload
   /** First frame of a connection: the resolved skin, the change-event capability and the replay epoch. */
   'gateway.ready': GatewayReadyPayload
-  /** The owner's mid-turn message reached the running turn as its own user row. */
-  'input.absorbed': InputAbsorbedPayload
   /** A Group Chat log, task or live status moved; an open room re-reads its log delta and groups.state. */
   'groups.changed': GroupsChangedPayload
+  /** The owner's mid-turn message reached the running turn as its own user row. */
+  'input.absorbed': InputAbsorbedPayload
   /** The turn ended: final text, usage and outcome. */
   'message.complete': MessageCompletePayload
   /** One streamed chunk of the assistant reply (null text: segment boundary). */

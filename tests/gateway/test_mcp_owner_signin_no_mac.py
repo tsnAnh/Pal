@@ -22,8 +22,9 @@ from tests.gateway.device_tools_harness import connect_phone, device_id_for, hom
 from tests.gateway.test_auth_prompts import _required, _wait_for
 from tests.gateway.test_ios_session_surface import _create
 from tests.gateway.test_session_create_tier_cwd import _owner
-from tests.tools.test_mcp_action_gate import _call, _register
-from tests.tools.test_mcp_owner_signin_reauth import ROTATED, invalid_grant, refresh_grant, through_the_provider
+from tests.tools.test_mcp_oauth_import import CONNECTION
+from tests.tools.test_mcp_owner_signin_reauth import (
+    ROTATED, _call, invalid_grant, refresh_grant, register_account_server, through_the_provider)
 from tools import approval, auth_required, mcp_action_gate
 from tools.approval_context import reset_current_session_key, set_current_session_key
 from tools.mcp_oauth import HermesTokenStorage
@@ -74,7 +75,7 @@ class IphoneChat:
 
 
 def _expire(home):
-    path = home / 'mcp-tokens' / 'upwork.json'
+    path = HermesTokenStorage(CONNECTION, hermes_home=home)._tokens_path()
     data = json.loads(path.read_text())
     data['expires_at'] = time.time() - 10
     path.write_text(json.dumps(data))
@@ -96,13 +97,13 @@ async def test_with_only_an_iphone_chat_attached_the_read_the_refresh_and_the_ap
         assert (await mac.call('auth.submit_oauth_tokens', HANDOVER))['result'] == {'ok': True}
         await mac.connection.close()
         assert _mac_slots(authority) == [], 'the signing-in Mac is gone'
-        stored = ''.join(p.read_text() for p in (home / 'mcp-tokens').iterdir()) + (home / 'config.yaml').read_text()
+        stored = ''.join(p.read_text() for p in (home / 'mcp-tokens').rglob('*') if p.is_file()) + (home / 'config.yaml').read_text()
         assert device_id_for('Mac') not in stored and 'Mac' not in stored, 'the credential records no device'
 
         phone = await connect_phone(authority, 'iPhone', kind='ios')
         live, policy = await _create(phone.connection, authority, 'chat', tmp_path, source='ios')
         assert policy.source == 'ios' and _mac_slots(authority) == []
-        _register()
+        register_account_server()
         token_requests, bearers = through_the_provider(server, refresh_grant)
         _expire(home)
         with IphoneChat(live) as chat:
@@ -110,7 +111,7 @@ async def test_with_only_an_iphone_chat_attached_the_read_the_refresh_and_the_ap
             assert await asyncio.to_thread(_call, 'submit_proposal', {'job_id': '~1', 'cover_letter': 'Hi'}) == {'result': 'ok'}
         assert len(token_requests) == 1 and bearers == ['Bearer at-after-refresh'] * 2
         assert len(chat.cards) == 1 and chat.cards[0]['draft']['subject'] == 'submit_proposal'
-        assert json.loads((home / 'mcp-tokens' / 'upwork.json').read_text())['refresh_token'] == ROTATED
+        assert json.loads(HermesTokenStorage(CONNECTION, hermes_home=home)._tokens_path().read_text())['refresh_token'] == ROTATED
         assert _mac_slots(authority) == []
         with IphoneChat(live, choice='deny') as denied:
             result = await asyncio.to_thread(_call, 'submit_proposal', {'job_id': '~2'})
@@ -128,13 +129,13 @@ async def test_a_dead_sign_in_raises_the_mac_prompt_on_the_attached_apps_without
     monkeypatch.setenv('HERMES_HOME', str(home))
     phone = await connect_phone(authority, 'iPhone', kind='ios')
     assert (await phone.call('auth.submit_oauth_tokens', HANDOVER))['result'] == {'ok': True}
-    _register()
+    register_account_server()
     token_requests, _ = through_the_provider(server, invalid_grant)
     _expire(home)
 
     def bot_turn():
         from tools import mcp_tool_handlers as handlers
-        handler = handlers._make_tool_handler('upwork', 'search_jobs', 30.0)
+        handler = handlers._make_tool_handler(CONNECTION, 'search_jobs', 30.0)
         return [json.loads(auth_required.resolve('mcp_upwork_search_jobs', {}, handler({}), lambda: '{}'))
                 for _ in range(3)]
 
@@ -142,11 +143,11 @@ async def test_a_dead_sign_in_raises_the_mac_prompt_on_the_attached_apps_without
     results = await asyncio.to_thread(bot_turn)
     assert time.monotonic() - started < 10, 'no wait for the sign-in'
     assert [r.get('code') for r in results] == ['reauth_required'] * 3, results
-    assert len(token_requests) == 1 and HermesTokenStorage('upwork', hermes_home=home).reauth_required()
+    assert len(token_requests) == 1 and HermesTokenStorage(CONNECTION, hermes_home=home).reauth_required()
     await _wait_for(lambda: len(_required(phone)) == 1, timeout=30.0)
     event = _required(phone)[0]
-    assert event['service'] == 'mcp:upwork' and event['signin_on'] == 'owner_app' and event['server'] == 'upwork'
+    assert event['service'] == 'mcp:upwork:default' and event['signin_on'] == 'owner_app' and event['server'] == 'upwork'
     assert len(_required(phone)) == 1, 'repeated calls do not repeat the prompt'
     assert (await phone.call('auth.submit_oauth_tokens', HANDOVER))['result'] == {'ok': True}
     assert phone.events('auth.resolved')[-1]['outcome'] == 'signed_in'
-    assert not HermesTokenStorage('upwork', hermes_home=home).reauth_required()
+    assert not HermesTokenStorage(CONNECTION, hermes_home=home).reauth_required()

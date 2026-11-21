@@ -12,6 +12,9 @@ CATALOG_PATH = Path(__file__).parent / "data" / "pal_connectors.yaml"
 FEATURED_CONNECTOR_IDS: tuple[str, ...] = ("github", "linear", "slack", "notion", "sentry")
 
 
+NON_MULTI_ACCOUNT_ID = "t3code"
+
+
 class ConnectionMethod(str, Enum):
     MCP_OAUTH = "mcp_oauth"
     OAUTH_CLIENT = "oauth_client"
@@ -20,6 +23,9 @@ class ConnectionMethod(str, Enum):
     API_KEY = "api_key"
     NATIVE = "native"
     NONE = "none"
+
+
+MULTI_ACCOUNT_METHODS = frozenset({ConnectionMethod.MCP_OAUTH, ConnectionMethod.OAUTH_CLIENT, ConnectionMethod.API_KEY})
 
 
 @dataclass(frozen=True)
@@ -96,6 +102,11 @@ class PalConnector:
     notes: str | None = None
     setup: SetupGuide | None = None
     stdio: StdioRecipe | None = None
+
+    @property
+    def multi_account(self) -> bool:
+        return (self.method in MULTI_ACCOUNT_METHODS and self.mcp_url is not None and self.stdio is None
+                and self.id != NON_MULTI_ACCOUNT_ID)
 
 
 class PalCatalogError(ValueError):

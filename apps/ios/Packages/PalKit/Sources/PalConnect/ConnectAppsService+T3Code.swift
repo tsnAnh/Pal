@@ -78,7 +78,7 @@ extension ConnectAppsService {
             status.title = String(localized: "Sign-in did not finish")
             status.reason = reason
             return T3CodeFailure(status: status)
-        case .unavailable, .credentialsRequired, .oauthClient, .signInRefused, .adminApprovalPending:
+        case .unavailable, .credentialsRequired, .oauthClient, .signInRefused, .adminApprovalPending, .accountName:
             return T3CodeFailure(status: SetupStatus(code: SetupStatusClass.internalFault.rawValue, method: method, subject: T3CodeConnector.name))
         }
     }

@@ -137,9 +137,12 @@ def _raw_server_entry_trust(server_name: str, home) -> Any:
     from hermes_cli.managed_scope import load_managed_config
     from hermes_constants import get_hermes_home, hermes_home_key
 
+    from tools.mcp_accounts import registration_name
+    template_name = registration_name(server_name)
+
     def entry(doc):
         servers = doc.get("mcp_servers") if isinstance(doc, dict) else None
-        return servers.get(server_name) if isinstance(servers, dict) else None
+        return servers.get(template_name) if isinstance(servers, dict) else None
 
     try:
         native = entry(read_config_doc_readonly(home / "config.yaml"))
@@ -153,7 +156,7 @@ def _raw_server_entry_trust(server_name: str, home) -> Any:
     if hermes_home_key(home) == hermes_home_key(get_hermes_home()):  # plugin managers are per active home
         from hermes_cli.plugins import discover_plugins, get_plugin_manager
         discover_plugins()
-        portable = get_plugin_manager().get_portable_mcp_servers().get(server_name)
+        portable = get_plugin_manager().get_portable_mcp_servers().get(template_name)
         if isinstance(portable, dict):
             return portable.get("trust", _NO_TRUST_KEY)
     return _NOT_CONFIGURED
@@ -270,8 +273,10 @@ def _ask_for_call(server_name: str, tool_name: str, charge, booked: Optional[lis
                 return None
             over = True
     extra = charge.lines(spent) if charge is not None else []
+    from tools.mcp_accounts import display_name
+    shown_server = display_name(server_name)
     if gated:
-        head = f"MCP tool '{tool_name}' on UNTRUSTED server '{server_name}' wants to run."
+        head = f"MCP tool '{tool_name}' on UNTRUSTED server '{shown_server}' wants to run."
         tail = "This tool is write-capable (no readOnlyHint=true annotation) and may modify external state."
         # The limit notice leads, and the arguments trail: a prompt cut to a platform's cap keeps the notice.
         message = " ".join([head, *(["This call goes past the chat's spend limit."] if over else []), *extra, tail])
@@ -281,15 +286,15 @@ def _ask_for_call(server_name: str, tool_name: str, charge, booked: Optional[lis
         # pre-approve the next over-limit call.
         remember_key = None if over else _trust_approval_key(server_name, tool_name)
         scope = "once" if over else "once, for this session, or always"
-        description = (f"Server '{server_name}' is configured 'trust: untrusted'. "
+        description = (f"Server '{shown_server}' is configured 'trust: untrusted'. "
                        f"Approve to run '{tool_name}' {scope}, or deny to block it.")
-        title = f"MCP server '{server_name}' is asking"
+        title = f"MCP server '{shown_server}' is asking"
     else:
-        message = " ".join([f"MCP tool '{tool_name}' on server '{server_name}' would take this chat past its "
+        message = " ".join([f"MCP tool '{tool_name}' on server '{shown_server}' would take this chat past its "
                             f"spend limit.", *extra])
-        description = (f"Server '{server_name}' declares a spend limit per chat. Approve to run '{tool_name}' "
+        description = (f"Server '{shown_server}' declares a spend limit per chat. Approve to run '{tool_name}' "
                        f"once (every further paid call in this chat asks again), or deny to block it.")
-        title = f"MCP server '{server_name}' spend limit"
+        title = f"MCP server '{shown_server}' spend limit"
         remember_key = None
     try:  # lazy: tools.approval routes the prompt to whichever surface owns the session
         from tools.approval_prompt import request_elicitation_consent
@@ -878,7 +883,40 @@ def _render_call_tool_result(result, server_name: str, image_paths: Optional[lis
         return json.dumps({"result": text_result}, ensure_ascii=False)
 
 
+def _resolve_account_server(slug: str, alias: Any) -> str:
+    from hermes_cli.config import load_config_readonly
+    from hermes_cli.shared_catalog import visible_mcp_servers
+    from tools.mcp_accounts import resolve_alias, server_name
+    template = visible_mcp_servers(load_config_readonly().get("mcp_servers")).get(slug)
+    return server_name(slug, resolve_alias(slug, template, alias))
+
+
+def _make_account_handler(slug: str, make_body: Callable[[str], Callable]) -> Callable:
+    from tools.mcp_accounts import CONNECTOR_ALIAS_PARAM, AccountError
+    bodies: dict[str, Callable] = {}
+
+    def _handler(args: dict, **kwargs) -> Any:
+        call_args = dict(args or {})
+        alias = call_args.pop(CONNECTOR_ALIAS_PARAM, None)
+        try:
+            internal = _resolve_account_server(slug, alias)
+        except AccountError as exc:
+            return tool_error(exc.message)
+        body = bodies.get(internal) or bodies.setdefault(internal, make_body(internal))
+        return body(call_args, **kwargs)
+    return _handler
+
+
 def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float, *, native_images: bool = False):
+    from tools.mcp_accounts import split
+    if (ref := split(server_name)) is not None:
+        return _make_account_handler(
+            ref.slug, lambda internal: _make_connection_tool_handler(
+                internal, tool_name, tool_timeout, native_images=native_images))
+    return _make_connection_tool_handler(server_name, tool_name, tool_timeout, native_images=native_images)
+
+
+def _make_connection_tool_handler(server_name: str, tool_name: str, tool_timeout: float, *, native_images: bool = False):
     """Sync handler (``handler(args_dict, **kwargs)``) calling an MCP tool via the background loop. Always a JSON
     string, except with ``native_images`` (the registry handler the agent loop dispatches): a result carrying
     images then becomes the ``_multimodal`` envelope when the active route takes images in tool results.
@@ -1095,7 +1133,10 @@ def _make_check_fn(server_name: str):
     stale connection lingers. With no declaration registered the check is the connection check
     alone. Returns a plain bool: the registry caches ``bool(fn())``.
     """
+    from tools.mcp_accounts import split
     from tools.mcp_tool_scope import _resolve_server_key
+    if (ref := split(server_name)) is not None:
+        return _make_account_check_fn(ref.slug)
 
     def _connected() -> bool:
         with _core._lock:
@@ -1108,6 +1149,21 @@ def _make_check_fn(server_name: str):
         if not _connected():
             return False
         return _declared_app_offerable(server_name)
+    return _check
+
+
+def _make_account_check_fn(slug: str):
+    from tools.mcp_accounts import split
+    from tools.mcp_tool_scope import _key_name
+
+    def _check() -> bool:
+        scope = _core._mcp_registry_scope()
+        with _core._lock:
+            live = [_key_name(key) for key, server in _core._servers.items()
+                    if (ref := split(_key_name(key))) is not None and ref.slug == slug
+                    and _core._server_visible_in_scope(key, scope)
+                    and (server.session is not None or server._is_recycled_stdio())]
+        return any(_declared_app_offerable(name) for name in live)
     return _check
 
 

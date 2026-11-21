@@ -148,3 +148,21 @@ def test_invalid_step_fallback_is_refused(tmp_path, fallback):
                     f"source: https://x.dev, setup: {{steps: [{{id: a, kind: open_page, title: T, body: B, fallback: {fallback}}}]}}}}\n")
     with pytest.raises(PalCatalogError):
         load_pal_connectors(path)
+
+
+def test_a_connector_can_hold_several_accounts_when_it_signs_in_or_takes_a_key_over_http():
+    by_id = {e.id: e for e in load_pal_connectors()}
+
+    assert {i for i in ("linear", "notion", "upwork", "figma", "dropbox", "canva", "github") if by_id[i].multi_account} == {
+        "linear", "notion", "upwork", "figma", "dropbox", "canva", "github"}
+    assert not any(by_id[i].multi_account for i in (
+        "discord", "slack", "t3code", "context7", "wolfram", "google-ads", "google-workspace"))
+
+
+def test_multi_account_connectors_all_have_an_address_and_a_sign_in_or_key_method():
+    for entry in load_pal_connectors():
+        if entry.multi_account:
+            assert entry.mcp_url and entry.stdio is None
+            assert entry.method in (ConnectionMethod.MCP_OAUTH, ConnectionMethod.OAUTH_CLIENT, ConnectionMethod.API_KEY)
+        elif entry.method in (ConnectionMethod.NONE, ConnectionMethod.BOT_APP, ConnectionMethod.BOT_TOKEN_STDIO):
+            assert entry.id not in ("linear", "github")

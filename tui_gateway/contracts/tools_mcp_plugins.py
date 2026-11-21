@@ -14,7 +14,7 @@ from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
 from .common import OpenModel, ProfileParams, SessionLiveInfo
-from .connectors import ConnectorErrorReason
+from .connectors import ConnectionAccountRow, ConnectorErrorReason
 from .connectors_operation import CatalogAppState, CatalogTier
 from .registry import method
 
@@ -413,6 +413,7 @@ class McpCatalogEntry(Result):
     requires: list[str]
     setup: str = ""
     transport: str
+    accounts: list[ConnectionAccountRow] = []
     needs_auth_reason: str | None = None
 
 
@@ -479,6 +480,7 @@ class McpServerRuntimeRow(Result):
     # Parked on a rejected OAuth credential (older backends omit it).
     needs_auth: bool = False
     needs_auth_reason: str | None = None
+    account: str | None = None
 
 
 class McpServersStatusResult(Result):
@@ -487,7 +489,8 @@ class McpServersStatusResult(Result):
 
 
 method("mcp.servers.status", params=ProfileParams, result=McpServersStatusResult,
-       doc="Cached runtime state per configured server; never connects, probes, or starts auth.")
+       doc="Cached runtime state per configured server, one row per account of a connector that holds several "
+           "(name is the connector, account the account); never connects, probes, or starts auth.")
 
 
 class McpServerNameParams(ProfileParams):
@@ -553,9 +556,17 @@ method("mcp.servers.update", params=McpServersUpdateParams, result=McpServersUpd
        doc="Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090.")
 
 
-class McpServersSetApiKeyParams(McpServerNameParams):
+class McpAccountParams(McpServerNameParams):
+    """``account`` names one account of a connector that holds several. A connector with exactly one account
+    may leave it out; ``create`` makes ``account`` a new account and answers 4090 when the name is taken."""
+
+    account: str | None = None
+
+
+class McpServersSetApiKeyParams(McpAccountParams):
     value: str
     env_var: str | None = None
+    create: bool = False
 
 
 class McpServersSetApiKeyResult(Result):
@@ -563,10 +574,12 @@ class McpServersSetApiKeyResult(Result):
     name: str
     env_var: str
     server: McpServerSummary
+    account: str | None = None
 
 
 method("mcp.servers.set_api_key", params=McpServersSetApiKeyParams, result=McpServersSetApiKeyResult,
-       doc="Store a credential in the profile's .env and reference it from the server config (header or env).")
+       doc="Store a credential in the profile's .env and reference it from the server config (header or env); "
+           "with account, the key of that account of the connector.")
 
 
 class McpProbeTool(Result):
@@ -595,8 +608,9 @@ class McpServersTestResult(Result):
     oauth_tokens_present: bool | None = None
 
 
-method("mcp.servers.test", params=McpServerNameParams, result=McpServersTestResult,
-       doc="Connect, list tools, disconnect — an OAuth server with no token on disk is reported as not ok.")
+method("mcp.servers.test", params=McpAccountParams, result=McpServersTestResult,
+       doc="Connect, list tools, disconnect — an OAuth server with no token on disk is reported as not ok. "
+           "A connector that holds several accounts is tested through the named account (4063 when none is named).")
 
 
 class McpServersRemoveResult(Result):
@@ -604,17 +618,36 @@ class McpServersRemoveResult(Result):
     removed: bool
 
 
-method("mcp.servers.remove", params=McpServerNameParams, result=McpServersRemoveResult,
-       doc="Drop a server from the profile's config.yaml.")
+method("mcp.servers.remove", params=McpAccountParams, result=McpServersRemoveResult,
+       doc="Drop a server from the profile's config.yaml. With account, drop that account and its sign-in; "
+           "the last account takes the whole connector with it.")
 
 
-class McpOauthStartParams(McpServerNameParams):
+class McpAccountRenameParams(McpServerNameParams):
+    account: str
+    new_account: str
+
+
+class McpAccountRenameResult(Result):
+    ok: bool
+    name: str
+    account: str
+
+
+method("mcp.servers.accounts.rename", params=McpAccountRenameParams, result=McpAccountRenameResult,
+       doc="Rename one account of a connector; its sign-in moves with it. An unknown account is 4064, a name that "
+           "is taken 4090, an invalid name 4063.")
+
+
+class McpOauthStartParams(McpAccountParams):
     """With ``client_redirect_uri`` the CLIENT hosts the loopback and relays the code via
-    ``mcp.servers.oauth.callback``."""
+    ``mcp.servers.oauth.callback``. For an account that is not the connector's only one the authorization
+    request carries ``prompt=select_account login`` so the vendor asks which account to use."""
 
     client_redirect_uri: str | None = None
     fallback_redirect_uri: str | None = None
     client_id: str | None = None
+    create: bool = False
 
 
 class McpOauthRedirect(WireEnum):
@@ -631,13 +664,14 @@ class McpOauthStartResult(Result):
     redirect: McpOauthRedirect
     redirect_uri: str
     notice: str | None = None
+    private_window_hint: bool = False
 
 
 method("mcp.servers.oauth.start", params=McpOauthStartParams, result=McpOauthStartResult,
        doc="Begin a PKCE OAuth flow; the client opens auth_url and polls mcp.servers.oauth.poll.")
 
 
-class McpOauthFlowParams(McpServerNameParams):
+class McpOauthFlowParams(McpAccountParams):
     """``session_id`` is the OAuth flow id returned by ``oauth.start`` (not a gateway session)."""
 
     session_id: str
