@@ -23,7 +23,7 @@ final class ConnectionModel {
     var baseURLText: String
     var username = ""
     var password = ""
-    private(set) var signInMethod: SignInMethod = .browser
+    private(set) var discovery: SignInDiscovery = .unknown
     private(set) var phase: Phase = .signedOut
     private(set) var client: PalClient?
     private(set) var userInitial = "H"
@@ -172,63 +172,6 @@ final class ConnectionModel {
         await connect()
     }
 
-    var usesPasswordSignIn: Bool {
-        if case .password = signInMethod { true } else { false }
-    }
-
-    func addressChanged() {
-        methodProbe?.cancel()
-        signInMethod = .browser
-        guard let baseURL = try? GatewayBaseURL(validating: baseURLText) else { return }
-        let signIn = nativeSignIn
-        methodProbe = Task {
-            try? await Task.sleep(for: .milliseconds(400))
-            guard !Task.isCancelled else { return }
-            let method = await signIn.discoverMethod(baseURL: baseURL)
-            guard !Task.isCancelled else { return }
-            signInMethod = method
-        }
-    }
-
-    private var nativeSignIn: NativeSignIn {
-        NativeSignIn(transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID)
-    }
-
-    func signIn() async {
-        guard !isBusy else { return }
-        let baseURL: GatewayBaseURL
-        do {
-            baseURL = try GatewayBaseURL(validating: baseURLText)
-        } catch {
-            phase = .failed(Self.message(for: error))
-            return
-        }
-        phase = .signingIn
-        await methodProbe?.value
-        do {
-            let credentials: StoredCredentials
-            if case .password(let provider) = signInMethod {
-                let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
-                let secret = password
-                password = ""
-                guard !name.isEmpty, !secret.isEmpty else {
-                    phase = .failed("Enter your username and password.")
-                    return
-                }
-                credentials = try await nativeSignIn.signIn(baseURL: baseURL, provider: provider, username: name, password: secret)
-            } else {
-                credentials = try await nativeSignIn.signIn(baseURL: baseURL, browser: browser)
-            }
-            try await auth.adopt(credentials)
-            baseURLText = baseURL.displayString
-        } catch {
-            phase = .failed(Self.message(for: error))
-            return
-        }
-        password = ""
-        await connect()
-    }
-
     var negotiatedRuntime: JSONValue? { connection?.negotiatedRuntime }
 
     var chatConnector: PalClientConnector? {
@@ -341,5 +284,90 @@ final class ConnectionModel {
         default:
             "Something went wrong."
         }
+    }
+}
+
+extension ConnectionModel {
+    var passwordOption: SignInOption? {
+        guard case .ready(let options) = discovery else { return nil }
+        return options.first { $0.kind == .password }
+    }
+
+    var browserOptions: [SignInOption] {
+        guard case .ready(let options) = discovery else { return [] }
+        return options.filter { $0.kind == .browser }
+    }
+
+    func addressChanged() {
+        methodProbe?.cancel()
+        methodProbe = nil
+        guard let baseURL = try? GatewayBaseURL(validating: baseURLText) else {
+            discovery = .unknown
+            return
+        }
+        discovery = .checking
+        probe(baseURL, debounce: .milliseconds(400))
+    }
+
+    func retryDiscovery() {
+        methodProbe?.cancel()
+        guard let baseURL = try? GatewayBaseURL(validating: baseURLText) else {
+            discovery = .unknown
+            return
+        }
+        discovery = .checking
+        probe(baseURL, debounce: .zero)
+    }
+
+    private func probe(_ baseURL: GatewayBaseURL, debounce: Duration) {
+        let signIn = nativeSignIn
+        methodProbe = Task {
+            if debounce > .zero { try? await Task.sleep(for: debounce) }
+            guard !Task.isCancelled else { return }
+            let result = await signIn.discoverOptions(baseURL: baseURL)
+            guard !Task.isCancelled else { return }
+            discovery = result
+        }
+    }
+
+    private var nativeSignIn: NativeSignIn {
+        NativeSignIn(transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID)
+    }
+
+    func signIn(with option: SignInOption) async {
+        guard !isBusy else { return }
+        let baseURL: GatewayBaseURL
+        do {
+            baseURL = try GatewayBaseURL(validating: baseURLText)
+        } catch {
+            phase = .failed(Self.message(for: error))
+            return
+        }
+        let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let secret = password
+        if option.kind == .password {
+            guard !name.isEmpty, !secret.isEmpty else {
+                phase = .failed("Enter your username and password.")
+                return
+            }
+        }
+        phase = .signingIn
+        do {
+            let credentials: StoredCredentials
+            switch option.kind {
+            case .password:
+                credentials = try await nativeSignIn.signIn(baseURL: baseURL, provider: option.id, username: name, password: secret)
+            case .browser:
+                credentials = try await nativeSignIn.signIn(baseURL: baseURL, browser: browser, provider: option.id)
+            }
+            try await auth.adopt(credentials)
+            baseURLText = baseURL.displayString
+        } catch {
+            password = ""
+            phase = .failed(Self.message(for: error))
+            return
+        }
+        password = ""
+        await connect()
     }
 }

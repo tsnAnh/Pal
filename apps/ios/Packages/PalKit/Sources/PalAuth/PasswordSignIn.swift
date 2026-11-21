@@ -2,34 +2,7 @@ import Foundation
 import PalDiagnostics
 import PalREST
 
-public enum SignInMethod: Sendable, Equatable {
-    case browser
-    case password(provider: String)
-}
-
 extension NativeSignIn {
-    private struct ProviderList: Decodable, Sendable {
-        struct Provider: Decodable, Sendable {
-            var name: String
-            var supportsPassword: Bool
-
-            enum CodingKeys: String, CodingKey {
-                case name
-                case supportsPassword = "supports_password"
-            }
-        }
-
-        var providers: [Provider]
-    }
-
-    public func discoverMethod(baseURL: GatewayBaseURL) async -> SignInMethod {
-        let client = RESTClient(baseURL: baseURL, transport: transport, diagnostics: diagnostics)
-        guard let list = try? await client.get("/api/auth/providers", as: ProviderList.self),
-              list.providers.count == 1, let only = list.providers.first, only.supportsPassword, !only.name.isEmpty
-        else { return .browser }
-        return .password(provider: only.name)
-    }
-
     public func signIn(
         baseURL: GatewayBaseURL,
         provider: String,

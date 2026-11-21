@@ -2,9 +2,20 @@ import XCTest
 
 @MainActor
 final class SignInFlowTests: E2ETestCase {
-    func testNativeSignInThroughWebAuthenticationSession() throws {
+    func testNativeSignInWithoutABrowser() throws {
         let app = launch(resetCredentials: true)
-        signInIfNeeded(app)
+        enterAddress(app)
+        waitFor(app.textFields["usernameField"], timeout: 20, "password method shown inline")
+        shot(app, "landing-password-method")
+        enterNativeCredentials(app, password: env.password)
+        shot(app, "landing-keyboard-up")
+        app.buttons["signInButton"].hit()
+        waitFor(roster(app), timeout: 40, "roster after in-app sign-in")
+        XCTAssertEqual(app.webViews.count, 0, "sign-in must not open a web view")
+        #if os(iOS)
+        let consent = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Continue"]
+        XCTAssertFalse(consent.exists, "sign-in must not ask to open a web authentication session")
+        #endif
 
         app.buttons["userAvatarButton"].hit()
         #if os(macOS)
@@ -27,7 +38,6 @@ final class SignInFlowTests: E2ETestCase {
         shot(app, "signed-in-settings")
     }
 
-    #if os(macOS)
     func testWrongPasswordIsRejectedWithoutSigningIn() throws {
         let app = launch(resetCredentials: true)
         enterAddress(app)
@@ -36,10 +46,10 @@ final class SignInFlowTests: E2ETestCase {
 
         let error = app.staticTexts["errorLabel"]
         waitFor(error, timeout: 20, "wrong password error")
-        XCTAssertEqual(error.value as? String ?? error.label, "Wrong username or password.")
+        let shown = (error.value as? String).flatMap { $0.isEmpty ? nil : $0 } ?? error.label
+        XCTAssertEqual(shown, "Wrong username or password.")
         XCTAssertFalse(roster(app).exists, "a wrong password must not sign in")
         XCTAssertTrue(app.buttons["signInButton"].isEnabled)
         shot(app, "wrong-password")
     }
-    #endif
 }

@@ -1,159 +1,74 @@
+import PalAuth
 import PalDesign
 import SwiftUI
-
-struct ConnectionForm: View {
-    @Bindable var model: ConnectionModel
-
-    @Environment(\.hermesTheme) private var theme
-
-    private var cardFill: Color { Color(theme.palette.groupedCard) }
-
-    var body: some View {
-        Form {
-            if !model.isConnected {
-                Section("Pal address") {
-                    addressField
-                        .urlEntry()
-                        .accessibilityIdentifier("baseURLField")
-                        .disabled(model.isBusy)
-                        .listRowBackground(cardFill)
-                    if model.usesPasswordSignIn {
-                        credentialFields
-                    }
-                    Button {
-                        Task { await model.signIn() }
-                    } label: {
-                        HStack {
-                            Text("Sign in")
-                            if model.isBusy { Spacer(); ProgressView() }
-                        }
-                    }
-                    .disabled(model.isBusy)
-                    .accessibilityIdentifier("signInButton")
-                    .listRowBackground(cardFill)
-                }
-            }
-            Section("Status") {
-                statusRow
-                    .listRowBackground(cardFill)
-            }
-            if case .connected = model.phase {
-                Section {
-                    Button("Sign out", role: .destructive) {
-                        Task { await model.signOut() }
-                    }
-                    .foregroundStyle(Color(theme.palette.destructive))
-                    .accessibilityIdentifier("signOutButton")
-                    .listRowBackground(cardFill)
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
-    }
-
-    @ViewBuilder
-    private var credentialFields: some View {
-        TextField("Username", text: $model.username, prompt: Text(verbatim: "Username"))
-            .labelsHidden()
-            .textContentType(.username)
-            .autocorrectionDisabled()
-            .disabled(model.isBusy)
-            .accessibilityIdentifier("usernameField")
-            .listRowBackground(cardFill)
-        SecureField("Password", text: $model.password, prompt: Text(verbatim: "Password"))
-            .labelsHidden()
-            .textContentType(.password)
-            .disabled(model.isBusy)
-            .onSubmit { Task { await model.signIn() } }
-            .accessibilityIdentifier("passwordField")
-            .listRowBackground(cardFill)
-    }
-
-    @ViewBuilder
-    private var addressField: some View {
-        #if os(macOS)
-        TextField("Pal address", text: $model.baseURLText, prompt: Text(verbatim: "https://your-host.tailnet.ts.net"))
-            .labelsHidden()
-            .onChange(of: model.baseURLText) { model.addressChanged() }
-        #else
-        TextField("https://your-host.tailnet.ts.net", text: $model.baseURLText)
-        #endif
-    }
-
-    @ViewBuilder
-    private var statusRow: some View {
-        switch model.phase {
-        case .signedOut:
-            Text("Not signed in")
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .accessibilityIdentifier("statusLabel")
-        case .signingIn:
-            Text("Signing in")
-                .accessibilityIdentifier("statusLabel")
-        case .connecting:
-            Text("Connecting")
-                .accessibilityIdentifier("statusLabel")
-        case .connected(let instanceID):
-            VStack(alignment: .leading, spacing: 4) {
-                Label("Connected", palIcon: "checkmark.circle.fill", ink: .success)
-                    .foregroundStyle(.green)
-                    .accessibilityIdentifier("statusLabel")
-                Text(instanceID)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("instanceIDLabel")
-            }
-        case .failed(let message):
-            Text(message)
-                .foregroundStyle(Color(theme.palette.destructive))
-                .accessibilityIdentifier("errorLabel")
-        }
-    }
-}
 
 struct ConnectionView: View {
     @Bindable var model: ConnectionModel
 
-    @State private var showsOptions = false
+    @FocusState private var focus: SignInField?
 
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var tone: SignInTone { colorScheme == .dark ? .dark : .light }
 
-    private var host: String? {
-        guard let host = URL(string: model.baseURLText.trimmingCharacters(in: .whitespaces))?.host(), !host.isEmpty else { return nil }
-        return host
+    private var primaryOption: SignInOption? {
+        model.passwordOption ?? model.browserOptions.first
     }
 
-    private var needsOptions: Bool { host == nil || model.usesPasswordSignIn }
+    private var secondaryOptions: [SignInOption] {
+        model.browserOptions.filter { $0.id != primaryOption?.id }
+    }
+
+    private var isCompact: Bool {
+        #if os(iOS)
+        focus != nil
+        #else
+        false
+        #endif
+    }
+
+    private var errorMessage: String? {
+        if case .failed(let message) = model.phase { return message }
+        switch model.discovery {
+        case .unreachable: return String(localized: "Pal couldn't reach this server. Check the address and that the server is running.")
+        case .noMethods: return String(localized: "This server has no sign-in method Pal can use.")
+        default: return nil
+        }
+    }
 
     var body: some View {
-        ZStack {
-            tone.background.ignoresSafeArea()
-            SignInBackdrop()
-                .ignoresSafeArea()
-            VStack(spacing: 0) {
+        VStack(spacing: 0) {
+            if isCompact {
+                heading
+                Spacer(minLength: 0)
+            } else {
                 Spacer(minLength: 0)
                 heading
                 Spacer(minLength: 0)
-                actions
             }
-            .frame(maxWidth: SignInMetrics.columnWidth)
-            .padding(.horizontal, SignInMetrics.margin)
-            .padding(.bottom, SignInMetrics.bottomPadding)
+            actions
         }
-        .sheet(isPresented: Binding(get: { showsOptions && !model.isConnected }, set: { showsOptions = $0 })) {
-            SignInOptionsSheet(model: model) { showsOptions = false }
-                .macSheetFrame()
+        .frame(maxWidth: SignInMetrics.columnWidth)
+        .padding(.horizontal, SignInMetrics.margin)
+        .padding(.bottom, SignInMetrics.bottomPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .signInBackdrop(gathered: isCompact, ring: tone.background)
+        .background { tone.background.ignoresSafeArea() }
+        .animation(reduceMotion ? nil : .snappy, value: isCompact)
+        .animation(.snappy, value: model.discovery)
+        .onChange(of: model.phase) { _, phase in
+            guard case .failed = phase, model.passwordOption != nil else { return }
+            focus = .password
         }
     }
 
     private var heading: some View {
-        VStack(spacing: SignInMetrics.titleToSubtitle) {
+        VStack(spacing: 0) {
+            SignInLineupSlot(gathered: isCompact)
+                .padding(.bottom, isCompact ? SignInMetrics.lineupToTitle : 0)
             Text(verbatim: "Pal")
-                .font(.system(size: SignInMetrics.titleSize))
+                .font(.system(size: isCompact ? SignInMetrics.compactTitleSize : SignInMetrics.titleSize))
                 .foregroundStyle(tone.primaryText)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("signInTitle")
@@ -162,216 +77,258 @@ struct ConnectionView: View {
                 .foregroundStyle(tone.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: SignInMetrics.subtitleWidth)
+                .padding(.top, isCompact ? SignInMetrics.compactTitleToSubtitle : SignInMetrics.titleToSubtitle)
         }
-        .padding(.top, SignInMetrics.headingLift)
+        .padding(.top, isCompact ? SignInMetrics.compactHeadingTop : SignInMetrics.headingLift)
     }
 
     private var actions: some View {
         VStack(spacing: 0) {
-            if case .failed(let message) = model.phase, !showsOptions {
-                Text(message)
-                    .font(.system(size: SignInMetrics.footnoteSize))
+            card
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: SignInMetrics.errorSize))
                     .foregroundStyle(tone.errorText)
                     .multilineTextAlignment(.center)
-                    .padding(.bottom, SignInMetrics.errorToButton)
-                    .accessibilityIdentifier("signInErrorMessage")
+                    .padding(.top, SignInMetrics.cardToMessage)
+                    .accessibilityIdentifier("errorLabel")
             }
-            continueButton
-            Button("Other options") { showsOptions = true }
-                .buttonStyle(.plain)
-                .font(.system(size: SignInMetrics.linkSize))
-                .foregroundStyle(tone.secondaryText)
-                .padding(.top, SignInMetrics.buttonToLink)
-                .accessibilityIdentifier("otherOptionsButton")
-            Text("By continuing, you connect Pal to your own server and sign in with your account.")
-                .font(.system(size: SignInMetrics.footnoteSize))
-                .foregroundStyle(tone.footnoteText)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: SignInMetrics.footnoteWidth)
-                .padding(.top, SignInMetrics.linkToFootnote)
+            primaryButton
+                .padding(.top, SignInMetrics.messageToButton)
+            if let primaryOption, primaryOption.kind == .browser {
+                Text("Opens your server's sign-in page, then returns to Pal.")
+                    .font(.system(size: SignInMetrics.footnoteSize + 1))
+                    .foregroundStyle(tone.secondaryText)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, SignInMetrics.cardToMessage)
+            }
+            if !secondaryOptions.isEmpty {
+                orDivider
+                VStack(spacing: SignInMetrics.secondarySpacing) {
+                    ForEach(secondaryOptions) { option in
+                        browserButton(option)
+                    }
+                }
+            }
+            if !isCompact {
+                Text("By continuing, you connect Pal to your own server and sign in with your account.")
+                    .font(.system(size: SignInMetrics.footnoteSize))
+                    .foregroundStyle(tone.footnoteText)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: SignInMetrics.footnoteWidth)
+                    .padding(.top, SignInMetrics.buttonToFootnote)
+            }
         }
     }
 
-    private var continueButton: some View {
-        Button {
-            if needsOptions {
-                showsOptions = true
-            } else {
-                Task { await model.signIn() }
+    private var card: some View {
+        VStack(spacing: 0) {
+            addressRow
+            if model.passwordOption != nil {
+                rowDivider
+                usernameRow
+                rowDivider
+                passwordRow
             }
-        } label: {
-            ZStack {
-                Text(continueTitle)
-                    .font(.system(size: SignInMetrics.buttonTextSize))
-                    .foregroundStyle(tone.primaryText)
-                    .lineLimit(1)
-                    .padding(.horizontal, SignInMetrics.buttonGlyphInset * 2 + SignInMetrics.buttonGlyphSize)
-                HStack {
-                    Group {
-                        if model.isBusy {
-                            ProgressView().controlSize(.small).tint(tone.primaryText)
-                        } else {
-                            PalIcon("server.rack", ink: .custom(tone.primaryText))
-                                .font(.system(size: SignInMetrics.buttonGlyphSize - 4, weight: .medium))
-                        }
-                    }
-                    .frame(width: SignInMetrics.buttonGlyphSize, height: SignInMetrics.buttonGlyphSize)
-                    Spacer(minLength: 0)
-                }
-                .padding(.leading, SignInMetrics.buttonGlyphInset)
-            }
-            .frame(maxWidth: .infinity, minHeight: SignInMetrics.buttonHeight)
-            .background(tone.buttonFill, in: Capsule())
-            .overlay(Capsule().strokeBorder(tone.buttonRim, lineWidth: 1))
-            .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .palGlass(Capsule())
+        .background(tone.buttonFill, in: RoundedRectangle(cornerRadius: SignInMetrics.cardRadius))
+        .overlay(RoundedRectangle(cornerRadius: SignInMetrics.cardRadius).strokeBorder(tone.buttonRim, lineWidth: 1))
+        .opacity(model.isBusy ? SignInMetrics.busyOpacity : 1)
         .disabled(model.isBusy)
-        .accessibilityIdentifier("continueButton")
     }
 
-    private var continueTitle: String {
-        if let host, !model.usesPasswordSignIn {
-            return String(localized: "Continue to \(host)")
+    private var rowDivider: some View {
+        Rectangle().fill(tone.buttonRim).frame(height: 1)
+    }
+
+    private func row<Field: View, Trailing: View>(
+        icon: String,
+        @ViewBuilder field: () -> Field,
+        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
+    ) -> some View {
+        HStack(spacing: SignInMetrics.rowSpacing) {
+            PalIcon(icon, ink: .custom(tone.secondaryText))
+                .font(.system(size: SignInMetrics.rowGlyphSize))
+                .frame(width: SignInMetrics.rowGlyphWidth)
+            field()
+                .textFieldStyle(.plain)
+                .font(.system(size: SignInMetrics.rowTextSize))
+                .foregroundStyle(tone.primaryText)
+            trailing()
         }
-        return String(localized: "Connect to your Pal")
+        .padding(.horizontal, SignInMetrics.rowInset)
+        .frame(minHeight: SignInMetrics.rowHeight)
     }
-}
 
-private struct SignInOptionsSheet: View {
-    @Bindable var model: ConnectionModel
-    let close: () -> Void
-
-    @Environment(\.hermesTheme) private var theme
-
-    var body: some View {
-        NavigationStack {
-            ConnectionForm(model: model)
-                .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
-                .navigationTitle("Sign in")
-                .toolbarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close, action: close)
-                            .accessibilityIdentifier("signInOptionsClose")
-                    }
+    private var addressRow: some View {
+        row(icon: "server.rack") {
+            addressField
+                .urlEntry()
+                .focused($focus, equals: .address)
+                .submitLabel(model.passwordOption == nil ? .go : .next)
+                .onSubmit {
+                    if model.passwordOption != nil { focus = .username } else { submit() }
                 }
-        }
-    }
-}
-
-private struct SignInBackdrop: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        GeometryReader { proxy in
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
-                let time = context.date.timeIntervalSinceReferenceDate
-                ZStack {
-                    ForEach(SignInFloater.all) { floater in
-                        BotAvatarView(spec: floater.spec, size: floater.diameter / SignInMetrics.bodyFill, eyeInk: SignInMetrics.backdropEyes)
-                            .position(floater.position(in: proxy.size, at: reduceMotion ? 0 : time))
-                            .opacity(floater.opacity(at: reduceMotion ? 0 : time))
-                    }
+                .accessibilityIdentifier("baseURLField")
+        } trailing: {
+            switch model.discovery {
+            case .checking:
+                HStack(spacing: SignInMetrics.checkingSpacing) {
+                    ProgressView().controlSize(.small)
+                    Text("Checking")
                 }
+                .font(.system(size: SignInMetrics.checkingSize))
+                .foregroundStyle(tone.secondaryText)
+            case .ready:
+                PalIcon("checkmark", ink: .custom(tone.secondaryText))
+                    .font(.system(size: SignInMetrics.checkingSize, weight: .semibold))
+            default:
+                EmptyView()
             }
         }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+    }
+
+    private var usernameRow: some View {
+        row(icon: "person") {
+            TextField("Username", text: $model.username, prompt: Text(verbatim: "Username"))
+                .labelsHidden()
+                .textContentType(.username)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .focused($focus, equals: .username)
+                .submitLabel(.next)
+                .onSubmit { focus = .password }
+                .accessibilityIdentifier("usernameField")
+        }
+    }
+
+    private var passwordRow: some View {
+        row(icon: "key") {
+            SecureField("Password", text: $model.password, prompt: Text(verbatim: "Password"))
+                .labelsHidden()
+                .textContentType(.password)
+                .focused($focus, equals: .password)
+                .submitLabel(.go)
+                .onSubmit { submit() }
+                .accessibilityIdentifier("passwordField")
+        }
+    }
+
+    @ViewBuilder
+    private var addressField: some View {
+        Group {
+            #if os(macOS)
+            TextField("Pal address", text: $model.baseURLText, prompt: Text(verbatim: "https://your-host.tailnet.ts.net"))
+                .labelsHidden()
+            #else
+            TextField("https://your-host.tailnet.ts.net", text: $model.baseURLText)
+            #endif
+        }
+        .onChange(of: model.baseURLText, initial: true) { model.addressChanged() }
     }
 }
 
-private struct SignInFloater: Identifiable {
-    let id: Int
-    let kind: String
-    let color: String
-    let anchor: CGPoint
-    let diameter: CGFloat
-    let drift: CGFloat
-    let period: Double
-    let fades: Bool
-
-    var spec: BotAvatarSpec {
-        BotAvatarSpec(name: "pal-\(id)", meta: BotAvatarMeta(shape: "blobatar:signin\(id):\(kind)", color: color, custom: true))
+extension ConnectionView {
+    private var primaryTitle: String {
+        if model.isBusy { return String(localized: "Signing in") }
+        switch model.discovery {
+        case .unknown, .checking: return String(localized: "Continue")
+        case .unreachable, .noMethods: return String(localized: "Try again")
+        case .ready:
+            guard let primaryOption else { return String(localized: "Continue") }
+            return primaryOption.kind == .password
+                ? String(localized: "Sign in")
+                : String(localized: "Continue with \(primaryOption.displayName)")
+        }
     }
 
-    func position(in size: CGSize, at time: Double) -> CGPoint {
-        let phase = Double(id) * 1.7
-        let angle = time * 2 * .pi / period + phase
-        return CGPoint(
-            x: anchor.x * size.width + drift * cos(angle),
-            y: anchor.y * size.height + drift * sin(angle * 0.8)
-        )
+    private var primaryEnabled: Bool {
+        if model.isBusy { return false }
+        switch model.discovery {
+        case .unknown, .checking: return false
+        default: return true
+        }
     }
 
-    func opacity(at time: Double) -> Double {
-        guard fades else { return 1 }
-        let wave = 0.5 + 0.5 * sin(time * 2 * .pi / (period * 0.6) + Double(id))
-        return 0.12 + 0.88 * wave
+    private func submit() {
+        guard primaryEnabled else { return }
+        switch model.discovery {
+        case .ready:
+            guard let primaryOption else { return }
+            focus = nil
+            Task { await model.signIn(with: primaryOption) }
+        case .unreachable, .noMethods:
+            model.retryDiscovery()
+        default:
+            break
+        }
     }
 
-    static let all: [SignInFloater] = [
-        .init(id: 0, kind: "clover", color: "#0f7a3c", anchor: CGPoint(x: 0.28, y: 0.13), diameter: 100, drift: 10, period: 23, fades: true),
-        .init(id: 1, kind: "round", color: "#ff1f8f", anchor: CGPoint(x: 0.64, y: 0.15), diameter: 72, drift: 9, period: 19, fades: false),
-        .init(id: 2, kind: "round", color: "#8b4bff", anchor: CGPoint(x: 0.07, y: 0.30), diameter: 58, drift: 8, period: 21, fades: false),
-        .init(id: 3, kind: "round", color: "#8a5a35", anchor: CGPoint(x: 0.97, y: 0.28), diameter: 62, drift: 8, period: 25, fades: false),
-        .init(id: 4, kind: "round", color: "#ff8a00", anchor: CGPoint(x: 0.01, y: 0.48), diameter: 90, drift: 10, period: 27, fades: false),
-        .init(id: 5, kind: "round", color: "#ff1f3d", anchor: CGPoint(x: 1.0, y: 0.47), diameter: 76, drift: 9, period: 24, fades: false),
-        .init(id: 6, kind: "round", color: "#0bb39b", anchor: CGPoint(x: 0.89, y: 0.64), diameter: 68, drift: 9, period: 20, fades: true),
-        .init(id: 7, kind: "boxy", color: "#1f6bff", anchor: CGPoint(x: 0.13, y: 0.68), diameter: 80, drift: 9, period: 22, fades: true),
-    ]
+    private var primaryButton: some View {
+        Button(action: submit) {
+            capsuleLabel(primaryTitle, leading: primaryLeading)
+                .foregroundStyle(tone.background)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(tone.primaryText)
+        .buttonBorderShape(.capsule)
+        .disabled(!primaryEnabled)
+        .accessibilityIdentifier("signInButton")
+    }
+
+    @ViewBuilder
+    private var primaryLeading: some View {
+        if model.isBusy {
+            ProgressView().controlSize(.small).tint(tone.background)
+        } else if case .ready = model.discovery, primaryOption?.kind == .browser {
+            PalIcon("arrow.up.right", ink: .custom(tone.background))
+        }
+    }
+
+    private func browserButton(_ option: SignInOption) -> some View {
+        Button {
+            focus = nil
+            Task { await model.signIn(with: option) }
+        } label: {
+            capsuleLabel(String(localized: "Continue with \(option.displayName)"), leading: PalIcon("arrow.up.right"))
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .disabled(model.isBusy)
+        .accessibilityIdentifier("signInOption-\(option.id)")
+    }
+
+    private func capsuleLabel<Leading: View>(_ title: String, leading: Leading) -> some View {
+        Text(title)
+            .font(.system(size: SignInMetrics.buttonTextSize))
+            .lineLimit(1)
+            .padding(.horizontal, SignInMetrics.buttonGlyphInset * 2 + SignInMetrics.buttonGlyphSize)
+            .frame(maxWidth: .infinity, minHeight: SignInMetrics.buttonHeight)
+            .overlay(alignment: .leading) {
+                leading
+                    .font(.system(size: SignInMetrics.buttonGlyphSize - 8, weight: .medium))
+                    .frame(width: SignInMetrics.buttonGlyphSize, height: SignInMetrics.buttonGlyphSize)
+                    .padding(.leading, SignInMetrics.buttonGlyphInset)
+            }
+    }
+
+    private var orDivider: some View {
+        HStack(spacing: SignInMetrics.rowSpacing) {
+            Rectangle().fill(tone.buttonRim).frame(height: 1)
+            Text("or")
+                .font(.system(size: SignInMetrics.footnoteSize + 1))
+                .foregroundStyle(tone.footnoteText)
+            Rectangle().fill(tone.buttonRim).frame(height: 1)
+        }
+        .padding(.top, SignInMetrics.orTop)
+        .padding(.bottom, SignInMetrics.secondarySpacing)
+    }
 }
 
-struct SignInTone {
-    let background: Color
-    let buttonFill: Color
-    let buttonRim: Color
-    let primaryText: Color
-    let secondaryText: Color
-    let footnoteText: Color
-    let errorText: Color
-
-    static let dark = SignInTone(
-        background: Color(red: 20 / 255, green: 20 / 255, blue: 20 / 255),
-        buttonFill: Color(red: 45 / 255, green: 45 / 255, blue: 45 / 255),
-        buttonRim: Color.white.opacity(0.12),
-        primaryText: .white,
-        secondaryText: Color(white: 0.6),
-        footnoteText: Color(white: 0.36),
-        errorText: Color(red: 1, green: 0.42, blue: 0.4)
-    )
-
-    static let light = SignInTone(
-        background: Color(red: 247 / 255, green: 247 / 255, blue: 247 / 255),
-        buttonFill: .white,
-        buttonRim: Color.black.opacity(0.08),
-        primaryText: Color(white: 0.08),
-        secondaryText: Color(white: 0.42),
-        footnoteText: Color(white: 0.6),
-        errorText: Color(red: 0.8, green: 0.15, blue: 0.12)
-    )
-}
-
-enum SignInMetrics {
-    static let backdropEyes = AvatarColor(css: "#111111")
-    static let bodyFill: CGFloat = 0.76
-    static let columnWidth: CGFloat = 430
-    static let margin: CGFloat = 36
-    static let titleSize: CGFloat = 38
-    static let subtitleSize: CGFloat = 15
-    static let subtitleWidth: CGFloat = 240
-    static let titleToSubtitle: CGFloat = 12
-    static let headingLift: CGFloat = 40
-    static let buttonHeight: CGFloat = 47
-    static let buttonTextSize: CGFloat = 15
-    static let buttonGlyphSize: CGFloat = 24
-    static let buttonGlyphInset: CGFloat = 14
-    static let buttonToLink: CGFloat = 32
-    static let linkSize: CGFloat = 15
-    static let linkToFootnote: CGFloat = 38
-    static let footnoteSize: CGFloat = 11
-    static let footnoteWidth: CGFloat = 300
-    static let errorToButton: CGFloat = 12
-    static let bottomPadding: CGFloat = 24
+private enum SignInField: Hashable {
+    case address
+    case username
+    case password
 }
