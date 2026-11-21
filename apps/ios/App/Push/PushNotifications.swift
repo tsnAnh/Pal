@@ -12,12 +12,22 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
     private var presence: ReachPresence?
     private var open: ((PushTarget) -> Void)?
     private var pendingTap: PushTarget?
+    private var badgeClearing: Task<Void, Never>?
 
     init(center: UNUserNotificationCenter = .current(), diagnostics: Diagnostics = .osLog()) {
         self.center = center
         self.diagnostics = diagnostics
         super.init()
         center.delegate = self
+        badgeClearing = Task { [center, diagnostics] in
+            for await _ in NotificationCenter.default.notifications(named: PlatformApplication.didBecomeActive) {
+                do {
+                    try await center.setBadgeCount(0)
+                } catch {
+                    diagnostics.info("push", "app icon badge was not cleared: \(Diagnostics.describe(error))")
+                }
+            }
+        }
     }
 
     func attach(presence: ReachPresence, open: @escaping (PushTarget) -> Void) {

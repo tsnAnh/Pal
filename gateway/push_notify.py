@@ -4,6 +4,7 @@ import logging
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
@@ -47,23 +48,23 @@ _executor: ThreadPoolExecutor | None = None
 _noted_unconfigured = False
 
 
-def _submit(authority, notice: Notice) -> None:
+def _submit(job: Callable[[], object], label: str) -> None:
     global _executor
     with _executor_lock:
         if _executor is None:
             _executor = ThreadPoolExecutor(max_workers=WORKERS, thread_name_prefix="push-notify")
         executor = _executor
     try:
-        executor.submit(_run, authority, notice)
+        executor.submit(_run, job, label)
     except RuntimeError:
-        logger.debug("Push notifications are shutting down; dropped a %s event", notice.kind.value)
+        logger.debug("Push notifications are shutting down; dropped a %s event", label)
 
 
-def _run(authority, notice: Notice) -> None:
+def _run(job: Callable[[], object], label: str) -> None:
     try:
-        deliver(authority, notice, time.time())
+        job()
     except Exception:
-        logger.warning("Push notification for a %s event failed", notice.kind.value, exc_info=True)
+        logger.warning("Push notification for a %s event failed", label, exc_info=True)
 
 
 def _field(row, name: str):
@@ -80,13 +81,21 @@ def turn_finished(authority, session_id: str, row, complete: dict) -> None:
         return
     text = complete.get("text")
     reply = text if isinstance(text, str) else ""
-    if kind is Kind.FINISHED and is_intentional_silence_response(reply):
+    if kind is Kind.FINISHED and (is_intentional_silence_response(reply) or not _first_line(reply)):
         return
-    _submit(authority, Notice(kind, session_id, f"{session_id}:turn:{admission_id}", reply))
+    _enqueue(authority, Notice(kind, session_id, f"{session_id}:turn:{admission_id}", reply))
 
 
 def waiting_on_user(authority, session_id: str, prompt_id: str, kind: Kind) -> None:
-    _submit(authority, Notice(kind, session_id, f"{session_id}:{kind.value}:{prompt_id}"))
+    _enqueue(authority, Notice(kind, session_id, f"{session_id}:{kind.value}:{prompt_id}"))
+
+
+def _enqueue(authority, notice: Notice) -> None:
+    _submit(lambda: deliver(authority, notice, time.time()), notice.kind.value)
+
+
+def badge_cleared(authority) -> None:
+    _submit(lambda: clear_badge(authority), "badge")
 
 
 def notifications_flag(cfg) -> bool:
@@ -131,7 +140,7 @@ def _first_line(text: str) -> str:
 
 
 def _payload(notice: Notice, profile: str, name: str) -> dict:
-    body = BODIES.get(notice.kind) or _first_line(notice.reply) or "Finished"
+    body = BODIES.get(notice.kind) or _first_line(notice.reply)
     alert = {"title": name[:TITLE_LIMIT], "body": body}
     return {"aps": {"alert": alert, "sound": "default", "thread-id": profile, "mutable-content": 1},
             "profile": profile, "session_id": notice.session_id}
@@ -166,6 +175,28 @@ def deliver(authority, notice: Notice, now: float) -> int:
         return 0
     profile, name = _bot_identity(authority)
     payload = _payload(notice, profile, name)
+    payload["aps"]["badge"] = device_registry.next_badge(root)
+    return _send_all(root, client, targets, payload)
+
+
+def clear_badge(authority) -> int:
+    root = device_registry.install_root(authority.profile_id)
+    if not device_registry.clear_badge(root):
+        return 0
+    config = push_apns.load_config(root)
+    if config is None:
+        return 0
+    targets = device_registry.push_targets(root)
+    if not targets:
+        return 0
+    try:
+        client = push_apns.shared_client(config)
+    except push_apns.ApnsUnavailable:
+        return 0
+    return _send_all(root, client, targets, {"aps": {"badge": 0}})
+
+
+def _send_all(root, client, targets, payload: dict) -> int:
     delivered = 0
     for target in targets:
         outcome = client.send(target, payload)

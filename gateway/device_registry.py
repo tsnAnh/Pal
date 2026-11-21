@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS push_claims (
     claim_key TEXT PRIMARY KEY,
     claimed_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS push_badge (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    count INTEGER NOT NULL
+);
 """
 
 
@@ -264,3 +268,15 @@ def claim_push(root, claim_key: str, now: float) -> bool:
         claimed = conn.execute("INSERT OR IGNORE INTO push_claims (claim_key, claimed_at) VALUES (?, ?)",
                                (claim_key, now))
         return claimed.rowcount == 1
+
+
+def next_badge(root) -> int:
+    with _write(root) as conn:
+        return conn.execute(
+            "INSERT INTO push_badge (id, count) VALUES (1, 1) "
+            "ON CONFLICT(id) DO UPDATE SET count = count + 1 RETURNING count").fetchone()["count"]
+
+
+def clear_badge(root) -> bool:
+    with _write(root) as conn:
+        return conn.execute("UPDATE push_badge SET count = 0 WHERE id = 1 AND count > 0").rowcount == 1
