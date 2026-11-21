@@ -247,11 +247,11 @@ jobs:
         if: matrix.kind == 'app'
         run: command -v xcodegen >/dev/null || brew install xcodegen
 
-      - name: Generate the Xcode project (Communication Notifications off by default)
+      - name: Generate the Xcode project (notification service extension included)
         if: matrix.kind == 'app'
         run: |
           xcodegen generate
-          if grep -q NotificationService HermesBots.xcodeproj/project.pbxproj; then exit 1; fi
+          grep -q NotificationService HermesBots.xcodeproj/project.pbxproj
 
       - name: Build for testing
         if: matrix.kind == 'app'
