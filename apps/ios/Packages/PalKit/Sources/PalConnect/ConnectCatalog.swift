@@ -378,6 +378,8 @@ public struct ConnectCatalog: Sendable, Equatable {
             if let notes = entry.notes { return notes }
             return entry.status == .needsSetup ? String(localized: "Save your OAuth client once to connect.") : ""
         }
-        return entry.status == .needsSetup ? String(localized: "Needs setup on your Pal before it can connect.") : ""
+        if entry.method == .none, entry.mcpURL == nil { return entry.notes ?? "" }
+        if entry.status == .needsSetup { return entry.notes ?? String(localized: "Needs setup on your Pal before it can connect.") }
+        return ""
     }
 }

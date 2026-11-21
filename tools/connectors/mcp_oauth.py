@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 from urllib.parse import urlparse
 
+from tools.connectors import gateway_client_id
+
 logger = logging.getLogger(__name__)
 
 URL_TIMEOUT_SECONDS = 30.0
@@ -168,6 +170,8 @@ def run_worker(
     cfg = _without_cimd(cfg)
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     try:
+        if flow is not None and gateway_client_id.entry_for(server_name, cfg) is not None:
+            flow.client_metadata_url = gateway_client_id.document_url(hermes_home)
         from agent.secret_scope import (
             build_profile_secret_scope, reset_secret_scope, set_secret_scope)
         from tools.mcp_dashboard_oauth import dashboard_oauth_flow
@@ -355,7 +359,13 @@ def start(
     if older is not None and not older.worker_done:
         flow.inherited_backup = getattr(older, "backup", None)
         cancel_attempt(older)
-    httpd = choose_callback_receiver(flow, cfg, client_redirect_uri)
+    gateway_redirect = gateway_client_id.callback_url(hermes_home) if gateway_client_id.entry_for(server_name, cfg) else None
+    if gateway_redirect:
+        flow.redirect_uri = gateway_redirect
+        client_redirect_uri = gateway_redirect
+        httpd = None
+    else:
+        httpd = choose_callback_receiver(flow, cfg, client_redirect_uri)
     mcp_oauth_sessions.register_flow(flow, httpd=httpd)
     threading.Thread(
         target=run_worker, args=(hermes_home, server_name, cfg, False),
@@ -369,6 +379,8 @@ def start(
         if snapshot.get("status") == "approved":
             return OAuthAttempt(auth_url="", flow=flow)  # the saved authorization still works
         if snapshot.get("authorization_url"):
+            if gateway_redirect:
+                mcp_oauth_sessions.expect_gateway_callback(flow.flow_id, snapshot["authorization_url"])
             return OAuthAttempt(
                 auth_url=snapshot["authorization_url"], flow=flow,
                 detail=_ssh_detail(flow.redirect_uri) if client_redirect_uri is None else "")

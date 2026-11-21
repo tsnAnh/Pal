@@ -9,7 +9,7 @@ public struct T3CodeFailure: Error, Sendable, Equatable {
 extension ConnectAppsService {
     public func checkT3Address(_ input: String) async throws {
         let url = try T3CodeConnector.mcpURL(fromInput: input)
-        let created = try await saveT3Server(url: url)
+        let created = try await saveAddressedServer(name: T3CodeConnector.slug, url: url)
         do {
             let result = try await call("mcp.servers.test", ["name": .string(T3CodeConnector.slug)])
             if let status = Self.t3Failure(testResult: result) { throw T3CodeFailure(status: status) }
@@ -32,28 +32,8 @@ extension ConnectAppsService {
         return Self.t3Reach(testResult: result)
     }
 
-    private func saveT3Server(url: String) async throws -> Bool {
-        let name = JSONValue.string(T3CodeConnector.slug)
-        let config: JSONValue = ["url": .string(url), "transport": "http"]
-        do {
-            _ = try await rawCall("mcp.servers.add", ["name": name, "config": config])
-            return true
-        } catch let error as GatewayTransportError {
-            guard case .rpc(let rpc) = error, rpc.code == 4090 else { throw Self.map(error, method: "mcp.servers.add") }
-        }
-        _ = try await call("mcp.servers.update", ["name": name, "config": config])
-        return false
-    }
-
     static func t3Failure(testResult result: JSONValue) -> SetupStatus? {
-        if result["ok"]?.boolValue == true || result["oauth_needed"]?.boolValue == true { return nil }
-        let reason = result["reason"]?.stringValue?.lowercased() ?? ""
-        let code = switch reason {
-        case "unreachable": SetupStatusClass.serverUnreachable.rawValue
-        case "not_mcp": SetupStatusClass.notMcpServer.rawValue
-        default: SetupStatusClass.internalFault.rawValue
-        }
-        return SetupStatus(code: code, method: "mcp.servers.test", subject: T3CodeConnector.name)
+        addressedFailure(testResult: result, subject: T3CodeConnector.name)
     }
 
     static func t3Reach(testResult result: JSONValue) -> T3Reach {

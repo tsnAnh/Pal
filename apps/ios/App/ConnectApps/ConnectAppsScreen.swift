@@ -25,6 +25,7 @@ struct ConnectAppsScreen: View {
             }
             .modifier(ConnectAppsPresentations(model: model))
             .modifier(T3CodeSheet(model: model))
+            .modifier(ShopifySheet(model: model))
             .modifier(DiscordFlowSheet(model: model))
             .modifier(GoogleAdsFlowSheet(model: model))
     }

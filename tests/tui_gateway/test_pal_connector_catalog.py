@@ -56,8 +56,8 @@ def test_catalog_lists_every_pal_entry_with_its_method_and_nothing_connected(wor
         row = rows[cid]
         assert (row["name"], row["category"], row["method"], row["verified"], row["mcp_url"], row["icon"]) == (
             entry.name, entry.category, entry.method.value, entry.verified, entry.mcp_url, entry.icon)
-    assert {row["status"] for cid, row in rows.items() if ENTRIES[cid].method is not ConnectionMethod.OAUTH_CLIENT} == {
-        "not_connected"}
+    assert {row["status"] for cid, row in rows.items()
+            if ENTRIES[cid].method is not ConnectionMethod.OAUTH_CLIENT and not ENTRIES[cid].cimd} == {"not_connected"}
 
 
 def test_owner_registered_oauth_clients_need_setup(work_home):

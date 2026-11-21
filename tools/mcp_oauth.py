@@ -1218,6 +1218,17 @@ def _maybe_use_cimd(cfg: dict, storage: HermesTokenStorage | None = None) -> tup
     return None if port is None else (url, port)
 
 
+def _flow_client_metadata_url(flow, storage: HermesTokenStorage | None) -> str | None:
+    url = getattr(flow, "client_metadata_url", None)
+    ineligible = (
+        not url
+        or not _is_valid_cimd_url(url)
+        or _cached_client_info(storage) is not None
+        or (storage is not None and storage.cimd_rejected())
+        or _server_declined_cimd(storage))
+    return None if ineligible else url
+
+
 def cimd_provider_kwargs(cfg: dict) -> dict[str, Any]:
     """``client_metadata_url=`` kwargs for ``OAuthClientProvider`` when CIMD applies; omitted entirely
     on a DCR flow because an SDK too old for CIMD rejects the keyword outright."""
@@ -1261,6 +1272,8 @@ def _configure_callback_port(cfg: dict, storage: HermesTokenStorage | None = Non
     if dashboard_flow is not None and not pinned_loopback:
         cfg["_resolved_port"] = 0
         cfg["redirect_uri"] = cfg.get("redirect_uri") or dashboard_flow.redirect_uri
+        if url := _flow_client_metadata_url(dashboard_flow, storage):
+            cfg["_cimd_url"] = url
         return 0
     cached_uri, cached_port = _cached_redirect(storage)
     if cached_uri and not cfg.get("redirect_uri") and not pinned_loopback:

@@ -75,43 +75,13 @@ public enum T3CodeFlow {
             status.code = "invalid_address"
             return status
         case let failure as ConnectAppsError:
-            return fromConnect(failure, subject: subject)
+            return AddressedFlowStatus.fromConnect(failure, subject: subject)
         case let transport as GatewayTransportError:
-            return fromTransport(transport, subject: subject)
+            return AddressedFlowStatus.fromTransport(transport, subject: subject)
         case let failure as ConnectorFailure:
-            return fromConnector(failure, subject: subject)
+            return AddressedFlowStatus.fromConnector(failure, subject: subject)
         default:
             return SetupStatus(code: SetupStatusClass.internalFault.rawValue, subject: subject)
         }
-    }
-
-    private static func fromConnect(_ error: ConnectAppsError, subject: String) -> SetupStatus {
-        switch error {
-        case .faulted(let fault):
-            return SetupStatus(fault: fault, subject: subject)
-        case .oauthClient(_, let fault?):
-            return SetupStatus(fault: fault, subject: subject)
-        case .failed:
-            return SetupStatus(code: SetupStatusClass.offline.rawValue, subject: subject)
-        case .unavailable, .cancelled, .credentialsRequired, .signInFailed, .signInRefused, .adminApprovalPending, .oauthClient, .accountName:
-            return SetupStatus(code: SetupStatusClass.internalFault.rawValue, subject: subject)
-        }
-    }
-
-    private static func fromTransport(_ error: GatewayTransportError, subject: String) -> SetupStatus {
-        if case .rpc(let rpc) = error {
-            return SetupStatus(fault: GatewayFault(rpc, method: "mcp.servers"), subject: subject)
-        }
-        return SetupStatus(code: SetupStatusClass.offline.rawValue, subject: subject)
-    }
-
-    private static func fromConnector(_ error: ConnectorFailure, subject: String) -> SetupStatus {
-        let code: SetupStatusClass = switch error {
-        case .offline: .offline
-        case .unreachable: .serverUnreachable
-        case .authRefused: .needsReauth
-        default: .internalFault
-        }
-        return SetupStatus(code: code.rawValue, subject: subject)
     }
 }

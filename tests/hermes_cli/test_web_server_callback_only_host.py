@@ -137,6 +137,6 @@ def test_a_changed_address_applies_after_the_cache_expires(gateway, monkeypatch)
 
 def test_the_shared_callback_list_matches_the_routers():
     from gateway.oauth_client_setup import GOOGLE_REDIRECT_PATH
-    from tools.connectors.mcp_oauth_redirect import GATEWAY_CALLBACK_PATH
+    from tools.connectors.mcp_oauth_redirect import CLIENT_METADATA_PATH, GATEWAY_CALLBACK_PATH
     from tui_gateway.chat_install import REDIRECT_PATH
-    assert set(OAUTH_CALLBACK_PATHS) == {REDIRECT_PATH, GATEWAY_CALLBACK_PATH, GOOGLE_REDIRECT_PATH}
+    assert set(OAUTH_CALLBACK_PATHS) == {REDIRECT_PATH, GATEWAY_CALLBACK_PATH, GOOGLE_REDIRECT_PATH, CLIENT_METADATA_PATH}

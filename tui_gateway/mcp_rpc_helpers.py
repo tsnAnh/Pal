@@ -148,6 +148,16 @@ def apply_client_id(cfg: dict, client_id: Any) -> str | None:
     return None
 
 
+def apply_catalog_action_policy(name: str, cfg: dict) -> None:
+    from hermes_cli.pal_connectors import load_pal_connectors
+    from tools.mcp_accounts import registration_name
+
+    slug = registration_name(name)
+    entry = next((e for e in load_pal_connectors() if e.id == slug and e.action_policy), None)
+    if entry is not None and cfg.get("url") == entry.mcp_url:
+        cfg["action_policy"] = entry.action_policy.config()
+
+
 def add_server(name: str, server_config: dict, writes: Mapping[str, str]) -> bool:
     return hs.commit(name, server_config, writes, [])
 
@@ -179,6 +189,7 @@ def repair_connector_stub(name: str, cfg: dict) -> dict | None:
     if entry is None:
         return None
     repaired = {"transport": "http", **cfg, "url": entry.mcp_url, "enabled": True}
+    apply_catalog_action_policy(name, repaired)
     return repaired if add_server(name, repaired, {}) else None
 
 

@@ -94,6 +94,17 @@ class SetupGuide:
 
 
 @dataclass(frozen=True)
+class ActionPolicy:
+    read_tools: tuple[str, ...] = ()
+    refused_tools: tuple[str, ...] = ()
+    refused_message: str = ""
+
+    def config(self) -> dict:
+        return {"read_tools": list(self.read_tools), "refused_tools": list(self.refused_tools),
+                "refused_message": self.refused_message}
+
+
+@dataclass(frozen=True)
 class PalConnector:
     id: str
     name: str
@@ -110,6 +121,8 @@ class PalConnector:
     setup: SetupGuide | None = None
     stdio: StdioRecipe | None = None
     sign_in: SignIn = SignIn.GATEWAY
+    cimd: bool = False
+    action_policy: ActionPolicy | None = None
 
     @property
     def multi_account(self) -> bool:
@@ -122,7 +135,7 @@ class PalCatalogError(ValueError):
 
 
 _REQUIRED = ("id", "name", "description", "icon", "category", "method", "verified", "source")
-_OPTIONAL = ("mcp_url", "oauth", "scopes", "notes", "setup", "stdio", "sign_in")
+_OPTIONAL = ("mcp_url", "oauth", "scopes", "notes", "setup", "stdio", "sign_in", "cimd", "action_policy")
 
 
 def _https(value: object, field: str, cid: str) -> str:
@@ -223,6 +236,21 @@ def _parse_sign_in(raw: object, cid: str, method: ConnectionMethod, mcp_url: str
     return sign_in
 
 
+def _parse_action_policy(raw: object, cid: str) -> ActionPolicy:
+    where = f"{cid}: action_policy"
+    if not isinstance(raw, dict) or set(raw) - {"read_tools", "refused_tools", "refused_message"}:
+        raise PalCatalogError(f"{where} takes read_tools, refused_tools and refused_message")
+    lists: dict[str, tuple[str, ...]] = {}
+    for key in ("read_tools", "refused_tools"):
+        names = raw.get(key, [])
+        if not isinstance(names, list) or not all(isinstance(n, str) and n for n in names):
+            raise PalCatalogError(f"{where}: {key} must be a list of tool names")
+        lists[key] = tuple(names)
+    if not lists["refused_tools"]:
+        raise PalCatalogError(f"{where}: refused_tools must name at least one tool")
+    return ActionPolicy(lists["read_tools"], lists["refused_tools"], _text(raw, "refused_message", where).strip())
+
+
 def _parse_entry(raw: object) -> PalConnector:
     if not isinstance(raw, dict):
         raise PalCatalogError("connector entry must be a mapping")
@@ -257,12 +285,19 @@ def _parse_entry(raw: object) -> PalConnector:
     if stdio is not None and method not in (ConnectionMethod.BOT_TOKEN_STDIO, ConnectionMethod.OAUTH_CLIENT):
         raise PalCatalogError(f"{cid}: only bot_token_stdio and oauth_client entries carry a stdio recipe")
     sign_in = _parse_sign_in(raw.get("sign_in"), cid, method, mcp_url)
+    cimd = raw.get("cimd", False)
+    if not isinstance(cimd, bool) or (cimd and (method is not ConnectionMethod.MCP_OAUTH or mcp_url is None)):
+        raise PalCatalogError(f"{cid}: cimd is a boolean for mcp_oauth entries with an mcp_url")
+    policy = _parse_action_policy(raw["action_policy"], cid) if raw.get("action_policy") is not None else None
+    if policy is not None and mcp_url is None:
+        raise PalCatalogError(f"{cid}: action_policy needs an mcp_url")
     return PalConnector(
         id=raw["id"], name=raw["name"], icon=raw["icon"], category=raw["category"], method=method,
         verified=raw["verified"], source=_https(raw["source"], "source", cid), description=raw["description"].strip(),
         mcp_url=mcp_url, oauth=oauth,
         scopes=tuple(scopes), notes=raw.get("notes"),
         setup=_parse_setup(raw["setup"], cid) if raw.get("setup") is not None else None, stdio=stdio, sign_in=sign_in,
+        cimd=cimd, action_policy=policy,
     )
 
 

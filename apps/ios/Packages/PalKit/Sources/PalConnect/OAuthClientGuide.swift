@@ -1,7 +1,7 @@
 import Foundation
 
 public enum OAuthClientGuide {
-    static let guidedSlugs: Set<String> = ["google-workspace", "figma", "dropbox", "canva"]
+    static let guidedSlugs: Set<String> = ["google-workspace", "figma", "dropbox", "canva", "slack_mcp", "discord_mcp"]
 
     public static func steps(slug: String, appName: String) -> [String] {
         switch slug {

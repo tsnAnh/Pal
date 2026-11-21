@@ -1546,6 +1546,7 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 4090, f"server '{name}' already exists")
     if message := helpers.endpoint_error(server_config):
         return _err(rid, 4063, message)
+    helpers.apply_catalog_action_policy(name, server_config)
     env_writes, failure = helpers.plan_add_headers(name, server_config, params)
     if failure:
         return _err(rid, *failure)
@@ -1666,6 +1667,8 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 4033, str(e), data={"reason": "ADMIN_APPROVAL_PENDING"})
         except sessions.DeviceSignInRequired as e:
             return _err(rid, 4034, str(e), data={"reason": "SIGNIN_ON_DEVICE"})
+        except _tools_mod("tools.connectors.gateway_client_id").PublicAddressRequired as e:
+            return _err(rid, 4412, str(e), data={"reason": "NEEDS_PUBLIC_URL"})
     except ValueError as e:
         return _err(rid, 4001, str(e))
     keys = ("session_id", "auth_url", "flow", "redirect", "redirect_uri", "notice")

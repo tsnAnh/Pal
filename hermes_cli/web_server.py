@@ -814,6 +814,7 @@ from hermes_cli.web_routers import (
     ui_preferences as _ui_preferences_routes,
     chat_install as _chat_install_routes,
     mcp_oauth_callback as _mcp_oauth_callback_routes,
+    oauth_client_metadata as _oauth_client_metadata_routes,
     google_install as _google_install_routes,
     gateway_connections as _gateway_connections_routes,
     gateway_connections_reach as _gateway_connections_reach_routes,
@@ -871,6 +872,7 @@ app.include_router(_webapp_access_routes.router, dependencies=[_Depends(_route_o
 app.include_router(_ui_preferences_routes.router, dependencies=[_Depends(_route_on("ui_preferences"))])
 app.include_router(_chat_install_routes.router)
 app.include_router(_mcp_oauth_callback_routes.router)
+app.include_router(_oauth_client_metadata_routes.router)
 app.include_router(_google_install_routes.router)
 app.include_router(_gateway_connections_routes.router, dependencies=[_Depends(_route_on("gateway_connections"))])
 app.include_router(_gateway_connections_reach_routes.router, dependencies=[_Depends(_route_on("gateway_connections"))])

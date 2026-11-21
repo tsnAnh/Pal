@@ -36,8 +36,10 @@ def accepts_what_t3_accepts(uri: str) -> bool:
 class T3CodeDouble:
     """A plain-http stand-in that answers like T3 Code's MCP endpoint and OAuth server."""
 
-    def __init__(self, *, accepts=accepts_everything, mcp_behaviour="mcp", advertises_cimd=False):
-        self.advertises_cimd = advertises_cimd
+    def __init__(self, *, accepts=accepts_everything, mcp_behaviour="mcp", advertises_cimd=False, cimd_only=False):
+        self.cimd_only = cimd_only
+        self.advertises_cimd = advertises_cimd or cimd_only
+        self.authorizations: list[dict] = []
         self.accepts = accepts
         self.refusal = None
         self.mcp_behaviour = mcp_behaviour
@@ -110,7 +112,7 @@ class T3CodeDouble:
                 **({"client_id_metadata_document_supported": True} if self.advertises_cimd else {}),
                 "issuer": self.base, "authorization_endpoint": f"{self.base}/oauth/mcp/authorize",
                 "token_endpoint": f"{self.base}/oauth/mcp/token",
-                "registration_endpoint": f"{self.base}/oauth/mcp/register",
+                **({} if self.cimd_only else {"registration_endpoint": f"{self.base}/oauth/mcp/register"}),
                 "response_types_supported": ["code"], "grant_types_supported": ["authorization_code"],
                 "code_challenge_methods_supported": ["S256"], "token_endpoint_auth_methods_supported": ["none"],
                 "scopes_supported": ["orchestration:read", "orchestration:operate"]})
@@ -135,6 +137,7 @@ class T3CodeDouble:
 
     def _authorize(self, h) -> None:
         query = {k: v[0] for k, v in parse_qs(urlsplit(h.path).query).items()}
+        self.authorizations.append(query)
         if query.get("code_challenge_method") != "S256" or not query.get("code_challenge"):
             return self._send(h, 400, {"error": "invalid_request"})
         code = secrets.token_urlsafe(12)
