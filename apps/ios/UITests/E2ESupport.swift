@@ -116,23 +116,13 @@ class E2ETestCase: XCTestCase {
     private func signInThenSettle(_ app: XCUIApplication) {
         if roster(app).waitForExistence(timeout: 15) { return }
         enterAddress(app)
-        #if os(macOS)
         enterNativeCredentials(app, password: env.password)
         app.buttons["signInButton"].hit()
-        #else
-        app.buttons["signInButton"].hit()
-        signInThroughWebSession(app)
-        #endif
         XCTAssertTrue(roster(app).waitForExistence(timeout: 40), app.debugDescription)
     }
 
     func enterAddress(_ app: XCUIApplication) {
         let field = app.textFields["baseURLField"]
-        if !field.exists {
-            let options = app.buttons["otherOptionsButton"]
-            XCTAssertTrue(options.waitForExistence(timeout: 15), app.debugDescription)
-            options.hit()
-        }
         XCTAssertTrue(field.waitForExistence(timeout: 15), app.debugDescription)
         field.hit()
         if let existing = field.value as? String, !existing.isEmpty, existing != "https://your-host.tailnet.ts.net" {
@@ -141,7 +131,6 @@ class E2ETestCase: XCTestCase {
         field.typeText(env.baseURL)
     }
 
-    #if os(macOS)
     func enterNativeCredentials(_ app: XCUIApplication, password: String) {
         let userField = app.textFields["usernameField"]
         XCTAssertTrue(userField.waitForExistence(timeout: 20), app.debugDescription)
@@ -152,27 +141,6 @@ class E2ETestCase: XCTestCase {
         passwordField.hit()
         passwordField.typeText(password)
     }
-    #else
-    private func signInThroughWebSession(_ app: XCUIApplication) {
-        let consent = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Continue"]
-        if consent.waitForExistence(timeout: 5) { consent.hit() }
-
-        let web = app.webViews.firstMatch
-        XCTAssertTrue(web.waitForExistence(timeout: 20), app.debugDescription)
-        let userField = web.textFields.firstMatch
-        XCTAssertTrue(userField.waitForExistence(timeout: 20), app.debugDescription)
-        let passwordField = web.secureTextFields.firstMatch
-        XCTAssertTrue(passwordField.waitForExistence(timeout: 20), app.debugDescription)
-        passwordField.hit()
-        passwordField.typeText(env.password)
-        userField.hit()
-        userField.typeText(env.username + "\n")
-        if !roster(app).waitForExistence(timeout: 8) {
-            let submit = web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch
-            if submit.exists, submit.isHittable { submit.hit() }
-        }
-    }
-    #endif
 
     func roster(_ app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["rosterScreen"]

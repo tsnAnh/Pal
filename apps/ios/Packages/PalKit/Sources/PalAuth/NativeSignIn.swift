@@ -33,12 +33,12 @@ public struct NativeSignIn: Sendable {
         case browserEnded
     }
 
-    public func signIn(baseURL: GatewayBaseURL, browser: any AuthorizationBrowser) async throws -> StoredCredentials {
+    public func signIn(baseURL: GatewayBaseURL, browser: any AuthorizationBrowser, provider: String? = nil) async throws -> StoredCredentials {
         let api = NativeAuthAPI(baseURL: baseURL, transport: transport, diagnostics: diagnostics, now: now, deviceID: deviceID)
         let pkce = try PKCE.generate()
         let state = try PKCE.randomToken(byteCount: 24)
         let listener = try await LoopbackRedirectListener.start(timeout: callbackTimeout, diagnostics: diagnostics)
-        let authorizeURL = api.authorizeURL(challenge: pkce.challenge, redirectURI: listener.redirectURI, state: state)
+        let authorizeURL = api.authorizeURL(challenge: pkce.challenge, redirectURI: listener.redirectURI, state: state, provider: provider)
         diagnostics.info("signin", "presenting authorization to \(Diagnostics.describe(authorizeURL))")
 
         let parameters: [String: String]
