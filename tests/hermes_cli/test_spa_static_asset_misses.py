@@ -1,7 +1,6 @@
-"""Asset requests never get the SPA shell. The sign-in page's brand fonts load on the Webapp surface
-too, whose bundle carries no ``fonts/`` dir, and a missing file under a static asset prefix is a
+"""Asset requests never get the SPA shell. The SPA's brand fonts load on the Webapp surface too,
+whose bundle carries no ``fonts/`` dir, and a missing file under a static asset prefix is a
 404 on both surfaces instead of ``index.html`` served as 200 ``text/html``."""
-import re
 from pathlib import Path
 
 import pytest
@@ -28,19 +27,14 @@ def _spa(monkeypatch, dist: Path, *, surface) -> TestClient:
     return TestClient(app)
 
 
-def _login_font_urls() -> list[str]:
-    from hermes_cli.dashboard_auth.login_page import render_login_html
-
-    urls = re.findall(r"url\('(/fonts/[^']+)'\)", render_login_html())
-    assert urls
-    return sorted(set(urls))
+_FONT_URLS = ["/fonts/Collapse-Regular.woff2", "/fonts/RulesCompressed-Medium.woff2"]
 
 
 @pytest.mark.parametrize("surface", ["webapp", None], ids=["webapp", "dashboard"])
-def test_the_sign_in_page_fonts_load_as_fonts(monkeypatch, tmp_path, surface):
+def test_spa_fonts_load_as_fonts(monkeypatch, tmp_path, surface):
     client = _spa(monkeypatch, tmp_path, surface=surface)
 
-    for url in _login_font_urls():
+    for url in _FONT_URLS:
         response = client.get(url)
         assert response.status_code == 200, url
         assert response.headers["content-type"] == "font/woff2", url
@@ -57,14 +51,14 @@ def test_a_font_in_the_served_bundle_wins(monkeypatch, tmp_path):
     assert response.content == b"bundle copy"
 
 
-def test_sign_in_fonts_load_from_the_packaged_dashboard_without_a_source_tree(monkeypatch, tmp_path):
+def test_fonts_load_from_the_packaged_dashboard_without_a_source_tree(monkeypatch, tmp_path):
     """Nix and wheel installs ship no ``web/public``; the packaged dashboard dist has the fonts."""
     from hermes_cli import web_server as server
     from hermes_cli import web_server_static_assets as static_assets
 
     dashboard = tmp_path / "dashboard"
     (dashboard / "fonts").mkdir(parents=True)
-    urls = _login_font_urls()
+    urls = _FONT_URLS
     for url in urls:
         (dashboard / url.lstrip("/")).write_bytes(b"packaged " + url.encode())
     webapp = tmp_path / "webapp"

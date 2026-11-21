@@ -644,7 +644,7 @@ class TestPostLoginLandingPrefix:
 
 # ---------------------------------------------------------------------------
 # Whole-class coverage: every root-absolute URL the server-rendered auth
-# pages emit (auth links, font URLs, logout landing) honours the prefix
+# pages emit (auth links, logout landing) honours the prefix
 # ---------------------------------------------------------------------------
 
 
@@ -653,20 +653,18 @@ class TestLoginPageWholeClassPrefix:
     must stay inside the proxy mount, and the empty-prefix deploy must be
     byte-identical to today's output."""
 
-    def test_login_page_fonts_prefixed_behind_proxy(self, gated_app_proxied):
+    def test_login_page_marks_main_with_prefix_behind_proxy(self, gated_app_proxied):
         r = gated_app_proxied.get(
             "/login", headers={"X-Forwarded-Prefix": "/hermes"})
         assert r.status_code == 200
-        assert "url('/fonts/" not in r.text
-        assert "url('/hermes/fonts/" in r.text
+        assert '<main data-prefix="/hermes">' in r.text
+        assert 'href="/hermes/auth/login?provider=' in r.text
 
     def test_login_page_byte_identical_without_prefix(self, gated_app_direct):
-        # No X-Forwarded-Prefix: no data-prefix, no rewritten fonts,
-        # bare-root hrefs — the direct deploy is unchanged.
+        # No X-Forwarded-Prefix: no data-prefix, bare-root hrefs — the direct deploy is unchanged.
         r = gated_app_direct.get("/login")
         assert r.status_code == 200
         assert "data-prefix" not in r.text
-        assert "url('/fonts/" in r.text
         assert 'href="/auth/login?provider=' in r.text
 
     def test_password_form_script_reads_data_prefix(self, gated_app_proxied):
@@ -690,10 +688,10 @@ class TestLoginPageWholeClassPrefix:
         finally:
             clear_providers()
 
-    def test_native_chooser_fonts_prefixed_behind_proxy(self):
+    def test_native_chooser_stays_inside_the_mount_behind_proxy(self):
         """The RFC 8252 desktop provider chooser shares the login template,
-        so its font URLs must honour the prefix too (rendered when more
-        than one interactive provider is registered)."""
+        so it must carry the prefix too (rendered when more than one
+        interactive provider is registered)."""
         from tests.hermes_cli.conftest_dashboard_auth import StubAuthProvider
         from hermes_cli.dashboard_auth.login_page import (
             render_native_provider_choice_html)
@@ -711,8 +709,7 @@ class TestLoginPageWholeClassPrefix:
             state="cli-state",
             prefix="/hermes",
         )
-        assert "url('/fonts/" not in html
-        assert "url('/hermes/fonts/" in html
+        assert '<main data-prefix="/hermes">' in html
         # The chooser buttons re-enter the mount, not the origin root.
         assert 'href="/hermes/auth/native/authorize?' in html
 
@@ -734,4 +731,4 @@ class TestLoginPageWholeClassPrefix:
             state="cli-state",
         )
         assert "data-prefix" not in html
-        assert "url('/fonts/" in html
+        assert 'href="/auth/native/authorize?' in html
