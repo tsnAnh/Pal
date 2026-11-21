@@ -93,27 +93,21 @@ public struct CardFootnote: View {
 public struct BrandMarkFooter: View {
     public let name: String
     public let version: String
+    public let avatar: BotAvatarSpec?
 
     @Environment(\.hermesTheme) private var theme
 
-    public init(name: String, version: String) {
+    public init(name: String, version: String, avatar: BotAvatarSpec?) {
         self.name = name
         self.version = version
+        self.avatar = avatar
     }
 
     public var body: some View {
         VStack(spacing: 12) {
-            ZStack {
-                Circle().fill(.white)
-                HStack(spacing: 14) {
-                    Capsule().frame(width: 6, height: 16).rotationEffect(.degrees(-9))
-                    Capsule().frame(width: 6, height: 16).rotationEffect(.degrees(9))
-                }
-                .foregroundStyle(Color.black.opacity(0.88))
-                .offset(y: -1)
-            }
-            .frame(width: 51, height: 51)
-            .accessibilityHidden(true)
+            mark
+                .frame(width: 51, height: 51)
+                .accessibilityHidden(true)
             VStack(spacing: 4) {
                 Text(name)
                     .font(.system(size: 18, weight: .regular))
@@ -127,5 +121,22 @@ public struct BrandMarkFooter: View {
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("settingsFooter")
+    }
+
+    @ViewBuilder
+    private var mark: some View {
+        if let avatar {
+            BotAvatarView(spec: avatar, size: 51 * 1.15)
+        } else {
+            ZStack {
+                Circle().fill(.white)
+                HStack(spacing: 14) {
+                    Capsule().frame(width: 6, height: 16).rotationEffect(.degrees(-9))
+                    Capsule().frame(width: 6, height: 16).rotationEffect(.degrees(9))
+                }
+                .foregroundStyle(Color.black.opacity(0.88))
+                .offset(y: -1)
+            }
+        }
     }
 }

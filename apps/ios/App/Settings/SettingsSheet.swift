@@ -33,6 +33,11 @@ struct SettingsSheet: View {
                         .environment(\.sheetChromeHostedInNavigation, true)
                 }
         }
+<<<<<<< HEAD
+=======
+        .tint(.primary)
+        .environment(\.groupedCardDividers, true)
+>>>>>>> ad5c6563c3 (fix(ios): row dividers in Settings and bot profile, Settings top padding, primary bot avatar in footer)
         .task { await hub.refresh() }
     }
 }
@@ -94,10 +99,11 @@ struct SettingsRootView: View {
                     preferencesCard
                     feedbackCard
                     signOutCard
-                    BrandMarkFooter(name: "Pal", version: AppVersion.display)
+                    BrandMarkFooter(name: "Pal", version: AppVersion.display, avatar: hub.roster.primaryBot?.spec)
                         .padding(.top, 8)
                         .padding(.bottom, 24)
                 }
+                .padding(.top, PalMetrics.screenMargin)
             }
             .scrollIndicators(.hidden)
             .accessibilityIdentifier("settingsScroll")

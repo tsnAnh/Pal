@@ -26,6 +26,7 @@ struct BotProfileView: View {
             .padding(.bottom, 32)
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
+        .environment(\.groupedCardDividers, true)
         .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
         .accessibilityIdentifier("botProfileScreen")
         .toolbar { toolbar }
