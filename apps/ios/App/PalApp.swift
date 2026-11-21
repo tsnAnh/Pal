@@ -297,7 +297,7 @@ struct RootView: View {
             .environment(rooms)
             .task { await roster.runLive() }
             .task { await rooms.run() }
-            .sheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {
+            .macSheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {
                 CreateRoomSheet(rooms: rooms, roster: roster, router: router)
             }
             .onChange(of: roster.bots, initial: true) { _, _ in router.dropUnresolvedChat(in: roster) }

@@ -60,7 +60,7 @@ struct CreateBotImportRow: View {
                 if (error as? CocoaError)?.code != .userCancelled { importer.fail(.unreadable) }
             }
         }
-        .sheet(isPresented: Binding(
+        .macSheet(isPresented: Binding(
             get: { importer.phase == .reviewing || importer.phase == .importing },
             set: { if !$0 { importer.reset() } }
         )) {
@@ -69,7 +69,6 @@ struct CreateBotImportRow: View {
                 roster.nudge()
                 router.dismissSheet()
             }
-            .macSheetFrame()
         }
     }
 }
@@ -79,7 +78,7 @@ private struct TemplateReviewSheet: View {
     let onImport: () async -> Void
 
     @Environment(\.hermesTheme) private var theme
-    @Environment(\.dismiss) private var dismiss
+    private var dismiss = SheetDismiss()
 
     var body: some View {
         SheetChrome(
@@ -99,7 +98,7 @@ private struct TemplateReviewSheet: View {
             }
             .safeAreaInset(edge: .bottom) { importButton }
         }
-        .interactiveDismissDisabled(importer.isBusy)
+        .macSheetDismissDisabled(importer.isBusy)
     }
 
     @ViewBuilder

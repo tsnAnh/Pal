@@ -96,7 +96,7 @@ struct CreateRoomSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
-        .interactiveDismissDisabled(model.isCreating)
+        .macSheetDismissDisabled(model.isCreating)
         .macOnly { $0.frame(minWidth: 380, minHeight: 460) }
     }
 
@@ -137,7 +137,7 @@ struct RoomDetailsSheet: View {
 
     @State private var name = ""
     @State private var isRenaming = false
-    @Environment(\.dismiss) private var dismiss
+    private var dismiss = SheetDismiss()
 
     private var canSaveName: Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -76,7 +76,7 @@ struct RoomView: View {
             model.clearPendingDraft()
             composerFocused = true
         }
-        .sheet(isPresented: $showsDetails) { RoomDetailsSheet(model: model, roster: roster) }
+        .macSheet(isPresented: $showsDetails) { RoomDetailsSheet(model: model, roster: roster) }
         .fileExporter(isPresented: exportBinding, document: exported?.document, contentType: .data, defaultFilename: exported?.name) { _ in
             exported = nil
         }

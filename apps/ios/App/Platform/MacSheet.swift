@@ -6,6 +6,7 @@ struct MacSheetRequest: Identifiable {
     let content: () -> AnyView
     let dismiss: () -> Void
     let onDismiss: (() -> Void)?
+    let readable: Bool
 }
 
 @MainActor
@@ -40,26 +41,57 @@ extension EnvironmentValues {
 }
 #endif
 
+extension EnvironmentValues {
+    @Entry var sheetClose: (() -> Void)?
+}
+
+struct SheetDismiss: DynamicProperty {
+    @Environment(\.sheetClose) private var layerClose
+    @Environment(\.dismiss) private var systemDismiss
+
+    func callAsFunction() {
+        if let layerClose { layerClose() } else { systemDismiss() }
+    }
+}
+
+struct MacSheetDismissLockKey: PreferenceKey {
+    static let defaultValue = false
+
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
 private func macSheetPresence<Item>(of item: Binding<Item?>) -> Binding<Bool> {
     Binding(get: { item.wrappedValue != nil }, set: { if !$0 { item.wrappedValue = nil } })
 }
 
 extension View {
     func macSheet<Sheet: View>(
-        isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Sheet
+        isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, readable: Bool = false, @ViewBuilder content: @escaping () -> Sheet
     ) -> some View {
-        modifier(MacSheetPresentation(isPresented: isPresented, onDismiss: onDismiss, sheet: { isPresented.wrappedValue ? content() : nil }))
+        modifier(MacSheetPresentation(
+            isPresented: isPresented, readable: readable, onDismiss: onDismiss, sheet: { isPresented.wrappedValue ? content() : nil }
+        ))
     }
 
     func macSheet<Item, Sheet: View>(
-        item: Binding<Item?>, onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping (Item) -> Sheet
+        item: Binding<Item?>, onDismiss: (() -> Void)? = nil, readable: Bool = false, @ViewBuilder content: @escaping (Item) -> Sheet
     ) -> some View {
-        modifier(MacSheetPresentation(isPresented: macSheetPresence(of: item), onDismiss: onDismiss, sheet: { item.wrappedValue.map(content) }))
+        modifier(MacSheetPresentation(
+            isPresented: macSheetPresence(of: item), readable: readable, onDismiss: onDismiss, sheet: { item.wrappedValue.map(content) }
+        ))
+    }
+
+    func macSheetDismissDisabled(_ disabled: Bool) -> some View {
+        interactiveDismissDisabled(disabled)
+            .preference(key: MacSheetDismissLockKey.self, value: disabled)
     }
 }
 
 private struct MacSheetPresentation<Sheet: View>: ViewModifier {
     let isPresented: Binding<Bool>
+    let readable: Bool
     let onDismiss: (() -> Void)?
     let sheet: () -> Sheet?
 
@@ -79,7 +111,8 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
                             id: token,
                             content: built,
                             dismiss: { flag.wrappedValue = false },
-                            onDismiss: onDismiss
+                            onDismiss: onDismiss,
+                            readable: readable
                         ))
                     } else {
                         center.withdraw(token)
@@ -101,7 +134,7 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
 
     private func system(_ content: Content) -> some View {
         content.sheet(isPresented: isPresented, onDismiss: onDismiss) {
-            built().macSheetFrame()
+            built().environment(\.sheetClose, nil).macSheetFrame(readable: readable)
         }
     }
 }

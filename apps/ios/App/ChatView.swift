@@ -184,7 +184,7 @@ struct ChatView: View {
             VoiceModeView(model: model) { isVoiceModePresented = false }
         }
         .imageViewerPresentation(model: model, attach: attachActions) { scroll.jumpToBottom(animated: !reduceMotion) }
-        .sheet(item: $model.filePreview) { file in
+        .macSheet(item: $model.filePreview) { file in
             FilePreviewSheet(file: file).environment(\.chatFileActions, model.fileActions)
         }
     }
