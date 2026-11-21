@@ -144,6 +144,29 @@ async def test_a_cli_chat_with_iphone_disabled_in_the_profile_config_is_not_offe
         store.close_all_db_handles()
 
 
+def scheduled_run_tools(job):
+    import model_tools
+    from cron.scheduler import _resolve_cron_disabled_toolsets, _resolve_cron_enabled_toolsets
+    from toolsets import session_disabled_toolsets
+    enabled = _resolve_cron_enabled_toolsets(job, {})
+    disabled = session_disabled_toolsets(_resolve_cron_disabled_toolsets({}), 'cron', enabled=enabled)
+    return {tool['function']['name'] for tool in model_tools.get_tool_definitions(
+        enabled_toolsets=enabled, disabled_toolsets=disabled, quiet_mode=True, skip_tool_search_assembly=True) or []}
+
+
+@pytest.mark.parametrize('registered', [True, False])
+def test_a_scheduled_run_is_never_offered_the_device_tools_even_when_its_profile_has_a_registered_mac(
+        tmp_path, monkeypatch, registered):
+    from gateway import device_connectors as connectors
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path))
+    if registered:
+        connectors.register_device(tmp_path, 'mac-device-0001', 'Work Mac', kind='mac')
+    assert connectors.any_enabled(tmp_path) is registered
+    names = scheduled_run_tools({})
+    assert 'terminal' in names
+    assert not DEVICE_TOOLS & names
+
+
 def test_every_connector_of_the_catalog_has_a_family_under_test():
     from gateway.device_actions import CONNECTOR_CATALOG
     assert {info.connector.value for info in CONNECTOR_CATALOG if not info.opt_in} == set(FAMILIES)

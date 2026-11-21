@@ -304,6 +304,22 @@ _CRON_HINT = (
     "context for this run, not as a request to schedule another job.]\n\n"
 )
 
+_CRON_DEVICE_HINT = (
+    "[IMPORTANT: The user's Mac and iPhone tools (`device`, `devices_list`) are never offered to a scheduled run. "
+    "If this task needs one, put [CRON_FAILURE] on the first line by itself, then exactly one line: "
+    "\"The device tool is not available in a scheduled run; run this task in a chat turn instead, "
+    "for example with /loop in the chat.\" Nothing else, and do not try to reach the device another way.]\n\n"
+)
+
+
+def _cron_scaffold_hint(job: dict) -> str:
+    from gateway import device_connectors
+    from hermes_constants import get_hermes_home
+    offered = "iphone" in (job.get("enabled_toolsets") or ())
+    if offered or not device_connectors.any_enabled(get_hermes_home()):
+        return _CRON_HINT
+    return _CRON_HINT + _CRON_DEVICE_HINT
+
 
 def _run_time_line(job: Optional[dict] = None) -> str:
     """This fire's wall-clock time in the job's pinned zone, else the configured one. The system
@@ -382,7 +398,8 @@ def _build_job_prompt(
     tail, has_injected_data = _per_run_tail(job, prerun_script, extra_prompt, runtime_data_prompt)
     if tail is None:
         return None  # no output → nothing to report, skip the AI call
-    scaffold = f"{_CRON_HINT}{job_prompt}\n\n" if job_prompt else _CRON_HINT
+    hint = _cron_scaffold_hint(job)
+    scaffold = f"{hint}{job_prompt}\n\n" if job_prompt else hint
     skill_names = _job_skill_names(job)
     if not skill_names:
         assembled = _scan_assembled_cron_prompt(
