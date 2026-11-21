@@ -188,10 +188,6 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
         row.hit()
         waitUntilGone(close, "tapping the selected card again closes the pane")
     }
-
-    private func systemBack(_ app: XCUIApplication) -> XCUIElement {
-        app.navigationBars.buttons.element(boundBy: 0)
-    }
     #endif
 
     private func assertOneWayOut(_ app: XCUIApplication, close: Bool, _ screen: String) {
