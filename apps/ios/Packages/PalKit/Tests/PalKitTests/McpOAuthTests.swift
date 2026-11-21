@@ -10,7 +10,7 @@ import Testing
 private let secretAccess = "AT-secret-access-token"
 private let secretRefresh = "RT-secret-refresh-token"
 
-private final class FakeAuthServer: HTTPTransport, @unchecked Sendable {
+final class FakeAuthServer: HTTPTransport, @unchecked Sendable {
     struct Seen: Sendable {
         var method: String
         var url: URL
@@ -66,7 +66,7 @@ private final class FakeAuthServer: HTTPTransport, @unchecked Sendable {
     }
 }
 
-private final class CallbackBrowser: AuthorizationBrowser {
+final class CallbackBrowser: AuthorizationBrowser {
     enum Mode {
         case valid
         case wrongStateThenValid
@@ -104,7 +104,7 @@ private final class CallbackBrowser: AuthorizationBrowser {
     func dismiss() async {}
 }
 
-private final class GatewayRPC: ConnectRPC {
+final class GatewayRPC: ConnectRPC {
     private let log = Mutex<[(String, JSONValue)]>([])
     let reply: JSONValue
 
@@ -119,7 +119,7 @@ private final class GatewayRPC: ConnectRPC {
     }
 }
 
-private func flow(_ server: FakeAuthServer, _ browser: CallbackBrowser, timeout: Duration = .seconds(20)) -> McpOAuthFlow {
+func oauthFlow(_ server: FakeAuthServer, _ browser: CallbackBrowser, timeout: Duration = .seconds(20)) -> McpOAuthFlow {
     McpOAuthFlow(resource: UpworkConnector.serverURL, transport: server, browser: browser, callbackTimeout: timeout)
 }
 
@@ -145,7 +145,7 @@ struct McpOAuthHandshakeTests {
     @Test func fullHandshakeAgainstFakeServer() async throws {
         let server = FakeAuthServer()
         let browser = CallbackBrowser()
-        let grant = try await flow(server, browser).authorize()
+        let grant = try await oauthFlow(server, browser).authorize()
 
         let authorize = try #require(browser.openedURLs.first)
         let params = query(authorize)
@@ -190,7 +190,7 @@ struct McpOAuthHandshakeTests {
     @Test func submitsTheTokensToTheGatewayWithTheDocumentedShape() async throws {
         let server = FakeAuthServer()
         let rpc = GatewayRPC()
-        let native = McpNativeSignIn(flow: flow(server, CallbackBrowser()), rpc: rpc)
+        let native = McpNativeSignIn(flow: oauthFlow(server, CallbackBrowser()), rpc: rpc)
         try await native.run()
 
         let (method, params) = try #require(rpc.calls.first)
@@ -210,7 +210,7 @@ struct McpOAuthHandshakeTests {
 
     @Test func gatewayRefusalSurfacesItsReasonWithoutTokens() async throws {
         let rpc = GatewayRPC(reply: ["ok": false, "reason": "Upwork says this app isn't approved."])
-        let native = McpNativeSignIn(flow: flow(FakeAuthServer(), CallbackBrowser()), rpc: rpc)
+        let native = McpNativeSignIn(flow: oauthFlow(FakeAuthServer(), CallbackBrowser()), rpc: rpc)
         do {
             try await native.run()
             Issue.record("expected a refusal")
@@ -228,13 +228,13 @@ struct McpOAuthHandshakeTests {
     }
 
     @Test func wrongStateIsRejectedAndTheRealRedirectStillWorks() async throws {
-        let grant = try await flow(FakeAuthServer(), CallbackBrowser(.wrongStateThenValid)).authorize()
+        let grant = try await oauthFlow(FakeAuthServer(), CallbackBrowser(.wrongStateThenValid)).authorize()
         #expect(grant.accessToken.reveal() == secretAccess)
     }
 
     @Test func providerErrorMeansDenied() async throws {
         do {
-            _ = try await flow(FakeAuthServer(), CallbackBrowser(.error)).authorize()
+            _ = try await oauthFlow(FakeAuthServer(), CallbackBrowser(.error)).authorize()
             Issue.record("expected a denial")
         } catch {
             #expect(error as? McpOAuthError == .denied)
@@ -243,7 +243,7 @@ struct McpOAuthHandshakeTests {
 
     @Test func noRedirectTimesOut() async throws {
         do {
-            _ = try await flow(FakeAuthServer(), CallbackBrowser(.neverCalls), timeout: .milliseconds(300)).authorize()
+            _ = try await oauthFlow(FakeAuthServer(), CallbackBrowser(.neverCalls), timeout: .milliseconds(300)).authorize()
             Issue.record("expected a timeout")
         } catch {
             #expect(error as? McpOAuthError == .timedOut)
@@ -254,7 +254,7 @@ struct McpOAuthHandshakeTests {
         let server = FakeAuthServer()
         server.tokenStatus = 400
         do {
-            _ = try await flow(server, CallbackBrowser()).authorize()
+            _ = try await oauthFlow(server, CallbackBrowser()).authorize()
             Issue.record("expected a failed exchange")
         } catch {
             #expect(error as? McpOAuthError == .tokenExchangeFailed)
@@ -263,7 +263,7 @@ struct McpOAuthHandshakeTests {
     }
 
     @Test func grantDescriptionHidesTheTokens() async throws {
-        let grant = try await flow(FakeAuthServer(), CallbackBrowser()).authorize()
+        let grant = try await oauthFlow(FakeAuthServer(), CallbackBrowser()).authorize()
         for text in [String(describing: grant), String(reflecting: grant), "\(grant)"] {
             #expect(!text.contains(secretAccess))
             #expect(!text.contains(secretRefresh))
@@ -274,7 +274,7 @@ struct McpOAuthHandshakeTests {
         let server = FakeAuthServer()
         server.scopes = nil
         let browser = CallbackBrowser()
-        _ = try await flow(server, browser).authorize()
+        _ = try await oauthFlow(server, browser).authorize()
         #expect(query(try #require(browser.openedURLs.first))["scope"] == nil)
         let registration = try #require(server.requests(to: "/register").first)
         let registrationBody = try #require(registration.body)
@@ -285,7 +285,7 @@ struct McpOAuthHandshakeTests {
     @Test func fallsBackToWellKnownWhenThereIsNoChallengeHint() async throws {
         let server = FakeAuthServer()
         server.challengeHeader = nil
-        let grant = try await flow(server, CallbackBrowser()).authorize()
+        let grant = try await oauthFlow(server, CallbackBrowser()).authorize()
         #expect(grant.clientID == "client-123")
         #expect(server.requests(to: "/.well-known/oauth-protected-resource").count == 1)
     }
@@ -320,7 +320,7 @@ struct McpOAuthHandshakeTests {
 
     private func expectDiscoveryFailure(_ server: FakeAuthServer) async {
         await #expect(throws: McpOAuthError.discoveryFailed) {
-            _ = try await flow(server, CallbackBrowser(.neverCalls)).authorize()
+            _ = try await oauthFlow(server, CallbackBrowser(.neverCalls)).authorize()
         }
     }
 
@@ -344,166 +344,5 @@ private final class FakeAuthServerIssuerMismatch: HTTPTransport {
         else { return result }
         object["issuer"] = "https://evil.example.com"
         return HTTPResult(data: try JSONSerialization.data(withJSONObject: object), response: result.response)
-    }
-}
-
-private func disconnectedUpwork() -> ConnectApp {
-    deviceSignInApp()
-}
-
-@Suite("Upwork connect through the service")
-struct UpworkServiceConnectTests {
-    @Test func withoutTheNativeFlowItIsUnavailableAndTouchesNothing() async {
-        let rpc = GatewayRPC()
-        let service = ConnectAppsService(rpc: rpc, profile: nil)
-        await #expect(throws: ConnectAppsError.unavailable) { try await service.connect(disconnectedUpwork()) }
-        #expect(rpc.methods.isEmpty)
-    }
-
-    @Test func addsThePresetThenSubmitsTheTokens() async throws {
-        let rpc = GatewayRPC()
-        let native = McpNativeSignIn(flow: flow(FakeAuthServer(), CallbackBrowser()), rpc: rpc)
-        let service = ConnectAppsService(rpc: rpc, profile: nil, browser: UnavailableAuthorizationBrowser(), nativeSignIn: native)
-        try await service.connect(disconnectedUpwork())
-        #expect(rpc.methods == ["mcp.servers.add", "auth.submit_oauth_tokens"])
-    }
-
-    @Test func aRefusedSignInRemovesThePresetItJustAdded() async {
-        let rpc = GatewayRPC(reply: ["ok": false, "reason": "Not approved."])
-        let native = McpNativeSignIn(flow: flow(FakeAuthServer(), CallbackBrowser()), rpc: rpc)
-        let service = ConnectAppsService(rpc: rpc, profile: nil, browser: UnavailableAuthorizationBrowser(), nativeSignIn: native)
-        await #expect(throws: ConnectAppsError.signInFailed("Not approved.")) { try await service.connect(disconnectedUpwork()) }
-        #expect(rpc.methods == ["mcp.servers.add", "auth.submit_oauth_tokens", "mcp.servers.remove"])
-    }
-
-    @Test func aTimedOutSignInRollsBackAndSaysWhy() async {
-        let rpc = GatewayRPC()
-        let native = McpNativeSignIn(flow: flow(FakeAuthServer(), CallbackBrowser(.neverCalls), timeout: .milliseconds(200)), rpc: rpc)
-        let service = ConnectAppsService(rpc: rpc, profile: nil, browser: UnavailableAuthorizationBrowser(), nativeSignIn: native)
-        await #expect(throws: ConnectAppsError.signInFailed(McpOAuthError.timedOut.reason)) { try await service.connect(disconnectedUpwork()) }
-        #expect(rpc.methods == ["mcp.servers.add", "mcp.servers.remove"])
-    }
-}
-
-private final class RefusingBrowser: AuthorizationBrowser {
-    func present(_ url: URL) async throws { throw SignInError.browserUnavailable }
-    func dismiss() async {}
-}
-
-private final class FailingAddRPC: ConnectRPC {
-    private let log = Mutex<[String]>([])
-    let addError: any Error
-
-    init(addError: any Error) { self.addError = addError }
-
-    var methods: [String] { log.withLock { $0 } }
-
-    func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
-        log.withLock { $0.append(method) }
-        if method == "mcp.servers.add" { throw addError }
-        return ["ok": true]
-    }
-}
-
-@Suite("Upwork connect failures stay visible")
-struct UpworkSilentFailureTests {
-    private func service(_ rpc: FailingAddRPC, browser: any AuthorizationBrowser = CallbackBrowser()) -> ConnectAppsService {
-        let native = McpNativeSignIn(flow: McpOAuthFlow(resource: UpworkConnector.serverURL, transport: FakeAuthServer(), browser: browser, callbackTimeout: .seconds(20)), rpc: rpc)
-        return ConnectAppsService(rpc: rpc, profile: nil, browser: UnavailableAuthorizationBrowser(), nativeSignIn: native)
-    }
-
-    @Test func aRefusedServerAddShowsTheGatewaysMessage() async {
-        let rpc = FailingAddRPC(addError: GatewayTransportError.rpc(RPCError(code: 4001, message: "Unknown preset upwork")))
-        let reason = McpOAuthError.serverAddFailed("Unknown preset upwork").reason
-        await #expect(throws: ConnectAppsError.signInFailed(reason)) { try await service(rpc).connect(disconnectedUpwork()) }
-        #expect(rpc.methods == ["mcp.servers.add"])
-    }
-
-    @Test func aServerAddThatCannotReachTheGatewaySaysSo() async {
-        let rpc = FailingAddRPC(addError: GatewayTransportError.timedOut)
-        await #expect(throws: ConnectAppsError.signInFailed(McpOAuthError.gatewayUnavailable.reason)) {
-            try await service(rpc).connect(disconnectedUpwork())
-        }
-    }
-
-    @Test func aServerThatIsAlreadyThereSignsInAndIsNeverRemoved() async {
-        let rpc = FailingAddRPC(addError: GatewayTransportError.rpc(RPCError(code: 4090, message: "exists")))
-        await #expect(throws: ConnectAppsError.signInFailed(McpOAuthError.timedOut.reason)) {
-            let native = McpNativeSignIn(
-                flow: McpOAuthFlow(resource: UpworkConnector.serverURL, transport: FakeAuthServer(), browser: CallbackBrowser(.neverCalls), callbackTimeout: .milliseconds(200)),
-                rpc: rpc
-            )
-            try await ConnectAppsService(rpc: rpc, profile: nil, browser: UnavailableAuthorizationBrowser(), nativeSignIn: native).connect(disconnectedUpwork())
-        }
-        #expect(rpc.methods == ["mcp.servers.add"])
-    }
-
-    @Test func aBrowserThatCannotOpenIsTypedAndRollsBack() async {
-        let working = GatewayRPC()
-        let refusing = McpNativeSignIn(
-            flow: McpOAuthFlow(resource: UpworkConnector.serverURL, transport: FakeAuthServer(), browser: RefusingBrowser(), callbackTimeout: .seconds(20)),
-            rpc: working
-        )
-        let service = ConnectAppsService(rpc: working, profile: nil, browser: UnavailableAuthorizationBrowser(), nativeSignIn: refusing)
-        await #expect(throws: ConnectAppsError.signInFailed(McpOAuthError.browserUnavailable.reason)) { try await service.connect(disconnectedUpwork()) }
-        #expect(working.methods == ["mcp.servers.add", "mcp.servers.remove"])
-    }
-}
-
-@Suite("MCP OAuth scopes and callback checks")
-struct McpOAuthChecksTests {
-    @Test func requestsEveryScopeTheServerOffersOrNone() {
-        #expect(McpOAuthScopes.requested(resourceScopes: nil, serverScopes: nil) == nil)
-        #expect(McpOAuthScopes.requested(resourceScopes: [], serverScopes: []) == nil)
-        #expect(McpOAuthScopes.requested(resourceScopes: nil, serverScopes: ["a", "b", "a"]) == "a b")
-        #expect(McpOAuthScopes.requested(resourceScopes: ["r"], serverScopes: ["a", "b"]) == "r")
-    }
-
-    @Test func acceptsOnlyAMatchingStateWithACode() throws {
-        #expect(try AuthorizationCallback.code(from: ["code": "c", "state": "s"], expectedState: "s") == "c")
-        #expect(throws: SignInError.stateMismatch) { try AuthorizationCallback.code(from: ["code": "c", "state": "x"], expectedState: "s") }
-        #expect(throws: SignInError.stateMismatch) { try AuthorizationCallback.code(from: ["code": "c"], expectedState: "s") }
-        #expect(throws: SignInError.authorizationDenied("access_denied")) {
-            try AuthorizationCallback.code(from: ["error": "access_denied", "state": "s"], expectedState: "s")
-        }
-        #expect(throws: SignInError.missingAuthorizationCode) { try AuthorizationCallback.code(from: ["state": "s"], expectedState: "s") }
-    }
-
-    @Test func comparesStatesInFull() {
-        #expect(ConstantTime.equal("abc", "abc"))
-        #expect(!ConstantTime.equal("abc", "abd"))
-        #expect(!ConstantTime.equal("abc", "abcd"))
-        #expect(!ConstantTime.equal("", "a"))
-        #expect(ConstantTime.equal("", ""))
-    }
-
-    @Test func readsTheResourceMetadataHint() {
-        let header = #"Bearer realm="mcp", resource_metadata="https://mcp.upwork.com/.well-known/oauth-protected-resource""#
-        #expect(McpOAuthDiscovery.resourceMetadataURL(inChallenge: header)?.absoluteString == "https://mcp.upwork.com/.well-known/oauth-protected-resource")
-        #expect(McpOAuthDiscovery.resourceMetadataURL(inChallenge: "Bearer realm=\"mcp\"") == nil)
-    }
-}
-
-@Suite("Loopback listener state and reuse")
-struct LoopbackStateTests {
-    @Test func ignoresAWrongStateThenAcceptsTheRightOne() async throws {
-        let listener = try await LoopbackRedirectListener.start(timeout: .seconds(10), expectedState: "good")
-        async let parameters = listener.awaitCallback()
-        let (_, bad) = try await URLSession.shared.data(from: URL(string: "\(listener.redirectURI)?code=a&state=bad")!)
-        let (_, missing) = try await URLSession.shared.data(from: URL(string: "\(listener.redirectURI)?code=a")!)
-        #expect((bad as? HTTPURLResponse)?.statusCode == 400)
-        #expect((missing as? HTTPURLResponse)?.statusCode == 400)
-        let (_, good) = try await URLSession.shared.data(from: URL(string: "\(listener.redirectURI)?code=a&state=good")!)
-        #expect((good as? HTTPURLResponse)?.statusCode == 200)
-        #expect(try await parameters == ["code": "a", "state": "good"])
-    }
-
-    @Test func aSecondCallbackIsRefused() async throws {
-        let listener = try await LoopbackRedirectListener.start(timeout: .seconds(10), expectedState: "s")
-        async let parameters = listener.awaitCallback()
-        _ = try await URLSession.shared.data(from: URL(string: "\(listener.redirectURI)?code=a&state=s")!)
-        _ = try await parameters
-        let second = try? await URLSession.shared.data(from: URL(string: "\(listener.redirectURI)?code=b&state=s")!)
-        if let second { #expect((second.1 as? HTTPURLResponse)?.statusCode == 410) }
     }
 }
