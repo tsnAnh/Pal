@@ -22,6 +22,7 @@ from tools.mcp_oauth import HermesTokenStorage
 
 ACCESS, REFRESH = "at-canary-5c1e90ab77d2", "rt-canary-1b84e0d6f9a3"
 URL = "https://mcp.upwork.com/mcp"
+CONNECTION = "upwork@default"
 TOKEN_ENDPOINT = "https://auth.upwork.example/oauth2/token"
 
 
@@ -50,7 +51,7 @@ def home():
 async def test_import_writes_a_public_client_and_the_sdk_readable_tokens(home, caplog):
     caplog.set_level(logging.DEBUG)
     assert await imp.import_owner_tokens(home, "upwork", _tokens()) is None
-    storage = HermesTokenStorage("upwork", hermes_home=home)
+    storage = HermesTokenStorage(CONNECTION, hermes_home=home)
     tokens, client, meta = await storage.get_tokens(), await storage.get_client_info(), storage.load_oauth_metadata()
     assert tokens.access_token == ACCESS and tokens.refresh_token == REFRESH and tokens.token_type == "Bearer"
     assert client.client_id == "client-abc" and client.client_secret is None
@@ -59,7 +60,7 @@ async def test_import_writes_a_public_client_and_the_sdk_readable_tokens(home, c
     assert str(meta.token_endpoint) == TOKEN_ENDPOINT and meta.code_challenge_methods_supported == ["S256"]
     assert meta.token_endpoint_auth_methods_supported == ["none"]
     assert json.loads(storage._tokens_path().read_text())["hermes_issuer"] == "https://auth.upwork.example"
-    assert _oauth_tokens_present("upwork")
+    assert _oauth_tokens_present(CONNECTION)
     assert ACCESS not in caplog.text and REFRESH not in caplog.text
 
 
@@ -98,7 +99,7 @@ async def test_an_older_bare_entry_of_the_same_server_gains_the_gate_and_a_forei
 ])
 async def test_a_malformed_hand_over_writes_nothing(home, override):
     assert await imp.import_owner_tokens(home, "upwork", _tokens(**override)) == imp.INVALID_REQUEST
-    assert not _oauth_tokens_present("upwork") and "upwork" not in _get_mcp_servers()
+    assert not _oauth_tokens_present(CONNECTION) and "upwork" not in _get_mcp_servers()
 
 
 @pytest.mark.asyncio
@@ -112,13 +113,13 @@ async def test_only_an_oauth_catalog_server_takes_a_hand_over(home):
 @pytest.mark.asyncio
 async def test_a_failed_write_restores_the_previous_state(home, monkeypatch):
     assert await imp.import_owner_tokens(home, "upwork", _tokens()) is None
-    before = HermesTokenStorage("upwork", hermes_home=home).snapshot()
+    before = HermesTokenStorage(CONNECTION, hermes_home=home).snapshot()
 
     async def boom(self, tokens):
         raise OSError("disk full")
     monkeypatch.setattr(HermesTokenStorage, "set_tokens", boom)
     assert await imp.import_owner_tokens(home, "upwork", _tokens(access_token="new-access-9999")) == imp.SAVE_FAILED
-    assert HermesTokenStorage("upwork", hermes_home=home).snapshot() == before
+    assert HermesTokenStorage(CONNECTION, hermes_home=home).snapshot() == before
 
 
 async def _refresh(access_expired_by=10):
@@ -126,11 +127,11 @@ async def _refresh(access_expired_by=10):
     from tools.mcp_oauth_manager import get_manager
     from tools.mcp_tool import sdk_httpx
     httpx = sdk_httpx()
-    path = HermesTokenStorage("upwork")._tokens_path()
+    path = HermesTokenStorage(CONNECTION)._tokens_path()
     data = json.loads(path.read_text())
     data["expires_at"] = time.time() - access_expired_by
     path.write_text(json.dumps(data))
-    provider = get_manager().get_or_build_provider("upwork", URL, {})
+    provider = get_manager().get_or_build_provider(CONNECTION, URL, {})
     flow = provider.async_auth_flow(httpx.Request("POST", URL))
     refresh = await flow.__anext__()
     return provider, flow, refresh, httpx
@@ -155,7 +156,7 @@ async def test_refresh_is_a_public_client_refresh_grant_and_a_rotated_refresh_to
         assert retried.headers["authorization"] == f"Bearer at-after-{issued[-6:]}"
         with pytest.raises(StopAsyncIteration):
             await flow.asend(httpx.Response(200, request=retried))
-        stored = json.loads(HermesTokenStorage("upwork")._tokens_path().read_text())
+        stored = json.loads(HermesTokenStorage(CONNECTION)._tokens_path().read_text())
         assert stored["refresh_token"] == issued and stored["hermes_issuer"] == "https://auth.upwork.example"
     assert all("code_verifier" not in form for _, form, _ in seen)
     assert REFRESH not in caplog.text and "rt-rotated" not in caplog.text and ACCESS not in caplog.text
@@ -164,11 +165,11 @@ async def test_refresh_is_a_public_client_refresh_grant_and_a_rotated_refresh_to
 @pytest.mark.asyncio
 async def test_a_refresh_token_is_never_sent_to_an_issuer_that_did_not_grant_it(home):
     assert await imp.import_owner_tokens(home, "upwork", _tokens()) is None
-    storage = HermesTokenStorage("upwork", hermes_home=home)
+    storage = HermesTokenStorage(CONNECTION, hermes_home=home)
     meta = storage.load_oauth_metadata().model_copy(update={"issuer": "https://other-issuer.example"})
     storage.save_oauth_metadata(meta)
     from tools.mcp_oauth_manager import get_manager
-    provider = get_manager().get_or_build_provider("upwork", URL, {})
+    provider = get_manager().get_or_build_provider(CONNECTION, URL, {})
     await provider._initialize()
     assert provider.context.current_tokens.refresh_token is None
     assert "refresh_token" not in json.loads(storage._tokens_path().read_text())
@@ -179,19 +180,19 @@ async def test_a_profiles_tokens_are_never_used_by_another_profile(tmp_path, hom
     other = tmp_path / "profile-b"
     other.mkdir()
     assert await imp.import_owner_tokens(home, "upwork", _tokens()) is None
-    assert HermesTokenStorage("upwork", hermes_home=home).has_cached_tokens()
-    assert not HermesTokenStorage("upwork", hermes_home=other).has_cached_tokens()
+    assert HermesTokenStorage(CONNECTION, hermes_home=home).has_cached_tokens()
+    assert not HermesTokenStorage(CONNECTION, hermes_home=other).has_cached_tokens()
     scope = set_hermes_home_override(other)
     try:
-        assert not _oauth_tokens_present("upwork") and "upwork" not in _get_mcp_servers()
+        assert not _oauth_tokens_present(CONNECTION) and "upwork" not in _get_mcp_servers()
         from tools.mcp_oauth import OAuthNonInteractiveError
         from tools.mcp_oauth_manager import get_manager
         with pytest.raises(OAuthNonInteractiveError):
-            get_manager().get_or_build_provider("upwork", URL, {})
+            get_manager().get_or_build_provider(CONNECTION, URL, {})
     finally:
         reset_hermes_home_override(scope)
     assert await imp.import_owner_tokens(other, "upwork", _tokens(access_token="b-access-token-1", refresh_token="b-refresh-1")) is None
-    assert (await HermesTokenStorage("upwork", hermes_home=home).get_tokens()).access_token == ACCESS
+    assert (await HermesTokenStorage(CONNECTION, hermes_home=home).get_tokens()).access_token == ACCESS
 
 
 @pytest.mark.asyncio
@@ -201,3 +202,44 @@ async def test_the_server_summary_the_app_and_model_read_carries_no_token(home):
     summary = summarize_server("upwork", _get_mcp_servers()["upwork"])
     assert summary["oauth_tokens_present"] is True
     assert ACCESS not in json.dumps(summary) and REFRESH not in json.dumps(summary)
+
+
+@pytest.mark.asyncio
+async def test_a_hand_over_for_an_account_lands_in_that_account_only(home):
+    from hermes_cli.mcp_accounts import account_names
+
+    assert await imp.import_owner_tokens(home, "upwork", _tokens(access_token="work-access-1", refresh_token="work-refresh-1"),
+                                         account="work") is None
+    assert await imp.import_owner_tokens(home, "upwork", _tokens(access_token="home-access-1", refresh_token="home-refresh-1"),
+                                         account="home") is None
+
+    assert account_names("upwork") == ["work", "home"]
+    assert (await HermesTokenStorage("upwork@work", hermes_home=home).get_tokens()).access_token == "work-access-1"
+    assert (await HermesTokenStorage("upwork@home", hermes_home=home).get_tokens()).access_token == "home-access-1"
+    assert not HermesTokenStorage("upwork@default", hermes_home=home).has_cached_tokens()
+    assert not HermesTokenStorage("upwork", hermes_home=home).has_cached_tokens()
+
+
+@pytest.mark.asyncio
+async def test_a_hand_over_without_an_account_needs_one_when_several_exist_and_names_a_valid_one(home):
+    from hermes_cli.mcp_accounts import account_names
+
+    for alias in ("work", "home"):
+        assert await imp.import_owner_tokens(home, "upwork", _tokens(), account=alias) is None
+    stamp = HermesTokenStorage("upwork@work", hermes_home=home).credential_stamp()
+
+    assert await imp.import_owner_tokens(home, "upwork", _tokens(access_token="z" * 12)) == imp.ACCOUNT_REQUIRED
+    assert await imp.import_owner_tokens(home, "upwork", _tokens(access_token="z" * 12), account="Not Valid") == imp.INVALID_ACCOUNT
+    assert HermesTokenStorage("upwork@work", hermes_home=home).credential_stamp() == stamp
+    assert account_names("upwork") == ["work", "home"]
+
+
+@pytest.mark.asyncio
+async def test_a_hand_over_without_an_account_goes_to_the_only_account_or_default(home):
+    from hermes_cli.mcp_accounts import account_names
+
+    assert await imp.import_owner_tokens(home, "upwork", _tokens()) is None
+    assert account_names("upwork") == ["default"]
+    assert await imp.import_owner_tokens(home, "upwork", _tokens(access_token="renewed-access-1")) is None
+    assert account_names("upwork") == ["default"]
+    assert (await HermesTokenStorage("upwork@default", hermes_home=home).get_tokens()).access_token == "renewed-access-1"

@@ -76,6 +76,11 @@ def _action_phrase(tool: str, app_slug: str = "") -> str:
     return " ".join(words).lower()
 
 
+def _with_alias(action: str, arguments: Any) -> str:
+    alias = arguments.get("connector_alias") if isinstance(arguments, dict) else None
+    return f"{action} ({alias.strip()})" if isinstance(alias, str) and alias.strip() else action
+
+
 def _registry_emoji(name: str) -> str:
     try:
         from tools.registry import registry
@@ -116,16 +121,13 @@ def label_for_tool_name(name: str, arguments: Any = None) -> Optional[ToolLabel]
         return None
     connector = parse_connector_name(name)
     if connector is not None:
-        action = _action_phrase(connector.tool, connector.connector)
-        alias = arguments.get("connector_alias") if isinstance(arguments, dict) else None
-        if isinstance(alias, str) and alias.strip():
-            action = f"{action} ({alias.strip()})"
+        action = _with_alias(_action_phrase(connector.tool, connector.connector), arguments)
         return ToolLabel(kind="connector", app=app_title(connector.connector), action=action,
                          emoji=CONNECTOR_EMOJI, name=name, preview=_arg_preview(name, arguments))
     if name.startswith(MCP_TOOL_NAME_PREFIX):
         server, _, tool = name[len(MCP_TOOL_NAME_PREFIX):].partition("__")
         if tool:
-            return ToolLabel(kind="mcp", app=app_title(server), action=_action_phrase(tool),
+            return ToolLabel(kind="mcp", app=app_title(server), action=_with_alias(_action_phrase(tool), arguments),
                              emoji=MCP_EMOJI, name=name, preview=_arg_preview(name, arguments))
     return _local_tool_label(name, arguments)
 

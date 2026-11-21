@@ -86,9 +86,11 @@ class HermesProviderMixin:
 
     _hermes_logger: logging.Logger = logger
 
-    def __init__(self, *args: Any, token_user_agent: str | None = None, oauth_flow: str = "browser", **kwargs: Any):
+    def __init__(self, *args: Any, token_user_agent: str | None = None, oauth_flow: str = "browser",
+                 authorization_prompt: str | None = None, **kwargs: Any):
         super().__init__(*args, **kwargs)
         self._hermes_oauth_flow = oauth_flow
+        self._hermes_authorization_prompt = authorization_prompt
         # oauth.user_agent — stamped onto token-endpoint requests only; some authorization servers/WAFs
         # reject httpx's default (#75576).
         self._hermes_token_user_agent = token_user_agent
@@ -118,6 +120,7 @@ class HermesProviderMixin:
                 "background reconnects cannot start a device login")
         self._tolerate_missing_iss_for_known_server()
         self._request_google_offline_access()
+        self._request_authorization_prompt()
         return await super()._perform_authorization()
 
     def _tolerate_missing_iss_for_known_server(self) -> None:
@@ -166,6 +169,22 @@ class HermesProviderMixin:
 
         _with_offline_access._hermes_offline_access = True  # type: ignore[attr-defined]
         self.context.redirect_handler = _with_offline_access
+
+    def _request_authorization_prompt(self) -> None:
+        prompt = getattr(self, "_hermes_authorization_prompt", None)
+        inner = self.context.redirect_handler
+        if not prompt or inner is None or getattr(inner, "_hermes_prompt", False):
+            return
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+        async def _with_prompt(authorization_url: str) -> None:
+            parts = urlsplit(authorization_url)
+            query = dict(parse_qsl(parts.query, keep_blank_values=True))
+            query.setdefault("prompt", prompt)
+            await inner(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
+
+        _with_prompt._hermes_prompt = True  # type: ignore[attr-defined]
+        self.context.redirect_handler = _with_prompt
 
     async def _hermes_accept_origin_issued_metadata(self, response):
         """Accept an authorization server's metadata document whose ``issuer`` differs from the advertised
@@ -665,4 +684,5 @@ def build_provider_kwargs(cfg: dict, storage: HermesTokenStorage, *, ssh_proxy_h
         "callback_handler": mo._make_callback_waiter(port, cfg.get("_cimd_url"), timeout=float(cfg.get("timeout", 300))),
         "token_user_agent": mo.token_request_user_agent(cfg),
         "oauth_flow": cfg.get("flow", "browser"),
+        "authorization_prompt": cfg.get("prompt") or None,
         **mo.cimd_provider_kwargs(cfg)}

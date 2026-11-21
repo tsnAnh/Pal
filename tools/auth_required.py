@@ -52,8 +52,16 @@ class AuthNeed:
 
 
 def service_display_name(service: str) -> str:
+    from tools.mcp_accounts import split_service
+    account = split_service(service)
+    if account is not None and account[1] is not None:
+        return f"{_title(account[0])} ({account[1]})"
     name = service.partition(":")[2] if ":" in service else service
-    return _SERVICE_NAMES.get(service, name.replace("_", " ").replace("-", " ").title() or service)
+    return _SERVICE_NAMES.get(service, _title(name) or service)
+
+
+def _title(name: str) -> str:
+    return name.replace("_", " ").replace("-", " ").title()
 
 
 def auth_required_result(service: str, reason: str = "missing", *, flow: Optional[str] = None,
@@ -66,7 +74,8 @@ def auth_required_result(service: str, reason: str = "missing", *, flow: Optiona
 
 
 def reauth_reason(server: str) -> str:
-    return f"Sign in again: {service_display_name(f'mcp:{server}')} stopped accepting the saved sign-in"
+    from tools.mcp_accounts import service_for_server
+    return f"Sign in again: {service_display_name(service_for_server(server))} stopped accepting the saved sign-in"
 
 
 def reauth_required_result(server: str) -> str:
@@ -243,7 +252,8 @@ def detect(function_name: str, function_args: Any, result: Any) -> Optional[Auth
         return AuthNeed(typed["service"], reason if reason in REASONS else "missing",
                         flow if isinstance(flow, str) else None)
     if body.get("needs_reauth") is True and isinstance(body.get("server"), str):
-        return AuthNeed(f"mcp:{body['server']}", "expired", blocking=body.get("code") != REAUTH_REQUIRED)
+        from tools.mcp_accounts import service_for_server
+        return AuthNeed(service_for_server(body["server"]), "expired", blocking=body.get("code") != REAUTH_REQUIRED)
     hosted = _hosted_connector_need(body)
     if hosted is not None:
         return hosted

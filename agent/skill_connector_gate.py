@@ -40,17 +40,18 @@ def _mcp_connected(names: Iterable[str], home: Path) -> frozenset[str]:
     except Exception:
         logger.debug("MCP connector state unavailable", exc_info=True)
         return frozenset()
+    from tools.mcp_accounts import registration_name
     connected: set[str] = set()
-    for name in wanted:
-        cfg = servers.get(name)
-        if not isinstance(cfg, dict) or not mcp_server_enabled(cfg):
+    for connection, cfg in servers.items():
+        name = registration_name(connection)
+        if name not in wanted or name in connected or not isinstance(cfg, dict) or not mcp_server_enabled(cfg):
             continue
         try:
             if str(cfg.get("auth") or "").lower().strip() == "oauth" and not HermesTokenStorage(
-                    name, hermes_home=home).has_cached_tokens():
+                    connection, hermes_home=home).has_cached_tokens():
                 continue
         except Exception:
-            logger.debug("MCP token check failed for server %r", name, exc_info=True)
+            logger.debug("MCP token check failed for server %r", connection, exc_info=True)
             continue
         connected.add(name)
     return frozenset(connected)

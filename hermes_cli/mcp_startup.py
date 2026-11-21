@@ -87,7 +87,10 @@ def _servers_awaiting_connect() -> list[str]:
     from tools.mcp_tool_discovery import mcp_servers_awaiting_connect
 
     pending = mcp_servers_awaiting_connect()
-    return pending if _mcp_server_filter is None else [n for n in pending if n in _mcp_server_filter]
+    from tools.mcp_accounts import registration_name
+
+    return pending if _mcp_server_filter is None else [
+        n for n in pending if n in _mcp_server_filter or registration_name(n) in _mcp_server_filter]
 
 
 def start_background_mcp_discovery(*, logger, thread_name: str) -> None:

@@ -739,6 +739,12 @@ def _portable_mcp_servers(safe_servers: dict[str, dict], rejected: frozenset[str
         logger.debug("Failed to load portable MCP servers", exc_info=True)
 
 
+def connector_configs(name: str, *, interpolate: bool = True) -> dict[str, dict]:
+    from tools.mcp_accounts import registration_name
+    return {connection: cfg for connection, cfg in _load_mcp_config(interpolate=interpolate).items()
+            if registration_name(connection) == name}
+
+
 def _load_mcp_config(*, interpolate: bool = True) -> dict[str, dict]:
     """``mcp_servers`` from config.yaml as ``{name: config}`` (empty on error / safe mode), ``${VAR}`` interpolated.
     ``interpolate=False`` is the read-only view for status checks: it neither loads dotenv into ``os.environ`` nor
@@ -756,7 +762,12 @@ def _load_mcp_config(*, interpolate: bool = True) -> dict[str, dict]:
         except ImportError as exc:
             logger.warning("MCP server validator unavailable; no MCP servers started: %s", exc)
             return {}
+        from hermes_cli.mcp_accounts import migrate_legacy_accounts
         from hermes_cli.mcp_config import drop_retired_device_servers
+        try:
+            migrate_legacy_accounts()
+        except Exception:  # health: allow BLE001 -- a failed migration leaves the legacy connection serving; it must not blank every server
+            logger.warning("MCP account migration failed; legacy connections stay as they are", exc_info=True)
         servers = drop_retired_device_servers(load_config()).get("mcp_servers")
         if interpolate:
             try:  # ensure .env vars are available for interpolation
@@ -766,7 +777,8 @@ def _load_mcp_config(*, interpolate: bool = True) -> dict[str, dict]:
                 pass
         safe_servers: dict[str, dict] = {}
         from hermes_cli.shared_catalog import effective_mcp_servers
-        servers = effective_mcp_servers(servers)
+        from tools.mcp_accounts import expand
+        servers = expand(effective_mcp_servers(servers))
         # Validate what will be spawned: a benign-looking ``${VAR}`` can expand into a shell payload.
         kept = _filter_suspicious_mcp_servers({name: _interpolate_env_vars(cfg) for name, cfg in servers.items()})
         for name, interpolated in kept.items():

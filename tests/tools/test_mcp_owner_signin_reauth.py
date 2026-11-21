@@ -15,12 +15,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from tests.tools.test_mcp_action_gate import Owner, _call, _register
-from tests.tools.test_mcp_oauth_import import ACCESS, REFRESH, TOKEN_ENDPOINT, URL, _tokens
+from tests.tools.test_mcp_action_gate import Owner, _call as _call_server, _register
+from tests.tools.test_mcp_oauth_import import ACCESS, CONNECTION, REFRESH, TOKEN_ENDPOINT, URL, _tokens
 from tools import auth_required, mcp_oauth_import as imp
 from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
 
 REASON = "Sign in again: Upwork stopped accepting the saved sign-in"
+ACCOUNT_REASON = "Sign in again: Upwork (default) stopped accepting the saved sign-in"
 ROTATED = "rt-rotated-9e41d27a"
 
 pytest_plugins = ("tests.tools.test_mcp_action_gate",)
@@ -41,7 +42,7 @@ def home():
 
 
 def expire_access_token():
-    path = HermesTokenStorage("upwork")._tokens_path()
+    path = HermesTokenStorage(CONNECTION)._tokens_path()
     data = json.loads(path.read_text())
     data["expires_at"] = time.time() - 10
     path.write_text(json.dumps(data))
@@ -66,7 +67,7 @@ def through_the_provider(session, answer_token_endpoint):
     token_requests, bearers = [], []
 
     async def call_tool(name, arguments=None, **kwargs):
-        provider = get_manager().get_or_build_provider("upwork", URL, {})
+        provider = get_manager().get_or_build_provider(CONNECTION, URL, {})
         flow = provider.async_auth_flow(httpx.Request("POST", URL))
         request = await flow.__anext__()
         while True:
@@ -90,8 +91,18 @@ def through_the_provider(session, answer_token_endpoint):
 def signed_in(home, server):
     import asyncio
     assert asyncio.run(imp.import_owner_tokens(home, "upwork", _tokens())) is None
-    _register()
+    register_account_server()
     return server
+
+
+def register_account_server():
+    from tools import mcp_tool
+    mcp_tool._servers[CONNECTION] = mcp_tool._servers["upwork"]
+    _register(CONNECTION)
+
+
+def _call(tool, args=None):
+    return _call_server(tool, args, CONNECTION)
 
 
 def test_no_computer_attached_a_read_a_refresh_and_an_approved_action_run_from_stored_tokens(signed_in):
@@ -103,7 +114,7 @@ def test_no_computer_attached_a_read_a_refresh_and_an_approved_action_run_from_s
     assert len(token_requests) == 1 and token_requests[0]["refresh_token"] == [REFRESH]
     assert bearers == ["Bearer at-after-refresh"] * 2
     assert len(chat.cards) == 1 and chat.cards[0]["draft"]["subject"] == "submit_proposal"
-    stored = json.loads(HermesTokenStorage("upwork")._tokens_path().read_text())
+    stored = json.loads(HermesTokenStorage(CONNECTION)._tokens_path().read_text())
     assert stored["refresh_token"] == ROTATED
 
 
@@ -112,10 +123,10 @@ def test_a_rejected_refresh_token_is_presented_once_and_every_call_then_gets_the
     expire_access_token()
     results = [_call("search_jobs") for _ in range(3)]
     assert [r["code"] for r in results] == ["reauth_required"] * 3 == [auth_required.REAUTH_REQUIRED] * 3
-    assert all(REASON in r["error"] and r["server"] == "upwork" for r in results)
+    assert all(ACCOUNT_REASON in r["error"] and r["server"] == CONNECTION for r in results), results
     assert len(token_requests) == 1, "the dead refresh token must reach the token endpoint exactly once"
     assert signed_in.call_tool.await_count == 1, "later calls fail before any request is made"
-    assert HermesTokenStorage("upwork").reauth_required()
+    assert HermesTokenStorage(CONNECTION).reauth_required()
 
 
 def test_a_gated_action_is_refused_before_a_card_is_shown_while_sign_in_is_dead(signed_in):
@@ -132,7 +143,7 @@ def test_the_refusal_survives_a_restart_and_a_reconnect(signed_in):
     token_requests, _ = through_the_provider(signed_in, invalid_grant)
     expire_access_token()
     _call("search_jobs")
-    get_manager().evict("upwork")
+    get_manager().evict(CONNECTION)
     assert _call("search_jobs")["code"] == "reauth_required"
     assert len(token_requests) == 1
 
@@ -148,7 +159,7 @@ def test_the_provider_stops_before_the_network_and_opens_no_browser_flow(signed_
     _call("search_jobs")
 
     async def first_request():
-        provider = get_manager().get_or_build_provider("upwork", URL, {})
+        provider = get_manager().get_or_build_provider(CONNECTION, URL, {})
         await provider.async_auth_flow(httpx.Request("POST", URL)).__anext__()
 
     with pytest.raises(OwnerSigninRequired):
@@ -161,7 +172,7 @@ def test_a_server_error_from_the_token_endpoint_is_not_a_dead_sign_in(signed_in)
     first, _ = through_the_provider(signed_in, unavailable)
     expire_access_token()
     _call("search_jobs")
-    assert len(first) == 1 and not HermesTokenStorage("upwork").reauth_required()
+    assert len(first) == 1 and not HermesTokenStorage(CONNECTION).reauth_required()
     second, _ = through_the_provider(signed_in, refresh_grant)
     assert _call("search_jobs") == {"result": "ok"} and len(second) == 1, "the saved refresh token is still tried"
 
@@ -191,7 +202,7 @@ def test_every_app_reads_the_reason_from_the_catalog_and_the_status_until_a_new_
     assert asyncio.run(imp.import_owner_tokens(home, "upwork", _tokens(refresh_token="rt-new-3b7c"))) is None
     catalog, status = _rows()
     assert catalog["needs_auth_reason"] is None and not status["needs_auth"]
-    assert not HermesTokenStorage("upwork").reauth_required()
+    assert not HermesTokenStorage(CONNECTION).reauth_required()
     token_requests, bearers = through_the_provider(signed_in, refresh_grant)
     assert _call("search_jobs") == {"result": "ok"} and token_requests == [] and bearers == [f"Bearer {ACCESS}"]
 
@@ -211,9 +222,10 @@ def test_the_sign_in_state_lives_in_owner_only_files_and_no_token_reaches_config
     caplog.set_level("DEBUG")
     assert asyncio.run(imp.import_owner_tokens(home, "upwork", _tokens())) is None
     folder = home / "mcp-tokens"
-    assert stat.S_IMODE(folder.stat().st_mode) == 0o700
-    files = sorted(folder.iterdir())
-    assert {p.name for p in files} >= {"upwork.json", "upwork.client.json", "upwork.meta.json"}
+    account_folder = folder / "accounts" / "upwork"
+    assert all(stat.S_IMODE(d.stat().st_mode) == 0o700 for d in (folder, folder / "accounts", account_folder))
+    files = sorted(account_folder.iterdir())
+    assert {p.name for p in files} >= {"default.json", "default.client.json", "default.meta.json"}
     assert all(stat.S_IMODE(p.stat().st_mode) == 0o600 for p in files if p.is_file())
     assert ACCESS not in (home / "config.yaml").read_text() and REFRESH not in (home / "config.yaml").read_text()
     assert ACCESS not in caplog.text and REFRESH not in caplog.text
@@ -225,7 +237,7 @@ def test_a_crash_before_the_rename_leaves_the_previous_tokens_intact_and_loadabl
     from mcp.shared.auth import OAuthToken
     import utils
     assert asyncio.run(imp.import_owner_tokens(home, "upwork", _tokens())) is None
-    storage = HermesTokenStorage("upwork", hermes_home=home)
+    storage = HermesTokenStorage(CONNECTION, hermes_home=home)
     before = storage._tokens_path().read_bytes()
 
     def crash(tmp_path, destination):

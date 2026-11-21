@@ -418,8 +418,10 @@ class McpServerFlow:
     user_code = None
 
     def __init__(self, home: Path, service: str) -> None:
+        from tools.mcp_accounts import split_service
         self._home = home
-        self._server = service.partition(":")[2]
+        parsed = split_service(service)
+        self._server, self._alias = parsed if parsed is not None else (service.partition(":")[2], None)
         self._inner: SigninFlow = ManualFlow()
 
     @property
@@ -448,6 +450,8 @@ class McpServerFlow:
             kind = "api_key"
         if kind == "oauth" and signs_in_on_owner_app(cfg):
             self._inner = OwnerComputerFlow(self._server)
+        elif self._alias is not None:
+            return
         elif kind == "oauth":
             paste = McpPasteFlow(self._home, self._server)
             try:

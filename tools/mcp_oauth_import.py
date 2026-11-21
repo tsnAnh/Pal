@@ -25,6 +25,8 @@ NOT_OAUTH_SERVICE = "not_oauth_service"
 SERVER_MISMATCH = "server_mismatch"
 INVALID_REQUEST = "invalid_request"
 SAVE_FAILED = "save_failed"
+INVALID_ACCOUNT = "invalid_account"
+ACCOUNT_REQUIRED = "account_required"
 
 
 @dataclass(frozen=True)
@@ -96,11 +98,14 @@ def _ensure_server_config(entry: Any, home: Path) -> Optional[str]:
     current = _get_mcp_servers().get(entry.name)
     if isinstance(current, dict) and str(current.get("url") or "").rstrip("/") != wanted["url"].rstrip("/"):
         return SERVER_MISMATCH
-    merged = {**(current if isinstance(current, dict) else {"enabled": True}), **{
-        key: value for key, value in wanted.items() if key in ("url", "auth", "signin_on", "action_policy")}}
+    merged = {**(current if isinstance(current, dict) else {"enabled": True}), **_catalog_fields(wanted)}
     if merged != current and not _save_mcp_server(entry.name, merged):
         return SAVE_FAILED
     return None
+
+
+def _catalog_fields(wanted: dict) -> dict:
+    return {key: value for key, value in wanted.items() if key in ("url", "auth", "signin_on", "action_policy")}
 
 
 async def _write_state(storage: Any, tokens: OwnerTokens) -> None:
@@ -134,8 +139,24 @@ def _wake_connection(server_name: str, home: Path) -> None:
     reconnect_mcp_server(server_name)
 
 
-async def import_owner_tokens(home: Path, server_name: str, tokens: OwnerTokens) -> Optional[str]:
+def _target_account(slug: str, account: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    from hermes_cli.mcp_accounts import capable_slugs, resolve_for_connect
+    from hermes_cli.mcp_config import _get_mcp_servers
+    from tools.mcp_accounts import AccountError
+    if slug not in capable_slugs():
+        return None, (INVALID_ACCOUNT if account is not None else None)
+    try:
+        return resolve_for_connect(slug, _get_mcp_servers().get(slug), account), None
+    except AccountError as exc:
+        return None, INVALID_ACCOUNT if exc.code == "invalid_account" else ACCOUNT_REQUIRED
+
+
+async def import_owner_tokens(home: Path, server_name: str, tokens: OwnerTokens,
+                              account: Optional[str] = None) -> Optional[str]:
+    from hermes_cli.mcp_accounts import add_account
+    from hermes_cli.mcp_catalog import _build_server_config
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from tools.mcp_accounts import server_name as account_server_name
     from tools.mcp_oauth import HermesTokenStorage
     if (entry := catalog_entry(server_name)) is None:
         return NOT_OAUTH_SERVICE
@@ -143,17 +164,23 @@ async def import_owner_tokens(home: Path, server_name: str, tokens: OwnerTokens)
         return INVALID_REQUEST
     scope = set_hermes_home_override(home)
     try:
+        alias, refusal = _target_account(server_name, account)
+        if refusal is not None:
+            return refusal
         if (refusal := _ensure_server_config(entry, home)) is not None:
             return refusal
-        storage = HermesTokenStorage(server_name, hermes_home=home)
+        connection = server_name if alias is None else account_server_name(server_name, alias)
+        storage = HermesTokenStorage(connection, hermes_home=home)
         before = storage.snapshot()
         try:
             await _write_state(storage, tokens)
+            if alias is not None:
+                add_account(server_name, alias, _catalog_fields(_build_server_config(entry, None)))
         except Exception as exc:  # health: allow BLE001 -- restore the previous state on any write failure; only the exception type is logged because pydantic errors echo the token input
             storage.restore(before)
-            logger.warning("OAuth hand-over for MCP server '%s' was not saved (%s)", server_name, type(exc).__name__)
+            logger.warning("OAuth hand-over for MCP server '%s' was not saved (%s)", connection, type(exc).__name__)
             return SAVE_FAILED
-        _wake_connection(server_name, home)
+        _wake_connection(connection, home)
     finally:
         reset_hermes_home_override(scope)
     return None

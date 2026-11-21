@@ -45,7 +45,7 @@ def _reauth():
 
 
 def _tokens_on_disk(authority):
-    folder = home_of(authority) / 'mcp-tokens'
+    folder = home_of(authority) / 'mcp-tokens' / 'accounts' / 'upwork'
     return sorted(p.name for p in folder.glob('*.json')) if folder.exists() else []
 
 
@@ -119,7 +119,7 @@ async def test_the_hand_over_signs_the_waiting_request_in_and_the_call_retries(a
     assert reply['result'] == {'ok': True}
     assert json.loads(await task) == {'ok': True} and retries == [1]
     assert phone.events('auth.resolved')[-1]['outcome'] == 'signed_in'
-    assert _tokens_on_disk(authority) == ['upwork.client.json', 'upwork.json', 'upwork.meta.json']
+    assert _tokens_on_disk(authority) == ['default.client.json', 'default.json', 'default.meta.json']
     everything = json.dumps(phone.frames) + json.dumps(reply) + caplog.text
     assert ACCESS not in everything and REFRESH not in everything
 
@@ -155,9 +155,9 @@ async def test_each_profile_stores_its_own_hand_over(authorities):
     assert (await one.call('auth.submit_oauth_tokens', HANDOVER))['result'] == {'ok': True}
     assert _tokens_on_disk(first) and _tokens_on_disk(second) == []
     assert (await two.call('auth.submit_oauth_tokens', {**HANDOVER, 'access_token': 'b-access-1', 'refresh_token': 'b-refresh-1'}))['result'] == {'ok': True}
-    stored = json.loads((home_of(first) / 'mcp-tokens' / 'upwork.json').read_text())
+    stored = json.loads((home_of(first) / 'mcp-tokens' / 'accounts' / 'upwork' / 'default.json').read_text())
     assert stored['access_token'] == ACCESS
-    assert json.loads((home_of(second) / 'mcp-tokens' / 'upwork.json').read_text())['access_token'] == 'b-access-1'
+    assert json.loads((home_of(second) / 'mcp-tokens' / 'accounts' / 'upwork' / 'default.json').read_text())['access_token'] == 'b-access-1'
 
 
 def test_an_action_gated_server_reaches_session_kinds_exactly_like_any_other_connector():

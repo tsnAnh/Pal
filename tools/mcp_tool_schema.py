@@ -8,6 +8,8 @@ import fnmatch
 import re
 from typing import Any, List
 from tools.ansi_strip import strip_tool_metadata_text
+from tools.mcp_accounts import (
+    CONNECTOR_ALIAS_DESCRIPTION, CONNECTOR_ALIAS_PARAM, is_account_server, registration_name)
 from tools.mcp_tool_common import mcp_field
 
 logger = logging.getLogger("tools.mcp_tool")
@@ -229,14 +231,24 @@ def strip_schema_annotations(node, tool_name: str = "", _contract: bool = False,
     return node
 
 
+def with_connector_alias(parameters: dict) -> dict:
+    properties = parameters.get("properties")
+    if not isinstance(properties, dict) or CONNECTOR_ALIAS_PARAM in properties:
+        return parameters
+    return {**parameters, "properties": {
+        **properties, CONNECTOR_ALIAS_PARAM: {"type": "string", "description": CONNECTOR_ALIAS_DESCRIPTION}}}
+
+
 def _convert_mcp_schema(server_name: str, mcp_tool) -> dict:
     """Convert an MCP ``Tool`` (``.input_schema``, or ``.inputSchema`` before mcp 2.0) to a
     ``registry.register(schema=...)`` dict."""
+    registered_as = registration_name(server_name)
+    parameters = strip_schema_annotations(
+        _normalize_mcp_input_schema(mcp_field(mcp_tool, "input_schema", "inputSchema")), mcp_tool.name)
     return {
-        "name": mcp_prefixed_tool_name(server_name, mcp_tool.name),
-        "description": strip_tool_metadata_text(mcp_tool.description or f"MCP tool {mcp_tool.name} from {server_name}"),
-        "parameters": strip_schema_annotations(
-            _normalize_mcp_input_schema(mcp_field(mcp_tool, "input_schema", "inputSchema")), mcp_tool.name),
+        "name": mcp_prefixed_tool_name(registered_as, mcp_tool.name),
+        "description": strip_tool_metadata_text(mcp_tool.description or f"MCP tool {mcp_tool.name} from {registered_as}"),
+        "parameters": with_connector_alias(parameters) if is_account_server(server_name) else parameters,
     }
 
 
@@ -287,6 +299,7 @@ _UTILITY_TOOL_SPECS = (
 
 def _build_utility_schemas(server_name: str) -> list[dict]:
     """Schemas for the resource/prompt utility tools as ``{schema, handler_key}`` dicts."""
+    registered_as = registration_name(server_name)
     out = []
     for handler_key, description, properties, required in _UTILITY_TOOL_SPECS:
         parameters = {"type": "object", "properties": {k: dict(v) for k, v in properties.items()}}
@@ -294,9 +307,9 @@ def _build_utility_schemas(server_name: str) -> list[dict]:
             parameters["required"] = list(required)
         out.append({
             "schema": {
-                "name": mcp_prefixed_tool_name(server_name, handler_key),
-                "description": description.format(server=server_name),
-                "parameters": parameters},
+                "name": mcp_prefixed_tool_name(registered_as, handler_key),
+                "description": description.format(server=registered_as),
+                "parameters": with_connector_alias(parameters) if is_account_server(server_name) else parameters},
             "handler_key": handler_key})
     return out
 

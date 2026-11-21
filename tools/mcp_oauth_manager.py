@@ -382,7 +382,7 @@ class MCPOAuthManager:
 
     async def invalidate_if_disk_changed(self, server_name: str, *, hermes_home: str | Path | None = None) -> bool:
         """Force the SDK provider to reload when the tokens file mtime changed (e.g. a cron refresh); True if so."""
-        from tools.mcp_oauth import _get_token_dir, _safe_filename
+        from tools.mcp_oauth import HermesTokenStorage
         from utils import file_cache_version
         entry = self._entries.get(self._key(server_name, hermes_home))
         if entry is None or entry.provider is None:
@@ -391,7 +391,7 @@ class MCPOAuthManager:
             try:
                 # Hashed every time: a refresh atomically replaced in the same tick keeps the mtime,
                 # and a racy digest going empty later would read as a change and tear the session down.
-                version = file_cache_version(_get_token_dir(hermes_home) / f"{_safe_filename(server_name)}.json",
+                version = file_cache_version(HermesTokenStorage(server_name, hermes_home=hermes_home)._tokens_path(),
                                              always_digest=True)
             except OSError:
                 return False

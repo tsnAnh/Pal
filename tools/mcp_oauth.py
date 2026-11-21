@@ -226,11 +226,16 @@ _SKIP_TOKENS = frozenset({"skip", "cancel", "s", "n", "no", "q", "quit"})
 _USER_SKIPPED_SENTINEL = "__hermes_user_skipped__"
 
 
+TOKEN_DIR_NAME = "mcp-tokens"
+ACCOUNT_DIR_NAME = "accounts"
+STATE_FILE_SUFFIXES = (".json", ".client.json", ".client.json.bak", ".meta.json", ".cimd-off", ".reauth", ".redirect.json")
+
+
 def _get_token_dir(hermes_home: str | Path | None = None) -> Path:
     """``HERMES_HOME/mcp-tokens/`` — per-profile token directory."""
     from hermes_constants import get_hermes_home
 
-    return Path(hermes_home if hermes_home is not None else get_hermes_home()) / "mcp-tokens"
+    return Path(hermes_home if hermes_home is not None else get_hermes_home()) / TOKEN_DIR_NAME
 
 
 def _safe_filename(name: str) -> str:
@@ -400,8 +405,44 @@ def _write_json(path: Path, data: dict) -> None:
     from hermes_constants import mkdir_under_hermes_home
 
     mkdir_under_hermes_home(path.parent)
-    secure_parent_dir(path)
+    _secure_token_dirs(path)
     atomic_json_write(path, data, mode=0o600, fsync_dir=True, default=str)
+
+
+def _secure_token_dirs(path: Path) -> None:
+    secure_parent_dir(path)
+    parent = path.parent
+    while parent.name != TOKEN_DIR_NAME and parent != parent.parent:
+        secure_parent_dir(parent)
+        parent = parent.parent
+
+
+def _copy_private(origin: Path, target: Path) -> None:
+    from hermes_constants import mkdir_under_hermes_home
+
+    mkdir_under_hermes_home(target.parent)
+    _secure_token_dirs(target)
+    temp = target.with_name(f".{target.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat.S_IRUSR | stat.S_IWUSR)
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(origin.read_bytes())
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp, target)
+    except BaseException:
+        temp.unlink(missing_ok=True)
+        raise
+    _fsync_dir(target.parent)
+
+
+def _fsync_dir(directory: Path) -> None:
+    with contextlib.suppress(OSError):
+        fd = os.open(directory, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def _model_json(model: Any) -> dict:
@@ -414,7 +455,12 @@ class HermesTokenStorage:
     ``.client.json`` (client info), ``.meta.json`` (server metadata), ``.cimd-off`` (CIMD refused), ``.redirect.json`` (app sign-in redirect preference)."""
 
     def __init__(self, server_name: str, *, hermes_home: str | Path | None = None):
-        self._server_name = _safe_filename(server_name)
+        from tools.mcp_accounts import split
+
+        account = split(server_name)
+        self._dir_parts: tuple[str, ...] = (ACCOUNT_DIR_NAME, account.slug) if account else ()
+        self._stem = account.alias if account else _safe_filename(server_name)
+        self._server_name = account.server_name if account else self._stem
         self._hermes_home = Path(hermes_home) if hermes_home is not None else None
         # Issuer binding: ``loaded_issuer`` is what the token file on disk recorded (the authorization
         # server that granted the stored refresh token); ``_bound_issuer`` is stamped onto the next
@@ -422,8 +468,26 @@ class HermesTokenStorage:
         self.loaded_issuer: str | None = None
         self._bound_issuer: str | None = None
 
+    def _directory(self) -> Path:
+        return _get_token_dir(self._hermes_home).joinpath(*self._dir_parts)
+
     def _path(self, suffix: str) -> Path:
-        return _get_token_dir(self._hermes_home) / f"{self._server_name}{suffix}"
+        return self._directory() / f"{self._stem}{suffix}"
+
+    def state_paths(self) -> list[Path]:
+        return [p for p in (self._path(suffix) for suffix in STATE_FILE_SUFFIXES) if p.exists()]
+
+    def absorb(self, source: "HermesTokenStorage") -> bool:
+        moved = False
+        for suffix in STATE_FILE_SUFFIXES:
+            origin, target = source._path(suffix), self._path(suffix)
+            if not origin.exists():
+                continue
+            if not target.exists():
+                _copy_private(origin, target)
+            origin.unlink(missing_ok=True)
+            moved = True
+        return moved
 
     _tokens_path = partialmethod(_path, ".json")
     _client_info_path = partialmethod(_path, ".client.json")
@@ -617,6 +681,13 @@ class HermesTokenStorage:
                   *(() if keep_metadata else (self._meta_path(),))):
             p.unlink(missing_ok=True)
 
+    def purge(self) -> None:
+        for path in (*self.state_paths(), _refresh_lock_path(self._tokens_path())):
+            path.unlink(missing_ok=True)
+        if self._dir_parts:
+            with contextlib.suppress(OSError):
+                self._directory().rmdir()
+
     def snapshot(self) -> dict[str, bytes]:
         """filename -> bytes of the existing state files; ``restore()`` it to undo a ``remove()`` after
         a failed re-auth so a valid token survives."""
@@ -634,10 +705,11 @@ class HermesTokenStorage:
         self.remove()
         if not snapshot:
             return
-        token_dir = _get_token_dir(self._hermes_home)
+        token_dir = self._directory()
         from hermes_constants import mkdir_under_hermes_home
 
         mkdir_under_hermes_home(token_dir)
+        _secure_token_dirs(token_dir / "x")
         for fname, data in snapshot.items():
             try:
                 fd = os.open(str(token_dir / fname), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
@@ -1013,7 +1085,8 @@ def signs_in_on_owner_app(cfg: object) -> bool:
 
 def server_signs_in_on_owner_app(server_name: str) -> bool:
     from hermes_cli.mcp_config import _get_mcp_servers
-    return signs_in_on_owner_app(_get_mcp_servers().get(server_name))
+    from tools.mcp_accounts import registration_name
+    return signs_in_on_owner_app(_get_mcp_servers().get(registration_name(server_name)))
 
 
 def pending_reauth_reason(server_name: str) -> str | None:

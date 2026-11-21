@@ -17,6 +17,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
+from tools.mcp_accounts import display_name
 from tools.registry import tool_error
 
 logger = logging.getLogger("tools.mcp_action_gate")
@@ -160,10 +161,11 @@ def build_card(server_name: str, tool_name: str, args: Mapping) -> dict:
         details.append({"name": "more", "value": f"{len(shown) - _MAX_FIELDS} more fields not shown"})
     text = _first_value(shown, _TEXT_KEYS) or "\n".join(f"{d['name']}: {d['value']}" for d in details) or tool_name
     recipient = _first_value(shown, _RECIPIENT_KEYS)
-    draft = {"kind": DRAFT_KIND, "channel": server_name, "recipient": recipient, "subject": tool_name,
+    channel = display_name(server_name)
+    draft = {"kind": DRAFT_KIND, "channel": channel, "recipient": recipient, "subject": tool_name,
              "text": text, "editable": False, "held": False}
     return {"text": text, "draft": draft, "details": details,
-            "description": f"Run '{tool_name}' on {server_name} once with exactly the details shown, or deny."}
+            "description": f"Run '{tool_name}' on {channel} once with exactly the details shown, or deny."}
 
 
 def _approve(server_name: str, tool_name: str, args: Mapping) -> Optional[str]:
@@ -198,7 +200,7 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str,
         return tool_error(policy.refused_message, code=ACTION_REFUSED), None
     from tools.approval_context import get_current_session_key
     if not approver_present():
-        return tool_error(f"'{tool_name}' changes things on {server_name}, so it needs the owner's approval in "
+        return tool_error(f"'{tool_name}' changes things on {display_name(server_name)}, so it needs the owner's approval in "
                           f"their app, and nobody can approve in this chat. It was NOT run.",
                           code=APPROVAL_UNAVAILABLE), None
     args = dict(args or {})
