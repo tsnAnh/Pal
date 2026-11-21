@@ -100,7 +100,7 @@ def account_names(slug: str) -> list[str]:
     return list(template_accounts(mc._get_mcp_servers().get(slug)))
 
 
-def _update_template(slug: str, mutate: Callable[[dict | None], dict | None]) -> bool:
+def update_template(slug: str, mutate: Callable[[dict | None], dict | None]) -> bool:
     with _CONFIG_LOCK:
         current = _template(slug, load_config())
         updated = mutate(copy.deepcopy(current))
@@ -122,7 +122,7 @@ def add_account(slug: str, alias: str, template: Mapping | None = None, *, api_k
         merged[ACCOUNTS_KEY] = accounts
         return merged
 
-    if not _update_template(slug, mutate):
+    if not update_template(slug, mutate):
         raise AccountError("save_failed", "This connector could not be saved. Check the settings and try again.")
 
 
@@ -140,11 +140,11 @@ def save_account_entry(ref: AccountRef, cfg: Mapping) -> bool:
         merged[ACCOUNTS_KEY] = accounts
         return merged
 
-    return _update_template(ref.slug, mutate)
+    return update_template(ref.slug, mutate)
 
 
 def _drop_alias(ref: AccountRef) -> bool:
-    return _update_template(ref.slug, lambda cfg: {
+    return update_template(ref.slug, lambda cfg: {
         **cfg, ACCOUNTS_KEY: {k: v for k, v in cfg[ACCOUNTS_KEY].items() if k != ref.alias}})
 
 
@@ -234,7 +234,7 @@ def rename_account(slug: str, old: str, new: str) -> None:
         renamed = {(new if key == old else key): value for key, value in (current or {}).get(ACCOUNTS_KEY, {}).items()}
         return {**(current or {}), ACCOUNTS_KEY: renamed}
 
-    _update_template(slug, mutate)
+    update_template(slug, mutate)
     get_manager().evict(server_name(slug, old))
     _reconcile_live_servers()
 

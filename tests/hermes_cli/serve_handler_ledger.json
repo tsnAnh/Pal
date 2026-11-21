@@ -5,7 +5,7 @@
    "undecided": 350
   },
   "rpc": {
-   "authority": 210,
+   "authority": 212,
    "keep-host-wide": 1,
    "undecided": 198
   },
@@ -456,6 +456,8 @@
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "connectors.accounts.remove", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "connectors.accounts.rename", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "connectors.catalog", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "connectors.details", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "connectors.details.policy.set", "kind": "rpc", "ref": ""},
   {"current_path": "authority (session-owned); account-owned: legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "connectors.connect", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "connectors.list", "kind": "rpc", "ref": ""},
   {"current_path": "authority (session-owned); account-owned: legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "connectors.operation.status", "kind": "rpc", "ref": "D3"},

@@ -28,6 +28,8 @@ _SESSION_OPERATION = "gateway/session_connections.py"
 
 PAL_RPC_MODULES = {
     "connectors.catalog": (_ACCOUNT,),
+    "connectors.details": (_ACCOUNT,),
+    "connectors.details.policy.set": (_ACCOUNT,),
     "connectors.setup.check": (_ACCOUNT,),
     "connectors.setup.progress.get": (_ACCOUNT,),
     "connectors.setup.progress.set": (_ACCOUNT,),

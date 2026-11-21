@@ -259,6 +259,7 @@ class ConnectorCatalogRow(Result):
     method: str | None = None
     verified: bool | None = None
     mcp_url: str | None = None
+    source: str | None = None
     status: ConnectorCatalogStatus | None = None
     notes: str | None = None
     setup_guide: SetupGuide | None = None
@@ -283,6 +284,90 @@ method(
         "status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when "
         "none is but one needs it, else not_connected. "
         "A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
+)
+
+
+class ConnectorToolGroup(WireEnum):
+    read = "read"
+    write = "write"
+    never = "never"
+    tool = "tool"
+
+
+class ConnectorPolicyMode(WireEnum):
+    auto = "auto"
+    ask = "ask"
+    off = "off"
+    on = "on"
+
+
+class ConnectorDetailsTool(Result):
+    name: str
+    title: str
+    description: str
+    group: ConnectorToolGroup
+
+
+class ConnectorDetailsPolicy(Result):
+    read: Literal["auto", "ask", "off"] | None = None
+    write: Literal["ask", "off"] | None = None
+    tool: Literal["on", "off"] | None = None
+
+
+class ConnectorDetailsSkill(Result):
+    name: str
+    title: str
+    description: str
+
+
+class ConnectorDetailsParams(ProfileParams):
+    slug: str = Field(min_length=1)
+
+
+class ConnectorDetailsResult(Result):
+    slug: str
+    grouped: bool
+    tools_known: bool
+    tools: list[ConnectorDetailsTool]
+    policy: ConnectorDetailsPolicy
+    skills: list[ConnectorDetailsSkill]
+
+
+method(
+    "connectors.details",
+    params=ConnectorDetailsParams,
+    result=ConnectorDetailsResult,
+    doc="What a connector's details screen shows besides its catalog row: the tools already discovered for any "
+        "connected account of the slug (never a live probe; tools_known is false and tools empty when none are "
+        "known), each in a group, the owner's permission mode per group present, and the installed skills that "
+        "name the connector. A server with a read/write policy is grouped (read, write, never); any other "
+        "server lists every tool in the tool group. Policy keys exist only for groups present: read is auto, ask "
+        "or off, write is ask or off, tool is on or off, and never is fixed. Defaults are read auto, write ask, "
+        "tool on.",
+)
+
+
+class ConnectorDetailsPolicySetParams(ProfileParams):
+    slug: str = Field(min_length=1)
+    group: ConnectorToolGroup
+    mode: ConnectorPolicyMode
+
+
+class ConnectorDetailsPolicySetResult(Result):
+    ok: bool
+    policy: ConnectorDetailsPolicy
+
+
+method(
+    "connectors.details.policy.set",
+    params=ConnectorDetailsPolicySetParams,
+    result=ConnectorDetailsPolicySetResult,
+    doc="Set one group's mode for every account of a connector, now and for accounts added later. off hides "
+        "the group's tools from new sessions only (a live session keeps its tool list); ask on read makes "
+        "reads wait for the owner's approval like an action, live. A write can never be set to auto and the "
+        "never group has no mode. An unknown connector answers 4041 connector_not_found, a connector that is "
+        "not connected 4041 connection_not_found, an invalid group or mode combination 4000 invalid_policy, "
+        "and turning writes off before the connector's tools are known 5034 tools_unavailable.",
 )
 
 

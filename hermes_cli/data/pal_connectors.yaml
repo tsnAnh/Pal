@@ -2,6 +2,7 @@ version: 1
 connectors:
 - id: airtable
   name: Airtable
+  description: "Search, read and update records, tables and bases in your Airtable workspace."
   icon: airtable
   category: Work management
   method: mcp_oauth
@@ -10,6 +11,7 @@ connectors:
   source: https://support.airtable.com/articles/9897799762-using-the-airtable-mcp-server
 - id: atlassian
   name: Atlassian
+  description: "Search and update Jira issues and Confluence pages in your Atlassian sites."
   icon: atlassian
   category: Work management
   method: mcp_oauth
@@ -18,6 +20,7 @@ connectors:
   source: https://support.atlassian.com/rovo/docs/getting-started-with-the-atlassian-remote-mcp-server/
 - id: aws-knowledge
   name: Aws Knowledge
+  description: "Look up AWS documentation, API references and best practices."
   icon: plugin_glyph
   category: Hosting and infrastructure
   method: none
@@ -26,6 +29,7 @@ connectors:
   source: https://awslabs.github.io/mcp/servers/aws-knowledge-mcp-server/
 - id: buildkite
   name: Buildkite
+  description: "Check pipelines, builds and test results, and see why a build failed."
   icon: buildkite
   category: Developer tools
   method: mcp_oauth
@@ -34,6 +38,7 @@ connectors:
   source: https://buildkite.com/docs/apis/mcp-server
 - id: calendly
   name: Calendly
+  description: "See your scheduling links, upcoming events and invitees in Calendly."
   icon: calendly
   category: Work management
   method: mcp_oauth
@@ -42,6 +47,7 @@ connectors:
   source: https://developer.calendly.com/calendly-mcp-server
 - id: canva
   name: Canva
+  description: "Search, create and edit your Canva designs."
   icon: canva
   category: Design and web
   method: oauth_client
@@ -89,6 +95,7 @@ connectors:
       check: canva_client
 - id: circleci
   name: Circleci
+  description: "Find failing builds, read their logs and rerun workflows in CircleCI."
   icon: circleci
   category: Developer tools
   method: mcp_oauth
@@ -97,6 +104,7 @@ connectors:
   source: https://circleci.com/docs/guides/toolkit/circleci-mcp-overview/
 - id: clickhouse
   name: ClickHouse
+  description: "Run read-only SQL queries against your ClickHouse databases."
   icon: clickhouse
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -105,6 +113,7 @@ connectors:
   source: https://clickhouse.com/docs/products/cloud/features/ai-ml/remote-mcp
 - id: clickup
   name: Clickup
+  description: "Search, create and update tasks, docs and spaces in your ClickUp workspace."
   icon: clickup
   category: Work management
   method: mcp_oauth
@@ -113,6 +122,7 @@ connectors:
   source: https://developer.clickup.com/docs/connect-an-ai-assistant-to-clickups-mcp-server
 - id: cloudflare
   name: Cloudflare
+  description: "Manage your Cloudflare zones, DNS records, Workers and other account settings."
   icon: cloudflare
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -121,6 +131,7 @@ connectors:
   source: https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/
 - id: cloudinary
   name: Cloudinary
+  description: "Upload, search and transform images and videos in your Cloudinary library."
   icon: cloudinary
   category: Design and web
   method: mcp_oauth
@@ -129,6 +140,7 @@ connectors:
   source: https://cloudinary.com/documentation/cloudinary_llm_mcp
 - id: comfy-cloud
   name: Comfy Cloud
+  description: "Generate images, video, audio and 3D models with workflows on Comfy Cloud."
   icon: comfy-cloud
   category: Design and web
   method: mcp_oauth
@@ -137,6 +149,7 @@ connectors:
   source: https://docs.comfy.org/agent-tools/cloud
 - id: context7
   name: Context7
+  description: "Look up current, version-specific documentation and code examples for software libraries."
   icon: plugin_glyph
   category: Developer tools
   method: none
@@ -145,6 +158,7 @@ connectors:
   source: https://context7.com/docs/resources/all-clients
 - id: craft
   name: Craft
+  description: "Read and write documents, tasks and notes in your Craft space."
   icon: plugin_glyph
   category: Docs and files
   method: mcp_oauth
@@ -153,6 +167,7 @@ connectors:
   source: https://support.craft.do/hc/en-us/articles/29455875123101
 - id: datadog
   name: Datadog
+  description: "Search logs, metrics, monitors and incidents in your Datadog account."
   icon: datadog
   category: Monitoring and analytics
   method: mcp_oauth
@@ -161,6 +176,7 @@ connectors:
   source: https://docs.datadoghq.com/mcp_server/setup/
 - id: deepwiki
   name: Deepwiki
+  description: "Ask questions about any public GitHub repository and read its generated documentation."
   icon: plugin_glyph
   category: Developer tools
   method: none
@@ -169,6 +185,7 @@ connectors:
   source: https://docs.devin.ai/work-with-devin/deepwiki-mcp
 - id: discord
   name: Discord
+  description: "Read and send messages in the Discord servers you choose."
   icon: plugin_glyph
   category: Communication
   method: bot_token_stdio
@@ -219,6 +236,7 @@ connectors:
         itself.
 - id: dropbox
   name: Dropbox
+  description: "Search, read and organize files and folders in your Dropbox."
   icon: dropbox
   category: Docs and files
   method: oauth_client
@@ -261,6 +279,7 @@ connectors:
       - {id: client_secret, label: App secret, secret: true}
 - id: figma
   name: Figma
+  description: "Read your Figma designs and pull layout, styles and components into your work."
   icon: figma
   category: Design and web
   method: oauth_client
@@ -303,6 +322,7 @@ connectors:
       - {id: client_secret, label: Client secret, secret: true}
 - id: gamma
   name: Gamma
+  description: "Generate and edit presentations, documents and sites in Gamma."
   icon: plugin_glyph
   category: Docs and files
   method: mcp_oauth
@@ -311,6 +331,7 @@ connectors:
   source: https://developers.gamma.app/docs/gamma-mcp-server
 - id: github
   name: Github
+  description: "Browse repositories, issues and pull requests, and create or update them on GitHub."
   icon: github
   category: Developer tools
   method: api_key
@@ -337,6 +358,7 @@ connectors:
       check: github_token
 - id: gitlab
   name: Gitlab
+  description: "Browse projects, issues, merge requests and pipelines, and update them on GitLab."
   icon: gitlab
   category: Developer tools
   method: mcp_oauth
@@ -345,6 +367,7 @@ connectors:
   source: https://docs.gitlab.com/user/model_context_protocol/mcp_server/
 - id: google-ads
   name: Google Ads
+  description: "Read campaign, ad group and keyword performance from your Google Ads account."
   icon: plugin_glyph
   category: Monitoring and analytics
   method: oauth_client
@@ -363,6 +386,7 @@ connectors:
     env: {}
 - id: google-workspace
   name: Google Workspace
+  description: "Work with your Gmail, Calendar, Drive, Docs and Sheets."
   icon: plugin_glyph
   category: Docs and files
   method: oauth_client
@@ -429,6 +453,7 @@ connectors:
   source: https://developers.google.com/identity/protocols/oauth2/web-server
 - id: grafana
   name: Grafana
+  description: "Search dashboards, query data sources and review alerts in your Grafana instance."
   icon: grafana
   category: Monitoring and analytics
   method: mcp_oauth
@@ -437,6 +462,7 @@ connectors:
   source: https://grafana.com/docs/grafana-cloud/ai-tools/mcp-servers/cloud-mcp/
 - id: hugging_face
   name: Hugging Face
+  description: "Search models, datasets, papers and Spaces on Hugging Face."
   icon: hugging_face
   category: Developer tools
   method: mcp_oauth
@@ -445,6 +471,7 @@ connectors:
   source: https://huggingface.co/docs/hub/agents-mcp
 - id: intercom
   name: Intercom
+  description: "Search conversations and contacts and reply to customers in Intercom."
   icon: intercom
   category: Sales and support
   method: mcp_oauth
@@ -453,6 +480,7 @@ connectors:
   source: https://developers.intercom.com/docs/guides/mcp
 - id: linear
   name: Linear
+  description: "Search, create and update issues and projects in your Linear workspace."
   icon: linear
   category: Work management
   method: mcp_oauth
@@ -461,6 +489,7 @@ connectors:
   source: https://linear.app/docs/mcp
 - id: microsoft-learn
   name: Microsoft Learn
+  description: "Search official Microsoft, Azure and .NET documentation and code samples."
   icon: plugin_glyph
   category: Developer tools
   method: none
@@ -469,6 +498,7 @@ connectors:
   source: https://learn.microsoft.com/en-us/training/support/mcp-get-started
 - id: mintlify
   name: Mintlify
+  description: "Search documentation sites that are hosted on Mintlify."
   icon: mintlify
   category: Docs and files
   method: none
@@ -477,6 +507,7 @@ connectors:
   source: https://www.mintlify.com/docs/ai/model-context-protocol
 - id: miro
   name: Miro
+  description: "Read and edit boards, diagrams and frames in Miro."
   icon: miro
   category: Work management
   method: mcp_oauth
@@ -485,6 +516,7 @@ connectors:
   source: https://developers.miro.com/docs/connecting-to-miro-mcp
 - id: monday
   name: Monday
+  description: "Search and update boards, items and docs in your monday.com account."
   icon: plugin_glyph
   category: Work management
   method: mcp_oauth
@@ -493,6 +525,7 @@ connectors:
   source: https://developer.monday.com/api-reference/docs/integrate-with-monday-mcp
 - id: motherduck
   name: Motherduck
+  description: "Run SQL queries against your MotherDuck databases."
   icon: plugin_glyph
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -501,6 +534,7 @@ connectors:
   source: https://motherduck.com/docs/key-tasks/ai-and-motherduck/mcp-setup/
 - id: neon
   name: Neon
+  description: "Manage your Neon Postgres projects and branches and run SQL against them."
   icon: neon
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -509,6 +543,7 @@ connectors:
   source: https://neon.com/docs/ai/neon-mcp-server
 - id: netlify
   name: Netlify
+  description: "Manage your Netlify sites, deploys and settings."
   icon: netlify
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -517,6 +552,7 @@ connectors:
   source: https://docs.netlify.com/build/build-with-ai/agent-setup-guides/agent-setup-overview/
 - id: notion
   name: Notion
+  description: "Search, read and edit pages and databases in your Notion workspace."
   icon: notion
   category: Work management
   method: mcp_oauth
@@ -525,6 +561,7 @@ connectors:
   source: https://developers.notion.com/guides/mcp/build-mcp-client
 - id: postman
   name: Postman
+  description: "Work with the workspaces, collections and environments in your Postman account."
   icon: postman
   category: Developer tools
   method: mcp_oauth
@@ -533,6 +570,7 @@ connectors:
   source: https://learning.postman.com/docs/reference/postman-api/postman-mcp-server/postman-mcp-remote-server/
 - id: prisma-postgres
   name: Prisma Postgres
+  description: "Create and manage Prisma Postgres databases."
   icon: prisma-postgres
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -541,6 +579,7 @@ connectors:
   source: https://www.prisma.io/docs/postgres/integrations/mcp-server
 - id: railway
   name: Railway
+  description: "Manage your Railway projects, services, deployments and environments."
   icon: railway
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -549,6 +588,7 @@ connectors:
   source: https://docs.railway.com/ai/mcp-server
 - id: semgrep
   name: Semgrep
+  description: "Scan code for security vulnerabilities with Semgrep."
   icon: plugin_glyph
   category: Developer tools
   method: mcp_oauth
@@ -557,6 +597,7 @@ connectors:
   source: https://semgrep.dev/docs/mcp
 - id: sentry
   name: Sentry
+  description: "Search errors, read stack traces and triage issues in Sentry."
   icon: sentry
   category: Monitoring and analytics
   method: mcp_oauth
@@ -565,6 +606,7 @@ connectors:
   source: https://docs.sentry.io/product/sentry-mcp/
 - id: slack
   name: Slack
+  description: "Read channels and send messages in your Slack workspace."
   icon: plugin_glyph
   category: Communication
   method: bot_app
@@ -572,6 +614,7 @@ connectors:
   source: https://docs.slack.dev/ai/mcp-server
 - id: stripe
   name: Stripe
+  description: "Look up customers, payments and subscriptions in your Stripe account."
   icon: stripe
   category: Finance
   method: mcp_oauth
@@ -580,6 +623,7 @@ connectors:
   source: https://docs.stripe.com/mcp
 - id: supabase
   name: Supabase
+  description: "Manage your Supabase projects and databases and run SQL against them."
   icon: supabase
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -588,6 +632,7 @@ connectors:
   source: https://supabase.com/docs/guides/ai-tools/mcp
 - id: t3code
   name: T3 Code
+  description: "Start and manage coding threads in your T3 Code app."
   icon: plugin_glyph
   category: Developer tools
   method: mcp_oauth
@@ -596,6 +641,7 @@ connectors:
   notes: Runs on your own computer. Turn on Network access in T3 Code first.
 - id: todoist
   name: Todoist
+  description: "Add, search and complete tasks and projects in Todoist."
   icon: todoist
   category: Work management
   method: mcp_oauth
@@ -604,6 +650,7 @@ connectors:
   source: https://developer.todoist.com/api/v1/
 - id: twilio-docs
   name: Twilio Docs
+  description: "Search the Twilio developer documentation."
   icon: plugin_glyph
   category: Developer tools
   method: none
@@ -612,6 +659,7 @@ connectors:
   source: https://www.twilio.com/docs/ai/mcp
 - id: unreal-engine
   name: Unreal Engine
+  description: "Control a running Unreal Engine editor on this computer."
   icon: unreal-engine
   category: Developer tools
   method: none
@@ -620,6 +668,7 @@ connectors:
   source: https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor
 - id: upwork
   name: Upwork
+  description: "Search jobs and freelancers, read proposals, contracts and messages, and send proposals or messages only after you approve each one."
   icon: upwork
   category: Other
   method: mcp_oauth
@@ -628,6 +677,7 @@ connectors:
   source: https://www.upwork.com/ai/mcp
 - id: vercel
   name: Vercel
+  description: "Manage your Vercel projects and deployments and read their logs."
   icon: vercel
   category: Hosting and infrastructure
   method: mcp_oauth
@@ -636,6 +686,7 @@ connectors:
   source: https://vercel.com/docs/mcp
 - id: webflow
   name: Webflow
+  description: "Manage the sites, pages and CMS content in your Webflow account."
   icon: webflow
   category: Design and web
   method: mcp_oauth
@@ -644,6 +695,7 @@ connectors:
   source: https://developers.webflow.com/mcp/reference/getting-started
 - id: wolfram
   name: Wolfram
+  description: "Do math, computation and fact lookups with Wolfram Alpha."
   icon: wolfram
   category: Other
   method: none
@@ -652,6 +704,7 @@ connectors:
   source: https://www.wolfram.com/agent-tools/
 - id: wordpress-com
   name: Wordpress Com
+  description: "Read and write posts, pages and comments, and see stats, on your WordPress.com sites."
   icon: wordpress-com
   category: Design and web
   method: mcp_oauth

@@ -26,8 +26,8 @@ def _catalog_row(entry):
 
     accounts = account_rows(entry.id) if entry.multi_account else []
     return ConnectorCatalogRow(
-        slug=entry.id, name=entry.name, description="", category=entry.category, icon=entry.icon,
-        method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, status=_catalog_status(entry, accounts),
+        slug=entry.id, name=entry.name, description=entry.description, category=entry.category, icon=entry.icon,
+        method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, source=entry.source, status=_catalog_status(entry, accounts),
         notes=entry.notes, setup_guide=build_guide(entry), setup_progress=derive_progress(entry),
         featured=entry.id in FEATURED_CONNECTOR_IDS, multi_account=entry.multi_account, accounts=accounts,
     )
@@ -52,6 +52,38 @@ def _catalog_status(entry, accounts):
     if pending_reauth_reason(entry.id):
         return ConnectorCatalogStatus.needs_reconnect
     return ConnectorCatalogStatus.connected
+
+
+def _details_call(params_model, action):
+    def handler(rid, params):
+        from pydantic import ValidationError
+        from tui_gateway import connector_details as details
+        from tui_gateway.contracts.connectors import ConnectorErrorReason
+        try:
+            request = params_model.model_validate(params)
+        except ValidationError:
+            return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "Connector parameters are invalid.")
+        try:
+            return _ok(rid, action(details, request).model_dump(mode="json", exclude_none=True))
+        except details.DetailsRpcError as exc:
+            return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
+    return handler
+
+
+@method("connectors.details")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import ConnectorDetailsParams
+    return _details_call(ConnectorDetailsParams, lambda details, request: details.details(request.slug))(rid, params)
+
+
+@method("connectors.details.policy.set")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import ConnectorDetailsPolicySetParams
+    return _details_call(
+        ConnectorDetailsPolicySetParams,
+        lambda details, request: details.set_mode(request.slug, request.group.value, request.mode.value))(rid, params)
 
 
 def _oauth_client_call(params_model, action):

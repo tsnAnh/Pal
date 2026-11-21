@@ -107,3 +107,9 @@ def tools_from_cache_entry(entry: dict) -> list[dict]:
 def utility_tools_from_cache_entry(entry: dict) -> list[dict]:
     """Return cached ``{schema, handler_key}`` utility rows."""
     return _list_field(entry, "utility_tools")
+
+
+def cached_tool_rows(server_name: str) -> list[dict]:
+    with _cache_lock:
+        entry = _load_all().get(server_name)
+    return tools_from_cache_entry(entry) if isinstance(entry, dict) else []
