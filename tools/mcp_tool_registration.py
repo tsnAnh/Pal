@@ -470,7 +470,7 @@ def _write_schema_cache(name: str, server: "MCPServerTask", config: dict, should
         utility_payload = [{"schema": e["schema"], "handler_key": e["handler_key"]}
                            for e in _select_utility_schemas(name, server, config)]
         cache_meta = getattr(server, "_list_cache_meta", None) or {}
-        write_cache_entry(name, config_fingerprint(config), tools=tools_payload, utility_tools=utility_payload,
+        write_cache_entry(registration_name(name), config_fingerprint(config), tools=tools_payload, utility_tools=utility_payload,
                           ttl_ms=cache_meta.get("ttl_ms"), cache_scope=cache_meta.get("cache_scope"))
     except Exception as exc:
         logger.debug("MCP schema cache write failed for '%s': %s", name, exc)
@@ -500,8 +500,7 @@ def _register_server_tools(name: str, server: "MCPServerTask", config: dict) -> 
         name, _resolve_name_collisions(name, candidates),
         check_fn=_make_check_fn(name), scope=lambda: _core._server_registry_scope(key), lazy=False, key=key,
         execution_timeout=config.get("timeout"))
-    if (registered and not is_account_server(name)
-            and not (_core._server_registry_scope(key) or '').startswith('editor-session:')):
+    if registered and not (_core._server_registry_scope(key) or '').startswith('editor-session:'):
         _write_schema_cache(name, server, config, should_register)
     return registered
 

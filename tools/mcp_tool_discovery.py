@@ -406,6 +406,13 @@ def _select_new_servers(servers: dict[str, dict]) -> dict[str, dict]:
     return new_servers
 
 
+def _sign_in_lapsed(name: str, config: dict) -> bool:
+    """True for an OAuth connection whose saved sign-in can no longer be renewed on this host: connecting would
+    only fail, so its tools register from the schema cache and every call asks the owner to sign in again."""
+    from tools.mcp_oauth import pending_reauth_reason
+    return "url" in config and pending_reauth_reason(name) is not None
+
+
 def _register_lazy_from_cache(new_servers: dict[str, dict]) -> tuple[dict[str, dict], int, int]:
     """Register ``lazy: true`` servers from a valid schema-cache entry without connecting
     (missing/stale entry or failed registration -> eager). Returns (eager servers, lazy tool
@@ -420,9 +427,10 @@ def _register_lazy_from_cache(new_servers: dict[str, dict]) -> tuple[dict[str, d
     except Exception:  # pragma: no cover - cache module missing
         return eager_servers, 0, 0
     for name, cfg in new_servers.items():
-        if not _resolve_server_lazy(name, cfg):
+        lapsed = _sign_in_lapsed(name, cfg)
+        if not (lapsed or _resolve_server_lazy(name, cfg)):
             continue
-        entry = get_cached_entry(name, config_fingerprint(cfg))
+        entry = get_cached_entry(registration_name(name), config_fingerprint(cfg), ignore_ttl=lapsed)
         if not entry:
             continue
         with _core._lock:

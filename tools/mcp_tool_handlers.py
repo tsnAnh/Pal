@@ -1169,16 +1169,20 @@ def _make_check_fn(server_name: str):
 
 def _make_account_check_fn(slug: str):
     from tools.mcp_accounts import split
-    from tools.mcp_tool_scope import _key_name
+    from tools.mcp_tool_scope import _key_name, _key_visible_in_scope
+
+    def _of_slug(key) -> bool:
+        return (ref := split(_key_name(key))) is not None and ref.slug == slug
 
     def _check() -> bool:
         scope = _core._mcp_registry_scope()
         with _core._lock:
-            live = [_key_name(key) for key, server in _core._servers.items()
-                    if (ref := split(_key_name(key))) is not None and ref.slug == slug
-                    and _core._server_visible_in_scope(key, scope)
-                    and (server.session is not None or server._is_recycled_stdio())]
-        return any(_declared_app_offerable(name) for name in live)
+            serving = [_key_name(key) for key, server in _core._servers.items()
+                       if _of_slug(key) and _core._server_visible_in_scope(key, scope)
+                       and (server.session is not None or server._is_recycled_stdio())]
+            serving += [_key_name(key) for key in _core._lazy_server_configs
+                        if _of_slug(key) and _key_visible_in_scope(key, scope)]
+        return any(_declared_app_offerable(name) for name in serving)
     return _check
 
 

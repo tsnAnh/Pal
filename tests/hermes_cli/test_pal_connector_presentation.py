@@ -22,6 +22,7 @@ LOGO_FALLBACK = {
     "discord_mcp": "brand terms not reviewed",
     "gamma": "kit and terms return 403",
     "higgsfield": "no brand kit or terms",
+    "google-ads": "Google requires an approved permission request",
     "google-workspace": "Google requires an approved permission request",
     "microsoft-learn": "Microsoft logos require a licence",
     "monday": "press kit has PNG only and no integration terms",

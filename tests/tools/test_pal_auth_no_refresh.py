@@ -161,3 +161,122 @@ def test_only_the_account_whose_token_expired_asks_for_a_new_sign_in(servers, pa
     assert {a["name"]: a["status"] for a in listed["accounts"]} == {"default": "connected", "work": "needs_reconnect"}
     status = {r.get("account"): r for r in pal.rpc("mcp.servers.status")["servers"] if r["name"] == SLUG}
     assert status["work"]["needs_auth"] is True and status["default"]["needs_auth"] is False
+
+
+def traffic_marks(authorization, mcp) -> tuple[int, int]:
+    return len(mcp.traffic.statuses), len(authorization.token_requests)
+
+
+def test_a_restart_with_a_dead_sign_in_keeps_the_tools_and_asks_for_a_new_sign_in_without_any_traffic(servers, pal):
+    authorization, mcp = servers
+    sign_in(pal, authorization, mcp)
+    pal.call(SLUG, "whoami")
+    authorization.expire_access_tokens()
+    assert pal.call(SLUG, "whoami")["code"] == "reauth_required"
+
+    pal.restart_process(SLUG)
+    before = traffic_marks(authorization, mcp)
+    registered = pal.start_agent_tools()
+    started = time.monotonic()
+    answers = [pal.call(SLUG, "whoami") for _ in range(CALLS_AFTER_EXPIRY)]
+
+    assert all(pal.tool(SLUG, name) in registered for name in ("whoami", "list_projects"))
+    assert all(a["code"] == "reauth_required" and a["needs_reauth"] is True for a in answers)
+    assert time.monotonic() - started < FAST
+    reauth_need(pal, answers[0])
+    assert traffic_marks(authorization, mcp) == before
+    row = server_row(pal)
+    assert row["needs_auth"] is True and row["connected"] is False
+    assert pal.connector_row(SLUG)["status"] == "needs_reconnect"
+
+    pal.sign_in_with_app_redirect(SLUG)
+    recovered = pal.call(SLUG, "whoami")
+
+    assert json.loads(recovered["result"])["account"] == "owner"
+    assert pal.connector_row(SLUG)["status"] == "connected"
+    assert server_row(pal)["needs_auth"] is False
+
+
+def test_a_restart_with_a_dead_sign_in_and_no_cached_tools_registers_nothing_but_still_asks_for_a_new_sign_in(servers, pal):
+    authorization, mcp = servers
+    sign_in(pal, authorization, mcp)
+    authorization.expire_access_tokens()
+    pal.call(SLUG, "whoami")
+    pal.restart_process(SLUG)
+    (pal.home / "cache" / "mcp_schema_cache.json").unlink(missing_ok=True)
+    before = traffic_marks(authorization, mcp)
+
+    registered = pal.start_agent_tools()
+
+    assert not any(name.startswith(pal.tool(SLUG, "")) for name in registered)
+    assert traffic_marks(authorization, mcp) == before
+    row = server_row(pal)
+    assert row["needs_auth"] is True and row["connected"] is False
+
+
+def test_a_restart_keeps_every_account_of_a_connector_and_only_the_dead_one_asks_for_a_new_sign_in(servers, pal):
+    authorization, mcp = servers
+    pal.add_connector(SLUG, "mcp_oauth", mcp.mcp_url)
+    pal.rpc("mcp.servers.add", name=SLUG, preset=SLUG)
+    authorization.sign_in_as("alice")
+    pal.sign_in_with_app_redirect(SLUG)
+    authorization.sign_in_as("bob")
+    pal.sign_in_with_app_redirect(SLUG, account="work", create=True)
+    pal.start_agent_tools()
+    authorization.expire_access_tokens("bob")
+    assert pal.call(SLUG, "whoami", connector_alias="work")["code"] == "reauth_required"
+
+    pal.restart_process(SLUG)
+    rejected_before = mcp.traffic.rejected()
+    tokens_before = len(authorization.token_requests)
+    registered = pal.start_agent_tools()
+    assert mcp.traffic.rejected() == rejected_before and len(authorization.token_requests) == tokens_before
+    settled = len(mcp.traffic.statuses)
+    work = [pal.call(SLUG, "whoami", connector_alias="work") for _ in range(CALLS_AFTER_EXPIRY)]
+    personal = pal.call(SLUG, "whoami", connector_alias="default")
+
+    assert pal.tool(SLUG, "whoami") in registered
+    assert all(a["code"] == "reauth_required" and a["server"] == f"{SLUG}@work" for a in work)
+    assert json.loads(personal["result"])["account"] == "alice"
+    assert [c.account for c in mcp.traffic.calls("whoami")] == ["alice"]
+    status = {r.get("account"): r for r in pal.rpc("mcp.servers.status")["servers"] if r["name"] == SLUG}
+    assert status["work"]["needs_auth"] is True and status["default"]["needs_auth"] is False
+    assert len(mcp.traffic.statuses) > settled
+
+    authorization.sign_in_as("bob")
+    pal.sign_in_with_app_redirect(SLUG, account="work")
+    recovered = pal.call(SLUG, "whoami", connector_alias="work")
+
+    assert json.loads(recovered["result"])["account"] == "bob"
+    assert {a["name"]: a["status"] for a in pal.connector_row(SLUG)["accounts"]} == {"default": "connected", "work": "connected"}
+
+
+def test_a_restart_where_every_account_is_dead_keeps_the_tools_and_each_account_recovers_on_its_own_sign_in(servers, pal):
+    authorization, mcp = servers
+    pal.add_connector(SLUG, "mcp_oauth", mcp.mcp_url)
+    pal.rpc("mcp.servers.add", name=SLUG, preset=SLUG)
+    authorization.sign_in_as("alice")
+    pal.sign_in_with_app_redirect(SLUG)
+    authorization.sign_in_as("bob")
+    pal.sign_in_with_app_redirect(SLUG, account="work", create=True)
+    pal.start_agent_tools()
+    authorization.expire_access_tokens()
+    for alias in ("default", "work"):
+        wait_until(lambda: pal.call(SLUG, "whoami", connector_alias=alias).get("code") == "reauth_required",
+                   what=f"{alias} to ask for a new sign-in")
+
+    pal.restart_process(SLUG)
+    before = traffic_marks(authorization, mcp)
+    registered = pal.start_agent_tools()
+    answers = {alias: pal.call(SLUG, "whoami", connector_alias=alias) for alias in ("default", "work")}
+
+    assert all(pal.tool(SLUG, name) in registered for name in ("whoami", "list_projects"))
+    assert {alias: a["server"] for alias, a in answers.items()} == {"default": f"{SLUG}@default", "work": f"{SLUG}@work"}
+    assert all(a["code"] == "reauth_required" for a in answers.values())
+    assert traffic_marks(authorization, mcp) == before
+
+    authorization.sign_in_as("bob")
+    pal.sign_in_with_app_redirect(SLUG, account="work")
+
+    assert json.loads(pal.call(SLUG, "whoami", connector_alias="work")["result"])["account"] == "bob"
+    assert pal.call(SLUG, "whoami", connector_alias="default")["code"] == "reauth_required"
