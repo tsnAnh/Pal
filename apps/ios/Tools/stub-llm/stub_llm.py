@@ -23,7 +23,8 @@ DM_BODY_MARKER = " :: "
 DM_STAMP_PREFIX = "Message from \U0001f916 "
 DM_STAMP = re.compile(r"\AMessage from \U0001f916 .+? \(@[A-Za-z0-9_-]+\): ?(.*)\Z", re.DOTALL)
 DM_REPLY_FIELD = re.compile(r'"reply":\s*("(?:[^"\\]|\\.)*")')
-DM_DEFAULT_REPLY = "Đã nhận, em xử lý ngay."
+DM_OWNER_LINE = "A bot messaged me, replying now."
+DM_DEFAULT_REPLY = "Received, working on it."
 DM_SENT_REPLY = "Đã nhắn."
 dm_replies_path = None
 IPHONE_TRIGGER = "IPHONE"
@@ -122,6 +123,14 @@ def dm_replies():
         return {}
 
 
+def dm_reply(delivered):
+    replies = dm_replies()
+    for body in sorted(replies, key=len, reverse=True):
+        if delivered == body or delivered.startswith(body + "\n\n"):
+            return replies[body]
+    return DM_DEFAULT_REPLY
+
+
 def dm_plan(last_role, last, last_user, names):
     if last_role == "tool" and "delivery_id" in text_of(last.get("content")):
         return "final", DM_SENT_REPLY, NORMAL_DELAY
@@ -132,7 +141,7 @@ def dm_plan(last_role, last, last_user, names):
         return "tool", {"name": "message_agent", "arguments": {"target": target.strip(), "message": message}}, 0
     stamped = DM_STAMP.match(last_user[last_user.rfind(DM_STAMP_PREFIX):].strip()) if DM_STAMP_PREFIX in last_user else None
     if stamped:
-        return "final", dm_replies().get(stamped.group(1).strip(), DM_DEFAULT_REPLY), NORMAL_DELAY
+        return "final", f"{DM_OWNER_LINE}\n{dm_reply(stamped.group(1).strip())}", NORMAL_DELAY
     if last_user.lstrip().startswith("[IMPORTANT: Background process") and '"reply"' in last_user:
         found = DM_REPLY_FIELD.search(last_user)
         reply = json.loads(found.group(1)) if found else ""

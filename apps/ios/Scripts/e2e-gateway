@@ -26,7 +26,8 @@ the disabled stdio MCP server fixture-tools (default seed only).
                   perf-bot-NN fillers. See Scripts/perf-mac.
   --seed perf     keep bot-alpha and bot-beta and seed their Bot Chats with long marked transcripts
                   (600 and 2000 rows: unique visible markers, hidden rows, tall replies, tool-heavy turns);
-                  HERMES_IOS_E2E_PERF_MANIFEST names the JSON listing each profile's ordered markers.
+                  bot-alpha also gets 130 distinct saved links in a separate hidden session, so its Library
+                  spans three pages. HERMES_IOS_E2E_PERF_MANIFEST names the JSON listing each profile's ordered markers.
                   See Tools/perf/perf_seed.py.
 USAGE
 }
@@ -192,7 +193,7 @@ fi
 if [ "$SEED" = "perf" ]; then
   PERF_MANIFEST="$WORK_DIR/perf-manifest.json"
   "$PYTHON" -I "$IOS_DIR/Tools/perf/perf_seed.py" --home "$HOME_DIR" --repo "$GATEWAY_REPO" \
-    --sizes bot-alpha=600,bot-beta=2000 --marked --manifest "$PERF_MANIFEST" >"$WORK_DIR/seed.log" 2>&1 \
+    --sizes bot-alpha=600,bot-beta=2000 --marked --library-links 130 --manifest "$PERF_MANIFEST" >"$WORK_DIR/seed.log" 2>&1 \
     || { echo "seed perf failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
   export HERMES_IOS_E2E_PERF_MANIFEST="$PERF_MANIFEST"
 fi

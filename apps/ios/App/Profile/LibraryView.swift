@@ -21,6 +21,7 @@ struct LibraryView: View {
             LazyVStack(spacing: 0) {
                 chips
                 content
+                loadMoreSentinel
             }
             .padding(.bottom, 32)
             .padding(.leading, showsChrome ? 0 : 12)
@@ -81,6 +82,26 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
+    private var loadMoreSentinel: some View {
+        switch model.pagination {
+        case .more(let cursor), .loading(let cursor, _):
+            Color.clear
+                .frame(height: 1)
+                .accessibilityHidden(true)
+                .onAppear { model.loadMore() }
+                .id(cursor)
+        case .failed:
+            LibraryLoadMoreFailedFooter(showsChrome: showsChrome, retry: model.retryLoadMore)
+        case .end:
+            EmptyView()
+        }
+    }
+
+    private var spinnerDelay: Duration {
+        if case .loading(_, .retry) = model.pagination { .zero } else { LoadingPolicy.silentWindow }
+    }
+
+    @ViewBuilder
     private var content: some View {
         switch model.phase {
         case .loading:
@@ -104,7 +125,7 @@ struct LibraryView: View {
         case .ready:
             readySections
             if model.isIndexing || model.isLoadingMore {
-                DelayedProgressView()
+                DelayedProgressView(after: spinnerDelay)
                     .padding(.top, 24)
                     .accessibilityIdentifier("libraryIndexing")
             }
@@ -228,7 +249,6 @@ private struct MacLibraryRow: View {
         .frame(minHeight: 33)
         .contentShape(Rectangle())
         .help(entry.subtitle())
-        .onAppear { model.loadMoreIfNeeded(after: entry) }
     }
 }
 
@@ -276,7 +296,6 @@ private struct LibraryRow: View {
         .padding(.vertical, LibraryMetrics.rowVerticalPadding)
         .frame(minHeight: LibraryMetrics.rowHeight)
         .contentShape(Rectangle())
-        .onAppear { model.loadMoreIfNeeded(after: entry) }
     }
 }
 
