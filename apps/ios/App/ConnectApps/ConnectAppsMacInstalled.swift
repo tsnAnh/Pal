@@ -130,15 +130,21 @@ struct ConnectAppsMacInstalled: View {
     }
 
     private func installedRow(_ item: ConnectInstalledItem) -> some View {
-        ConnectMacRow(
-            title: item.name, subtitle: item.countLine, problem: false, identifier: "connectInstalled-\(item.id)",
+        let app = item.app.flatMap { $0.opensDetails ? $0 : nil }
+        return ConnectMacRow(
+            title: item.name, subtitle: item.subtitle, problem: false, identifier: "connectInstalled-\(item.id)",
+            open: app.map { target in { model.openDetails(target) } }, opensWholeRow: app != nil,
             icon: { ConnectInstalledIcon(item: item) },
             trailing: {
-                Text("Connected")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.green)
-                    .lineLimit(1)
-                    .fixedSize()
+                if app != nil {
+                    ConnectOpenMark(state: .connected)
+                } else {
+                    Text("Connected")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.green)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
             }
         )
     }

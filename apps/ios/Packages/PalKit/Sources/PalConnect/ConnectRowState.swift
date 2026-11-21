@@ -98,8 +98,10 @@ public struct ConnectListRow: Identifiable, Sendable, Equatable {
         case .setUp:
             summary = botSummary ?? String(localized: "One-time setup, about 5 minutes")
         case .connected:
-            summary = botSummary ?? String(localized: "Connected")
-        case .needsAttention(let reason), .waiting(let reason):
+            summary = botSummary ?? (app.opensDetails ? app.accountLine ?? "" : String(localized: "Connected"))
+        case .needsAttention(let reason):
+            summary = (app.opensDetails ? app.accountLine : nil) ?? reason
+        case .waiting(let reason):
             summary = reason
         case .unavailable:
             summary = note ?? String(localized: "Not available yet")

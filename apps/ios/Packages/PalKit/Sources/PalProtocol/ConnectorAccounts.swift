@@ -20,6 +20,7 @@ public enum ConnectorAccountNameError: Sendable, Equatable, CaseIterable {
 
 public enum ConnectorAccountName {
     public static let maxLength = 32
+    public static let defaultName = "default"
 
     private static let suggestions = ["default", "work", "personal"]
 

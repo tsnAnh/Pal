@@ -114,12 +114,19 @@ extension ConnectAppsList {
     }
 
     private func macRow(_ entry: ConnectListEntry) -> some View {
-        ConnectMacRow(
+        let opens = entry.app.opensDetails
+        let wholeRow = opens && entry.row.state.showsOpenMark
+        return ConnectMacRow(
             title: entry.row.name, subtitle: entry.row.summary, problem: entry.row.hasProblem, identifier: "connectApp-\(entry.app.id)",
+            open: opens ? { model.openDetails(entry.app) } : nil, opensWholeRow: wholeRow,
             icon: { ConnectorLogoTile(app: entry.app) },
             trailing: {
-                ConnectCapsule(state: entry.row.state, identifier: "connectApp-\(entry.app.id)-action") {
-                    model.performRowAction(entry.app, state: entry.row.state)
+                if wholeRow {
+                    ConnectOpenMark(state: entry.row.state)
+                } else {
+                    ConnectCapsule(state: entry.row.state, identifier: "connectApp-\(entry.app.id)-action") {
+                        model.performRowAction(entry.app, state: entry.row.state)
+                    }
                 }
             }
         )
@@ -162,22 +169,26 @@ struct ConnectMacRow<Icon: View, Trailing: View>: View {
     let subtitle: String
     let problem: Bool
     let identifier: String
+    var open: (() -> Void)?
+    var opensWholeRow = false
     private let icon: Icon
     private let trailing: Trailing
 
     init(
-        title: String, subtitle: String, problem: Bool, identifier: String,
+        title: String, subtitle: String, problem: Bool, identifier: String, open: (() -> Void)? = nil, opensWholeRow: Bool = false,
         @ViewBuilder icon: () -> Icon, @ViewBuilder trailing: () -> Trailing
     ) {
         self.title = title
         self.subtitle = subtitle
         self.problem = problem
         self.identifier = identifier
+        self.open = open
+        self.opensWholeRow = opensWholeRow
         self.icon = icon()
         self.trailing = trailing()
     }
 
-    var body: some View {
+    private var leading: some View {
         HStack(spacing: 12) {
             icon
             VStack(alignment: .leading, spacing: 1) {
@@ -194,7 +205,32 @@ struct ConnectMacRow<Icon: View, Trailing: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            trailing
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let open {
+                if opensWholeRow {
+                    Button(action: open) {
+                        HStack(spacing: 12) {
+                            leading
+                            trailing
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("\(identifier)-open")
+                } else {
+                    Button(action: open) { leading.contentShape(Rectangle()) }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("\(identifier)-open")
+                    trailing
+                }
+            } else {
+                leading
+                trailing
+            }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 8)

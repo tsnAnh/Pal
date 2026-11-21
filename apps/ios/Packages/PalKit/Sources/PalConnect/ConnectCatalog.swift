@@ -48,12 +48,14 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
     public var featured: Bool
     public var multiAccount: Bool
     public var accounts: [ConnectorAccount]
+    public var description: String
+    public var source: URL?
 
     public init(
         slug: String, name: String, category: String = "", icon: String = "", method: Method,
         verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected, notes: String? = nil,
         setupGuide: SetupGuide? = nil, setupProgress: SetupProgress? = nil, featured: Bool = false,
-        multiAccount: Bool = false, accounts: [ConnectorAccount] = []
+        multiAccount: Bool = false, accounts: [ConnectorAccount] = [], description: String = "", source: URL? = nil
     ) {
         self.slug = slug
         self.name = name
@@ -69,10 +71,12 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         self.featured = featured
         self.multiAccount = multiAccount
         self.accounts = accounts
+        self.description = description
+        self.source = source
     }
 
     enum CodingKeys: String, CodingKey {
-        case slug, name, category, icon, method, verified, status, notes, featured, accounts
+        case slug, name, category, icon, method, verified, status, notes, featured, accounts, description, source
         case multiAccount = "multi_account"
         case mcpURL = "mcp_url"
         case setupGuide = "setup_guide"
@@ -95,10 +99,17 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         featured = (try? container.decodeIfPresent(Bool.self, forKey: .featured)) ?? false
         multiAccount = (try? container.decodeIfPresent(Bool.self, forKey: .multiAccount)) ?? false
         accounts = ConnectorAccount.lossyList(from: container)
+        description = ConnectorCardState.cleaned(try? container.decodeIfPresent(String.self, forKey: .description)) ?? ""
+        source = (try? container.decodeIfPresent(String.self, forKey: .source)).flatMap { URL(string: $0) }.flatMap(Self.web)
     }
 
     private static func secure(_ url: URL) -> URL? {
         url.scheme?.lowercased() == "https" ? url : nil
+    }
+
+    private static func web(_ url: URL) -> URL? {
+        guard let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http", url.host?.isEmpty == false else { return nil }
+        return url
     }
 
     var hasGuidedSetup: Bool {

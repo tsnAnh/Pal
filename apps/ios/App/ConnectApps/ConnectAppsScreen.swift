@@ -43,19 +43,31 @@ struct ConnectAppsScreen: View {
     }
 
     #if os(macOS)
+    @ViewBuilder
     private var listChrome: some View {
-        VStack(spacing: 0) {
-            switch model.navigation.screen {
-            case .apps:
-                ConnectAppsMacHeader(model: model)
-                ConnectAppsList(model: model)
-            case .installed:
-                ConnectAppsMacInstalled(model: model)
+        if let route = model.openDetailsRoute {
+            detailsScreen(route)
+        } else {
+            VStack(spacing: 0) {
+                switch model.navigation.screen {
+                case .apps:
+                    ConnectAppsMacHeader(model: model)
+                    ConnectAppsList(model: model)
+                case .installed:
+                    ConnectAppsMacInstalled(model: model)
+                }
             }
+            .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: !model.navigation.showsPanelClose))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("connectApps")
         }
-        .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: !model.navigation.showsPanelClose))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("connectApps")
+    }
+
+    @ViewBuilder
+    private func detailsScreen(_ route: ConnectorDetailsRoute) -> some View {
+        if let details = model.detailsModel(appID: route.appID) {
+            ConnectorDetailsScreen(model: details) { model.closeDetails() }
+        }
     }
 
     private func customConnectorChrome(_ connector: CustomConnectorModel) -> some View {
@@ -115,7 +127,7 @@ private struct ConnectAppsPresentations: ViewModifier {
             }
             .macSheet(item: $model.credentialPrompt) { prompt in
                 CredentialSheet(prompt: prompt, botName: model.botName) { values in
-                    Task { await model.connect(prompt.app, credentials: values) }
+                    Task { await model.connect(prompt.app, credentials: values, account: prompt.account) }
                 }
             }
     }

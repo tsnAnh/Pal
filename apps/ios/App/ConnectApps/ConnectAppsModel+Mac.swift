@@ -43,6 +43,15 @@ struct ConnectInstalledItem: Identifiable {
     let source: Source
 
     var countLine: String { ConnectCountLine.text(connectors: 1) }
+
+    var subtitle: String {
+        if case .app(let app) = source, app.opensDetails { return app.accountLine ?? "" }
+        return countLine
+    }
+
+    var app: ConnectApp? {
+        if case .app(let app) = source { app } else { nil }
+    }
 }
 
 struct ConnectMacState {

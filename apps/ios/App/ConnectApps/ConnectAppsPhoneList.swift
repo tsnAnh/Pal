@@ -97,12 +97,19 @@ extension ConnectAppsList {
     }
 
     private func phoneAppRow(_ entry: ConnectListEntry) -> some View {
-        ConnectFlatRow(
+        let opens = entry.app.opensDetails
+        let wholeRow = opens && entry.row.state.showsOpenMark
+        return ConnectFlatRow(
             title: entry.row.name, subtitle: entry.row.summary, problem: entry.row.hasProblem, identifier: "connectApp-\(entry.app.id)",
+            open: opens ? { model.openDetails(entry.app) } : nil, opensWholeRow: wholeRow,
             icon: { ConnectorLogoTile(app: entry.app) },
             trailing: {
-                ConnectCapsule(state: entry.row.state, identifier: "connectApp-\(entry.app.id)-action", quiet: true) {
-                    model.performRowAction(entry.app, state: entry.row.state)
+                if wholeRow {
+                    ConnectOpenMark(state: entry.row.state)
+                } else {
+                    ConnectCapsule(state: entry.row.state, identifier: "connectApp-\(entry.app.id)-action", quiet: true) {
+                        model.performRowAction(entry.app, state: entry.row.state)
+                    }
                 }
             }
         )
