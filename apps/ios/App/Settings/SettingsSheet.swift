@@ -33,7 +33,7 @@ struct SettingsSheet: View {
                         .environment(\.sheetChromeHostedInNavigation, true)
                 }
         }
-        .tint(.primary)
+        .environment(\.groupedCardDividers, true)
         .task { await hub.refresh() }
     }
 }
@@ -95,10 +95,11 @@ struct SettingsRootView: View {
                     preferencesCard
                     feedbackCard
                     signOutCard
-                    BrandMarkFooter(name: "Pal", version: AppVersion.display)
+                    BrandMarkFooter(name: "Pal", version: AppVersion.display, avatar: hub.roster.primaryBot?.spec)
                         .padding(.top, 8)
                         .padding(.bottom, 24)
                 }
+                .padding(.top, PalMetrics.screenMargin)
             }
             .scrollIndicators(.hidden)
             .accessibilityIdentifier("settingsScroll")

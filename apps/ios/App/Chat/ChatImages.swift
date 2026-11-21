@@ -237,7 +237,7 @@ struct ChatImageViewer: View {
             .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(role: .close) { dismiss() } label: { Text("Close") }
+                    Button(role: .close) { dismiss() }
                         .accessibilityIdentifier("imageViewerClose")
                 }
             }

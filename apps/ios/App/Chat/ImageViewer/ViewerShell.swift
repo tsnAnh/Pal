@@ -59,11 +59,9 @@ struct ViewerShell<Content: View, Composer: View>: View {
                 GlassEffectContainer(spacing: 8) {
                     HStack(spacing: 8) {
                         ForEach(actions, id: \.self) { action in
-                            PalClearGlassIconButton(systemName: action.symbol, label: action.label, identifier: action.identifier) {
-                                perform(action)
-                            }
-                            .disabled(disabled.contains(action))
-                            .opacity(disabled.contains(action) ? 0.35 : 1)
+                            actionButton(action)
+                                .disabled(disabled.contains(action))
+                                .opacity(disabled.contains(action) ? 0.35 : 1)
                         }
                     }
                 }
@@ -72,17 +70,21 @@ struct ViewerShell<Content: View, Composer: View>: View {
         }
         .frame(height: 56)
     }
+
+    @ViewBuilder
+    private func actionButton(_ action: ViewerAction) -> some View {
+        switch action {
+        case .edit:
+            PalClearGlassIconButton(systemName: "pencil", label: action.label, identifier: action.identifier) { perform(action) }
+        case .download:
+            PalClearGlassIconButton(systemName: "arrow.down.to.line", label: action.label, identifier: action.identifier) { perform(action) }
+        case .close:
+            SheetGlassButton(clear: true, escapes: false, accessibilityIdentifier: action.identifier) { perform(action) }
+        }
+    }
 }
 
 extension ViewerAction {
-    var symbol: String {
-        switch self {
-        case .edit: "pencil"
-        case .download: "arrow.down.to.line"
-        case .close: "xmark"
-        }
-    }
-
     var label: LocalizedStringKey {
         switch self {
         case .edit: "Edit"

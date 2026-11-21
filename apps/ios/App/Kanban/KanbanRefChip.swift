@@ -14,8 +14,8 @@ struct KanbanRefChip: View {
                 .foregroundStyle(PalTokens.textSecondary)
                 .textSelection(.enabled)
                 .lineLimit(1)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
                 .background(PalTokens.chipFill, in: Capsule())
                 .accessibilityIdentifier("kanbanRef")
             Button(action: copy) {

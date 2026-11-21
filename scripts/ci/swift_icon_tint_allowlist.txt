@@ -3,7 +3,6 @@ App/Chat/ChatComposer.swift:icon-custom-ink: send and mic glyph on the bot-accen
 App/Chat/ChatComposerParts.swift:icon-custom-ink: attachment remove badge, a glyph on a disc filled with the palette circle-button fill
 App/Chat/ClarifyCards.swift:icon-custom-ink: badge glyph takes the computed badge text colour of the answer style, a contrast pair with its fill
 App/Chat/UsageBanner.swift:icon-custom-ink: usage warning state colour (orange), a status colour the app already uses for state
-App/Chat/VoiceModeView.swift:icon-custom-ink: close glyph on the bot-accent circle takes the bot's own foreground (chatAccent, allowed on small shapes)
 App/ConnectionView.swift:icon-custom-ink: sign-in progress glyph takes the tone's text colour, a contrast pair with the tone fill
 App/HomeView.swift:icon-custom-ink: bot activity glyph is secondary or the orange working state, a status colour the app already uses for state
 App/Kanban/KanbanTileView.swift:icon-custom-ink: chip glyph matches the chip's tone text colour, a status colour the app already uses for state

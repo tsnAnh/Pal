@@ -1,8 +1,25 @@
 import XCTest
+#if os(iOS)
+import UIKit
+#endif
 
 @MainActor
 class KanbanE2ETestCase: E2ETestCase {
     let title = "release notes"
+
+    var pushesKanban: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .phone
+        #else
+        false
+        #endif
+    }
+
+    #if os(iOS)
+    func systemBack(_ app: XCUIApplication) -> XCUIElement {
+        app.navigationBars.buttons.element(boundBy: 0)
+    }
+    #endif
 
     func any(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
@@ -26,6 +43,10 @@ class KanbanE2ETestCase: E2ETestCase {
 
     func show(_ app: XCUIApplication, column: String) {
         let chip = app.buttons["kanbanColumns-\(column)"]
-        if chip.exists { chip.hit() }
+        guard chip.exists else { return }
+        let bar = any(app, "kanbanColumns")
+        let screen = app.windows.firstMatch.frame
+        for _ in 0..<3 where chip.frame.maxX > screen.maxX - 8 { bar.swipeLeft() }
+        chip.hit()
     }
 }

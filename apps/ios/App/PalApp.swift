@@ -169,13 +169,6 @@ struct RootView: View {
             set: { if router.sheet != .kanban { router.sheet = $0 } }
         )
     }
-
-    private var kanbanPresented: Binding<Bool> {
-        Binding(
-            get: { router.sheet == .kanban },
-            set: { if !$0, router.sheet == .kanban { router.dismissSheet() } }
-        )
-    }
     #endif
 
     private var showsWorkspace: Bool {
@@ -271,7 +264,7 @@ struct RootView: View {
             let displayName = roster.bot(named: name)?.displayName ?? name
             BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)
         case .botVault(let name):
-            VaultScreen(hub: hub, profile: name, back: { if !router.path.isEmpty { router.path.removeLast() } })
+            VaultScreen(hub: hub, profile: name, back: router.pop)
                 .environment(\.sheetChromeHostedInNavigation, true)
         case .messagingSettings(let name):
             MessagingSettingsView(model: MessagingSettingsModel(
@@ -279,6 +272,8 @@ struct RootView: View {
                 displayName: roster.bot(named: name)?.displayName ?? name,
                 services: bots.services
             ))
+        case .kanban:
+            KanbanPushedSurface(connection: model, roster: roster, back: router.pop)
         default:
             EmptyView()
         }
@@ -349,7 +344,7 @@ struct RootView: View {
                 }
                 .serviceSignInDialogHost()
             }
-            .fullCover(isPresented: kanbanPresented) {
+            .fullCover(isPresented: $router.isKanbanPresented) {
                 KanbanSurface(connection: model, roster: roster) { router.dismissSheet() }
             }
             .fullCover(isPresented: $router.isSearching) {

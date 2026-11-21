@@ -68,6 +68,7 @@ final class McpSignInE2ETests: ConnectAppsTestCase {
         #endif
         let title = element(app, "mcpSignInStatusTitle")
         waitFor(title, timeout: 30, "failure title")
+        shot(app, "mcp-signin-refused-collapsed")
         waitLabel(title, equals: "Notion would not accept this \(device)'s address", timeout: 10)
         waitLabel(
             element(app, "mcpSignInStatusReason"),
@@ -106,10 +107,11 @@ final class McpSignInE2ETests: ConnectAppsTestCase {
 
     func test3AnAdminGateShowsTheCalmWaitingState() throws {
         let app = openSignIn(mode: "admin")
-        waitFor(element(app, "stepFlowPending"), timeout: 30, "waiting for admin state")
+        waitFor(element(app, "stepFlowCalmTitle"), timeout: 30, "waiting for admin state")
         waitLabel(element(app, "stepFlowCalmTitle"), equals: "Waiting for your admin", timeout: 10)
         shot(app, "mcp-signin-admin")
-        let close = element(app, "mcpSignInPrimary")
+        XCTAssertFalse(element(app, "mcpSignInPrimary").exists, "the toolbar Close is the only way out")
+        let close = element(app, "mcpSignInClose")
         waitFor(close, timeout: 10, "Close action")
         XCTAssertEqual(close.label, "Close")
         close.hit()
@@ -121,7 +123,7 @@ final class McpSignInE2ETests: ConnectAppsTestCase {
         let title = element(app, "mcpSignInStatusTitle")
         waitFor(title, timeout: 30, "failure title")
         waitLabel(title, equals: "Sign-in did not finish", timeout: 10)
-        XCTAssertFalse(element(app, "stepFlowPending").exists, "no waiting-for-admin state without the gateway saying so")
+        XCTAssertFalse(element(app, "stepFlowCalmTitle").exists, "no waiting-for-admin state without the gateway saying so")
         element(app, "mcpSignInStatusDetails").hit()
         waitLabel(element(app, "mcpSignInStatusDetailsText"), contains: "code: access_denied", timeout: 10)
         shot(app, "mcp-signin-admin-words")

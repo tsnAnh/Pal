@@ -73,7 +73,7 @@ ROOT_SKIP_DIRS = {".github"}
 # Pruned as repo-relative paths.
 SKIP_REL_DIRS = {Path("website/i18n"), Path("website/build"), Path("website/node_modules")}
 
-SKIP_FILE_NAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "uv.lock", "poetry.lock"}
+SKIP_FILE_NAMES = {"package-lock.json", "yarn.lock", "pnpm-lock.yaml", "uv.lock", "poetry.lock", ".swiftlint-baseline.json"}
 SKIP_FILE_PATTERNS = (
     re.compile(r"^test_.*\.py$"),
     re.compile(r"_test\.py$"),

@@ -1,6 +1,9 @@
 import PalClient
 import PalRoster
 import Observation
+#if os(iOS)
+import UIKit
+#endif
 
 enum AppRoute: Hashable {
     case chat(botName: String)
@@ -16,6 +19,7 @@ enum AppRoute: Hashable {
     case botVault(botName: String)
     case computer(botName: String)
     case room(roomID: String)
+    case kanban
 }
 
 enum AppSheet: String, Identifiable {
@@ -79,7 +83,24 @@ final class AppRouter {
     }
 
     func presentKanban() {
-        sheet = .kanban
+        if Self.pushesKanban {
+            if path.last != .kanban { push(.kanban) }
+        } else {
+            sheet = .kanban
+        }
+    }
+
+    var isKanbanPresented: Bool {
+        get { sheet == .kanban }
+        set { if !newValue, sheet == .kanban { dismissSheet() } }
+    }
+
+    private static var pushesKanban: Bool {
+        #if os(iOS)
+        UIDevice.current.userInterfaceIdiom == .phone
+        #else
+        false
+        #endif
     }
 
     func dismissSheet() {
@@ -92,6 +113,10 @@ final class AppRouter {
 
     func closeSearch() {
         isSearching = false
+    }
+
+    func pop() {
+        if !path.isEmpty { path.removeLast() }
     }
 
     func popToRoot() {

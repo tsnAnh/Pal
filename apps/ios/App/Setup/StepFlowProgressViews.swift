@@ -167,24 +167,32 @@ struct StepFlowCalmView: View {
     }
 }
 
-struct SetupHeader: View {
+struct SetupChrome<Content: View>: View {
     let title: String
+    let accessibilityIdentifier: String
     let close: () -> Void
+    private let content: Content
+
+    @Environment(\.sheetChromeHostedInNavigation) private var pushed
+
+    init(
+        title: String, accessibilityIdentifier: String, close: @escaping () -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.close = close
+        self.content = content()
+    }
 
     var body: some View {
-        HStack {
-            Text(title)
-                .hermesText(.sheetTitle)
-                .foregroundStyle(PalTokens.textPrimary)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("stepFlowTitle")
-            Spacer()
-            Button(role: .close, action: close)
-                .buttonStyle(.glass(.regular.interactive()))
-                .accessibilityIdentifier("stepFlowClose")
-        }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.vertical, PalMetrics.captionToCardGap)
+        SheetChrome(
+            title: title,
+            leading: pushed ? .back : .close,
+            accessibilityIdentifier: accessibilityIdentifier,
+            leadingAccessibilityIdentifier: pushed ? "stepFlowBack" : "stepFlowClose",
+            onLeading: close,
+            content: { content }
+        )
     }
 }

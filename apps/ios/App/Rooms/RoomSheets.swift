@@ -22,6 +22,26 @@ private struct RoomNameField: View {
     }
 }
 
+private struct RoomActionButton: View {
+    let title: String
+    let isBusy: Bool
+    let isEnabled: Bool
+    let identifier: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if isBusy { ProgressView().controlSize(.small) }
+                Text(title)
+            }
+        }
+        .buttonStyle(.glassProminent)
+        .disabled(isBusy || !isEnabled)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
 struct CreateRoomSheet: View {
     @Bindable var rooms: RoomsModel
     let roster: RosterModel
@@ -38,38 +58,41 @@ struct CreateRoomSheet: View {
             accessibilityIdentifier: "createRoomSheet",
             onLeading: { rooms.showsCreate = false },
             trailing: {
-                PillButton(
-                    String(localized: "Create"),
-                    kind: model.canCreate ? .accent : .dimmed,
+                RoomActionButton(
+                    title: String(localized: "Create"),
                     isBusy: model.isCreating,
-                    accessibilityIdentifier: "roomCreateButton"
+                    isEnabled: model.canCreate,
+                    identifier: "roomCreateButton"
                 ) { Task { await create() } }
             },
             content: {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) {
-                        RoomNameField(
-                            label: String(localized: "Group chat name"), prompt: String(localized: "Group chat name"),
-                            text: $model.name, identifier: "roomNameField"
-                        )
-                        .focused($nameFocused)
-                        SectionCaption(String(localized: "Bots (2 to 6)"), accessibilityIdentifier: "createRoomBotsCaption")
-                            .padding(.top, PalMetrics.cardGap)
-                            .padding(.bottom, PalMetrics.captionToCardGap)
-                        GroupedCard(accessibilityIdentifier: "createRoomBots") {
-                            ForEach(rooms.seatableBots) { bot in pickRow(bot) }
-                        }
+                List {
+                    Section {
+                        TextField("", text: $model.name, prompt: Text(String(localized: "Group chat name")))
+                            .focused($nameFocused)
+                            .accessibilityLabel(Text("Group chat name"))
+                            .accessibilityIdentifier("roomNameField")
+                            .listRowBackground(rowFill)
+                    }
+                    Section {
+                        ForEach(rooms.seatableBots) { bot in pickRow(bot) }
+                    } header: {
+                        Text("Bots (2 to 6)")
+                            .hermesText(.sectionCaption)
+                            .foregroundStyle(Color(theme.palette.sectionCaption))
+                            .textCase(nil)
+                            .accessibilityIdentifier("createRoomBotsCaption")
+                    } footer: {
                         if let failure = model.failure {
                             Text(failure)
                                 .hermesText(.rowSubtitle)
                                 .foregroundStyle(Color(theme.palette.destructive))
-                                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
-                                .padding(.top, 10)
                                 .accessibilityIdentifier("createRoomFailure")
                         }
                     }
-                    .padding(.bottom, 32)
                 }
+                .roomListStyle()
+                .scrollContentBackground(.hidden)
                 .scrollDismissesKeyboard(.interactively)
             }
         )
@@ -77,22 +100,27 @@ struct CreateRoomSheet: View {
         .macOnly { $0.frame(minWidth: 380, minHeight: 460) }
     }
 
+    private var rowFill: Color { Color(theme.palette.groupedCard) }
+
     private func pickRow(_ bot: BotRow) -> some View {
         let isSelected = model.selected.contains(bot.name)
-        return LeadingSettingsRow(
-            title: bot.displayName,
-            leadingSpacing: 12,
-            accessibilityIdentifier: "roomPick-\(bot.name)",
-            action: { model.toggle(bot.name) },
-            leading: { BotAvatarView(spec: bot.spec, size: 30 * 1.15).frame(width: 30, height: 30) }
-        )
-        .overlay(alignment: .trailing) {
-            if isSelected {
-                PalIcon("checkmark.circle.fill")
-                    .padding(.trailing, PalMetrics.rowInset)
-                    .accessibilityHidden(true)
+        return Button { model.toggle(bot.name) } label: {
+            HStack(spacing: 12) {
+                BotAvatarView(spec: bot.spec, size: 30 * 1.15).frame(width: 30, height: 30)
+                Text(bot.displayName)
+                    .hermesText(.rowTitle)
+                    .foregroundStyle(Color(theme.palette.textPrimary))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                if isSelected {
+                    PalIcon("checkmark").accessibilityHidden(true)
+                }
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .listRowBackground(rowFill)
+        .accessibilityIdentifier("roomPick-\(bot.name)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
@@ -122,11 +150,11 @@ struct RoomDetailsSheet: View {
             accessibilityIdentifier: "roomDetailsSheet",
             onLeading: { dismiss() },
             trailing: {
-                PillButton(
-                    String(localized: "Save"),
-                    kind: canSaveName ? .accent : .dimmed,
+                RoomActionButton(
+                    title: String(localized: "Save"),
                     isBusy: isRenaming,
-                    accessibilityIdentifier: "roomRenameSave"
+                    isEnabled: canSaveName,
+                    identifier: "roomRenameSave"
                 ) { save() }
             },
             content: {
@@ -173,5 +201,16 @@ struct RoomDetailsSheet: View {
             isRenaming = false
             if renamed { dismiss() }
         }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func roomListStyle() -> some View {
+        #if os(macOS)
+        listStyle(.inset)
+        #else
+        listStyle(.insetGrouped)
+        #endif
     }
 }

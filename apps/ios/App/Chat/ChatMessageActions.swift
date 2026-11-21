@@ -71,7 +71,7 @@ private struct MessageActionsModifier: ViewModifier {
                         .offset(badgeOffset)
                 }
             }
-            .modifier(TouchMessageActions(side: side, actions: actions))
+            .modifier(TouchMessageActions(actions: actions))
         #endif
     }
 
@@ -85,11 +85,6 @@ private struct MessageActionsModifier: ViewModifier {
 }
 
 #if os(iOS)
-@MainActor
-final class BubbleFrame {
-    var rect = CGRect.zero
-}
-
 private struct SwipeDrag {
     var tracking = false
     var offset: CGFloat = 0
@@ -114,18 +109,16 @@ private struct SwipeReplyGlyph: View {
 }
 
 private struct TouchMessageActions: ViewModifier {
-    let side: MessageSide
     let actions: MessageActions?
 
     @Environment(\.presentMessageMenu) private var presentMenu
-    @State private var frame = BubbleFrame()
     @State private var swipe = SwipeDrag()
 
     @MainActor
     private func open() {
         guard let actions, let presentMenu else { return }
         Haptics.impact()
-        presentMenu(MessageMenuRequest(anchor: frame.rect, side: side, actions: actions))
+        presentMenu(MessageMenuRequest(actions: actions))
     }
 
     private var swipeGesture: ScrollSafePan {
@@ -153,7 +146,6 @@ private struct TouchMessageActions: ViewModifier {
     func body(content: Content) -> some View {
         if let actions {
             content
-                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
                 .offset(x: swipe.offset)
                 .background(alignment: .leading) {
                     if swipe.tracking {
@@ -162,7 +154,7 @@ private struct TouchMessageActions: ViewModifier {
                     }
                 }
                 .gesture(swipeGesture)
-                .onLongPressGesture(minimumDuration: 0.35) { open() }
+                .gesture(ScrollSafeLongPress { open() })
                 .accessibilityAction(named: Text("Reply")) { actions.reply() }
                 .accessibilityAction(named: Text("Copy")) { Pasteboard.string = actions.text }
                 .accessibilityAction(named: Text("React")) { open() }

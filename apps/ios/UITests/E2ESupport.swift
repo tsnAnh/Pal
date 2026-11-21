@@ -13,6 +13,17 @@ extension XCUIElement {
     }
 }
 
+extension XCUIElement {
+    func flip() {
+        #if os(macOS)
+        click()
+        #else
+        let control = descendants(matching: .switch).firstMatch
+        (control.exists ? control : self).tap()
+        #endif
+    }
+}
+
 extension XCUICoordinate {
     func hit() {
         #if os(macOS)

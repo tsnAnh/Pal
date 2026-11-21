@@ -14,7 +14,13 @@ struct SearchHost: View {
     }
 
     var body: some View {
-        SearchView(model: model, roster: roster, router: router)
+        SheetChrome(
+            surface: .canvas,
+            accessibilityIdentifier: "searchScreen",
+            leadingAccessibilityIdentifier: "searchClose",
+            onLeading: { router.closeSearch() },
+            content: { SearchView(model: model, roster: roster, router: router) }
+        )
     }
 }
 
@@ -42,16 +48,9 @@ struct SearchView: View {
                 text: $model.query,
                 accessibilityLabel: String(localized: "Search"),
                 accessibilityIdentifier: "searchField",
-                trailingButton: FloatingSearchBarLeadingButton(
-                    systemName: "xmark",
-                    accessibilityLabel: String(localized: "Close search"),
-                    accessibilityIdentifier: "searchClose"
-                ) { router.closeSearch() },
                 autoFocus: true
             )
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("searchScreen")
         .task { model.start() }
         .onDisappear { model.stop() }
     }

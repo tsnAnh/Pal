@@ -37,9 +37,8 @@ struct SlackSetupScreen<Advanced: View>: View {
             .onChange(of: model.flow.engine.isFinished) { _, isFinished in
                 if isFinished { model.completeFlow() }
             }
+            #if os(macOS)
             .navigationBarBackButtonHidden(true)
-            #if os(iOS)
-            .toolbar(.hidden, for: .navigationBar)
             #endif
     }
 
@@ -61,21 +60,22 @@ struct SlackSetupScreen<Advanced: View>: View {
     }
 
     private func statusScreen(_ status: SetupStatus) -> some View {
-        VStack(spacing: 0) {
-            SetupHeader(title: String(localized: "Add \(model.displayName) to Slack"), close: close)
-            Spacer(minLength: 0)
-            StatusBlock(status: status, identifierPrefix: "slackSetupStatus") {
-                if status.kind == .forbidden { close() } else { Task { await model.load() } }
-            }
-            if status.kind == .gatewayOutdated {
-                NavigationLink { advanced() } label: {
-                    Text("Advanced: paste tokens").foregroundStyle(PalTokens.textSecondary)
+        SetupChrome(title: String(localized: "Add \(model.displayName) to Slack"), accessibilityIdentifier: "slackSetupFrame", close: close) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                StatusBlock(status: status, identifierPrefix: "slackSetupStatus") {
+                    if status.kind == .forbidden { close() } else { Task { await model.load() } }
                 }
-                .buttonStyle(.plain)
-                .padding(.top, PalMetrics.screenMargin)
-                .accessibilityIdentifier("slackSetupAdvanced")
+                if status.kind == .gatewayOutdated {
+                    NavigationLink { advanced() } label: {
+                        Text("Advanced: paste tokens").foregroundStyle(PalTokens.textSecondary)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, PalMetrics.screenMargin)
+                    .accessibilityIdentifier("slackSetupAdvanced")
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
         }
     }
 

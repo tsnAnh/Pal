@@ -126,7 +126,7 @@ private struct RoutineRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Toggle(routine.title, isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(PalToggleStyle())
+                .palSwitch()
                 .accessibilityLabel(Text(routine.title))
                 .accessibilityIdentifier("routineToggle-\(routine.id)")
         }

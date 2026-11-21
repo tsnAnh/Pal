@@ -8,7 +8,6 @@ struct ConnectAppsScreen: View {
     @State var model: ConnectAppsModel
     let close: () -> Void
 
-    @Environment(\.hermesTheme) private var theme
     @Environment(\.scenePhase) private var scenePhase
 
     init(model: ConnectAppsModel, close: @escaping () -> Void) {
@@ -17,28 +16,34 @@ struct ConnectAppsScreen: View {
     }
 
     var body: some View {
-        Group {
-            if let connector = model.customConnector {
-                customConnectorChrome(connector)
-            } else {
-                listChrome
+        chrome
+            .task { await model.start() }
+            .googleSignInReload(model)
+            .onDisappear { Task { await model.stop() } }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await model.devices.refresh() } }
             }
-        }
-        .task { await model.start() }
-        .googleSignInReload(model)
-        .onDisappear { Task { await model.stop() } }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.devices.refresh() } }
-        }
-        .modifier(ConnectAppsPresentations(model: model))
-        .modifier(T3CodeSheet(model: model))
-        .modifier(DiscordFlowSheet(model: model))
-        .modifier(GoogleAdsFlowSheet(model: model))
+            .modifier(ConnectAppsPresentations(model: model))
+            .modifier(T3CodeSheet(model: model))
+            .modifier(DiscordFlowSheet(model: model))
+            .modifier(GoogleAdsFlowSheet(model: model))
     }
 
     @ViewBuilder
-    private var listChrome: some View {
+    private var chrome: some View {
         #if os(macOS)
+        if let connector = model.customConnector {
+            customConnectorChrome(connector)
+        } else {
+            listChrome
+        }
+        #else
+        ConnectAppsPhoneRoot(model: model, close: close)
+        #endif
+    }
+
+    #if os(macOS)
+    private var listChrome: some View {
         VStack(spacing: 0) {
             switch model.navigation.screen {
             case .apps:
@@ -51,50 +56,23 @@ struct ConnectAppsScreen: View {
         .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: !model.navigation.showsPanelClose))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectApps")
-        #else
-        ConnectAppsPhoneRoot(model: model, close: close)
-        #endif
     }
 
-    @ViewBuilder
     private func customConnectorChrome(_ connector: CustomConnectorModel) -> some View {
-        #if os(macOS)
         VStack(spacing: 0) {
-            HStack {
-                Button { Task { await model.leaveCustomConnector() } } label: { // nav-chrome: ok
-                    PalIcon("chevron.left")
-                        .font(.system(size: 11, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(String(localized: "Back"))
-                .accessibilityLabel(Text("Back"))
-                .accessibilityIdentifier("customConnectorBackButton")
-                .padding(.leading, PalMetrics.macPanelTitleClearance)
-                Spacer()
-            }
-            .padding(.horizontal, PalMetrics.cardGap)
-            .frame(height: MacMetrics.topBarHeight)
+            Color.clear.frame(height: MacMetrics.topBarHeight)
             CustomConnectorForm(model: connector, style: .mac) { Task { await model.leaveCustomConnector() } }
         }
-        .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(identifier: "customConnectorCloseButton"))
-        #else
-        SheetChrome(
-            leading: .back,
-            accessibilityIdentifier: "connectApps",
-            leadingAccessibilityIdentifier: "customConnectorBackButton",
-            onLeading: { Task { await model.leaveCustomConnector() } },
-            trailing: {
-                Button(role: .close) { close() }
-                    .accessibilityIdentifier("customConnectorCloseButton")
-            },
-            content: {
-                CustomConnectorForm(model: connector, style: .phone(theme)) { Task { await model.leaveCustomConnector() } }
+        .overlay(alignment: .topLeading) {
+            SheetGlassButton(leading: .back, clear: true, accessibilityIdentifier: "customConnectorBackButton") {
+                Task { await model.leaveCustomConnector() }
             }
-        )
-        #endif
+            .padding(.top, PalMetrics.macPanelCloseTopInset)
+            .padding(.leading, PalMetrics.macPanelCloseLeadingInset)
+        }
+        .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
     }
+    #endif
 }
 
 private struct ConnectAppsPresentations: ViewModifier {

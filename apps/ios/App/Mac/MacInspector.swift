@@ -106,13 +106,7 @@ struct MacInspector: View {
                 .fixedSize()
                 .accessibilityLabel(Text("More"))
                 .accessibilityIdentifier("profileMoreButton")
-                Button { shell.showsInspector = false } label: {
-                    inspectorGlyph("xmark")
-                }
-                .buttonStyle(.plain)
-                .help(String(localized: "Close details"))
-                .accessibilityLabel(Text("Close details"))
-                .accessibilityIdentifier("inspectorClose")
+                SheetGlassButton(escapes: false, accessibilityIdentifier: "inspectorClose") { shell.showsInspector = false }
             }
         }
         .padding(.top, 12)
@@ -261,7 +255,7 @@ extension MacInspector {
                     Spacer(minLength: 8)
                     Toggle("Notifications", isOn: Binding(get: { profile.notificationsOn }, set: { profile.setNotifications($0) }))
                         .labelsHidden()
-                        .toggleStyle(.macSwitch)
+                        .palSwitch()
                         .accessibilityIdentifier("profileNotificationsToggle")
                 }
             }
@@ -282,7 +276,7 @@ extension MacInspector {
                             set: { value in Task { await autoApprove.setEnabled(value, sessionID: sessionID) } }
                         ))
                         .labelsHidden()
-                        .toggleStyle(.macSwitch)
+                        .palSwitch()
                         .disabled(autoApprove.isPending(sessionID))
                         .accessibilityIdentifier("autoApproveToggle")
                     }
@@ -321,7 +315,7 @@ extension MacInspector {
                             set: { enabled in Task { await routines.setEnabled(enabled, for: routine) } }
                         ))
                         .labelsHidden()
-                        .toggleStyle(.macSwitch)
+                        .palSwitch()
                         .accessibilityLabel(Text(routine.title))
                         .accessibilityIdentifier("routineToggle-\(routine.id)")
                     }

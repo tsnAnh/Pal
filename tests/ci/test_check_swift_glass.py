@@ -55,6 +55,11 @@ CASES = [
     ("glass-pill-button", SCREEN, "Button(\"Go\") {}.buttonStyle(.palPill(height: 28))\n", "Button(\"Go\") {}.buttonStyle(.palGlass)\n"),
     ("glass-pill-button", SCREEN, "Button(\"Go\") { go() }\n    .background(Color.blue, in: Capsule())\n",
      "Button(\"Go\") { go() }\n    .buttonStyle(.glassProminent)\n"),
+    ("glass-system-tint", SCREEN, "Toggle(\"On\", isOn: $on).tint(.blue)\n", "Toggle(\"On\", isOn: $on)\n"),
+    ("glass-system-tint", SCREEN, "Menu(\"More\") { items }\n    .tint(.accentColor)\n", "Menu(\"More\") { items }\n"),
+    ("glass-system-tint", SCREEN, "Link(\"Docs\", destination: url).tint(Color.blue)\n", "Link(\"Docs\", destination: url)\n"),
+    ("glass-system-tint", SCREEN, "Button(\"Go\") {}.accentColor(.red)\n", "Button(\"Go\") {}.foregroundStyle(.red)\n"),
+    ("glass-system-tint", SCREEN, "Button(\"Go\") {}.tint(Color(theme.palette.accentBlue))\n", "Button(\"Go\") {}.tint(PalTokens.textPrimary)\n"),
     ("glass-container", SCREEN,
      "var bar: some View {\n    HStack {\n        a.palGlass(Circle())\n        b.palGlass(Circle())\n    }\n}\n",
      "var bar: some View {\n    GlassEffectContainer(spacing: 8) {\n        a.palGlass(Circle())\n        b.palGlass(Circle())\n    }\n}\n"),
@@ -64,10 +69,26 @@ CASES = [
     ("glass-sheet-chrome", SCREEN,
      "ToolbarItem(placement: .topBarTrailing) {\n    Button(\"Close\") { dismiss() }\n}\n",
      "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() }\n}\n"),
-    ("glass-sheet-chrome", SCREEN, "Button(\"Close\") { dismiss() }\n", "Button(role: .close) { dismiss() }\n"),
+    ("glass-sheet-chrome", SCREEN, "Button(\"Close\") { dismiss() }\n",
+     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() }\n}\n"),
     ("glass-sheet-chrome", SCREEN,
      ".sheet(isPresented: $on) {\n    NavigationStack {\n        form.navigationTitle(\"New\")\n    }\n}\n",
      ".sheet(isPresented: $on) {\n    SheetChrome(title: \"New\", accessibilityIdentifier: \"s\", onLeading: close) { form }\n}\n"),
+    ("glass-close-chrome", SCREEN,
+     "var header: some View {\n    HStack {\n        Text(title)\n        Button(role: .close, action: close)\n            .buttonStyle(.glass)\n    }\n}\n",
+     "var body: some View {\n    list.toolbar {\n        ToolbarItem(placement: .cancellationAction) {\n            Button(role: .close, action: close)\n        }\n    }\n}\n"),
+    ("glass-close-chrome", SCREEN,
+     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() } label: { Text(\"Close\") }\n}\n",
+     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() }\n}\n"),
+    ("glass-close-chrome", SCREEN,
+     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close, action: close) { Text(\"Close\") }\n}\n",
+     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close, action: close)\n}\n"),
+    ("glass-close-chrome", SCREEN,
+     "PalClearGlassIconButton(systemName: \"xmark\", label: \"Close\", identifier: \"x\", action: close)\n",
+     "PalClearGlassIconButton(systemName: \"pencil\", label: \"Edit\", identifier: \"x\", action: edit)\n"),
+    ("glass-close-chrome", SCREEN,
+     "Button(action: back) {\n    PalIcon(\"chevron.left\")\n}\n.accessibilityLabel(Text(\"Back\"))\n",
+     "Button(action: remove) {\n    PalIcon(\"xmark\")\n}\n.accessibilityLabel(Text(\"Dismiss\"))\n"),
     ("glass-search-field", SCREEN,
      "TextField(\"Search models\", text: $query)\n    .padding(8)\n    .background(Color.gray.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))\n",
      "List(rows) { row }\n    .searchable(text: $query)\n"),
@@ -107,6 +128,22 @@ def test_rules_that_belong_to_one_layer_ignore_the_other(tmp_path: Path) -> None
     assert _rules(tmp_path / "c", DESIGN, "TextField(\"Search\", text: $q).background(.red)\nstruct SearchField: View {}\n") == [
         "glass-search-field"
     ]
+
+
+def test_close_inside_sheet_chrome_or_a_toolbar_item_passes(tmp_path: Path) -> None:
+    trailing = (
+        "SheetChrome(title: t, leading: .back, accessibilityIdentifier: \"s\", onLeading: back, trailing: {\n"
+        "    Button(role: .close) { close() }\n}, content: { form })\n"
+    )
+    group = "ToolbarItemGroup(placement: .cancellationAction) {\n    Button(role: .close, action: close)\n}\n"
+    assert _rules(tmp_path / "a", SCREEN, trailing) == []
+    assert _rules(tmp_path / "b", SCREEN, group) == []
+
+
+def test_close_chrome_applies_to_screens_not_to_the_shared_sheet_chrome(tmp_path: Path) -> None:
+    body = "var leadingButton: some View {\n    Button(role: .close, action: onLeading)\n}\n"
+    assert _rules(tmp_path / "a", DESIGN, body) == []
+    assert _rules(tmp_path / "b", SCREEN, body) == ["glass-close-chrome"]
 
 
 def test_opt_out_marker_and_test_targets_are_exempt(tmp_path: Path) -> None:

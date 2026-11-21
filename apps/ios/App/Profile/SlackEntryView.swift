@@ -26,6 +26,7 @@ struct SlackEntryView: View {
                 )
             }
         }
+        .environment(\.sheetChromeHostedInNavigation, true)
         .task {
             guard tokensConnected == nil else { return }
             let status = try? await services.slack.status(profile: botName)

@@ -24,9 +24,7 @@ public struct PalPalette: Equatable, Sendable {
     public var textTertiary: RGB
     public var sectionCaption: RGB
     public var chevron: RGB
-    public var toggleOnTrack: RGB
     public var toggleOffTrack: RGB
-    public var toggleKnob: RGB
     public var tileStroke: RGB
     public var primaryBadge: RGB
     public var primaryBadgeGlyph: RGB
@@ -86,9 +84,7 @@ extension PalPalette {
             textTertiary: solid(PalSwatches.textTertiary),
             sectionCaption: solid(PalSwatches.textSecondary),
             chevron: solid(PalSwatches.textTertiary),
-            toggleOnTrack: solid(PalSwatches.toggleOn),
             toggleOffTrack: solid(PalSwatches.toggleOff, over: elevated),
-            toggleKnob: RGB(hex: 0xffffff),
             tileStroke: solid(PalSwatches.panelBorder),
             primaryBadge: RGB(hex: 0xf58903),
             primaryBadgeGlyph: RGB(hex: 0xffffff),

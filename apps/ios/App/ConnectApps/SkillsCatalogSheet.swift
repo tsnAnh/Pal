@@ -15,11 +15,21 @@ struct SkillsCatalogEntry: View {
 }
 
 struct SkillsCatalogSheet: View {
-    @State private var model: SkillsCatalogModel
+    @State var model: SkillsCatalogModel
     let botName: String
     let close: () -> Void
 
-    @Environment(\.hermesTheme) private var theme
+    @Environment(\.hermesTheme) var theme
+    #if os(iOS)
+    @State private var shownDetail: SkillRow?
+
+    private var showsDetail: Binding<Bool> {
+        Binding(
+            get: { model.detail != nil },
+            set: { if !$0, model.detail != nil { model.closeDetail() } }
+        )
+    }
+    #endif
 
     init(model: SkillsCatalogModel, botName: String, close: @escaping () -> Void) {
         _model = State(initialValue: model)
@@ -28,23 +38,7 @@ struct SkillsCatalogSheet: View {
     }
 
     var body: some View {
-        SheetChrome(
-            title: model.detail?.name ?? String(localized: "Skills"),
-            leading: model.detail == nil ? .close : .back,
-            titleAlignment: .afterLeadingButton,
-            accessibilityIdentifier: "skillsCatalog",
-            onLeading: { if model.detail == nil { close() } else { model.closeDetail() } },
-            trailing: {
-                if model.detail == nil, model.updatableCount > 0 {
-                    Button(String(localized: "Update all")) { Task { await model.updateAll() } }
-                        .disabled(model.isMutating)
-                        .accessibilityIdentifier("skillsUpdateAll")
-                }
-            },
-            content: {
-                if let row = model.detail { detailPage(row) } else { listPage }
-            }
-        )
+        page
         .task { await model.start() }
         .macSheet(item: $model.keyRequest) { request in
             SkillKeyEntrySheet(model: model, request: request,
@@ -61,6 +55,56 @@ struct SkillsCatalogSheet: View {
                 ]
             )
         }
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        #if os(iOS)
+        NavigationStack {
+            listChrome
+                .environment(\.sheetChromeHostedInNavigation, true)
+                .navigationDestination(isPresented: showsDetail) {
+                    if let row = model.detail ?? shownDetail {
+                        detailChrome(row)
+                            .environment(\.sheetChromeHostedInNavigation, true)
+                    }
+                }
+        }
+        .tint(.primary)
+        .onChange(of: model.detail?.id, initial: true) {
+            if let row = model.detail { shownDetail = row }
+        }
+        #else
+        if let row = model.detail { detailChrome(row) } else { listChrome }
+        #endif
+    }
+
+    private var listChrome: some View {
+        SheetChrome(
+            title: String(localized: "Skills"),
+            titleAlignment: .afterLeadingButton,
+            accessibilityIdentifier: "skillsCatalog",
+            onLeading: close,
+            trailing: {
+                if model.updatableCount > 0 {
+                    Button(String(localized: "Update all")) { Task { await model.updateAll() } }
+                        .disabled(model.isMutating)
+                        .accessibilityIdentifier("skillsUpdateAll")
+                }
+            },
+            content: { listPage }
+        )
+    }
+
+    private func detailChrome(_ row: SkillRow) -> some View {
+        SheetChrome(
+            title: row.name,
+            leading: .back,
+            titleAlignment: .afterLeadingButton,
+            accessibilityIdentifier: "skillsCatalog",
+            onLeading: { model.closeDetail() },
+            content: { detailPage(row) }
+        )
     }
 
     private var listPage: some View {
@@ -161,7 +205,7 @@ struct SkillsCatalogSheet: View {
     }
 
     @ViewBuilder
-    private var outcomeBanner: some View {
+    var outcomeBanner: some View {
         if let outcome = model.outcome {
             HStack(alignment: .top, spacing: 10) {
                 PalIcon(outcome.isSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
@@ -184,168 +228,6 @@ struct SkillsCatalogSheet: View {
             .padding(.bottom, 10)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(outcome.isSuccess ? "skillsSuccess" : "skillsFailure")
-        }
-    }
-
-    private func detailPage(_ row: SkillRow) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                outcomeBanner.padding(.horizontal, -ConnectRowMetrics.horizontalMargin)
-                detailHeader(row)
-                detailContent(row)
-                detailActions(row)
-            }
-            .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
-            .padding(.bottom, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .task(id: row.id) { await model.loadDetail() }
-        .accessibilityIdentifier("skillDetail")
-    }
-
-    private func detailHeader(_ row: SkillRow) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(stateTitle(row.state))
-                .hermesText(.rowSubtitle)
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .accessibilityIdentifier("skillDetailState")
-            if case .loaded(let detail) = model.detailPhase, !detail.summary.isEmpty {
-                Text(detail.summary).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
-            } else if !row.summary.isEmpty {
-                Text(row.summary).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
-            }
-        }
-    }
-
-    private func stateTitle(_ state: SkillState) -> String {
-        switch state {
-        case .available: String(localized: "Not installed")
-        case .installed: String(localized: "Installed")
-        case .updateAvailable: String(localized: "Update available")
-        }
-    }
-
-    @ViewBuilder
-    private func detailContent(_ row: SkillRow) -> some View {
-        switch model.detailPhase {
-        case .loading:
-            DelayedProgressView().tint(Color(theme.palette.textSecondary)).frame(maxWidth: .infinity).padding(.top, 20).accessibilityIdentifier("skillDetailLoading")
-        case .failed(let message):
-            VStack(alignment: .leading, spacing: 12) {
-                Text(message).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textSecondary))
-                PillButton(String(localized: "Try again"), accessibilityIdentifier: "skillDetailRetry") { Task { await model.loadDetail() } }
-            }
-            .accessibilityIdentifier("skillDetailFailed")
-            sourceBlock(source: row.source, identifier: row.installTarget, trust: row.trust)
-        case .loaded(let detail):
-            sourceBlock(source: detail.source ?? row.source, identifier: detail.identifier ?? row.identifier, trust: row.trust)
-            if !detail.tags.isEmpty {
-                Text(detail.tags.joined(separator: ", "))
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-            }
-            requirementsBlock(detail.requirements, row: row)
-        }
-    }
-
-    private func sourceBlock(source: String?, identifier: String?, trust: String?) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Source").hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
-            let parts = [source, trust].compactMap { $0 }.joined(separator: " · ")
-            if !parts.isEmpty {
-                Text(parts).hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.textSecondary))
-            }
-            if let identifier {
-                Text(identifier)
-                    .hermesText(.rowSubtitle).monospaced()
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-                    .textSelection(.enabled)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("skillDetailSource")
-    }
-
-    private func requirementsBlock(_ requirements: SkillRequirements, row: SkillRow) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Requirements").hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
-            if requirements.isEmpty {
-                Text("No extra setup needed.")
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-            }
-            ForEach(requirements.environment) { key in
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(key.name)
-                        .hermesText(.rowSubtitle).monospaced()
-                        .foregroundStyle(Color(theme.palette.chipText))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color(theme.palette.chipFill), in: Capsule())
-                    let note = [key.prompt, key.isOptional ? String(localized: "Optional") : nil].compactMap { $0 }.joined(separator: " · ")
-                    if !note.isEmpty {
-                        Text(note).hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.textSecondary))
-                    }
-                    if let help = key.help {
-                        Text(help).hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.textSecondary))
-                    }
-                    if !key.isOptional, row.isInstalled {
-                        Button(String(localized: "Add key")) { model.beginKeyEntry(row, keyName: key.name) }
-                            .buttonStyle(.pill())
-                            .accessibilityLabel(Text("Add key for \(key.name)"))
-                            .accessibilityIdentifier("skillAddKey-\(key.name)")
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("skillRequirement-\(key.name)")
-            }
-            if requirements.needsSecrets, !row.isInstalled {
-                Text("Install this skill to add the keys \(botName) needs to use it.")
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-                    .accessibilityIdentifier("skillRequirementsNote")
-            }
-            if !requirements.commands.isEmpty {
-                Text("Needs these tools installed on \(botName)'s computer: \(requirements.commands.joined(separator: ", "))")
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-                    .accessibilityIdentifier("skillRequirementCommands")
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func detailActions(_ row: SkillRow) -> some View {
-        let working = model.isWorking(on: row)
-        VStack(spacing: 10) {
-            switch row.state {
-            case .available:
-                PillButton(String(localized: "Install"), kind: .accent, size: .large, isBusy: working, accessibilityIdentifier: "skillInstall") {
-                    Task { await model.install(row) }
-                }
-            case .updateAvailable where row.isRemovable:
-                PillButton(String(localized: "Update"), kind: .accent, size: .large, isBusy: working, accessibilityIdentifier: "skillUpdate") {
-                    Task { await model.update(row) }
-                }
-                removeButton(row, working: working)
-            case .installed where row.isRemovable, .updateAvailable:
-                removeButton(row, working: working)
-            case .installed:
-                Text("Built in. It can't be removed from here.")
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-            }
-        }
-        .disabled(model.isMutating && !working)
-    }
-
-    @ViewBuilder
-    private func removeButton(_ row: SkillRow, working: Bool) -> some View {
-        if row.isRemovable {
-            PillButton(String(localized: "Remove"), size: .large, isBusy: working, accessibilityIdentifier: "skillRemove") {
-                model.removeTarget = row
-            }
         }
     }
 }

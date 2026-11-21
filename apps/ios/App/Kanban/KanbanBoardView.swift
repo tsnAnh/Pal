@@ -8,6 +8,7 @@ struct KanbanBoardView: View {
     let board: String
     let openCard: (String) -> Void
     let close: (() -> Void)?
+    var back: (() -> Void)?
     let picker: KanbanBoardPicker?
 
     @State private var filter = KanbanFilter()
@@ -30,7 +31,7 @@ struct KanbanBoardView: View {
     }
 
     var body: some View {
-        KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoard", back: nil, close: close, scrolls: rows == nil, picker: picker) {
+        KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoard", back: back, close: close, scrolls: rows == nil, picker: picker) {
             content
         }
         .refreshable { await store.refreshSnapshot(board: board) }
@@ -122,7 +123,7 @@ struct KanbanBoardView: View {
     }
 
     private func select(_ taskID: String) {
-        if showsColumns { selected = taskID } else { openCard(taskID) }
+        if showsColumns { selected = selected == taskID ? nil : taskID } else { openCard(taskID) }
     }
 
     private func wide(_ layout: KanbanBoardLayout) -> some View {
@@ -132,11 +133,9 @@ struct KanbanBoardView: View {
                 let gaps = CGFloat(max(layout.columns.count - 1, 0)) * 10
                 let fit = (proxy.size.width - inset * 2 - gaps) / CGFloat(max(layout.columns.count, 1))
                 ScrollView(.horizontal) {
-                    GlassEffectContainer(spacing: 10) {
-                        HStack(alignment: .top, spacing: 10) {
-                            ForEach(layout.columns) { column in
-                                KanbanColumnView(layout: column, selected: selected, width: max(fit, 220), open: select)
-                            }
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(layout.columns) { column in
+                            KanbanColumnView(layout: column, selected: selected, width: max(fit, 220), open: select)
                         }
                     }
                     .padding(.horizontal, inset)

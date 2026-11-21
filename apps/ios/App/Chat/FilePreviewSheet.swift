@@ -29,7 +29,7 @@ struct FilePreviewSheet: View {
                 .navigationTitle(file.name)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close) { dismiss() } label: { Text("Close") }
+                        Button(role: .close) { dismiss() }
                             .accessibilityIdentifier("filePreviewClose")
                     }
                 }

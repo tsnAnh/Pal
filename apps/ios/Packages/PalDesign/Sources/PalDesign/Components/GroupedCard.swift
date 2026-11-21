@@ -5,6 +5,7 @@ public struct GroupedCard<Content: View>: View {
     private let content: Content
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.groupedCardDividers) private var showsDividers
 
     public init(
         accessibilityIdentifier: String,
@@ -16,7 +17,20 @@ public struct GroupedCard<Content: View>: View {
 
     public var body: some View {
         let shape = RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
-        VStack(spacing: 0) { content }
+        VStack(spacing: 0) {
+            Group(subviews: content) { rows in
+                ForEach(rows) { row in
+                    if showsDividers, row.id != rows.first?.id {
+                        Rectangle()
+                            .fill(Color(theme.palette.separator))
+                            .frame(height: PalMetrics.separatorThickness)
+                            .padding(.horizontal, PalMetrics.rowInset)
+                            .accessibilityHidden(true)
+                    }
+                    row
+                }
+            }
+        }
             .padding(.vertical, 6)
             .background(Color(theme.palette.groupedCard), in: shape)
             .overlay(shape.strokeBorder(Color(theme.palette.cardStroke), lineWidth: PalMetrics.separatorThickness))
@@ -25,6 +39,10 @@ public struct GroupedCard<Content: View>: View {
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(accessibilityIdentifier)
     }
+}
+
+extension EnvironmentValues {
+    @Entry public var groupedCardDividers = false
 }
 
 public struct SectionCaption: View {

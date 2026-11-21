@@ -21,6 +21,17 @@ final class ComputerE2ETests: ComputerTestCase {
         shot(app, "computer-watch-tap")
     }
 
+    func test2bBackIsTheSystemBackButton() throws {
+        let app = signedInApp()
+        openComputer(app)
+        XCTAssertFalse(app.buttons["computerBackButton"].exists, "no hand-built back")
+        let back = app.buttons["BackButton"]
+        waitFor(back, timeout: 10, "the system back button")
+        shot(app, "computer-system-back")
+        back.tap()
+        waitGone(element(app, "computerScreen"), timeout: 10, "back leaves the computer")
+    }
+
     func test3TakeControlClicksTypesAndHandsBack() throws {
         let app = signedInApp()
         openComputer(app)

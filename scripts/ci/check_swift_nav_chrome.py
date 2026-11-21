@@ -4,10 +4,10 @@
 The Pal apps use the system back and close controls, one way out per screen: the
 NavigationStack back, a ``ToolbarItem(placement: .cancellationAction)`` or a
 ``Button(role: .close)``. A custom one is a ``Button`` whose label is
-``Image(systemName: "chevron.left")`` or ``Image(systemName: "xmark")`` and whose
-accessibility label or identifier names it a back or close. An in-content dismiss,
-a clear-search glyph (``xmark.circle.fill``) or any other glyph does not match. A
-justified exception carries ``nav-chrome: ok`` on the Button or Image line.
+``Image(systemName: "chevron.left")``, ``PalIcon("chevron.left")`` (or any helper taking the glyph name first) or the same with ``xmark``, and
+whose accessibility label or identifier names it a back or close. An in-content dismiss,
+a clear-search glyph (``xmark.circle.fill``) or any other glyph does not match. No opt-out
+waives a hand-drawn back or close; ``nav-chrome: ok`` only waives the Mac window-chrome shapes below.
 
 The Mac window hides its title bar and draws the traffic lights over the top of
 the content, so two more shapes put controls under them: a window toolbar item or
@@ -17,8 +17,7 @@ full-window overlay in a view that ignores the top safe area
 without the shell's ``MacMetrics.topBarHeight`` or ``MacMetrics.trafficLightCenter`` inset. Text matching sees these
 shapes only; it cannot see where a control is drawn at run time.
 
-Sheet chrome rules (the Connect Apps and Skills bugs): an opt-out never waives a hand-drawn xmark
-close outside ``XMARK_OPT_OUT_ALLOWED``; the Mac modal panel draws its close with the shared
+Sheet chrome rules (the Connect Apps and Skills bugs): the Mac modal panel draws its close with the shared
 ``SheetGlassButton`` at ``.topLeading``; ``SheetChrome`` applies ``PalMetrics.sheetBottomInset`` on
 macOS; the Connect Apps search field is the plain system field (no ``FloatingSearchBar``, no custom
 border, background, ring or glass).
@@ -34,7 +33,7 @@ from pathlib import Path
 
 OPT_OUT = "nav-chrome: ok"
 SKIP_DIRS = {"Tests", "UITests", "Fixtures", ".build"}
-GLYPH = re.compile(r'Image\(systemName:\s*"(chevron\.left|xmark)"\)')
+GLYPH = re.compile(r'(?:Image\(systemName:|\b\w+\()\s*"(chevron\.left|xmark)"')
 BUTTON = re.compile(r"(?<![A-Za-z0-9_])Button\s*[({]")
 ROLE = re.compile(r'accessibility(?:Label|Identifier)\([^\n]*(?i:back|close)')
 LOOKBACK = 4
@@ -44,7 +43,6 @@ IF_OS = re.compile(r"#if\s+os\((macOS|iOS)\)\s*$")
 TOP_UNSAFE = ".ignoresSafeArea(.container, edges: .top)"
 FULL_FRAME = ".frame(maxWidth: .infinity, maxHeight: .infinity)"
 OVERLAY_CHAIN = 4
-XMARK_OPT_OUT_ALLOWED = {"App/Kanban/KanbanCardView.swift", "App/Chat/VoiceModeView.swift"}
 PANEL_OVERLAY = re.compile(r"overlayPreferenceValue\(MacPanelCloseIdentifierKey\.self,\s*alignment:\s*(\.\w+)")
 
 
@@ -52,19 +50,17 @@ def violations(path: Path, source: str) -> list[str]:
     lines = source.splitlines()
     found = []
     for i, line in enumerate(lines):
-        glyph = GLYPH.search(line)
+        glyph = GLYPH.search(line + " " + lines[i + 1].strip() if line.rstrip().endswith("(") and i + 1 < len(lines) else line)
         if not glyph:
             continue
         button = next((j for j in range(i, max(-1, i - LOOKBACK - 1), -1) if BUTTON.search(lines[j])), None)
         if button is None:
             continue
-        if OPT_OUT in line or OPT_OUT in lines[button]:
-            if glyph.group(1) == "xmark" and path.as_posix() not in XMARK_OPT_OUT_ALLOWED:
-                found.append(f"{path}:{i + 1}: nav-chrome opt-out cannot waive a hand-drawn close; use SheetChrome or SheetGlassButton")
-            continue
         if not any(ROLE.search(lines[k]) for k in range(i, min(len(lines), i + LOOKAHEAD + 1))):
             continue
-        found.append(f"{path}:{i + 1}: custom {glyph.group(1)} back/close button")
+        waived = OPT_OUT in line or OPT_OUT in lines[button]
+        found.append(f"{path}:{i + 1}: custom {glyph.group(1)} back/close button" + (
+            "; nav-chrome opt-out cannot waive a hand-drawn back or close, use the system control or SheetChrome" if waived else ""))
     return found
 
 
@@ -138,7 +134,7 @@ def main(argv: list[str]) -> int:
         print(f"\n{len(found)} nav chrome finding(s). Use the system control: the NavigationStack back, "
               "a ToolbarItem(placement: .cancellationAction), or Button(role: .close); one way out per screen. "
               "On macOS draw the header in content (SheetChrome) below MacMetrics.topBarHeight, never in the window toolbar. "
-              f'For a justified exception add "// {OPT_OUT}" on the Button line.')
+              f'The Mac window-chrome findings take "// {OPT_OUT}" when justified; a back or close never does.')
         return 1
     return 0
 

@@ -42,11 +42,6 @@ public enum PalMetrics {
     public static let searchBarBottomPadding: CGFloat = -4
     public static let searchBarLeadingButtonGap: CGFloat = 12
 
-    public static let toggleTrackSize = CGSize(width: 46, height: 28)
-    public static let toggleKnobSize = CGSize(width: 24, height: 24)
-    public static let toggleKnobInset: CGFloat = 2
-    public static let toggleTouchTarget = CGSize(width: 52, height: 44)
-
     public static let homeHeaderTopPadding: CGFloat = 0
     public static let heroDiameter: CGFloat = 88
     public static let heroAvatarFrame: CGFloat = 127

@@ -41,44 +41,30 @@ struct KanbanCardView: View {
     }
 
     private var pane: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                #if os(iOS)
-                Button(role: .close, action: back)
-                    .buttonStyle(.palGlass)
-                    .accessibilityIdentifier("kanbanCard-close")
-                #endif
-                Text(title)
-                    .hermesText(.rowTitle)
-                    .foregroundStyle(PalTokens.textPrimary)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityAddTraits(.isHeader)
-                #if os(macOS)
-                Button(action: back) { // nav-chrome: ok
-                    PalIcon("xmark", ink: .secondary).font(.system(size: 12, weight: .semibold))
-                        .frame(width: 28, height: 28)
-                        .palGlass(Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Close card"))
-                .accessibilityIdentifier("kanbanCard-close")
-                #endif
-            }
-            .padding(.horizontal, PalMetrics.screenMargin)
-            .padding(.vertical, 10)
+        SheetChrome(
+            surface: .canvas,
+            headerStyle: .toolbarRow,
+            escapes: false,
+            accessibilityIdentifier: "kanbanCard",
+            leadingAccessibilityIdentifier: "kanbanCard-close",
+            onLeading: back
+        ) {
             ScrollView {
-                VStack(alignment: .leading, spacing: PalMetrics.cardGap) { content }
-                    .padding(.bottom, 32)
+                VStack(alignment: .leading, spacing: PalMetrics.cardGap) {
+                    Text(title)
+                        .hermesText(.rowTitle)
+                        .foregroundStyle(PalTokens.textPrimary)
+                        .lineLimit(3)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, PalMetrics.screenMargin)
+                        .accessibilityAddTraits(.isHeader)
+                    content
+                }
             }
             .scrollIndicators(.hidden)
         }
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(PalTokens.content)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("kanbanCard")
     }
 
     @ViewBuilder
@@ -112,7 +98,6 @@ struct KanbanCardView: View {
         ticket(document)
         text("Result", detail.result, identifier: "kanbanResult")
         evidence(detail)
-        details(document)
         activity
         lifecycle(detail)
         runs(detail)
@@ -172,13 +157,6 @@ struct KanbanCardView: View {
                     accessibilityIdentifier: "kanbanPullRequestLink-\(index)"
                 ) { ExternalLink.open(url) }
             }
-        }
-    }
-
-    @ViewBuilder
-    private func details(_ document: KanbanBodyDocument) -> some View {
-        if !document.footer.isEmpty {
-            KanbanDetailsView(lines: document.footer)
         }
     }
 

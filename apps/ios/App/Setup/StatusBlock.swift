@@ -55,8 +55,25 @@ struct StatusBlock: View {
     }
 
     private var details: some View {
-        DisclosureGroup(String(localized: "Details"), isExpanded: $showsDetails) {
-            VStack(spacing: 10) {
+        VStack(spacing: 10) {
+            Button {
+                withAnimation(.snappy) { showsDetails.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Text("Details")
+                    PalIcon("chevron.right", ink: .tertiary)
+                        .font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(showsDetails ? 90 : 0))
+                }
+                .hermesText(.rowSubtitle)
+                .foregroundStyle(PalTokens.textSecondary)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(Text(showsDetails ? "Expanded" : "Collapsed"))
+            .accessibilityIdentifier("\(identifierPrefix)Details")
+            if showsDetails {
                 Text(status.detailsText(appBuild: AppBuild.label))
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(PalTokens.textSecondary)
@@ -71,10 +88,6 @@ struct StatusBlock: View {
                     Pasteboard.string = status.detailsText(appBuild: AppBuild.label)
                 }
             }
-            .padding(.top, 8)
         }
-        .hermesText(.rowSubtitle)
-        .foregroundStyle(PalTokens.textSecondary)
-        .accessibilityIdentifier("\(identifierPrefix)Details")
     }
 }

@@ -62,8 +62,6 @@ struct MessageMenuRow: View {
 #if os(iOS)
 struct MessageMenuRequest: Identifiable {
     let id = UUID()
-    let anchor: CGRect
-    let side: MessageSide
     let actions: MessageActions
 }
 
@@ -84,26 +82,9 @@ private struct MessageMenuPresenter: ViewModifier {
     func body(content: Content) -> some View {
         content
             .environment(\.presentMessageMenu) { request = $0 }
-            .overlay { MessageMenuHost(request: $request) }
-    }
-}
-
-private struct MessageMenuHost: View {
-    @Binding var request: MessageMenuRequest?
-
-    var body: some View {
-        GeometryReader { proxy in
-            if let current = request {
-                ZStack(alignment: .bottom) {
-                    MessageSheetDim(anchor: current.anchor) { request = nil }
-                        .transition(.opacity)
-                    MessageSheet(actions: current.actions, maxContentHeight: proxy.size.height * 0.5) { request = nil }
-                        .transition(.move(edge: .bottom))
-                }
-                .accessibilityAddTraits(.isModal)
+            .sheet(item: $request) { current in
+                MessageSheet(actions: current.actions) { request = nil }
             }
-        }
-        .animation(.snappy(duration: 0.25), value: request?.id)
     }
 }
 #endif

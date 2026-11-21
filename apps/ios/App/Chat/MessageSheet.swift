@@ -3,35 +3,6 @@ import PalChat
 import PalDesign
 import SwiftUI
 
-struct MessageSheetDim: View {
-    let anchor: CGRect
-    let dismiss: () -> Void
-
-    var body: some View {
-        GeometryReader { proxy in
-            let origin = proxy.frame(in: .global).origin
-            MessageSheetDimShape(hole: anchor.offsetBy(dx: -origin.x, dy: -origin.y))
-                .fill(PalTokens.scrim.opacity(0.5), style: FillStyle(eoFill: true))
-                .contentShape(Rectangle())
-                .onTapGesture(perform: dismiss)
-        }
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
-    }
-}
-
-private struct MessageSheetDimShape: Shape {
-    let hole: CGRect
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path(rect)
-        if !hole.isEmpty {
-            path.addPath(Path(roundedRect: hole, cornerRadius: 18, style: .continuous))
-        }
-        return path
-    }
-}
-
 private struct MessageSheetRowStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -49,78 +20,42 @@ struct MessageSheet: View {
     }
 
     let actions: MessageActions
-    let maxContentHeight: CGFloat
     let dismiss: () -> Void
 
     @State private var page = Page.menu
     @State private var plan: MessageActionPlan
     @State private var offersReactions: Bool
-    @State private var dragOffset: CGFloat = 0
+    @State private var contentHeight = Self.estimatedHeight
 
+    private static let estimatedHeight: CGFloat = 420
+    private static let selectTextMaxHeight: CGFloat = 360
     private static let reactionColumns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 6)
-    private static let shape = UnevenRoundedRectangle(
-        topLeadingRadius: 26,
-        bottomLeadingRadius: 0,
-        bottomTrailingRadius: 0,
-        topTrailingRadius: 26,
-        style: .continuous
-    )
 
-    init(actions: MessageActions, maxContentHeight: CGFloat, dismiss: @escaping () -> Void) {
+    init(actions: MessageActions, dismiss: @escaping () -> Void) {
         self.actions = actions
-        self.maxContentHeight = maxContentHeight
         self.dismiss = dismiss
         _plan = State(initialValue: actions.plan(offersSelectText: true))
         _offersReactions = State(initialValue: actions.canReact())
     }
 
     var body: some View {
-        GlassEffectContainer {
-            VStack(spacing: 0) {
-                grabber
-                pageContent
-                    .transition(.opacity)
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 12)
-            .frame(maxWidth: .infinity)
-            .background {
-                Color.clear
-                    .palGlass(Self.shape, interactive: false)
-                    .ignoresSafeArea(.container, edges: .bottom)
-            }
+        ScrollView {
+            pageContent
+                .transition(.opacity)
+                .padding(.horizontal, 16)
+                .padding(.top, 24)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
+        .scrollBounceBehavior(.basedOnSize)
         .animation(.snappy(duration: 0.2), value: page)
-        .offset(y: dragOffset)
-        .gesture(dismissDrag, including: page == .menu ? .all : .subviews)
+        .presentationDetents([.height(contentHeight)])
+        .presentationDragIndicator(.visible)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("messageContextMenu")
         .accessibilityAction(.escape) {
             if page == .menu { dismiss() } else { page = .menu }
         }
         .onAppear { MessageSpeaker.shared.stop() }
-    }
-
-    private var dismissDrag: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .global) // scroll-gesture: ok modal sheet over a dimmed chat
-            .onChanged { dragOffset = max(0, $0.translation.height) }
-            .onEnded { value in
-                if value.translation.height > 90 || value.predictedEndTranslation.height > 220 {
-                    dismiss()
-                } else {
-                    withAnimation(.snappy) { dragOffset = 0 }
-                }
-            }
-    }
-
-    private var grabber: some View {
-        Capsule()
-            .fill(PalTokens.textTertiary)
-            .frame(width: 36, height: 5)
-            .frame(maxWidth: .infinity, minHeight: 24)
-            .contentShape(Rectangle())
-            .gesture(dismissDrag)
-            .accessibilityHidden(true)
     }
 
     @ViewBuilder
@@ -137,7 +72,7 @@ struct MessageSheet: View {
             }
         case .selectText:
             subpage(title: MessageAction.selectText.title(speakingRowID: nil, rowID: actions.rowID)) {
-                SelectableTextView(text: actions.text, maxHeight: maxContentHeight)
+                SelectableTextView(text: actions.text, maxHeight: Self.selectTextMaxHeight)
                     .frame(maxWidth: .infinity)
                     .background(PalTokens.chipFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }

@@ -16,62 +16,21 @@ extension KanbanColumn {
     }
 }
 
-struct KanbanFlow: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let limit = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var widest: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > limit {
-                y += lineHeight + spacing
-                x = 0
-                lineHeight = 0
-            }
-            x += size.width + spacing
-            widest = max(widest, x - spacing)
-            lineHeight = max(lineHeight, size.height)
-        }
-        return CGSize(width: widest, height: y + lineHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var lineHeight: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.maxX {
-                y += lineHeight + spacing
-                x = bounds.minX
-                lineHeight = 0
-            }
-            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-    }
-}
-
 struct KanbanChip: View {
     let text: String
     var symbol: String?
     var tone: Color = .secondary
+    var size: KanbanChipSize = .tile
 
     var body: some View {
-        HStack(spacing: 3) {
-            if let symbol { PalIcon(symbol, ink: .custom(tone)).font(.system(size: 9, weight: .semibold)) }
+        HStack(spacing: size.spacing) {
+            if let symbol { PalIcon(symbol, ink: .custom(tone)).font(.system(size: size.iconSize, weight: .semibold)) }
             Text(text).lineLimit(1)
         }
-        .hermesText(.footnoteCaption)
+        .hermesText(size.textStyle)
         .fontWeight(.medium)
         .foregroundStyle(tone)
-        .padding(.horizontal, 7)
-        .padding(.vertical, 3)
+        .kanbanChipFrame(size)
         .background(tone.opacity(0.14), in: Capsule())
     }
 }
@@ -81,26 +40,27 @@ struct KanbanBadges: View {
     let now: Date
 
     var body: some View {
-        KanbanFlow(spacing: 6) {
-            KanbanChip(text: KanbanPresentation.statusTitle(row.card.status), tone: row.column.tone)
+        KanbanFlow(spacing: 8) {
+            KanbanChip(text: KanbanPresentation.statusTitle(row.card.status), tone: row.column.tone, size: .header)
                 .accessibilityIdentifier("kanbanState-\(row.card.taskID)")
             if let ref = row.ref { KanbanRefChip(ref: ref) }
-            if let project = row.project { KanbanChip(text: project, symbol: "folder") }
+            if let project = row.project { KanbanChip(text: project, symbol: "folder", size: .header) }
             if row.bot != nil {
-                KanbanAssignee(handle: row.bot, size: 16)
-                    .hermesText(.footnoteCaption)
+                KanbanAssignee(handle: row.bot, size: 18)
+                    .hermesText(.chip)
                     .fontWeight(.medium)
                     .foregroundStyle(PalTokens.textSecondary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
+                    .kanbanChipFrame(.header)
                     .background(PalTokens.chipFill, in: Capsule())
             }
-            if let kind = row.card.blockKind, !kind.isEmpty { KanbanChip(text: kind, symbol: "exclamationmark.circle", tone: .red) }
-            if let pullRequest = row.pullRequest { KanbanPullRequestChip(pullRequest: pullRequest, showsState: true) }
-            if row.evidenceCount > 0 { KanbanChip(text: "\(row.evidenceCount)", symbol: "paperclip") }
-            if let proof { KanbanChip(text: proof.text, symbol: proof.symbol, tone: proof.tone) }
+            if let kind = row.card.blockKind, !kind.isEmpty {
+                KanbanChip(text: kind, symbol: "exclamationmark.circle", tone: .red, size: .header)
+            }
+            if let pullRequest = row.pullRequest { KanbanPullRequestChip(pullRequest: pullRequest, showsState: true, size: .header) }
+            if row.evidenceCount > 0 { KanbanChip(text: "\(row.evidenceCount)", symbol: "paperclip", size: .header) }
+            if let proof { KanbanChip(text: proof.text, symbol: proof.symbol, tone: proof.tone, size: .header) }
             if let age = KanbanPresentation.age(since: KanbanPresentation.ageSource(row.card), now: now) {
-                KanbanChip(text: age, symbol: "clock").opacity(0.8)
+                KanbanChip(text: age, symbol: "clock", size: .header).opacity(0.8)
             }
         }
     }
@@ -179,6 +139,7 @@ struct KanbanAssignee: View {
 struct KanbanPullRequestChip: View {
     let pullRequest: KanbanPullRequest
     var showsState = false
+    var size: KanbanChipSize = .tile
 
     @Environment(\.hermesTheme) private var theme
 
@@ -211,15 +172,14 @@ struct KanbanPullRequestChip: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
-            PalIcon(symbol, ink: .custom(tone)).font(.system(size: 9, weight: .semibold))
+        HStack(spacing: size.spacing) {
+            PalIcon(symbol, ink: .custom(tone)).font(.system(size: size.iconSize, weight: .semibold))
             Text(showsState ? "\(number) \(stateTitle)" : number).lineLimit(1)
         }
-        .hermesText(.footnoteCaption)
+        .hermesText(size.textStyle)
         .fontWeight(.semibold)
         .foregroundStyle(tone)
-        .padding(.horizontal, 7)
-        .frame(height: 20)
+        .kanbanChipFrame(size, tileHeight: 20)
         .background(tone.opacity(0.14), in: Capsule())
         .overlay(Capsule().strokeBorder(tone.opacity(0.35), lineWidth: 0.5))
         .accessibilityElement(children: .ignore)
@@ -356,7 +316,8 @@ struct KanbanColumnView: View {
         .padding(8)
         .frame(width: width)
         .frame(maxWidth: width == nil ? .infinity : nil, maxHeight: .infinity, alignment: .top)
-        .kanbanGlass(RoundedRectangle(cornerRadius: PalMetrics.tileRadius, style: .continuous))
+        .background(PalTokens.sidebar, in: RoundedRectangle(cornerRadius: PalMetrics.tileRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: PalMetrics.tileRadius, style: .continuous).stroke(PalTokens.borderStrong, lineWidth: 0.5))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("kanbanColumn-\(layout.column.id)")
     }

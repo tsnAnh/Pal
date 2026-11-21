@@ -50,6 +50,10 @@ PRE_FIX_KANBAN_HEADER = '''
     PRE_FIX_KANBAN_HEADER,
     'Button { dismiss() } label: { Image(systemName: "chevron.left") }\n    .accessibilityLabel(Text("Back"))\n',
     'Button(action: close) {\n    Image(systemName: "xmark")\n}\n.accessibilityIdentifier("sheetClose")\n',
+    'Button { dismiss() } label: { PalIcon("chevron.left") }\n    .accessibilityLabel(Text("Back"))\n',
+    'Button(action: back) {\n    PalIcon("xmark", ink: .secondary)\n}\n.accessibilityIdentifier("kanbanCard-close")\n',
+    'Button(action: dismiss) {\n    PalIcon(\n        "xmark",\n        ink: .secondary)\n}\n.accessibilityIdentifier("voiceModeClose")\n',
+    'Button { shell.showsInspector = false } label: {\n    inspectorGlyph("xmark")\n}\n.accessibilityLabel(Text("Close details"))\n',
 ])
 def test_custom_back_or_close_fails(tmp_path: Path, body: str) -> None:
     found = cnc.scan(_tree(tmp_path, {"App/View.swift": body}))
@@ -63,6 +67,7 @@ def test_custom_back_or_close_fails(tmp_path: Path, body: str) -> None:
     'Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }\n    .accessibilityLabel(Text("Clear search"))\n',
     'Button(action: remove) {\n    Image(systemName: "xmark")\n}\n.accessibilityLabel(Text("Remove attachment"))\n',
     'Label("Back", systemImage: "chevron.left")\n.accessibilityIdentifier("back")\n',
+    'Button(action: dismiss) {\n    PalIcon("xmark", ink: .secondary)\n}\n.accessibilityLabel(Text("Dismiss"))\n.accessibilityIdentifier("usageBannerDismiss")\n',
 ])
 def test_system_controls_and_in_content_glyphs_pass(tmp_path: Path, body: str) -> None:
     assert cnc.scan(_tree(tmp_path, {"App/View.swift": body})) == []
@@ -179,6 +184,8 @@ def test_sheet_chrome_without_the_shared_bottom_inset_fails(tmp_path: Path) -> N
     assert ok == []
 
 
-def test_an_opt_out_still_waives_the_allowlisted_in_content_dismisses(tmp_path: Path) -> None:
-    body = 'Button(action: back) { // nav-chrome: ok\n    Image(systemName: "xmark")\n}\n.accessibilityLabel(Text("Close"))\n'
-    assert cnc.scan(_tree(tmp_path, {"App/Chat/VoiceModeView.swift": body})) == []
+def test_an_opt_out_cannot_waive_any_hand_drawn_back_or_close(tmp_path: Path) -> None:
+    close = 'Button(action: back) { // nav-chrome: ok\n    PalIcon("xmark")\n}\n.accessibilityLabel(Text("Close"))\n'
+    back = 'Button { dismiss() } label: { PalIcon("chevron.left") } // nav-chrome: ok\n    .accessibilityLabel(Text("Back"))\n'
+    found = cnc.scan(_tree(tmp_path, {"App/Chat/VoiceModeView.swift": close, "App/Computer/ComputerView.swift": back}))
+    assert len(found) == 2 and all("cannot waive" in f for f in found)

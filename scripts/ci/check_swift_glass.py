@@ -9,7 +9,7 @@ reported and harmless; ``--write-baseline`` rewrites the file. A justified excep
 ``glass-lint: ok`` on the flagged line.
 
 Rules: glass-dark-tint, glass-hand-rolled, glass-pill-button, glass-container, glass-sheet-chrome,
-glass-search-field, glass-floating-bar, glass-raw-color.
+glass-close-chrome, glass-search-field, glass-floating-bar, glass-raw-color, glass-system-tint.
 
 Run: python scripts/ci/check_swift_glass.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -226,6 +226,13 @@ LINE_RULES = (
         "old pill button style. Use the shared glass or capsule button style (.buttonStyle(.glass), no blue)",
     ),
     LineRule(
+        "glass-system-tint",
+        re.compile(r"\.tint\(\s*(?:Color\.|\.)?(?:blue|systemBlue|accentColor)\b|\.tint\([^)]*\baccentBlue(?:Text)?\b|\.accentColor\("),
+        SCREENS,
+        "system or blue tint on a control. Controls take the app accent (the Pal ink set once on the root); "
+        "delete the .tint/.accentColor, or use PalTokens.textPrimary when a view must restate the ink",
+    ),
+    LineRule(
         "glass-raw-color",
         re.compile(r"\b(?:Color|UIColor|NSColor)\(\s*(?:\.\w+\s*,\s*)?(?:red|white|hue)\s*:"
                    r"|\"#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?\"|\bColor\(\s*hex"),
@@ -248,6 +255,12 @@ DECL = re.compile(r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|private|filepriva
 CLOSE_SIDE = re.compile(r'"(?:Close|Cancel|Dismiss)"|xmark|role:\s*\.(?:close|cancel)')
 TRAILING_PLACEMENT = re.compile(r"placement:\s*\.(?:topBarTrailing|navigationBarTrailing|confirmationAction|primaryAction)\b")
 MAGIC_BOTTOM = re.compile(r"\.padding\(\s*\.bottom\s*,\s*\d")
+CLOSE_ROLE = re.compile(r"\brole:\s*\.close\b")
+CLOSE_HOSTS = frozenset({"ToolbarItem", "ToolbarItemGroup", "SheetChrome"})
+CALL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*$")
+HAND_BUILT_GLYPH = re.compile(r'systemName:\s*"(?:xmark|chevron\.left)"')
+HAND_BUILT_LABEL = re.compile(r'(?:Image\(systemName:|\b\w+\()\s*"(?:xmark|chevron\.left)"')
+CLOSE_OR_BACK_NAME = re.compile(r"accessibility(?:Label|Identifier)\([^\n]*(?i:back|close)")
 
 
 def _decls(src: Source) -> list[tuple[int, int]]:
@@ -314,6 +327,53 @@ def glass_sheet_chrome(src: Source) -> Iterator[tuple[int, str]]:
                                            "(Close on the leading side, shared bottom inset)")
 
 
+def _hosting_calls(src: Source, index: int, opened_by: dict[int, int]) -> set[str]:
+    names: set[str] = set()
+    for open_index in src.enclosing(index):
+        anchor = open_index
+        if src.text[open_index] == "{":
+            before = src.text[:open_index].rstrip()
+            if not before.endswith(")"):
+                continue
+            anchor = opened_by.get(len(before) - 1, open_index)
+        found = CALL_NAME.search(src.text, max(0, anchor - 40), anchor)
+        if found:
+            names.add(found.group().strip())
+    return names
+
+
+def _close_label(src: Source, open_index: int, end: int) -> str:
+    args_end = src.close[open_index]
+    if re.search(r"\baction\s*:", src.text[open_index:args_end + 1]):
+        return src.text[args_end + 1:end + 1]
+    label = re.compile(r"\s*label\s*:\s*\{").match(src.text, end + 1)
+    if not label:
+        return ""
+    brace = label.end() - 1
+    return src.text[brace:src.close.get(brace, brace) + 1]
+
+
+def glass_close_chrome(src: Source) -> Iterator[tuple[int, str]]:
+    opened_by = {close: open_index for open_index, close in src.close.items()}
+    for start, open_index, end in src.calls("Button"):
+        if HAND_BUILT_LABEL.search(src.text[open_index:end + 1]) and CLOSE_OR_BACK_NAME.search(src.modifier_chain(end)):
+            yield src.line_of(start), ("hand-built back or close button. Use the NavigationStack back, SheetChrome "
+                                       "(leading Close or Back) or Button(role: .close) in a ToolbarItem")
+        if not CLOSE_ROLE.search(src.text[open_index:src.close[open_index] + 1]):
+            continue
+        if not _hosting_calls(src, start, opened_by) & CLOSE_HOSTS:
+            yield src.line_of(start), ("Button(role: .close) outside the toolbar draws a text pill, not the system xmark. "
+                                       "Host the content in SheetChrome, or put it in "
+                                       "ToolbarItem(placement: .cancellationAction)")
+        if re.search(r"\b(?:Text|Label)\(", _close_label(src, open_index, end)):
+            yield src.line_of(start), ("Button(role: .close) with a Text label draws the word Close instead of the xmark. "
+                                       "Drop the label: Button(role: .close) { dismiss() }")
+    for start, open_index, _ in src.calls("PalClearGlassIconButton"):
+        if HAND_BUILT_GLYPH.search(src.text[open_index:src.close[open_index] + 1]):
+            yield src.line_of(start), ("hand-built glass close or back button. Use SheetChrome (leading Close or Back) "
+                                       "or Button(role: .close) in a ToolbarItem")
+
+
 def glass_search_field(src: Source, parts: tuple[str, ...]) -> Iterator[tuple[int, str]]:
     for start, open_index, end in src.calls("TextField"):
         if not SEARCH_LABEL.search(src.text[open_index:src.close[open_index] + 1]):
@@ -365,6 +425,7 @@ BLOCK_RULES: tuple[tuple[str, Scope, Callable[..., Iterator[tuple[int, str]]]], 
     ("glass-container", EVERYWHERE, glass_container),
     ("glass-pill-button", EVERYWHERE, glass_blue_button),
     ("glass-sheet-chrome", EVERYWHERE, glass_sheet_chrome),
+    ("glass-close-chrome", SCREENS, glass_close_chrome),
     ("glass-search-field", EVERYWHERE, glass_search_field),
     ("glass-floating-bar", SCREENS, glass_floating_bar),
 )
