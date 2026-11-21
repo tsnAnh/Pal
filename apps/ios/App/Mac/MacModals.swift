@@ -44,7 +44,7 @@ struct MacModalHost: View {
                     .accessibilityIdentifier("kanbanPanel")
                     .transition(.opacity)
             } else if let sheet = router.sheet {
-                MacModalScrim(blurs: sheet == .connectApps) { router.dismissSheet() }
+                MacModalScrim { router.dismissSheet() }
                 panel(for: sheet)
             } else if let bot = router.renamingBot.flatMap({ roster.bot(named: $0) }) {
                 MacModalScrim { router.renamingBot = nil }
@@ -120,7 +120,7 @@ struct MacModalHost: View {
         switch sheet {
         case .settings:
             MacModalPanel(
-                background: PalTokens.content, identifier: "settingsSheetPanel", closeIdentifier: "settingsClose", close: { router.dismissSheet() },
+                identifier: "settingsSheetPanel", closeIdentifier: "settingsClose", close: { router.dismissSheet() },
                 content: { MacSettingsModal(hub: hub, connection: connection, section: Bindable(shell).settingsSection) }
             )
         case .createBot:

@@ -56,11 +56,10 @@ struct HostUpdateScreen: View {
                 ]
             )
         }
-        .sheet(isPresented: $model.showingProgress, onDismiss: { model.dismissProgress() }) {
+        .macSheet(isPresented: $model.showingProgress, onDismiss: { model.dismissProgress() }, content: {
             HostUpdateProgressSheet(model: model) { model.showingProgress = false }
-                .macSheetFrame()
-                .interactiveDismissDisabled(model.isUpdating)
-        }
+                .macSheetDismissDisabled(model.isUpdating)
+        })
     }
 
     private var statusText: String {

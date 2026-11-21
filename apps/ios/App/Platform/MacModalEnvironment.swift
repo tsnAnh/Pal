@@ -11,6 +11,7 @@ struct MacModalEnvironment: ViewModifier {
     func body(content: Content) -> some View {
         #if os(macOS)
         content
+            .serviceSignInDialogHost()
             .environment(\.macWindowSize, windowSize)
             .environment(\.macDialogCenter, dialogs)
             .environment(\.macSheetCenter, sheets)

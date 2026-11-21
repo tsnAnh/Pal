@@ -14,7 +14,7 @@ struct FilePreviewSheet: View {
     }
 
     @Environment(\.chatFileActions) private var actions
-    @Environment(\.dismiss) private var dismiss
+    private var dismiss = SheetDismiss()
     @Environment(\.hermesTheme) private var theme
     @State private var phase: Phase = .loading
     @State private var attempt = 0
@@ -35,7 +35,6 @@ struct FilePreviewSheet: View {
                 }
                 .iOSOnly { $0.toolbarTitleDisplayMode(.inline) }
         }
-        .macSheetFrame()
         .task(id: attempt) { await load() }
         .onDisappear(perform: removeTemporaryCopy)
         .accessibilityIdentifier("filePreview")

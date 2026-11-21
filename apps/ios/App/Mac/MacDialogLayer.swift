@@ -34,7 +34,7 @@ private struct MacDialogPanel: View {
             stack(request.content, scrolls: true)
         }
         .frame(minWidth: MacModalSizing.alertMinWidth, maxWidth: measured ? cap.width : nil, maxHeight: measured ? cap.height : nil)
-        .background(PalTokens.elevated, in: shape)
+        .background(PalTokens.content, in: shape)
         .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 20, y: 12)
         .background { keyEquivalents }

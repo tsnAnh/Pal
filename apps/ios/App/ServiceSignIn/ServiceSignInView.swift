@@ -400,7 +400,7 @@ private struct ServiceSignInRoot: ViewModifier {
     func body(content: Content) -> some View {
         let context = ServiceSignInHostContext(center: center, hosts: hosts, botName: botName)
         content
-            .modifier(ServiceSignInPresentation(context: context))
+            .iOSOnly { $0.modifier(ServiceSignInPresentation(context: context)) }
             .environment(\.serviceSignInHost, context)
     }
 }
@@ -425,9 +425,9 @@ private struct ServiceSignInPresentation: ViewModifier {
         content
             .onAppear { context.hosts.enter(id) }
             .onDisappear { context.hosts.leave(id) }
-            .sheet(isPresented: Binding(get: { context.center.current != nil && context.hosts.presents(id) }, set: { _ in })) {
+            .macSheet(isPresented: Binding(get: { context.center.current != nil && context.hosts.presents(id) }, set: { _ in })) {
                 ServiceSignInDialogView(center: context.center, botName: context.botName)
-                    .interactiveDismissDisabled()
+                    .macSheetDismissDisabled(true)
                     .iOSOnly { $0.presentationDetents([.medium, .large]) }
             }
     }

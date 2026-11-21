@@ -3,18 +3,14 @@ import PalDesign
 import SwiftUI
 
 struct MacModalScrim: View {
-    var blurs = false
     let dismiss: () -> Void
 
     var body: some View {
-        ZStack {
-            if blurs { Rectangle().fill(.ultraThinMaterial) }
-            PalTokens.scrim
-        }
-        .contentShape(Rectangle())
-        .onTapGesture(perform: dismiss)
-        .accessibilityHidden(true)
-        .transition(.opacity)
+        PalTokens.scrim
+            .contentShape(Rectangle())
+            .onTapGesture(perform: dismiss)
+            .accessibilityHidden(true)
+            .transition(.opacity)
     }
 }
 
@@ -46,7 +42,6 @@ enum MacModalFit {
 
 struct MacModalPanel<Content: View>: View {
     var fit = MacModalFit.window
-    var background = PalTokens.elevated
     var clearClose = false
     var closePlacement = MacPanelClosePlacement.leading
     var closeDisabled = false
@@ -71,7 +66,7 @@ struct MacModalPanel<Content: View>: View {
     var body: some View {
         sized
             .paneOverflowProbe(identifier)
-            .background(background, in: shape)
+            .background(PalTokens.content, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .overlayPreferenceValue(MacPanelCloseKey.self, alignment: closePlacement.alignment) { override in
                 if !override.hidden {

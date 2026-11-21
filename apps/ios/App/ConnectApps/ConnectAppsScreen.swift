@@ -105,20 +105,18 @@ private struct ConnectAppsPresentations: ViewModifier {
                 SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
             }
             .macSheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, content: mcpSignInSheet)
-            .sheet(isPresented: $model.showsSlackPicker) {
+            .macSheet(isPresented: $model.showsSlackPicker) {
                 SlackBotChoice(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
-                    .macSheetFrame()
             }
             .modifier(OwnerSetupSheet(model: model))
             .macSheet(item: $model.keyRequest) { request in
                 CapabilityKeyEntrySheet(model: model, request: request)
                     .presentationDetents([.medium])
             }
-            .sheet(item: $model.credentialPrompt) { prompt in
+            .macSheet(item: $model.credentialPrompt) { prompt in
                 CredentialSheet(prompt: prompt, botName: model.botName) { values in
                     Task { await model.connect(prompt.app, credentials: values) }
                 }
-                .macSheetFrame()
             }
     }
 }
@@ -127,10 +125,11 @@ private struct OwnerSetupSheet: ViewModifier {
     @Bindable var model: ConnectAppsModel
 
     func body(content: Content) -> some View {
-        content.sheet(
+        content.macSheet(
             item: $model.ownerSetup,
             onDismiss: { Task { await model.reload() } },
-            content: { setup in OwnerSetupView(model: setup).macSheetFrame(readable: true) }
+            readable: true,
+            content: { setup in OwnerSetupView(model: setup) }
         )
     }
 }
@@ -140,7 +139,7 @@ struct CredentialSheet: View {
     let botName: String
     let submit: ([String: String]) -> Void
 
-    @Environment(\.dismiss) private var dismiss
+    private var dismiss = SheetDismiss()
     @State private var values: [String: String] = [:]
 
     private var pending: String? { prompt.keys.first { values[$0] == nil } }
