@@ -7,11 +7,19 @@ import Testing
 
 private let rejectedSignIn = "Sign in again: Upwork stopped accepting the saved sign-in"
 
-private func upwork(_ state: ConnectAppState, reason: String? = nil) -> ConnectApp {
+func deviceSignInApp(
+    slug: String = "upwork", name: String = "Upwork", url: URL = UpworkConnector.serverURL, state: ConnectAppState = .disconnected,
+    reason: String? = nil
+) -> ConnectApp {
     ConnectApp(
-        id: "mcp:upwork", name: "Upwork", summary: "", category: "Other",
-        source: .mcp(name: "upwork", requires: []), state: state, authReason: reason
+        id: "connector:\(slug)", name: name, summary: "", category: "Other",
+        source: .catalog(PalCatalogEntry(slug: slug, name: name, method: .mcpOAuth, mcpURL: url, multiAccount: true, signIn: .device)),
+        state: state, authReason: reason
     )
+}
+
+private func upwork(_ state: ConnectAppState, reason: String? = nil) -> ConnectApp {
+    deviceSignInApp(state: state, reason: reason)
 }
 
 private func resolve(_ state: ConnectAppState, busy: Bool = false, failure: String? = nil, reason: String? = nil) -> ConnectorCardState {

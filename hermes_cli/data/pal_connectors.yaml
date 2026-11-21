@@ -99,6 +99,7 @@ connectors:
   icon: circleci
   category: Developer tools
   method: mcp_oauth
+  sign_in: device
   mcp_url: https://mcp.circleci.com/v1/mcp
   verified: true
   source: https://circleci.com/docs/guides/toolkit/circleci-mcp-overview/
@@ -326,6 +327,7 @@ connectors:
   icon: plugin_glyph
   category: Docs and files
   method: mcp_oauth
+  sign_in: device
   mcp_url: https://mcp.gamma.app/mcp
   verified: true
   source: https://developers.gamma.app/docs/gamma-mcp-server
@@ -475,6 +477,7 @@ connectors:
   icon: intercom
   category: Sales and support
   method: mcp_oauth
+  sign_in: device
   mcp_url: https://mcp.intercom.com/mcp
   verified: true
   source: https://developers.intercom.com/docs/guides/mcp
@@ -672,6 +675,7 @@ connectors:
   icon: upwork
   category: Other
   method: mcp_oauth
+  sign_in: device
   mcp_url: https://mcp.upwork.com/mcp
   verified: false
   source: https://www.upwork.com/ai/mcp
@@ -681,6 +685,7 @@ connectors:
   icon: vercel
   category: Hosting and infrastructure
   method: mcp_oauth
+  sign_in: device
   mcp_url: https://mcp.vercel.com
   verified: true
   source: https://vercel.com/docs/mcp

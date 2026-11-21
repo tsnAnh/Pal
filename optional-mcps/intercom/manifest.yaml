@@ -18,6 +18,7 @@ transport:
 
 auth:
   type: oauth
+  signin_on: owner_app
 
 # Composer-suggestion triggers (desktop brand pills).
 suggest:

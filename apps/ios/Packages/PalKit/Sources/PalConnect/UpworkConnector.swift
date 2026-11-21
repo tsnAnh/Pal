@@ -13,7 +13,7 @@ public enum UpworkConnector {
 
 extension ConnectApp {
     public var requiresAppSignIn: Bool {
-        if case .mcp(let name, _) = source { return name == UpworkConnector.presetName }
+        if case .catalog(let entry) = source { return entry.signIn == .device }
         return false
     }
 }
@@ -147,71 +147,92 @@ public struct McpNativeSignIn: Sendable {
     }
 
     public func run(service requested: String) async throws {
-        try await run(account: try await reauthTarget(for: requested))
+        let target = try await target(for: requested)
+        try await target.signIn.run(account: target.account)
     }
 
     public func beginPaste(service requested: String, rollback: (@Sendable () async -> Void)? = nil) async throws -> McpPasteSession {
-        try await beginPaste(account: try await reauthTarget(for: requested), rollback: rollback)
+        let target = try await target(for: requested)
+        return try await target.signIn.beginPaste(account: target.account, rollback: rollback)
     }
 
-    private func reauthTarget(for requested: String) async throws -> ConnectorAccountTarget? {
-        guard let id = McpServiceID(service: requested), id.slug == McpServiceID(service: service)?.slug else {
+    func targeting(slug: String, resource: URL) -> McpNativeSignIn {
+        McpNativeSignIn(flow: flow.targeting(resource), rpc: rpc, service: "mcp:\(slug)")
+    }
+
+    private func target(for requested: String) async throws -> (signIn: McpNativeSignIn, account: ConnectorAccountTarget?) {
+        guard let id = McpServiceID(service: requested) else { throw McpOAuthError.tokenExchangeFailed }
+        if id.slug == McpServiceID(service: service)?.slug {
+            let row = id.account == nil ? nil : await catalogRow(slug: id.slug)
+            return (self, Self.accountTarget(id, row: row))
+        }
+        guard let row = await catalogRow(slug: id.slug), row.signIn == .device, let resource = row.mcpURL else {
             throw McpOAuthError.tokenExchangeFailed
         }
-        guard let alias = id.account else { return nil }
-        return ConnectorAccountTarget(name: alias, create: false, selectsAccount: await hasOtherAccounts(slug: id.slug, besides: alias))
+        return (targeting(slug: id.slug, resource: resource), Self.accountTarget(id, row: row))
     }
 
-    private func hasOtherAccounts(slug: String, besides alias: String) async -> Bool {
+    private static func accountTarget(_ id: McpServiceID, row: PalCatalogEntry?) -> ConnectorAccountTarget? {
+        guard let alias = id.account else { return nil }
+        let others = row.map { $0.accounts.contains { $0.name != alias } } ?? true
+        return ConnectorAccountTarget(name: alias, create: false, selectsAccount: others)
+    }
+
+    private func catalogRow(slug: String) async -> PalCatalogEntry? {
         guard let catalog = try? await rpc.call("connectors.catalog", .object([:])),
-              let row = (catalog["connectors"]?.arrayValue ?? []).first(where: { $0["slug"]?.stringValue == slug }),
-              let entry = try? row.decoded(as: PalCatalogEntry.self)
-        else { return true }
-        return entry.accounts.contains { $0.name != alias }
+              let row = (catalog["connectors"]?.arrayValue ?? []).first(where: { $0["slug"]?.stringValue == slug })
+        else { return nil }
+        return try? row.decoded(as: PalCatalogEntry.self)
     }
 }
 
 extension ConnectAppsService {
-    func connectUpwork(_ app: ConnectApp, account: ConnectorAccountTarget? = nil) async throws {
-        guard let nativeSignIn else { throw ConnectAppsError.unavailable }
-        let added = try await addUpworkServer(if: app.state == .disconnected)
-        let alreadyAdded = !added
+    func connectOnDevice(_ app: ConnectApp, account: ConnectorAccountTarget? = nil) async throws {
+        let target = try deviceTarget(app)
+        let added = try await addDeviceServer(slug: target.slug, if: app.state == .disconnected)
         do {
-            try await nativeSignIn.run(account: account)
+            try await target.signIn.run(account: account)
         } catch {
-            if !alreadyAdded { _ = try? await call("mcp.servers.remove", ["name": .string(UpworkConnector.presetName)]) }
+            if added { _ = try? await call("mcp.servers.remove", ["name": .string(target.slug)]) }
             let failure = McpOAuthError.from(error)
             throw failure == .cancelled ? ConnectAppsError.cancelled : ConnectAppsError.signInFailed(failure.reason)
         }
     }
 
-    private func addUpworkServer(if needed: Bool) async throws -> Bool {
+    public func beginDevicePaste(_ app: ConnectApp, account: ConnectorAccountTarget? = nil) async throws -> McpPasteSession {
+        let target = try deviceTarget(app)
+        let adding = try await addDeviceServer(slug: target.slug, if: app.state == .disconnected)
+        let service = self
+        let remove: (@Sendable () async -> Void)?
+        if adding {
+            remove = { @Sendable in _ = try? await service.call("mcp.servers.remove", ["name": .string(target.slug)]) }
+        } else {
+            remove = nil
+        }
+        do {
+            return try await target.signIn.beginPaste(account: account, rollback: remove)
+        } catch {
+            await remove?()
+            throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
+        }
+    }
+
+    private func deviceTarget(_ app: ConnectApp) throws -> (slug: String, signIn: McpNativeSignIn) {
+        guard let nativeSignIn, case .catalog(let entry) = app.source, let resource = entry.mcpURL else {
+            throw ConnectAppsError.unavailable
+        }
+        return (entry.slug, nativeSignIn.targeting(slug: entry.slug, resource: resource))
+    }
+
+    private func addDeviceServer(slug: String, if needed: Bool) async throws -> Bool {
         guard needed else { return false }
         do {
-            _ = try await rawCall("mcp.servers.add", ["name": .string(UpworkConnector.presetName), "preset": .string(UpworkConnector.presetName)])
+            _ = try await rawCall("mcp.servers.add", ["name": .string(slug), "preset": .string(slug)])
             return true
         } catch let error as GatewayTransportError {
             guard case .rpc(let rpc) = error else { throw ConnectAppsError.signInFailed(McpOAuthError.gatewayUnavailable.reason) }
             if rpc.code == 4090 { return false }
             throw ConnectAppsError.signInFailed(McpOAuthError.serverAddFailed(McpOAuthSubmission.readable(rpc.message)).reason)
-        }
-    }
-
-    public func beginUpworkPaste(_ app: ConnectApp, account: ConnectorAccountTarget? = nil) async throws -> McpPasteSession {
-        guard let nativeSignIn else { throw ConnectAppsError.unavailable }
-        let adding = try await addUpworkServer(if: app.state == .disconnected)
-        let service = self
-        let remove: (@Sendable () async -> Void)?
-        if adding {
-            remove = { @Sendable in _ = try? await service.call("mcp.servers.remove", ["name": .string(UpworkConnector.presetName)]) }
-        } else {
-            remove = nil
-        }
-        do {
-            return try await nativeSignIn.beginPaste(account: account, rollback: remove)
-        } catch {
-            await remove?()
-            throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
         }
     }
 }

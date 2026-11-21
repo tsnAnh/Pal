@@ -204,12 +204,12 @@ struct AccountReauthSignInTests {
     func aServiceThatIsNotThisConnectorIsRefused(_ service: String) async {
         let gateway = rpc()
         await #expect(throws: McpOAuthError.tokenExchangeFailed) { _ = try await McpNativeSignIn(flow: flow(), rpc: gateway).beginPaste(service: service) }
-        #expect(gateway.methods().isEmpty)
+        #expect(!gateway.methods().contains("auth.submit_oauth_tokens"))
     }
 }
 
 private func upworkApp(state: ConnectAppState = .connected) -> ConnectApp {
-    ConnectApp(id: "mcp:upwork", name: "Upwork", summary: "", category: "Other", source: .mcp(name: "upwork", requires: []), state: state)
+    deviceSignInApp(state: state)
 }
 
 private func serviceWith(_ gateway: CustomRPC) -> ConnectAppsService {
@@ -224,7 +224,7 @@ private func serviceWith(_ gateway: CustomRPC) -> ConnectAppsService {
 struct UpworkAccountConnectTests {
     @Test func aSecondAccountPasteHandsOffToItsAliasAndNeverRemovesTheServer() async throws {
         let gateway = rpc()
-        let session = try await serviceWith(gateway).beginUpworkPaste(upworkApp(), account: work)
+        let session = try await serviceWith(gateway).beginDevicePaste(upworkApp(), account: work)
         #expect(query(session.authorizeURL)["prompt"] == "select_account login")
         await session.cancel()
         #expect(!gateway.methods().contains("mcp.servers.remove"))
@@ -233,7 +233,7 @@ struct UpworkAccountConnectTests {
 
     @Test func aFirstAttemptThatIsCancelledRemovesTheServerItAddedWithNoAccount() async throws {
         let gateway = rpc()
-        let session = try await serviceWith(gateway).beginUpworkPaste(upworkApp(state: .disconnected), account: first)
+        let session = try await serviceWith(gateway).beginDevicePaste(upworkApp(state: .disconnected), account: first)
         await session.cancel()
         let removal = try #require(gateway.params("mcp.servers.remove").first)
         #expect(removal["name"]?.stringValue == "upwork")
@@ -248,7 +248,7 @@ struct UpworkAccountConnectTests {
             nativeSignIn: McpNativeSignIn(flow: flow(browser), rpc: gateway),
             timing: ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3)
         )
-        try await service.connectUpwork(upworkApp(), account: work)
+        try await service.connectOnDevice(upworkApp(), account: work)
         #expect(submittedService(gateway) == "mcp:upwork:work")
         #expect(query(try #require(browser.openedURLs.first))["prompt"] == "select_account login")
         #expect(!gateway.methods().contains("mcp.servers.remove"))

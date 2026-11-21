@@ -3,6 +3,12 @@ import Foundation
 extension McpOAuthFlow {
     public static let accountPrompt = "select_account login"
 
+    public func targeting(_ resource: URL) -> McpOAuthFlow {
+        var copy = self
+        copy.resource = resource
+        return copy
+    }
+
     public func selectingAccount(_ selects: Bool) -> McpOAuthFlow {
         var copy = self
         copy.selectsAccount = selects

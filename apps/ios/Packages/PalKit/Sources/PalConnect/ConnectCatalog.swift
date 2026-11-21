@@ -27,6 +27,19 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         }
     }
 
+    public enum SignIn: Sendable, Hashable {
+        case gateway
+        case device
+
+        static func decoded(_ raw: String?, slug: String) -> SignIn {
+            switch raw {
+            case "device": .device
+            case nil: slug == UpworkConnector.presetName ? .device : .gateway
+            default: .gateway
+            }
+        }
+    }
+
     public enum Status: String, Decodable, Sendable {
         case connected
         case needsReconnect = "needs_reconnect"
@@ -50,12 +63,14 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
     public var accounts: [ConnectorAccount]
     public var description: String
     public var source: URL?
+    public var signIn: SignIn
 
     public init(
         slug: String, name: String, category: String = "", icon: String = "", method: Method,
         verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected, notes: String? = nil,
         setupGuide: SetupGuide? = nil, setupProgress: SetupProgress? = nil, featured: Bool = false,
-        multiAccount: Bool = false, accounts: [ConnectorAccount] = [], description: String = "", source: URL? = nil
+        multiAccount: Bool = false, accounts: [ConnectorAccount] = [], description: String = "", source: URL? = nil,
+        signIn: SignIn = .gateway
     ) {
         self.slug = slug
         self.name = name
@@ -73,10 +88,12 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         self.accounts = accounts
         self.description = description
         self.source = source
+        self.signIn = signIn
     }
 
     enum CodingKeys: String, CodingKey {
         case slug, name, category, icon, method, verified, status, notes, featured, accounts, description, source
+        case signIn = "sign_in"
         case multiAccount = "multi_account"
         case mcpURL = "mcp_url"
         case setupGuide = "setup_guide"
@@ -101,6 +118,7 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         accounts = ConnectorAccount.lossyList(from: container)
         description = ConnectorCardState.cleaned(try? container.decodeIfPresent(String.self, forKey: .description)) ?? ""
         source = (try? container.decodeIfPresent(String.self, forKey: .source)).flatMap { URL(string: $0) }.flatMap(Self.web)
+        signIn = SignIn.decoded(try? container.decodeIfPresent(String.self, forKey: .signIn), slug: slug)
     }
 
     private static func secure(_ url: URL) -> URL? {

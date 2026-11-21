@@ -100,6 +100,11 @@ class HermesProviderMixin:
         name = getattr(self, "_hermes_server_name", "")
         return bool(name) and server_signs_in_on_owner_app(name)
 
+    def _hermes_hands_over_sign_in(self) -> bool:
+        from tools.mcp_oauth import server_hands_over_sign_in
+        name = getattr(self, "_hermes_server_name", "")
+        return bool(name) and server_hands_over_sign_in(name)
+
     def _hermes_raise_if_reauth_required(self) -> None:
         from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
         storage = self.context.storage
@@ -501,7 +506,7 @@ class HermesProviderMixin:
                 )
                 return True
             self.context.clear_tokens()
-            if response.status_code in (400, 401) and self._hermes_signs_in_on_owner_app():
+            if response.status_code in (400, 401) and self._hermes_hands_over_sign_in():
                 self._hermes_reject_refresh_token()
             return False
         from httpx import HTTPError

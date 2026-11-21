@@ -669,7 +669,17 @@ class HermesTokenStorage:
         _write_json(self._reauth_path(), {"reason": "refresh_rejected", "at": time.time()})
 
     def reauth_required(self) -> bool:
-        return self._reauth_path().exists()
+        return self._reauth_path().exists() or self._handed_over_grant_lapsed()
+
+    def _handed_over_grant_lapsed(self) -> bool:
+        """An access token past its expiry with no refresh token behind it: nothing on this host can renew it, so
+        a connector whose sign-in the owner's device runs needs that sign-in again."""
+        data = _read_json(self._tokens_path())
+        if not isinstance(data, dict) or data.get("refresh_token") or not data.get("access_token"):
+            return False
+        expires_at = data.get("expires_at")
+        return (isinstance(expires_at, (int, float)) and expires_at <= time.time()
+                and server_hands_over_sign_in(self._server_name))
 
     def remove(self, *, keep_metadata: bool = False) -> None:
         """Delete all stored OAuth state for this server; ``keep_metadata`` spares ``.meta.json`` so a
@@ -1087,6 +1097,26 @@ def server_signs_in_on_owner_app(server_name: str) -> bool:
     from hermes_cli.mcp_config import _get_mcp_servers
     from tools.mcp_accounts import registration_name
     return signs_in_on_owner_app(_get_mcp_servers().get(registration_name(server_name)))
+
+
+def device_sign_in_connector(server_name: str) -> bool:
+    """True for a Pal catalog connector the owner's device signs in (``sign_in: device`` in
+    ``pal_connectors.yaml``): its saved entry, when there is one, must be the catalog's own endpoint."""
+    from hermes_cli.mcp_config import _get_mcp_servers
+    from hermes_cli.pal_connectors import device_sign_in_urls
+    from tools.mcp_accounts import registration_name
+    slug = registration_name(server_name)
+    wanted = device_sign_in_urls().get(slug)
+    if wanted is None:
+        return False
+    saved = _get_mcp_servers().get(slug)
+    return not isinstance(saved, dict) or str(saved.get("url") or "").rstrip("/") == wanted.rstrip("/")
+
+
+def server_hands_over_sign_in(server_name: str) -> bool:
+    """The owner's device runs this server's sign-in and hands the tokens over, so a lapsed or rejected grant is
+    never recovered on this host."""
+    return server_signs_in_on_owner_app(server_name) or device_sign_in_connector(server_name)
 
 
 def pending_reauth_reason(server_name: str) -> str | None:

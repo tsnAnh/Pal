@@ -49,6 +49,7 @@ class ConnectorErrorReason(WireEnum):
     invalid_token = "INVALID_TOKEN"
     check_unavailable = "CHECK_UNAVAILABLE"
     admin_approval_pending = "ADMIN_APPROVAL_PENDING"
+    signin_on_device = "SIGNIN_ON_DEVICE"
 
 
 class ConnectorsListParams(ProfileParams):
@@ -267,6 +268,7 @@ class ConnectorCatalogRow(Result):
     featured: bool = False
     multi_account: bool = False
     accounts: list[ConnectionAccountRow] = []
+    sign_in: Literal["gateway", "device"] = "gateway"
 
 
 class ConnectorsCatalogResult(Result):
@@ -283,7 +285,10 @@ method(
         "A connector that can hold several accounts is multi_account and lists them in accounts, each with its own "
         "status and reconnect reason; the entry's status is connected while any account is, needs_reconnect when "
         "none is but one needs it, else not_connected. "
-        "A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
+        "A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected. "
+        "sign_in device: the vendor registers only the owner's own device as a redirect, so the app signs in there and "
+        "hands the tokens over with auth.submit_oauth_tokens; mcp.servers.oauth.start answers 4034 with reason "
+        "SIGNIN_ON_DEVICE for the gateway and app redirects of such a connector.",
 )
 
 

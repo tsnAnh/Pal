@@ -30,6 +30,7 @@ def _catalog_row(entry):
         method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, source=entry.source, status=_catalog_status(entry, accounts),
         notes=entry.notes, setup_guide=build_guide(entry), setup_progress=derive_progress(entry),
         featured=entry.id in FEATURED_CONNECTOR_IDS, multi_account=entry.multi_account, accounts=accounts,
+        sign_in=entry.sign_in.value,
     )
 
 

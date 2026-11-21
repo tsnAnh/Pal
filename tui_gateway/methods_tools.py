@@ -1664,6 +1664,8 @@ def _(rid, params: dict) -> dict:
                 fallback_redirect_uri=fallback_redirect_uri)
         except sessions.AdminApprovalPending as e:
             return _err(rid, 4033, str(e), data={"reason": "ADMIN_APPROVAL_PENDING"})
+        except sessions.DeviceSignInRequired as e:
+            return _err(rid, 4034, str(e), data={"reason": "SIGNIN_ON_DEVICE"})
     except ValueError as e:
         return _err(rid, 4001, str(e))
     keys = ("session_id", "auth_url", "flow", "redirect", "redirect_uri", "notice")

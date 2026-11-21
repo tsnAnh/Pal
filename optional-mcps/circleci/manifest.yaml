@@ -18,6 +18,7 @@ transport:
 
 auth:
   type: oauth
+  signin_on: owner_app
 
 # Excluded: connectivity ping and billing-CSV power-user probe.
 tools:
