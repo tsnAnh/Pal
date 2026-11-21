@@ -31,18 +31,13 @@ struct McpSignInSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if showsProgress, !showsChecklist, let engine = controller.engine { StepFlowSegments(engine: engine) }
-            HStack(spacing: 0) {
-                if showsProgress, showsChecklist, let engine = controller.engine { StepFlowChecklist(engine: engine, savedNote: nil) }
-                screen.frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            footer
-        }
-        .background(PalTokens.content)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("mcpSignIn")
+        SheetChrome(
+            title: String(localized: "Connect \(controller.vendor)"),
+            accessibilityIdentifier: "mcpSignIn",
+            leadingAccessibilityIdentifier: "mcpSignInClose",
+            onLeading: close,
+            content: { flow }
+        )
         .task { await controller.start() }
         .onChange(of: phase) { _, new in
             if new == .dismissed { close() }
@@ -53,21 +48,15 @@ struct McpSignInSheet: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            Text("Connect \(controller.vendor)")
-                .hermesText(.sheetTitle)
-                .foregroundStyle(PalTokens.textPrimary)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("mcpSignInTitle")
-            Spacer()
-            Button(role: .close, action: close)
-                .buttonStyle(.glass(.regular.interactive()))
-                .accessibilityIdentifier("mcpSignInClose")
+    private var flow: some View {
+        VStack(spacing: 0) {
+            if showsProgress, !showsChecklist, let engine = controller.engine { StepFlowSegments(engine: engine) }
+            HStack(spacing: 0) {
+                if showsProgress, showsChecklist, let engine = controller.engine { StepFlowChecklist(engine: engine, savedNote: nil) }
+                screen.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            footer
         }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.vertical, PalMetrics.captionToCardGap)
     }
 
     @ViewBuilder
@@ -180,8 +169,10 @@ struct McpSignInSheet: View {
     }
 
     private var hasFooter: Bool {
-        if case .failed = phase { return false }
-        return phase != .dismissed
+        switch phase {
+        case .inBrowser, .pasteAddress, .signedIn: true
+        case .waitingForAdmin, .failed, .dismissed: false
+        }
     }
 
     @ViewBuilder
@@ -196,11 +187,6 @@ struct McpSignInSheet: View {
             .disabled(McpPasteShape.of(address) != .valid)
             #if os(iOS)
             .controlSize(.large)
-            #endif
-        case .waitingForAdmin:
-            SetupButton(title: String(localized: "Close"), kind: .primary, fillsWidth: phone, identifier: "mcpSignInPrimary", action: close)
-            #if os(iOS)
-                .controlSize(.large)
             #endif
         case .signedIn:
             SetupButton(title: String(localized: "Done"), kind: .primary, fillsWidth: phone, identifier: "mcpSignInPrimary", action: close)
