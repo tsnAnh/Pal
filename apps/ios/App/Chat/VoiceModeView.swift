@@ -39,8 +39,12 @@ struct VoiceModeView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color(theme.palette.canvas).ignoresSafeArea()
+        SheetChrome(
+            surface: .canvas,
+            accessibilityIdentifier: "voiceModeScreen",
+            leadingAccessibilityIdentifier: "voiceModeClose",
+            onLeading: dismiss
+        ) {
             VStack(spacing: 28) {
                 Spacer()
                 orb
@@ -64,10 +68,7 @@ struct VoiceModeView: View {
                 Spacer()
                 controls
             }
-            .padding(.bottom, 24)
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("voiceModeScreen")
         .task { await conversation.begin() }
         .onChange(of: model.voiceReply) { _, reply in conversation.ingest(reply) }
         .onDisappear { conversation.end() }
@@ -102,20 +103,6 @@ struct VoiceModeView: View {
                     .opacity(conversation.phase == .speaking || conversation.phase == .thinking ? 1 : 0.35)
                     .disabled(conversation.phase != .speaking && conversation.phase != .thinking)
             }
-            Button(action: dismiss) { // nav-chrome: ok
-                PalIcon(
-                    "xmark",
-                    ink: .custom(accent == Color(theme.palette.chipSelectedFill)
-                        ? Color(theme.palette.chipSelectedText)
-                        : (model.chatAccent?.foreground ?? .white))
-                )
-                    .font(.system(size: 22, weight: .semibold))
-                    .frame(width: 64, height: 64)
-                    .background(accent, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("End voice mode"))
-            .accessibilityIdentifier("voiceModeClose")
         }
     }
 

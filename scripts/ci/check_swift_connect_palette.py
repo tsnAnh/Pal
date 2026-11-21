@@ -58,6 +58,8 @@ ALLOWLIST: dict[tuple[str, str], str] = {
     ("App/ConnectApps/McpSignInSheet.swift", "connect-red"): "valid/invalid status mark, green and red state colours",
     ("App/ConnectApps/ConnectAppsMacList.swift", "connect-red"): "Mac row problem state mark",
     ("App/ConnectApps/SkillsCatalogSheet.swift", "connect-tint"): "DelayedProgressView spinner coloured with a palette colour",
+    ("App/ConnectApps/SkillsCatalogDetail.swift", "connect-tint"): "DelayedProgressView spinner coloured with a palette colour",
+    ("App/ConnectApps/ConnectAppsPhoneHeader.swift", "connect-tint"): "NavigationStack tint keeps the system back and close controls in ink, not the accent",
 }
 
 

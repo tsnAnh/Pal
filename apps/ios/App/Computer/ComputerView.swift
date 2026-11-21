@@ -8,8 +8,6 @@ struct ComputerView: View {
     let title: String
     let spec: BotAvatarSpec?
 
-    @Environment(\.dismiss) private var dismiss
-
     init(model: ComputerModel, teach: TeachModel, title: String, spec: BotAvatarSpec?) {
         _model = State(initialValue: model)
         self.teach = teach
@@ -49,8 +47,8 @@ struct ComputerView: View {
         }
         .overlay(alignment: .top) { TeachBanner(model: teach, surface: .computer) }
         .overlay(alignment: .bottom) { bottomBar }
-        .navigationBarBackButtonHidden()
         .clearNavigationBackground()
+        .darkNavigationBar()
         .toolbar { toolbar }
         .toolbarTitleDisplayMode(.inline)
         .task(id: model.attempt) { await model.run() }
@@ -69,13 +67,6 @@ struct ComputerView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        #if os(iOS)
-        ToolbarItem(placement: .leadingBar) {
-            Button { dismiss() } label: { PalIcon("chevron.left") } // nav-chrome: ok
-                .accessibilityLabel(Text("Back"))
-                .accessibilityIdentifier("computerBackButton")
-        }
-        #endif
         ToolbarItem(placement: .principal) {
             HStack(spacing: ComputerMetrics.avatarToName) {
                 if let spec { BotAvatarView(spec: spec, size: ComputerMetrics.avatarSize) }
@@ -255,5 +246,15 @@ struct ComputerPillStyle: ButtonStyle {
             .background(ComputerChrome.fill, in: Capsule())
             .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Capsule())
+    }
+}
+
+private extension View {
+    func darkNavigationBar() -> some View {
+        #if os(iOS)
+        toolbarColorScheme(.dark, for: .navigationBar)
+        #else
+        self
+        #endif
     }
 }

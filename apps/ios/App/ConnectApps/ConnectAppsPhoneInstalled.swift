@@ -5,34 +5,27 @@ import SwiftUI
 
 struct ConnectAppsPhoneInstalled: View {
     @Bindable var model: ConnectAppsModel
-    let close: () -> Void
 
     var body: some View {
         let state = model.macState
-        VStack(spacing: 0) {
-            ConnectAppsPhoneBar(
-                title: String(localized: "Connected"),
-                leading: {
-                    PalClearGlassIconButton(
-                        systemName: "chevron.left", label: "Back", identifier: "connectAppsInstalledBack", action: { model.leaveInstalled() }
-                    )
-                },
-                trailing: {
-                    PalClearGlassIconButton(systemName: "xmark", label: "Close", identifier: "connectAppsInstalledClose", action: close)
+        SheetChrome(
+            title: String(localized: "Connected"),
+            leading: .back,
+            accessibilityIdentifier: "connectAppsInstalled",
+            leadingAccessibilityIdentifier: "connectAppsInstalledBack",
+            onLeading: { model.leaveInstalled() },
+            content: {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ConnectFlatSectionHeader(title: String(localized: "Connected"), identifier: "connectAppsInstalledTitle")
+                        ConnectFlatRows(state.installed) { installedRow($0) }
+                        if !state.privateSkills.isEmpty { privateSkills(state.privateSkills) }
+                    }
+                    .padding(.bottom, PalMetrics.cardGap)
                 }
-            )
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ConnectFlatSectionHeader(title: String(localized: "Connected"), identifier: "connectAppsInstalledTitle")
-                    ConnectFlatRows(state.installed) { installedRow($0) }
-                    if !state.privateSkills.isEmpty { privateSkills(state.privateSkills) }
-                }
-                .padding(.bottom, PalMetrics.cardGap)
+                .scrollIndicators(.automatic)
             }
-            .scrollIndicators(.automatic)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("connectAppsInstalled")
+        )
     }
 
     private func installedRow(_ item: ConnectInstalledItem) -> some View {

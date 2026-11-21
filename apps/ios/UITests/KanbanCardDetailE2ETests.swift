@@ -161,6 +161,39 @@ final class KanbanCardDetailE2ETests: KanbanE2ETestCase {
         #endif
     }
 
+    #if os(iOS)
+    func testWideBoardPaneClosesWithItsSystemCloseAndByTappingTheCardAgain() throws {
+        try control("kanban-seed")
+        let app = launch()
+        signInIfNeeded(app)
+
+        let entry = app.buttons["kanbanButton"]
+        waitFor(entry, timeout: 20, "work boards button")
+        entry.hit()
+        openSeededBoard(app)
+        try XCTSkipIf(app.buttons["kanbanColumns-ready"].exists, "this device is compact: no side pane")
+        let row = any(app, "kanbanColumn-backlog").buttons.firstMatch
+        waitFor(row, timeout: 20, "a card in Backlog")
+        let close = app.buttons["kanbanCard-close"]
+        row.hit()
+        waitFor(close, timeout: 20, "the card pane opens beside the board")
+        XCTAssertEqual(close.label, "Close", "the pane close is the system close")
+        shot(app, "kanban-pane-open")
+        close.hit()
+        waitUntilGone(close, "closing the pane removes it")
+        shot(app, "kanban-pane-closed")
+
+        row.hit()
+        waitFor(close, timeout: 20, "the pane reopens")
+        row.hit()
+        waitUntilGone(close, "tapping the selected card again closes the pane")
+    }
+
+    private func systemBack(_ app: XCUIApplication) -> XCUIElement {
+        app.navigationBars.buttons.element(boundBy: 0)
+    }
+    #endif
+
     private func assertOneWayOut(_ app: XCUIApplication, close: Bool, _ screen: String) {
         for duplicate in ["kanbanBoards-back", "kanbanBoards-close", "kanbanBoard-back", "kanbanCard-close", "kanban-close"] {
             XCTAssertFalse(any(app, duplicate).exists, "\(screen) has no \(duplicate)")

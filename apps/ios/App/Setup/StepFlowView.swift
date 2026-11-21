@@ -42,18 +42,16 @@ struct StepFlowView<Accessory: View>: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SetupHeader(title: title, close: close)
-            if !showsChecklist { StepFlowSegments(engine: engine) }
-            HStack(spacing: 0) {
-                if showsChecklist { StepFlowChecklist(engine: engine, savedNote: savedNote) }
-                screen.frame(maxWidth: .infinity, maxHeight: .infinity)
+        SetupChrome(title: title, accessibilityIdentifier: "stepFlow", close: close) {
+            VStack(spacing: 0) {
+                if !showsChecklist { StepFlowSegments(engine: engine) }
+                HStack(spacing: 0) {
+                    if showsChecklist { StepFlowChecklist(engine: engine, savedNote: savedNote) }
+                    screen.frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                footer
             }
-            footer
         }
-        .background(PalTokens.content)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("stepFlow")
         .task(id: ObjectIdentifier(model)) {
             model.openPage = { _ = ExternalLink.open($0) }
             await model.start()

@@ -72,6 +72,17 @@ class ConnectAppsTestCase: E2ETestCase {
         app.buttons["connectApp-connector:\(slug)-action"]
     }
 
+    func element(_ app: XCUIApplication, id: String) -> XCUIElement {
+        app.descendants(matching: .any)[id]
+    }
+
+    func assertOneSystemWayOut(_ app: XCUIApplication, screen: String, close: String, back: String) {
+        #if os(iOS)
+        XCTAssertFalse(app.buttons[close].exists || app.buttons[back].exists, "\(screen) has no hand-built close or back")
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == 'Close'")).count, 0, "\(screen) has no close beside the system back")
+        XCTAssertTrue(app.buttons["BackButton"].exists, "\(screen) has the system back")
+        #endif
+    }
 }
 
 @MainActor
@@ -152,7 +163,23 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         XCTAssertTrue(add.isHittable, "long list scrolls to the add button with search focused")
         if keyboard.exists { XCTAssertLessThanOrEqual(add.frame.maxY, keyboard.frame.minY, "add button not under the keyboard") }
         add.tap()
-        waitFor(app.buttons["customConnectorBackButton"], timeout: 10, "custom connector form opens")
+        waitFor(element(app, id: "customConnectorNameField"), timeout: 10, "custom connector form opens")
+    }
+
+    func test1eCustomConnectorHasOneSystemWayOut() throws {
+        let app = launchConnectApps()
+        waitForCatalog(app)
+        search(app, "zzzz no such app")
+        app.buttons["addCustomConnectorButton"].tap()
+        waitFor(element(app, id: "customConnectorNameField"), timeout: 20, "custom connector form opens")
+        assertOneSystemWayOut(app, screen: "custom connector", close: "customConnectorCloseButton", back: "customConnectorBackButton")
+        shot(app, "connect-apps-custom-connector")
+        #if os(iOS)
+        app.buttons["BackButton"].tap()
+        #else
+        app.buttons["customConnectorBackButton"].tap()
+        #endif
+        waitGone(element(app, id: "customConnectorNameField"), timeout: 10, "back leaves the custom connector")
     }
 
     func test3AnAppWithNoSignInConnectsDirectlyAndDisconnects() throws {
@@ -286,15 +313,11 @@ final class ConnectAppsPhoneE2ETests: ConnectAppsTestCase {
         let connect = action(app, "deepwiki")
         waitFor(connect, timeout: 30, "Deepwiki action again")
         connect.hit()
-        let disconnect = app.buttons["Disconnect"]
+        let disconnect = app.alerts.buttons["Disconnect"].firstMatch
         waitFor(disconnect, timeout: 10, "disconnect confirmation")
         disconnect.hit()
         waitLabel(connect, equals: "Connect")
         #endif
-    }
-
-    private func element(_ app: XCUIApplication, id: String) -> XCUIElement {
-        app.descendants(matching: .any)[id]
     }
 
     private func assertPhoneChrome(_ app: XCUIApplication) {
@@ -361,10 +384,16 @@ final class ConnectAppsPhoneE2ETests: ConnectAppsTestCase {
         installed.tap()
         waitFor(element(app, id: "connectAppsInstalled"), timeout: 10, "manage screen")
         waitFor(element(app, id: "connectInstalled-connector:deepwiki"), timeout: 10, "connected Deepwiki row")
-        XCTAssertTrue(app.buttons["connectAppsInstalledClose"].exists, "close on the manage screen")
+        assertOneSystemWayOut(app, screen: "manage screen", close: "connectAppsInstalledClose", back: "connectAppsInstalledBack")
         shot(app, "connect-apps-phone-installed")
+        #if os(iOS)
+        app.buttons["BackButton"].tap()
+        #else
         app.buttons["connectAppsInstalledBack"].tap()
+        #endif
         waitGone(element(app, id: "connectAppsInstalled"), timeout: 10, "manage screen leaves")
         waitFor(element(app, id: "connectAppsChips"), timeout: 10, "list returns")
+        waitFor(element(app, id: "connectAppsSearch"), timeout: 10, "search returns once the pop settles")
+        shot(app, "connect-apps-after-back")
     }
 }

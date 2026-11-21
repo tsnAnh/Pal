@@ -47,6 +47,34 @@ final class BotChatE2ETests: E2ETestCase {
         shot(app, "chat-reply")
     }
 
+    #if os(iOS)
+    func test2bVoiceModeClosesWithTheSystemClose() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-beta")
+        let voice = app.buttons["voiceModeButton"]
+        waitFor(voice, timeout: 20, "voice mode button")
+        addUIInterruptionMonitor(withDescription: "permissions") { alert in
+            for label in ["Allow", "OK", "Allow While Using App"] where alert.buttons[label].exists {
+                alert.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch.tap()
+                return true
+            }
+            return false
+        }
+        voice.tap()
+        waitFor(app.descendants(matching: .any)["voiceModeStatus"], timeout: 15, "voice mode screen")
+        let close = app.buttons["voiceModeClose"]
+        waitFor(close, timeout: 10, "the voice mode close")
+        app.tap()
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertEqual(close.label, "Close", "the voice mode close is the system close")
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == 'Close'")).count, 1, "one way out of voice mode")
+        shot(app, "voice-mode")
+        close.tap()
+        waitFor(app.descendants(matching: .any)["composerField"], timeout: 10, "chat returns after closing voice mode")
+    }
+    #endif
+
     func test3ClarifyCardAndComposerAnswer() throws {
         let app = launch()
         signInIfNeeded(app)

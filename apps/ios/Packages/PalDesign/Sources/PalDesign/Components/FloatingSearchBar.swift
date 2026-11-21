@@ -20,7 +20,6 @@ public struct FloatingSearchBar: View {
     public let accessibilityLabel: String
     public let accessibilityIdentifier: String
     public let leadingButton: FloatingSearchBarLeadingButton?
-    public let trailingButton: FloatingSearchBarLeadingButton?
     public let autoFocus: Bool
 
     @Environment(\.hermesTheme) private var theme
@@ -32,7 +31,6 @@ public struct FloatingSearchBar: View {
         accessibilityLabel: String,
         accessibilityIdentifier: String,
         leadingButton: FloatingSearchBarLeadingButton? = nil,
-        trailingButton: FloatingSearchBarLeadingButton? = nil,
         autoFocus: Bool = false
     ) {
         _text = text
@@ -40,7 +38,6 @@ public struct FloatingSearchBar: View {
         self.accessibilityLabel = accessibilityLabel
         self.accessibilityIdentifier = accessibilityIdentifier
         self.leadingButton = leadingButton
-        self.trailingButton = trailingButton
         self.autoFocus = autoFocus
     }
 
@@ -58,14 +55,7 @@ public struct FloatingSearchBar: View {
                     )
                 }
                 field
-                if let trailingButton {
-                    glassCircle(
-                        systemName: trailingButton.systemName,
-                        label: trailingButton.accessibilityLabel,
-                        identifier: trailingButton.accessibilityIdentifier,
-                        action: trailingButton.action
-                    )
-                } else if isSearching {
+                if isSearching {
                     glassCircle(
                         systemName: "xmark",
                         label: "Clear search",

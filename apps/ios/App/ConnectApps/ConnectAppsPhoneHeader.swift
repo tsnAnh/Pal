@@ -2,83 +2,77 @@
 import PalConnect
 import PalDesign
 import SwiftUI
-
-struct ConnectAppsPhoneBar<Leading: View, Trailing: View>: View {
-    let title: String
-    private let leading: Leading
-    private let trailing: Trailing
-
-    @Environment(\.hermesTheme) private var theme
-
-    init(title: String, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing) {
-        self.title = title
-        self.leading = leading()
-        self.trailing = trailing()
-    }
-
-    var body: some View {
-        GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) {
-                leading
-                Text(title)
-                    .hermesText(.sheetTitle)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-                trailing
-            }
-        }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.top, PalMetrics.sheetHeaderTopPadding)
-        .padding(.bottom, 12)
-    }
-}
-
-struct ConnectAppsPhoneHeader: View {
-    @Bindable var model: ConnectAppsModel
-    let close: () -> Void
-
-    var body: some View {
-        let connected = model.macState.installed.count
-        ConnectAppsPhoneBar(
-            title: String(localized: "Connect apps"),
-            leading: { PalClearGlassIconButton(systemName: "xmark", label: "Close", identifier: "connectApps-close", action: close) },
-            trailing: { if connected > 0 { installedButton(connected) } }
-        )
-    }
-
-    private func installedButton(_ count: Int) -> some View {
-        Button { model.showInstalled() } label: { Text("\(count) connected") }
-            .buttonStyle(PalClearCapsuleStyle(height: 30, horizontalPadding: 12))
-            .accessibilityLabel(Text("\(count) connected, opens manage"))
-            .accessibilityIdentifier("connectAppsInstalledButton")
-    }
-}
+import UIKit
 
 struct ConnectAppsPhoneRoot: View {
     @Bindable var model: ConnectAppsModel
     let close: () -> Void
 
     @Environment(\.hermesTheme) private var theme
+    @State private var shownConnector: CustomConnectorModel?
+
+    private var showsInstalled: Binding<Bool> {
+        Binding(
+            get: { model.navigation.screen == .installed },
+            set: { if !$0 { model.leaveInstalled() } }
+        )
+    }
+
+    private var showsCustomConnector: Binding<Bool> {
+        Binding(
+            get: { model.customConnector != nil },
+            set: { if !$0, model.customConnector != nil { Task { await model.leaveCustomConnector() } } }
+        )
+    }
 
     var body: some View {
-        let surface = Color(theme.palette.sheetBackground)
-        VStack(spacing: 0) {
-            switch model.navigation.screen {
-            case .apps:
-                ConnectAppsPhoneHeader(model: model, close: close)
-                ConnectAppsList(model: model)
-            case .installed:
-                ConnectAppsPhoneInstalled(model: model, close: close)
+        NavigationStack {
+            SheetChrome(
+                title: String(localized: "Connect apps"),
+                accessibilityIdentifier: "connectApps",
+                leadingAccessibilityIdentifier: "connectApps-close",
+                onLeading: close,
+                trailing: { installedButton(model.macState.installed.count) },
+                content: { ConnectAppsList(model: model) }
+            )
+            .environment(\.sheetChromeHostedInNavigation, true)
+            .navigationDestination(isPresented: showsInstalled) {
+                ConnectAppsPhoneInstalled(model: model)
+                    .environment(\.sheetChromeHostedInNavigation, true)
+            }
+            .navigationDestination(isPresented: showsCustomConnector) {
+                if let connector = model.customConnector ?? shownConnector {
+                    SheetChrome(
+                        leading: .back,
+                        accessibilityIdentifier: "customConnectorScreen",
+                        onLeading: { Task { await model.leaveCustomConnector() } },
+                        content: {
+                            CustomConnectorForm(model: connector, style: .phone(theme)) { Task { await model.leaveCustomConnector() } }
+                        }
+                    )
+                    .environment(\.sheetChromeHostedInNavigation, true)
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(surface.ignoresSafeArea())
-        .presentationBackground(surface)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("connectApps")
+        .tint(.primary)
+        .onChange(of: model.customConnector?.id, initial: true) {
+            if let connector = model.customConnector { shownConnector = connector }
+        }
+        .onChange(of: model.navigation.screen) { dismissKeyboard() }
+        .onChange(of: model.customConnector?.id) { dismissKeyboard() }
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    @ViewBuilder
+    private func installedButton(_ count: Int) -> some View {
+        if count > 0 {
+            Button { model.showInstalled() } label: { Text("\(count) connected") }
+                .accessibilityLabel(Text("\(count) connected, opens manage"))
+                .accessibilityIdentifier("connectAppsInstalledButton")
+        }
     }
 }
 #endif

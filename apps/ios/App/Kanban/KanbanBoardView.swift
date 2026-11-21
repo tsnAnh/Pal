@@ -123,7 +123,7 @@ struct KanbanBoardView: View {
     }
 
     private func select(_ taskID: String) {
-        if showsColumns { selected = taskID } else { openCard(taskID) }
+        if showsColumns { selected = selected == taskID ? nil : taskID } else { openCard(taskID) }
     }
 
     private func wide(_ layout: KanbanBoardLayout) -> some View {

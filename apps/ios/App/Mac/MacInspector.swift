@@ -106,13 +106,7 @@ struct MacInspector: View {
                 .fixedSize()
                 .accessibilityLabel(Text("More"))
                 .accessibilityIdentifier("profileMoreButton")
-                Button { shell.showsInspector = false } label: {
-                    inspectorGlyph("xmark")
-                }
-                .buttonStyle(.plain)
-                .help(String(localized: "Close details"))
-                .accessibilityLabel(Text("Close details"))
-                .accessibilityIdentifier("inspectorClose")
+                SheetGlassButton(escapes: false, accessibilityIdentifier: "inspectorClose") { shell.showsInspector = false }
             }
         }
         .padding(.top, 12)

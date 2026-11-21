@@ -15,9 +15,8 @@ struct SlackSettingsView: View {
     private var chat: ChatInstallModel { model.chat }
     private var name: String { model.displayName }
 
-    var body: some View {
+    private var page: some View {
         VStack(spacing: 0) {
-            SetupHeader(title: String(localized: "\(name) in Slack"), close: close)
             ScrollView {
                 VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
                     Text("\(name) is in Slack")
@@ -44,20 +43,22 @@ struct SlackSettingsView: View {
             .scrollIndicators(.hidden)
             footer
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("slackSettings")
-        .macConfirm(isPresented: $confirmsDisconnect) {
-            MacDialogContent(
-                String(localized: "Disconnect \(name) from Slack?"),
-                message: String(localized: "\(name) leaves every channel and stops answering in Slack."),
-                actions: [
-                    MacDialogAction(String(localized: "Disconnect"), role: .destructive, identifier: "slackDisconnectConfirm") {
-                        Task { await model.disconnect() }
-                    },
-                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
-                ]
-            )
-        }
+    }
+
+    var body: some View {
+        SetupChrome(title: String(localized: "\(name) in Slack"), accessibilityIdentifier: "slackSettings", close: close) { page }
+            .macConfirm(isPresented: $confirmsDisconnect) {
+                MacDialogContent(
+                    String(localized: "Disconnect \(name) from Slack?"),
+                    message: String(localized: "\(name) leaves every channel and stops answering in Slack."),
+                    actions: [
+                        MacDialogAction(String(localized: "Disconnect"), role: .destructive, identifier: "slackDisconnectConfirm") {
+                            Task { await model.disconnect() }
+                        },
+                        MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                    ]
+                )
+            }
     }
 
     private var workspace: some View {

@@ -83,6 +83,24 @@ private struct SheetGlassSurface: ViewModifier {
     }
 }
 
+#if os(iOS)
+public struct SheetCloseButton: View {
+    public let accessibilityIdentifier: String
+    public let action: () -> Void
+
+    public init(accessibilityIdentifier: String, action: @escaping () -> Void) {
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(role: .close, action: action)
+            .accessibilityIdentifier(accessibilityIdentifier)
+            .tint(.primary)
+    }
+}
+#endif
+
 public enum SheetTitleAlignment: Sendable {
     case centered
     case afterLeadingButton
@@ -110,6 +128,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
     public let titleAlignment: SheetTitleAlignment
     public let surface: SheetSurface
     public let headerStyle: SheetHeaderStyle
+    public let escapes: Bool
     public let accessibilityIdentifier: String
     public let leadingAccessibilityIdentifier: String?
     public let onLeading: () -> Void
@@ -124,6 +143,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         titleAlignment: SheetTitleAlignment = .centered,
         surface: SheetSurface = .grouped,
         headerStyle: SheetHeaderStyle = .standard,
+        escapes: Bool = true,
         accessibilityIdentifier: String,
         leadingAccessibilityIdentifier: String? = nil,
         onLeading: @escaping () -> Void,
@@ -135,6 +155,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         self.titleAlignment = titleAlignment
         self.surface = surface
         self.headerStyle = headerStyle
+        self.escapes = escapes
         self.accessibilityIdentifier = accessibilityIdentifier
         self.leadingAccessibilityIdentifier = leadingAccessibilityIdentifier
         self.onLeading = onLeading
@@ -169,8 +190,6 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
     }
 
     #if os(iOS)
-    private var usesSystemBack: Bool { hostedInNavigation && leading == .back }
-
     private var navigationContent: some View {
         content
             .environment(\.sheetChromeHostedInNavigation, false)
@@ -178,10 +197,14 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
             .background(background.ignoresSafeArea())
             .navigationTitle(title ?? "")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(!usesSystemBack)
+            .navigationBarBackButtonHidden(leading == .close)
             .toolbar {
-                if !usesSystemBack {
-                    ToolbarItem(placement: .topBarLeading) { leadingButton }
+                if leading == .close {
+                    ToolbarItem(placement: .topBarLeading) {
+                        SheetCloseButton(
+                            accessibilityIdentifier: leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-close", action: onLeading
+                        )
+                    }
                 }
                 if Trailing.self != EmptyView.self {
                     ToolbarItem(placement: .topBarTrailing) { trailing }
@@ -190,21 +213,6 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
             .presentationBackground(background)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(accessibilityIdentifier)
-    }
-
-    @ViewBuilder
-    private var leadingButton: some View {
-        switch leading {
-        case .close:
-            Button(role: .close, action: onLeading)
-                .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-close")
-        case .back:
-            Button(action: onLeading) { // nav-chrome: ok
-                PalIcon("chevron.left")
-            }
-            .accessibilityLabel(Text(leading.accessibilityLabel))
-            .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-back")
-        }
     }
     #endif
 
@@ -218,6 +226,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
             HStack(spacing: 0) {
                 SheetGlassButton(
                     leading: leading,
+                    escapes: escapes,
                     accessibilityIdentifier: leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)",
                     action: onLeading
                 )
@@ -256,6 +265,7 @@ extension SheetChrome where Trailing == EmptyView {
         titleAlignment: SheetTitleAlignment = .centered,
         surface: SheetSurface = .grouped,
         headerStyle: SheetHeaderStyle = .standard,
+        escapes: Bool = true,
         accessibilityIdentifier: String,
         leadingAccessibilityIdentifier: String? = nil,
         onLeading: @escaping () -> Void,
@@ -267,6 +277,7 @@ extension SheetChrome where Trailing == EmptyView {
             titleAlignment: titleAlignment,
             surface: surface,
             headerStyle: headerStyle,
+            escapes: escapes,
             accessibilityIdentifier: accessibilityIdentifier,
             leadingAccessibilityIdentifier: leadingAccessibilityIdentifier,
             onLeading: onLeading,

@@ -69,10 +69,7 @@ struct OwnerSetupView: View {
     }
 
     private func framed<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        VStack(spacing: 0) {
-            SetupHeader(title: model.app.name, close: { finish() })
-            content()
-        }
+        SetupChrome(title: model.app.name, accessibilityIdentifier: "ownerSetupFrame", close: { finish() }, content: content)
     }
 }
 
