@@ -11,6 +11,7 @@ from gateway import auth_flows, auth_prompts
 from hermes_cli import mcp_catalog
 from tests.gateway.device_tools_harness import connect_phone, home_of
 from tests.gateway.test_auth_prompts import _in_home, _required, _wait_for
+from tools.connectors import hosted_signin
 from tools import auth_required
 from tools.registry import tool_error
 
@@ -158,8 +159,9 @@ async def test_hosted_connector_oauth_opens_the_portal_link_then_retries_when_co
     authority = await authorities('home')
     phone = await connect_phone(authority)
     portal = FakePortal()
+    hosted_signin.register()
     monkeypatch.setattr('tools.connectors.managed.managed_client', lambda **kwargs: portal)
-    monkeypatch.setattr(auth_flows.HostedConnectorFlow, 'POLL_SECONDS', 0.05)
+    monkeypatch.setattr(hosted_signin.HostedConnectorFlow, 'POLL_SECONDS', 0.05)
     expired = json.dumps({'error': {'code': 'CONNECTION_EXPIRED', 'connector': 'Slack', 'message': 'expired'}})
     task = asyncio.ensure_future(_in_home(home_of(authority), lambda: auth_required.resolve(
         'connectors__slack__post', {}, expired, lambda: json.dumps({'response': 'sent'}))))

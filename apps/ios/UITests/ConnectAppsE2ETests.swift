@@ -248,22 +248,14 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         #endif
     }
 
-    func test6AnEarlierPortalConnectionOffersReconnectAndLeavesOnceConnected() throws {
+    func test6ConnectingAndDisconnectingContext7() throws {
         let app = launchConnectApps()
         waitForCatalog(app)
-        let row = app.descendants(matching: .any)["legacyRow-context7"]
-        waitFor(row, timeout: 30, "earlier connection row")
-        XCTAssertTrue(app.staticTexts["Reconnect your earlier apps"].exists)
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Nous Portal")).firstMatch.exists)
-        XCTAssertTrue(app.buttons["legacyRow-context7-dismiss"].exists)
-        shot(app, "connect-apps-earlier-connections")
-        let reconnect = app.buttons["legacyRow-context7-reconnect"]
-        waitFor(reconnect, timeout: 10, "Reconnect action")
-        reconnect.hit()
-        waitGone(row, timeout: 30, "earlier connection row leaves once connected")
         search(app, "Context7")
         let manage = action(app, "context7")
         waitFor(manage, timeout: 30, "Context7 action")
+        waitLabel(manage, equals: "Connect")
+        manage.hit()
         waitLabel(manage, equals: "Connected")
         manage.hit()
         let disconnect = app.buttons["Disconnect"]

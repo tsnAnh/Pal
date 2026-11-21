@@ -91,24 +91,6 @@ struct ConnectAppsList: View {
     }
 
     @ViewBuilder
-    var legacySection: some View {
-        switch model.legacy.display(in: model.catalog) {
-        case .hidden:
-            EmptyView()
-        case .unreadable(let code):
-            LegacyReadFailure(code: code, isBusy: model.legacy.isLoading) { Task { await model.retryLegacy() } }
-        case .rows(let rows):
-            sectionHeader(String(localized: "Reconnect your earlier apps"), identifier: "legacyReconnectTitle")
-            rowBlock(rows) { row in
-                LegacyReconnectRowView(
-                    row: row, isBusy: row.route.appID.map(model.busy.contains) ?? false,
-                    reconnect: { Task { await model.reconnect(row) } }, dismiss: { model.legacy.dismiss(row) }
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
     var capabilitiesSection: some View {
         switch model.capabilitiesPhase {
         case .hidden:

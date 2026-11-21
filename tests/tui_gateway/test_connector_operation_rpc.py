@@ -204,7 +204,7 @@ def test_panel_connect_reissues_only_a_dead_link(owned, monkeypatch):
 
     monkeypatch.setattr("tools.connectors.gateway.client.ConnectorClient", Client)
     # The real dispatcher: availability gate passes, then the open operation routes to _reissue.
-    monkeypatch.setattr("tools.connectors.connectors_available", lambda: True)
+    monkeypatch.setattr("tools.connectors.gateway.config.connectors_available", lambda: True)
     monkeypatch.setattr("model_tools._select_tool_names", lambda *a, **k: {"manage_connections"})
 
     refused = _connect_rpc(owner, connectors=["gmail"])
@@ -235,7 +235,7 @@ def test_a_failed_reissue_leaves_the_row_failed_with_no_link(owned, monkeypatch,
             return {"results": [{"connector": n, "status": "failed", "status_reason": "vendor: still no"} for n in names]}
 
     monkeypatch.setattr("tools.connectors.gateway.client.ConnectorClient", Client)
-    monkeypatch.setattr("tools.connectors.connectors_available", lambda: True)
+    monkeypatch.setattr("tools.connectors.gateway.config.connectors_available", lambda: True)
     monkeypatch.setattr("model_tools._select_tool_names", lambda *a, **k: {"manage_connections"})
 
     before = len(owner.frames)

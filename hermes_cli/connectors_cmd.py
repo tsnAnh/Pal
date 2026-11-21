@@ -229,13 +229,19 @@ _ACTIONS: dict[str, Callable[[Any], int]] = {
 
 
 def cmd_connectors(args) -> int:
+    from hermes_constants import display_hermes_home
     from tools.connectors import connectors_available
+    from tools.connectors.hosted_switch import hosted_enabled
     from tools.connectors.gateway.errors import GatewayAuthError, ToolGatewayError
 
     handler = _ACTIONS.get(getattr(args, "connectors_action", None) or "list")
     if handler is None:
         print(f"Unknown connectors action: {args.connectors_action}", file=sys.stderr)
         return 2
+    if not hosted_enabled():
+        print(f"Hosted connectors are turned off in {display_hermes_home()}/config.yaml (connectors.hosted).",
+              file=sys.stderr)
+        return 1
     if not connectors_available():
         print(f"Connectors are not available. {_SIGN_IN}", file=sys.stderr)
         return 1

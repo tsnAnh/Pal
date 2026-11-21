@@ -6,7 +6,6 @@ connectors:
   category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.airtable.com/mcp
-  replaces_portal_slug: airtable
   verified: true
   source: https://support.airtable.com/articles/9897799762-using-the-airtable-mcp-server
 - id: atlassian
@@ -15,7 +14,6 @@ connectors:
   category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.atlassian.com/v1/mcp/authv2
-  replaces_portal_slug: jira
   verified: true
   source: https://support.atlassian.com/rovo/docs/getting-started-with-the-atlassian-remote-mcp-server/
 - id: aws-knowledge
@@ -40,7 +38,6 @@ connectors:
   category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.calendly.com
-  replaces_portal_slug: calendly
   verified: true
   source: https://developer.calendly.com/calendly-mcp-server
 - id: canva
@@ -61,7 +58,6 @@ connectors:
   - brandtemplate:meta:read
   - brandtemplate:content:read
   - profile:read
-  replaces_portal_slug: canva_mcp
   verified: true
   source: https://www.canva.dev/docs/apps/quickstart/
   setup:
@@ -121,7 +117,6 @@ connectors:
   category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.cloudflare.com/mcp?codemode=false
-  replaces_portal_slug: cloudflare_mcp
   verified: true
   source: https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/
 - id: cloudinary
@@ -162,7 +157,6 @@ connectors:
   category: Monitoring and analytics
   method: mcp_oauth
   mcp_url: https://mcp.datadoghq.com/v1/mcp
-  replaces_portal_slug: datadog_mcp
   verified: true
   source: https://docs.datadoghq.com/mcp_server/setup/
 - id: deepwiki
@@ -237,7 +231,6 @@ connectors:
   - files.metadata.read
   - files.content.read
   - files.content.write
-  replaces_portal_slug: dropbox
   verified: true
   source: https://help.dropbox.com/integrations/connect-dropbox-mcp-server
   setup:
@@ -280,7 +273,6 @@ connectors:
   - file_content:read
   - file_metadata:read
   - file_comments:read
-  replaces_portal_slug: figma
   verified: true
   source: https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/
   setup:
@@ -457,7 +449,6 @@ connectors:
   category: Sales and support
   method: mcp_oauth
   mcp_url: https://mcp.intercom.com/mcp
-  replaces_portal_slug: intercom_mcp
   verified: true
   source: https://developers.intercom.com/docs/guides/mcp
 - id: linear
@@ -466,7 +457,6 @@ connectors:
   category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.linear.app/mcp
-  replaces_portal_slug: linear
   verified: true
   source: https://linear.app/docs/mcp
 - id: microsoft-learn
@@ -515,7 +505,6 @@ connectors:
   category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.neon.tech/mcp
-  replaces_portal_slug: neon_mcp
   verified: true
   source: https://neon.com/docs/ai/neon-mcp-server
 - id: netlify
@@ -532,7 +521,6 @@ connectors:
   category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.notion.com/mcp
-  replaces_portal_slug: notion
   verified: true
   source: https://developers.notion.com/guides/mcp/build-mcp-client
 - id: postman
@@ -549,7 +537,6 @@ connectors:
   category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.prisma.io/mcp
-  replaces_portal_slug: prisma
   verified: true
   source: https://www.prisma.io/docs/postgres/integrations/mcp-server
 - id: railway
@@ -558,7 +545,6 @@ connectors:
   category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.railway.com
-  replaces_portal_slug: railway
   verified: true
   source: https://docs.railway.com/ai/mcp-server
 - id: semgrep
@@ -575,7 +561,6 @@ connectors:
   category: Monitoring and analytics
   method: mcp_oauth
   mcp_url: https://mcp.sentry.dev/mcp
-  replaces_portal_slug: sentry_mcp
   verified: true
   source: https://docs.sentry.io/product/sentry-mcp/
 - id: slack
@@ -591,7 +576,6 @@ connectors:
   category: Finance
   method: mcp_oauth
   mcp_url: https://mcp.stripe.com
-  replaces_portal_slug: stripe_mcp
   verified: true
   source: https://docs.stripe.com/mcp
 - id: supabase
@@ -600,7 +584,6 @@ connectors:
   category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.supabase.com/mcp
-  replaces_portal_slug: supabase
   verified: true
   source: https://supabase.com/docs/guides/ai-tools/mcp
 - id: t3code
@@ -617,7 +600,6 @@ connectors:
   category: Work management
   method: mcp_oauth
   mcp_url: https://ai.todoist.net/mcp
-  replaces_portal_slug: todoist
   verified: true
   source: https://developer.todoist.com/api/v1/
 - id: twilio-docs
@@ -650,7 +632,6 @@ connectors:
   category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.vercel.com
-  replaces_portal_slug: vercel_mcp
   verified: true
   source: https://vercel.com/docs/mcp
 - id: webflow

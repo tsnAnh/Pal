@@ -227,9 +227,9 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
     from pathlib import Path
     from tests.gateway.fixtures.local_recovery_probe import rpc
     from gateway.run import _profile_runtime_scope
-    from tools.connectors import live, run
+    from tools.connectors import live, reissue
     from tools.connectors.contract import Actor, TargetState
-    from tools import connectors
+    from tools.connectors.gateway import config as connector_config
     from tools.connectors.gateway.errors import GatewayAuthError
     from tools.connectors.operation import ConnectionOperation, Target
 
@@ -237,7 +237,7 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
                         cwd=str(Path(authority.profile_id) / 'session-work'))
     sid = created['result']['session_id']
     owner = {'type': 'session', 'session_id': sid}
-    connectors.connectors_available = lambda *a, **k: True
+    connector_config.connectors_available = lambda *a, **k: True
     with _profile_runtime_scope(Path(authority.profile_id)):
         operation = ConnectionOperation([Target('linear', 'mcp', 'install')], session_key=authority.sessions[sid].route)
         live.open(operation)
@@ -257,7 +257,7 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
         seen.update(names=names, key=get_session_env('HERMES_SESSION_KEY'), platform=get_session_env('HERMES_SESSION_PLATFORM'))
         op.transition('linear', TargetState.initiated, Actor.user)
 
-    run.reissue = rerun
+    reissue.reissue = rerun
     retried = await rpc(ws, 'connectors.connect', owner=owner, connectors=['linear'], reconnect=True)
     assert retried.get('result', {}).get('targets', [{}])[0].get('state') == 'initiated', retried
     assert seen == {'names': ['linear'], 'key': authority.sessions[sid].route, 'platform': 'local'}, seen
@@ -265,35 +265,45 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
     def auth_failure(op, names):
         raise GatewayAuthError('expired', code='invalid_token', status=401)
 
-    run.reissue = auth_failure
+    reissue.reissue = auth_failure
     refused = await rpc(ws, 'connectors.connect', owner=owner, connectors=['linear'], reconnect=True)
     assert refused['error']['code'] == 4032 and refused['error']['data']['reason'] == 'NEEDS_NOUS_AUTH', refused
 
     def broken(op, names):
         raise OSError('transport down')
 
-    run.reissue = broken
+    reissue.reissue = broken
     failed = await rpc(ws, 'connectors.connect', owner=owner, connectors=['linear'], reconnect=True)
     assert failed['error']['code'] == 5034 and failed['error']['data']['reason'] == 'CONNECTOR_REQUEST_FAILED', failed
-    connectors.connectors_available = lambda *a, **k: False
-    gated = await rpc(ws, 'connectors.connect', owner=owner, connectors=['linear'], reconnect=True)
-    assert gated['error']['code'] == 4031 and gated['error']['data']['reason'] == 'CONNECTORS_UNAVAILABLE', gated
-    connectors.connectors_available = lambda *a, **k: True
-    # A session whose tools leave out manage_connections cannot re-run a target, even with connectors on.
+    reissue.reissue = rerun
+    connector_config.connectors_available = lambda *a, **k: False
+    seen.clear()
+    ungated = await rpc(ws, 'connectors.connect', owner=owner, connectors=['linear'], reconnect=True)
+    assert ungated.get('result', {}).get('targets', [{}])[0].get('state') == 'initiated' and seen['names'] == ['linear'], ungated
+    hosted = (await rpc(ws, 'session.create', request_id='routes-hosted', source='gui', toolsets=['connections'],
+                        cwd=str(Path(authority.profile_id) / 'session-work')))['result']['session_id']
+    with _profile_runtime_scope(Path(authority.profile_id)):
+        remint = ConnectionOperation([Target('gmail', 'connector', 'connect')], session_key=authority.sessions[hosted].route)
+        live.open(remint)
+    remint.transition('gmail', TargetState.failed, Actor.backend_watcher)
+    seen.clear()
+    gated = await rpc(ws, 'connectors.connect', owner={'type': 'session', 'session_id': hosted}, connectors=['gmail'], reconnect=True)
+    assert gated['error']['code'] == 4031 and gated['error']['data']['reason'] == 'CONNECTORS_UNAVAILABLE' and seen == {}, gated
+    connector_config.connectors_available = lambda *a, **k: True
+    # A hosted target needs manage_connections in the session's tools as well as connectors on.
     toolless = (await rpc(ws, 'session.create', request_id='routes-toolless', source='gui', toolsets=[],
                           cwd=str(Path(authority.profile_id) / 'session-work')))['result']['session_id']
     with _profile_runtime_scope(Path(authority.profile_id)):
-        foreign = ConnectionOperation([Target('linear', 'mcp', 'install')], session_key=authority.sessions[toolless].route)
+        foreign = ConnectionOperation([Target('gmail', 'connector', 'connect')], session_key=authority.sessions[toolless].route)
         live.open(foreign)
-    foreign.transition('linear', TargetState.failed, Actor.backend_watcher)
+    foreign.transition('gmail', TargetState.failed, Actor.backend_watcher)
     seen.clear()
-    run.reissue = rerun
     untooled = await rpc(ws, 'connectors.connect', owner={'type': 'session', 'session_id': toolless},
-                         connectors=['linear'], reconnect=True)
+                         connectors=['gmail'], reconnect=True)
     assert untooled['error']['code'] == 4031 and seen == {}, untooled
     crossed = await rpc(ws, 'connection.respond', owner=owner, op_id=foreign.op_id,
-                        result={'targets': [{'name': 'linear', 'status': 'approved'}]})
-    assert crossed['error']['code'] == 4004 and foreign.target('linear').state.value == 'failed', crossed
+                        result={'targets': [{'name': 'gmail', 'status': 'skipped'}]})
+    assert crossed['error']['code'] == 4004 and foreign.target('gmail').state.value == 'failed', crossed
     # A well-formed envelope with a bad answer is an invalid answer, not invalid parameters.
     for result in ({'targets': [{'name': 'linear', 'status': 'connected'}]}, None):
         bad = await rpc(ws, 'connection.respond', owner=owner, op_id=operation.op_id,

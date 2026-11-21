@@ -172,7 +172,7 @@ def test_reconnect_of_a_name_no_account_has_yet_sends_the_alias():
 
 
 def test_try_again_on_a_named_account_repairs_the_account_it_minted_not_the_name(monkeypatch):
-    from tools.connectors import run
+    from tools.connectors import reissue
     from tools.connectors.contract import Actor, TargetState
 
     gateway = _Gateway()
@@ -181,7 +181,7 @@ def test_try_again_on_a_named_account_repairs_the_account_it_minted_not_the_name
     operation.transition("gmail", TargetState.initiated, Actor.backend_watcher, connection_id="ca_work")
     operation.transition("gmail", TargetState.failed, Actor.backend_watcher, detail="expired")
     with patch("tools.connectors.gateway.client.session_platform", return_value="desktop"):
-        assert run.reissue(operation, ["gmail"]) is None
+        assert reissue.reissue(operation, ["gmail"]) is None
     assert gateway.mints == [{"connectors": ("gmail",), "reinitiate": True, "alias": None, "connection_id": "ca_work"}]
 
 

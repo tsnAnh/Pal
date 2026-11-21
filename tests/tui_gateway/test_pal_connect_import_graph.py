@@ -8,7 +8,6 @@ PAL_CONNECT_MODULES = (
     "tui_gateway.oauth_client_rpc",
     "tui_gateway.mcp_oauth_sessions",
     "tools.connectors.catalog",
-    "tools.connectors.legacy",
     "tools.connectors.mcp",
     "tools.connectors.mcp_oauth",
     "tools.connectors.live",

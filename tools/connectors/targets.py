@@ -131,20 +131,6 @@ def catalog_names() -> set[str]:
         return set()
 
 
-def hosted_names() -> Optional[set[str]]:
-    try:
-        from tools.connectors.gateway.client import ConnectorClient
-        from tools.connectors.gateway.config import connectors_available
-
-        if not connectors_available():
-            return None
-        return {str(item.get("connector", "")).lower()
-                for item in ConnectorClient().list_connectors() if isinstance(item, dict)}
-    except Exception as exc:
-        logger.debug("connector list for the routing check failed: %s", exc)
-        return None
-
-
 def misrouted_to_hosted_error(name: str) -> str:
     return (
         f"{name} is a local MCP server, not a hosted connector account. "

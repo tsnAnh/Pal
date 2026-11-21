@@ -137,6 +137,7 @@ _GUARDS = {
     "swift-fault-details": ["scripts/ci/check_swift_fault_details.py"],
     "swift-entitlements": ["scripts/ci/check_swift_entitlements.py"],
     "backend-imports": ["scripts/ci/check_backend_imports.py"],
+    "pal-nous-boundary": ["scripts/ci/check_pal_nous_boundary.py"],
 }
 # Guards that judge a diff, not a tree: they get the same base/head as the ratchet
 # (blob size, and SwiftLint on the changed Swift files against its baseline).

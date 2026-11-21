@@ -6,6 +6,7 @@ Disconnecting accounts remains a portal-only user decision.
 
 from typing import Any, Callable, Dict, Optional
 
+from tools.connectors import hosted_install, hosted_surface
 from tools.connectors.catalog_tool import MANAGE_CATALOG_SCHEMA, manage_catalog
 from tools.connectors.gateway import config as gateway_config
 from tools.connectors.managed import run_managed_action
@@ -38,6 +39,7 @@ def manage_connections(
         return run_mcp_operation(
             mcp_targets, action, backend=mcp_backend,
             connection_callback=connection_callback, session_id=session_id, tool_call_id=tool_call_id,
+            hosted_names=hosted_surface.names,
         )
 
     return run_managed_action(
@@ -46,6 +48,9 @@ def manage_connections(
         connection_callback=connection_callback, connectors_available=connectors_available,
         card_surface=card_surface,
     )
+
+
+hosted_install.install()
 
 
 MANAGE_CONNECTIONS_SCHEMA = {

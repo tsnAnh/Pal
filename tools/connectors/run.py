@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional
 
 from tools.connectors import live
 from tools.connectors.contract import SettleReason
@@ -41,34 +41,6 @@ class Kind:
     note: str
     # Replaces the per-target result for an operation the model reads differently (the display card).
     result: Optional[Callable[[ConnectionOperation], dict[str, Any]]] = None
-
-
-def reissue(operation: ConnectionOperation, names: Sequence[str], *, initiator: Optional[str] = None) -> Optional[str]:
-    from tools.connectors.contract import Actor, TargetState, allowed
-
-    targets = [operation.target(name) for name in names]
-    if any(target is None for target in targets):
-        return UNKNOWN_TARGET
-    if len({target.kind for target in targets}) != 1:
-        return MIXED_KINDS
-    stale = [target.name for target in targets if target.state in (TargetState.failed, TargetState.expired)]
-    if len(stale) != len(targets):
-        return LINK_STILL_VALID
-    if operation.settled:
-        return SETTLED
-    if any(allowed(target.kind, target.state, TargetState.initiated) is None for target in targets):
-        return NOT_ALLOWED
-    if targets[0].kind == "connector":
-        from tools.connectors.managed import CARD_RETRY, managed_client, mint
-
-        client = managed_client(creates_guest=True, initiator=initiator or CARD_RETRY, call=operation.call)
-        mint(client, operation, stale, reinitiate=True, actor=Actor.user)
-        return None
-    from tools.connectors import catalog
-    from tools.connectors.mcp import retry
-
-    rerun = catalog.retry if catalog.owns(operation.op_id) else retry
-    return REFUSED if rerun(operation, stale) else None
 
 
 def apply_answer(operation: ConnectionOperation, raw: str) -> None:

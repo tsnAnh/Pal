@@ -147,6 +147,13 @@ def _reuse_saved_authorization(
     return True
 
 
+def _without_cimd(cfg: dict) -> dict:
+    if not isinstance(cfg, dict):
+        return cfg
+    oauth = cfg.get("oauth")
+    return {**cfg, "oauth": {**(oauth if isinstance(oauth, dict) else {}), "cimd": False}}
+
+
 def run_worker(
         hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, *,
         flow, on_done: Optional[Callable[[], None]] = None,
@@ -158,6 +165,7 @@ def run_worker(
     so the configuration can reference them before anything is saved. ``reuse_saved`` is the
     card's rule: a server whose saved tokens still work connects with no consent step. The RPC
     session surface keeps it off, because its caller waits for an authorization URL."""
+    cfg = _without_cimd(cfg)
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     try:
         from agent.secret_scope import (

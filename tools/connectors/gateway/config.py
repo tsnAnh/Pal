@@ -9,6 +9,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from tools.connectors.hosted_switch import hosted_enabled
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -91,6 +93,8 @@ def connectors_available(
     not in the schema at all, so the model never narrates a gateway 404 to a user the portal has
     not enabled. Free-tier identities are always in, and so is a user with no identity who may get
     one; accounts are in only when the portal says so via the token claim."""
+    if not hosted_enabled():
+        return False
     try:
         resolved_loader = config_loader or load_config
         if not resolved_loader().enabled:
@@ -116,7 +120,7 @@ def guest_identity_pending() -> bool:
     from hermes_cli.anon_auth import guest_allowed, last_mint_failure
     from tools.managed_tool_gateway import _read_nous_provider_state, peek_nous_access_token
 
-    if not guest_allowed() or _read_nous_provider_state() is not None or peek_nous_access_token():
+    if not hosted_enabled() or not guest_allowed() or _read_nous_provider_state() is not None or peek_nous_access_token():
         return False
     failure = last_mint_failure()
     return not failure or bool(failure["retryable"])

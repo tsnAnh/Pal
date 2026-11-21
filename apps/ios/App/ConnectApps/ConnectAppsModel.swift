@@ -115,7 +115,6 @@ final class ConnectAppsModel {
     let devices: DeviceConnectorsModel
     let profile: String?
     let service: ConnectAppsService
-    let legacy: LegacyConnectionsModel
     let capabilitiesService: CapabilitiesService
     private let skillsService: SkillsCatalogService
     private let bots: [CustomConnectorBot]
@@ -144,7 +143,6 @@ final class ConnectAppsModel {
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: NativeMcpSignIn.native(connection: connection), diagnostics: .osLog()
         )
         service = connectService
-        legacy = LegacyConnectionsModel(service: connectService, profile: profile)
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection, tally: tally), profile: profile, diagnostics: .osLog())
         capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in
             tally.withLock { $0 += 1 }
@@ -173,7 +171,6 @@ final class ConnectAppsModel {
     func start() async {
         openInterval = PalPerf.begin("connect.open")
         rpcTally.withLock { $0 = 0 }
-        Task { await legacy.load() }
         Task { await slack.load() }
         await reload()
         Task { await devices.start() }

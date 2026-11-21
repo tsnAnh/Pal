@@ -134,7 +134,10 @@ def test_each_connect_path_names_its_initiator(monkeypatch):
     from tools.connectors import managed
     from tools.connectors.contract import Actor, TargetState
     from tools.connectors.operation import ConnectionOperation, Target
-    from tools.connectors.run import reissue
+    from tools.connectors import hosted_install
+    from tools.connectors.reissue import reissue
+
+    hosted_install.install()
 
     transport = _Transport(_mint_ok(["gmail"]), _mint_ok(["gmail"]), _mint_ok(["gmail"]))
     monkeypatch.setattr(managed, "ensure_guest_identity", lambda: None)
@@ -236,7 +239,10 @@ def test_try_again_keeps_the_opening_calls_ids(monkeypatch, caplog):
     from tools.connectors import managed
     from tools.connectors.contract import Actor, TargetState
     from tools.connectors.operation import ConnectionOperation, Target
-    from tools.connectors.run import reissue
+    from tools.connectors import hosted_install
+    from tools.connectors.reissue import reissue
+
+    hosted_install.install()
 
     _consent(True)
     transport = _Transport(_mint_ok(["gmail"]))
