@@ -96,7 +96,7 @@ A Mac perf mistake becomes a type, lint rule or test, never a note. Run `python 
 
 ## Learned
 
-- Mac UI tests: real Keychain, serial, fake creds; update: xcodegen, Release→/Applications, devicectl
+- Mac UI tests: real Keychain, serial machine-wide (`presentMainWindow` grabs any running Pal Dev), fake creds; update: xcodegen, Release→/Applications, devicectl
 - Mac/iOS parity+shared code; no streamed text (avatar+step+dots); Liquid Glass ToolbarItems; pinned bots top; no other brands; bot Qs never expire; NO_REPLY-type markers never shown/flashed anywhere
 - Avatars: 15 blobs (heart = primary bot, #93DCF7), 1:1:1 3D, unlit; black eyes (white→gray in light); body turns to pointer with eyes (no eyes-only/1-eye anims), upright on hover; rest eyes up-right, slanted; review render pre-build
 - T3 Code = catalog connector `t3code` (no bridge): Network on, plain-http tailnet `<ip>:<port>/mcp`, OAuth DCR+PKCE, no refresh; wizard `T3CodeFlow` (PalConnect), Mac prefill `T3AddressSuggestion`
@@ -105,3 +105,4 @@ A Mac perf mistake becomes a type, lint rule or test, never a note. Run `python 
 - iPhone screenshot (physical device): `pymobiledevice3 developer dvt screenshot <out.png>`
 - Push: Pi APNs key DDRHGPZC24 = sandbox-only, topic dev.tsnanh.pal (team at its sandbox+production key limit); TestFlight/App Store builds need a separate production key. App picks APNs env from its signature (`SignedPushEnvironment`); gateway needs `hermes pm install --extra apns`
 - swift-lint baseline (`.swiftlint-baseline.json`) matches messages incl. counts: growing an already-oversized file/type re-fails it; offset lines, never re-baseline
+- Composer callbacks take live text from the view that observes it (`ChatComposer.send(String)`); a view only forwarding `$draft` captures stale text

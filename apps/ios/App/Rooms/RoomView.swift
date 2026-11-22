@@ -136,9 +136,9 @@ struct RoomView: View {
                 dictation: dictation,
                 draft: $draft,
                 focused: $composerFocused,
-                send: {
+                send: { text in
                     dictation.stop()
-                    model.send(draft)
+                    model.send(text)
                     draft = ""
                 },
                 openVoiceMode: nil,

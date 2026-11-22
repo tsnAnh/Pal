@@ -19,7 +19,7 @@ struct ChatComposer: View {
     let dictation: DictationController
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
-    let send: () -> Void
+    let send: (String) -> Void
     let openVoiceMode: (() -> Void)?
     let removeAttachment: (UUID) -> Void
     let attachPhotos: ([PhotosPickerItem]) -> Void
@@ -185,7 +185,7 @@ struct ChatComposer: View {
         )
         switch action {
         case .send:
-            if hasContent, canSend { send() }
+            if hasContent, canSend { send(draft) }
             return .handled
         case .acceptCompletion:
             if let item = selectedFileRef { pickFileRef(item) }
@@ -269,7 +269,7 @@ struct ChatComposer: View {
             .lineLimit(1...5)
             .focused(focused)
             .submitLabel(.send)
-            .onSubmit { if hasContent, canSend { send() } }
+            .onSubmit { if hasContent, canSend { send(draft) } }
             .macOnly { field in
                 field
                     .textFieldStyle(.plain)
@@ -314,7 +314,7 @@ struct ChatComposer: View {
     @ViewBuilder
     private var trailingButton: some View {
         if hasContent {
-            Button(action: send) {
+            Button { send(draft) } label: {
                 actionCircle(systemName: "arrow.up", weight: .bold)
             }
             .buttonStyle(.plain)

@@ -98,6 +98,30 @@ final class MacShellE2ETests: BotProfileTestCase {
         waitFor(bubbles(app, "userBubble", containing: "line one").firstMatch, timeout: 15, "return sends")
     }
 
+    func test5aFirstReturnInFreshChatSendsTypedTextOnce() throws {
+        let app = signedInApp()
+        openBot(app, "bot-beta")
+        let field = element(app, "composerField")
+        let first = "first-return " + UUID().uuidString.prefix(6)
+        let second = "second-return " + UUID().uuidString.prefix(6)
+
+        field.hit()
+        field.typeText(first)
+        app.typeKey(.return, modifierFlags: [])
+        waitFor(bubbles(app, "userBubble", containing: first).firstMatch, timeout: 10, "the first Return in a fresh chat sends the typed text")
+        XCTAssertEqual(field.value as? String ?? "", "", "the composer clears after the send")
+        waitForReply(app, below: first)
+
+        field.typeText(second)
+        app.typeKey(.return, modifierFlags: [])
+        waitFor(bubbles(app, "userBubble", containing: second).firstMatch, timeout: 10, "the second Return sends the next text")
+        XCTAssertEqual(field.value as? String ?? "", "", "the composer clears after the second send")
+        waitForReply(app, below: second)
+
+        XCTAssertEqual(bubbles(app, "userBubble", containing: first).count, 1, "the first text is sent once")
+        XCTAssertEqual(bubbles(app, "userBubble", containing: second).count, 1, "the second text is sent once")
+    }
+
     func test6WindowShotsInBothAppearances() throws {
         for mode in [AppearanceMode.dark, .light] {
             let suffix = mode.rawValue

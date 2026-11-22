@@ -68,7 +68,7 @@ private struct MacDocumentViewer: View {
             dictation: dictation,
             draft: $composer.draft,
             focused: $composerFocused,
-            send: submit,
+            send: { _ in submit() },
             openVoiceMode: nil,
             removeAttachment: { model.removeAttachment($0) },
             attachPhotos: attach.photos,
