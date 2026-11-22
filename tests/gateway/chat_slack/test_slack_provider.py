@@ -335,10 +335,11 @@ def _config_items(kit: Kit, access: str = ACCESS, refresh: str | None = REFRESH)
     return access_id, refresh_id
 
 
-def test_manifest_subscribes_to_membership_events_and_reads_channels(tmp_path):
+def test_manifest_subscribes_to_membership_and_uninstall_events_and_reads_channels(tmp_path):
     kit = Kit(tmp_path)
     manifest = kit.slack.apps[kit.begin().app_id]
-    assert {"member_joined_channel", "member_left_channel"} <= set(manifest["settings"]["event_subscriptions"]["bot_events"])
+    events = {"member_joined_channel", "member_left_channel", "app_uninstalled", "tokens_revoked"}
+    assert events <= set(manifest["settings"]["event_subscriptions"]["bot_events"])
     assert {"channels:read", "groups:read"} <= set(manifest["oauth_config"]["scopes"]["bot"])
 
 

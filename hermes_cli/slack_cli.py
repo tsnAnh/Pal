@@ -40,8 +40,8 @@ def _build_full_manifest(
         "files:read", "files:write", "groups:history", "groups:read", "im:history", "im:read",
         "im:write", "mpim:history", "mpim:read", "reactions:read", "users:read"]
     bot_events = [
-        "app_mention", "member_joined_channel", "member_left_channel", "message.channels",
-        "message.groups", "message.im", "message.mpim", "reaction_added", "reaction_removed"]
+        "app_mention", "app_uninstalled", "member_joined_channel", "member_left_channel", "message.channels",
+        "message.groups", "message.im", "message.mpim", "reaction_added", "reaction_removed", "tokens_revoked"]
 
     if messaging_experience == "assistant":
         features["assistant_view"] = {

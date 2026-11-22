@@ -50,7 +50,7 @@ from gateway.platforms._shared import (
 )
 from gateway.platforms.base_log_safety import safe_url_for_log
 from gateway.platforms.helpers import MessageDeduplicator, clarify_text_with_choices, inline_document_text
-from plugins.platforms.slack.adapter_install_events import on_member_joined, on_member_left, schedule_install_welcomes
+from plugins.platforms.slack.adapter_install_events import event_handlers as install_event_handlers, schedule_install_welcomes
 from plugins.platforms.slack.adapter_config_readers import (
     _extra_or_env_channel_set_getter, _extra_or_env_flag_getter)
 from gateway.platforms.base import (
@@ -1630,8 +1630,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformA
             ("reaction_removed", _reaction(True)),
             ("assistant_thread_started", self._handle_assistant_thread_lifecycle_event),
             ("assistant_thread_context_changed", self._handle_assistant_thread_lifecycle_event),
-            ("member_joined_channel", functools.partial(on_member_joined, self)),
-            ("member_left_channel", functools.partial(on_member_left, self))):
+            *install_event_handlers(self)):
             self._app.event(event_type)(_listener_for(handler))
         # Catch-all ack: unacked envelopes count as failures and past 95%/60-min Slack disables
         # Event Subscriptions (ALL inbound). Registered AFTER all named handlers (first match wins).
