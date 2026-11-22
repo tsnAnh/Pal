@@ -114,8 +114,10 @@ def reads_need_approval(server_name: str, key: Any) -> bool:
             doc = read_config_doc_readonly(home / "config.yaml")
         except FileNotFoundError:
             return False
+        from hermes_cli.shared_catalog import with_root_connectors
         servers = doc.get("mcp_servers") if isinstance(doc, dict) else None
-        template = servers.get(registration_name(server_name)) if isinstance(servers, dict) else None
+        servers = with_root_connectors(servers if isinstance(servers, dict) else {}, home=home)
+        template = servers.get(registration_name(server_name))
         raw = template.get(POLICY_KEY) if isinstance(template, dict) else None
         return parse(raw).mode(GROUP_READ) == ASK
     except Exception as exc:  # health: allow BLE001 -- an unreadable setting must ask, never run the read silently

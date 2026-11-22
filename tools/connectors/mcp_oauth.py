@@ -335,6 +335,7 @@ def start(
 
     ``cfg`` is an install's in-memory configuration; without it the saved one is authorized."""
     from hermes_cli.mcp_config import _get_mcp_servers
+    from hermes_cli.shared_catalog_connectors import owner_write_scope
     from hermes_constants import get_hermes_home
     from tools.mcp_dashboard_oauth import DashboardOAuthFlow
     from tui_gateway import mcp_oauth_sessions
@@ -349,7 +350,8 @@ def start(
     if signs_in_on_owner_app(cfg) and not _oauth_tokens_present(server_name):
         raise RuntimeError(f"'{server_name}' signs in on your own computer, not on this host. Sign in from the Pal app on your phone, tablet or Mac.")
     cfg["auth"] = "oauth"
-    hermes_home = str(get_hermes_home().expanduser().resolve(strict=False))
+    with owner_write_scope(server_name):
+        hermes_home = str(get_hermes_home().expanduser().resolve(strict=False))
     flow = DashboardOAuthFlow(
         flow_id=secrets.token_urlsafe(24), server_name=server_name,
         hermes_home=hermes_home, redirect_uri="", reconnect_live=False)

@@ -40,8 +40,8 @@ class SavedBot:
 
 
 def _home():
-    from hermes_constants import get_hermes_home
-    return get_hermes_home()
+    from hermes_cli.shared_catalog_connectors import owner_state_home
+    return owner_state_home(SLUG)
 
 
 def _bot_path():
@@ -61,7 +61,9 @@ def _entry():
 
 def saved_token() -> str | None:
     from hermes_cli.config import load_env
-    return (load_env().get(TOKEN_VAR) or "").strip() or None
+    from hermes_cli.shared_catalog_connectors import owner_state_scope
+    with owner_state_scope(SLUG):
+        return (load_env().get(TOKEN_VAR) or "").strip() or None
 
 
 def saved_bot() -> SavedBot | None:
@@ -95,10 +97,11 @@ def save_token(item: str) -> DiscordBotResult:
     from utils import atomic_write_text
 
     from gateway import oauth_client_setup as setup_mod
+    from hermes_cli.shared_catalog_connectors import requested_profile_home
     from tui_gateway.connector_setup_guide import _secret
 
     _require_owner()
-    token = _secret(setup_mod.vault_for(_home()), item)
+    token = _secret(setup_mod.vault_for(requested_profile_home()), item)
     bot = _bot(token)
     save_env_value(TOKEN_VAR, token)
     path = _bot_path()

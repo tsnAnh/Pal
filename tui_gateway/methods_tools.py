@@ -18,9 +18,15 @@ _profile_scoped = _registry.profile_scoped
 
 
 # ─── Shared helpers ──────────────────────────────────────────────────────────
+def _owner_write_scope(params: dict, name_key: str | None):
+    if name_key is None:
+        return contextlib.nullcontext()
+    return _tools_mod("hermes_cli.shared_catalog_connectors").owner_write_scope(params.get(name_key))
+
+
 def _profile_scoped_rpc(
     fail_code: int, *, required=(), catch_resolve: bool = True, prefix: str = "",
-    scoped: bool = True, live_session: bool = False,
+    scoped: bool = True, live_session: bool = False, owner_write_of: str | None = None,
 ):
     """Wrap a handler body with the optional ``profile`` runtime scope. Order: ``required``
     params (4063 ``<key> required``) → ``live_session`` resolution via ``_sess`` (waits for the
@@ -65,7 +71,7 @@ def _profile_scoped_rpc(
                         raise
                     return _err(rid, fail_code, str(e))
             try:
-                with scope:
+                with scope, _owner_write_scope(params, owner_write_of):
                     return body(*args)
             except (ProfileUnavailableError, SessionNotOwned):
                 raise  # dispatch answers both: 4064 (a body binding ``profile`` itself), 4090 (chat taken)
@@ -108,10 +114,11 @@ _NAME = (("name", _stripped),)
 _NAME_SESSION = (("name", _stripped), ("session_id", _stripped))
 
 
-def _mcp_rpc(name: str, required=_NAME):
+def _mcp_rpc(name: str, required=_NAME, *, writes: bool = False):
     """mcp.servers.* contract: profile scope, ``required`` params (default ``name``), body errors → 5024,
     profile-resolve errors propagate to dispatch()."""
-    return _scoped_rpc(f"mcp.servers.{name}", required=required, catch_resolve=False)
+    return _scoped_rpc(
+        f"mcp.servers.{name}", required=required, catch_resolve=False, owner_write_of="name" if writes else None)
 
 
 def _mcp_server_rows():
@@ -1501,7 +1508,7 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"servers": servers, "checked_at": int(time.time() * 1000)})
 
 
-@_mcp_rpc("add")
+@_mcp_rpc("add", writes=True)
 def _(rid, params: dict) -> dict:
     """Add ``name`` from ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/
     tools). ``headers`` {Key: Value} and ``bearer_token`` go to the profile's .env (only ``${VAR}`` templates
@@ -1558,7 +1565,7 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"ok": True, "name": name, "server": _mcp_summarize_server(name, saved)})
 
 
-@_mcp_rpc("update")
+@_mcp_rpc("update", writes=True)
 def _(rid, params: dict) -> dict:
     """Edit a saved url server: ``config`` {url, transport}, ``auth`` none|bearer|oauth (+ ``bearer_token``),
     ``headers`` (replaces the set; ``null`` keeps a stored value) and ``client_id`` (``""`` clears) →
@@ -1572,7 +1579,7 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"ok": True, "name": name, "server": _mcp_summarize_server(name, saved)})
 
 
-@_mcp_rpc("set_api_key", (*_NAME, ("value", _nonempty)))
+@_mcp_rpc("set_api_key", (*_NAME, ("value", _nonempty)), writes=True)
 def _(rid, params: dict) -> dict:
     """Secret → profile .env under ``env_var`` (default ``MCP_<NAME>_API_KEY``); config.yaml gets only
     a ``${ENV}`` reference (Bearer header for http, ``env`` entry for stdio)."""
@@ -1604,7 +1611,8 @@ def _(rid, params: dict) -> dict:
     helpers = _tools_mod("tui_gateway.mcp_rpc_helpers")
 
     def failure(error: str, reason: str, oauth_needed: bool, tokens_present) -> dict:
-        return _ok(rid, {"ok": False, "error": helpers.redact_secrets(error, cfg), "reason": reason, "tools": [],
+        return _ok(rid, {"ok": False, "error": helpers.redact_secrets(error, mc._resolve_mcp_server_config(cfg, name)),
+                         "reason": reason, "tools": [],
                          "oauth_needed": oauth_needed, "oauth_tokens_present": tokens_present})
     try:
         tools = mc._probe_single_server(name, cfg, details=details)
@@ -1621,7 +1629,7 @@ def _(rid, params: dict) -> dict:
         "oauth_needed": needs_oauth_token, "oauth_tokens_present": True if needs_oauth_token else None})
 
 
-@_mcp_rpc("remove")
+@_mcp_rpc("remove", writes=True)
 def _(rid, params: dict) -> dict:
     """Remove a server from the profile's config.yaml and its header secrets from .env → ``{ok, removed}``."""
     name = _str_arg(params, "name")
@@ -1631,7 +1639,7 @@ def _(rid, params: dict) -> dict:
     return _err(rid, *failure) if failure else _ok(rid, removed)
 
 
-@_mcp_rpc("oauth.start")
+@_mcp_rpc("oauth.start", writes=True)
 def _(rid, params: dict) -> dict:
     """Begin a session-backed OAuth flow → ``{ok, session_id, auth_url, flow: "pkce"}``; the client
     opens ``auth_url`` and polls ``mcp.servers.oauth.poll``. With ``client_redirect_uri`` the CLIENT
@@ -1680,7 +1688,7 @@ def _mcp_flow_connection(rid, params):
     return connection, _err(rid, *failure) if failure else None
 
 
-@_mcp_rpc("oauth.poll", _NAME_SESSION)
+@_mcp_rpc("oauth.poll", _NAME_SESSION, writes=True)
 def _(rid, params: dict) -> dict:
     """Poll a flow → ``{ok, status: pending|approved|error, ...}``; ``approved`` persists tokens per profile."""
     connection, err = _mcp_flow_connection(rid, params)
@@ -1690,7 +1698,7 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"ok": True, **poll(_str_arg(params, "session_id"), connection)})
 
 
-@_mcp_rpc("oauth.cancel", _NAME_SESSION)
+@_mcp_rpc("oauth.cancel", _NAME_SESSION, writes=True)
 def _(rid, params: dict) -> dict:
     """Cancel a flow owned by the resolved profile, waking its callback worker."""
     connection, err = _mcp_flow_connection(rid, params)
@@ -1701,7 +1709,7 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, cancel(_str_arg(params, "session_id"), connection, home))
 
 
-@_mcp_rpc("oauth.callback", _NAME_SESSION)
+@_mcp_rpc("oauth.callback", _NAME_SESSION, writes=True)
 def _(rid, params: dict) -> dict:
     """Relay a client-captured redirect (``code``/``state``/``error``/``iss``) into a ``client_redirect_uri`` flow."""
     connection, err = _mcp_flow_connection(rid, params)

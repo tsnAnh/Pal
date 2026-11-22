@@ -63,6 +63,7 @@ def _needs_public_address(entry):
 
 def _details_call(params_model, action):
     def handler(rid, params):
+        from hermes_cli.shared_catalog_connectors import owner_write_scope
         from pydantic import ValidationError
         from tui_gateway import connector_details as details
         from tui_gateway.contracts.connectors import ConnectorErrorReason
@@ -71,7 +72,8 @@ def _details_call(params_model, action):
         except ValidationError:
             return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "Connector parameters are invalid.")
         try:
-            return _ok(rid, action(details, request).model_dump(mode="json", exclude_none=True))
+            with owner_write_scope(request.slug):
+                return _ok(rid, action(details, request).model_dump(mode="json", exclude_none=True))
         except details.DetailsRpcError as exc:
             return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
     return handler
@@ -102,7 +104,8 @@ def _oauth_client_call(params_model, action):
         except ValidationError:
             return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "slug is required.")
         try:
-            return _ok(rid, action(rpc, request).model_dump(mode="json"))
+            with rpc.owner_scope(request.slug):
+                return _ok(rid, action(rpc, request).model_dump(mode="json"))
         except rpc.OAuthClientRpcError as exc:
             return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
     return handler
@@ -186,6 +189,7 @@ def _(rid, params):
 
 def _discord_call(params_model, action):
     def handler(rid, params):
+        from hermes_cli.shared_catalog_connectors import owner_write_scope
         from pydantic import ValidationError
         from tui_gateway import discord_connector as discord
         try:
@@ -193,7 +197,8 @@ def _discord_call(params_model, action):
         except ValidationError:
             return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "Discord parameters are invalid.")
         try:
-            return _ok(rid, action(discord, request).model_dump(mode="json"))
+            with owner_write_scope(discord.SLUG):
+                return _ok(rid, action(discord, request).model_dump(mode="json"))
         except discord.DiscordRpcError as exc:
             return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
     return handler
@@ -223,6 +228,7 @@ def _(rid, params):
 
 def _google_ads_call(params_model, action):
     def handler(rid, params):
+        from hermes_cli.shared_catalog_connectors import owner_write_scope
         from pydantic import ValidationError
         from tui_gateway import google_ads_connector as ads
         try:
@@ -230,7 +236,8 @@ def _google_ads_call(params_model, action):
         except ValidationError:
             return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "Google Ads parameters are invalid.")
         try:
-            return _ok(rid, action(ads, request).model_dump(mode="json"))
+            with owner_write_scope(ads.SLUG):
+                return _ok(rid, action(ads, request).model_dump(mode="json"))
         except ads.GoogleAdsRpcError as exc:
             return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
     return handler

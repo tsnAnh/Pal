@@ -169,7 +169,7 @@ def test_figma_connects_through_the_preregistered_mcp_path(root, public_url, mon
     assert _ok("connectors.oauth_client.connect", slug="figma")["session_id"] == "s1"
     assert started["name"] == "figma@default" and started["cfg"]["url"] == "https://mcp.figma.com/mcp"
     assert started["cfg"]["oauth"]["client_id"] == "1.2" and started["redirect_uri"] == saved["redirect_url"]
-    config = (root / "profiles" / "work" / "config.yaml").read_text()
+    config = (root / "config.yaml").read_text()
     assert SECRET not in config and "FIGMA_CLIENT_SECRET" in config
 
 

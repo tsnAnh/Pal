@@ -72,13 +72,33 @@ def _apply_mcp_checklist(server_name: str, tools_cfg: dict, tool_names: list[str
         tools_cfg.pop("exclude", None)  # include-mode now; drop any legacy exclude block
 
 
+def _edit_root_owned(name: str, edit) -> bool:
+    from hermes_cli.shared_catalog import home_is_root, is_root_owned
+    from tools.mcp_accounts import registration_name
+
+    if home_is_root() or not is_root_owned(name):
+        return False
+    from hermes_cli.config import load_config, save_config
+    from hermes_cli.shared_catalog_connectors import owner_write_scope
+
+    with owner_write_scope(name):
+        root_config = load_config()
+        edit(root_config["mcp_servers"][registration_name(name)])
+        save_config(root_config)
+    return True
+
+
 def _configure_mcp_tools_interactive(config: dict):
     """Probe each MCP server for its tools, show a per-server curses checklist, and write the result
     back as ``tools.exclude`` / ``tools.include`` entries in config.yaml."""
     from hermes_cli.curses_ui import curses_checklist
     from hermes_cli.tools_config import save_config
 
-    mcp_servers = config.get("mcp_servers") or {}
+    from hermes_cli.profile_admin_guard import ProfileAdminDenied
+    from hermes_cli.shared_catalog import with_root_connectors
+
+    own_servers = config.get("mcp_servers") or {}
+    mcp_servers = with_root_connectors(own_servers)
     if not mcp_servers:
         _print_info("No MCP servers configured.")
         return
@@ -114,12 +134,13 @@ def _configure_mcp_tools_interactive(config: dict):
     print()
 
     any_changes = False
+    saved_in_root = False
     for server_name, tools in server_tools.items():
         if not tools:
             _print_info(f"  {server_name}: no tools found")
             continue
 
-        tools_cfg = mcp_servers.get(server_name, {}).get("tools") or {}
+        tools_cfg = (mcp_servers.get(server_name) or {}).get("tools") or {}
         # ``include: []`` is an explicit block-all whitelist, not "unfiltered" (#12865).
         include_raw, exclude_raw = tools_cfg.get("include"), tools_cfg.get("exclude")
         include_set = {str(p) for p in include_raw} if isinstance(include_raw, list) else None
@@ -140,14 +161,26 @@ def _configure_mcp_tools_interactive(config: dict):
             _print_info(f"  {server_name}: no changes")
             continue
 
-        tools_cfg = mcp_servers.setdefault(server_name, {}).setdefault("tools", {})
-        _apply_mcp_checklist(server_name, tools_cfg, tool_names, chosen, include_set, exclude_set, match)
+        def apply_checklist(entry: dict) -> None:
+            _apply_mcp_checklist(
+                server_name, entry.setdefault("tools", {}), tool_names, chosen, include_set, exclude_set, match)
+
+        try:
+            in_root = _edit_root_owned(server_name, apply_checklist)
+        except ProfileAdminDenied as exc:
+            _print_error(f"  {server_name}: {exc}")
+            continue
+        if not in_root:
+            apply_checklist(own_servers.setdefault(server_name, {}))
+        saved_in_root = saved_in_root or in_root
+        any_changes = any_changes or not in_root
 
         _print_success(f"  {server_name}: {len(chosen)} enabled, {len(tools) - len(chosen)} disabled")
-        any_changes = True
 
-    if any_changes:
-        save_config(config)
+    if any_changes or saved_in_root:
+        if any_changes:
+            config["mcp_servers"] = own_servers
+            save_config(config)
         print()
         print(color("  ✓ MCP tool configuration saved", Colors.GREEN))
     else:
@@ -170,16 +203,22 @@ def _apply_mcp_change(config: dict, targets: list[str], action: str) -> set[str]
 
     for target in targets:
         server_name, tool_name = target.split(":", 1)
+
+        def edit(entry: dict) -> None:
+            tools_cfg = entry.setdefault("tools", {})
+            exclude = list(tools_cfg.get("exclude") or [])
+            if action != "disable":
+                exclude = [t for t in exclude if t != tool_name]
+            elif tool_name not in exclude:
+                exclude.append(tool_name)
+            tools_cfg["exclude"] = exclude
+
+        if _edit_root_owned(server_name, edit):
+            continue
         if server_name not in mcp_servers:
             failed_servers.add(server_name)
             continue
-        tools_cfg = mcp_servers[server_name].setdefault("tools", {})
-        exclude = list(tools_cfg.get("exclude") or [])
-        if action != "disable":
-            exclude = [t for t in exclude if t != tool_name]
-        elif tool_name not in exclude:
-            exclude.append(tool_name)
-        tools_cfg["exclude"] = exclude
+        edit(mcp_servers[server_name])
 
     return failed_servers
 
@@ -284,7 +323,12 @@ def tools_disable_enable_command(args):
 
     failed_servers: set[str] = set()
     if mcp_targets:
-        failed_servers = _apply_mcp_change(config, mcp_targets, action)
+        from hermes_cli.profile_admin_guard import ProfileAdminDenied
+        try:
+            failed_servers = _apply_mcp_change(config, mcp_targets, action)
+        except ProfileAdminDenied as exc:
+            _print_error(str(exc))
+            return
         for srv in failed_servers:
             _print_error(f"MCP server '{srv}' not found in config")
     save_config(config)

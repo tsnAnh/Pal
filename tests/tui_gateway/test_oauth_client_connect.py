@@ -203,7 +203,7 @@ def test_figma_connects_through_the_mcp_path_with_the_owner_client(root, public_
     assert started["redirect_uri"] == PUBLIC_URL + "/webapp/mcp-oauth/callback"
     assert started["cfg"]["oauth"]["redirect_uri"] == started["redirect_uri"]
     assert "redirect_port" not in started["cfg"]["oauth"]
-    config = (root / "profiles" / "work" / "config.yaml").read_text()
+    config = (root / "config.yaml").read_text()
     assert OWNER_SECRET not in config
     assert yaml.safe_load(config)["mcp_servers"]["figma"]["oauth"]["client_id"] == FIGMA_CLIENT_ID
     assert _status("figma") == "connected"

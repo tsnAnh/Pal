@@ -1,11 +1,12 @@
-"""E2E tests for the per-profile MCP lifecycle RPCs (mcp.servers.*).
+"""E2E tests for the MCP lifecycle RPCs (mcp.servers.*).
 
 These drive the real registered gateway handlers against a real temp
 ``HERMES_HOME`` with named profile dirs — no mocks of the config/mcp layer — and
-assert that every write lands in the RIGHT profile's ``config.yaml`` / ``.env``
-and NEVER leaks into the launch (default) profile.
+assert that owner-surface writes land in the ROOT profile's ``config.yaml`` /
+``.env`` whatever profile they name, that a bot-only server is still managed in
+its own profile, and that every profile's reads include the root's servers.
 
-Covered: add + list + set_api_key + remove, profile isolation, and the
+Covered: add + list + set_api_key + remove, root sharing, and the
 duplicate/not-found error envelopes.
 """
 
@@ -59,7 +60,7 @@ def _read_yaml(path: Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
-def test_add_lands_in_named_profile_only(hermes_root):
+def test_add_lands_in_the_roots_config(hermes_root):
     root = hermes_root
     resp = _call(
         "mcp.servers.add",
@@ -74,18 +75,17 @@ def test_add_lands_in_named_profile_only(hermes_root):
     assert result["server"]["transport"] == "http"
     assert result["server"]["url"] == "https://mcp.example.com/weather"
 
-    work_cfg = _read_yaml(root / "profiles" / "work" / "config.yaml")
-    assert "weather" in work_cfg.get("mcp_servers", {})
-    assert work_cfg["mcp_servers"]["weather"]["url"] == "https://mcp.example.com/weather"
+    root_cfg = _read_yaml(root / "config.yaml")
+    assert "weather" in root_cfg.get("mcp_servers", {})
+    assert root_cfg["mcp_servers"]["weather"]["url"] == "https://mcp.example.com/weather"
 
-    # The launch/default profile and the sibling profile stay untouched.
-    default_cfg = _read_yaml(root / "config.yaml")
-    assert "weather" not in default_cfg.get("mcp_servers", {})
+    work_cfg = _read_yaml(root / "profiles" / "work" / "config.yaml")
+    assert "weather" not in work_cfg.get("mcp_servers", {})
     other_cfg = _read_yaml(root / "profiles" / "other" / "config.yaml")
     assert "weather" not in other_cfg.get("mcp_servers", {})
 
 
-def test_list_reflects_the_scoped_profile(hermes_root):
+def test_list_shows_root_owned_servers_in_every_profile(hermes_root):
     _result(
         _call(
             "mcp.servers.add",
@@ -102,16 +102,20 @@ def test_list_reflects_the_scoped_profile(hermes_root):
     work_names = [s["name"] for s in _result(_call("mcp.servers.list", {"profile": "work"}))["servers"]]
     other_names = [s["name"] for s in _result(_call("mcp.servers.list", {"profile": "other"}))["servers"]]
 
-    assert work_names == ["svc-a"]
-    assert other_names == ["svc-b"]
+    assert sorted(work_names) == ["svc-a", "svc-b"]
+    assert sorted(other_names) == ["svc-a", "svc-b"]
+    root_names = [s["name"] for s in _result(_call("mcp.servers.list", {}))["servers"]]
+    assert sorted(root_names) == ["svc-a", "svc-b"]
 
     # stdio transport surfaced correctly.
-    work_server = _result(_call("mcp.servers.list", {"profile": "work"}))["servers"][0]
+    work_server = next(
+        s for s in _result(_call("mcp.servers.list", {"profile": "work"}))["servers"] if s["name"] == "svc-a"
+    )
     assert work_server["transport"] == "stdio"
     assert work_server["command"] == "svc-a-bin"
 
 
-def test_status_is_profile_scoped_and_credential_safe(hermes_root):
+def test_status_includes_root_servers_and_is_credential_safe(hermes_root):
     _result(
         _call(
             "mcp.servers.add",
@@ -130,7 +134,7 @@ def test_status_is_profile_scoped_and_credential_safe(hermes_root):
     assert payload["checked_at"] > 0
     assert payload["servers"] == [
         {
-            "name": "svc-a",
+            "name": name,
             "transport": "stdio",
             "tools": 0,
             "connected": False,
@@ -140,6 +144,7 @@ def test_status_is_profile_scoped_and_credential_safe(hermes_root):
             "plugin": None,
             "needs_auth": False,
         }
+        for name in ("svc-a", "svc-b")
     ]
     assert "error" not in str(payload)
 
@@ -258,7 +263,7 @@ def test_status_includes_named_profile_runtime_in_multiplex(hermes_root):
     assert payload["servers"][0]["tools"] == 1
 
 
-def test_set_api_key_writes_env_and_header_to_right_profile(hermes_root):
+def test_set_api_key_writes_env_and_header_to_the_root(hermes_root):
     root = hermes_root
     _result(
         _call(
@@ -281,18 +286,17 @@ def test_set_api_key_writes_env_and_header_to_right_profile(hermes_root):
     env_var = resp["env_var"]
     assert env_var == "MCP_GIZMO_API_KEY"
 
-    # The secret is in the work profile's .env — and NOT the default profile's.
-    work_env = (root / "profiles" / "work" / ".env").read_text(encoding="utf-8")
-    assert "MCP_GIZMO_API_KEY=sk-secret-123" in work_env
-    assert not (root / ".env").exists() or "sk-secret-123" not in (root / ".env").read_text(
-        encoding="utf-8"
-    )
+    root_env = (root / ".env").read_text(encoding="utf-8")
+    assert "MCP_GIZMO_API_KEY=sk-secret-123" in root_env
+    work_env = root / "profiles" / "work" / ".env"
+    assert not work_env.exists() or "sk-secret-123" not in work_env.read_text(encoding="utf-8")
 
     # config.yaml stores only the interpolation template, never the raw secret.
-    work_cfg = _read_yaml(root / "profiles" / "work" / "config.yaml")
-    headers = work_cfg["mcp_servers"]["gizmo"]["headers"]
+    root_cfg = _read_yaml(root / "config.yaml")
+    headers = root_cfg["mcp_servers"]["gizmo"]["headers"]
     assert headers["Authorization"] == "Bearer ${MCP_GIZMO_API_KEY}"
-    assert "sk-secret-123" not in str(work_cfg)
+    assert "sk-secret-123" not in str(root_cfg)
+    assert "gizmo" not in _read_yaml(root / "profiles" / "work" / "config.yaml").get("mcp_servers", {})
 
 
 def test_set_api_key_stdio_references_env_block(hermes_root):
@@ -316,14 +320,14 @@ def test_set_api_key_stdio_references_env_block(hermes_root):
     )
     assert resp["env_var"] == "LOCALTOOL_TOKEN"
 
-    work_cfg = _read_yaml(root / "profiles" / "work" / "config.yaml")
-    env_block = work_cfg["mcp_servers"]["localtool"]["env"]
+    root_cfg = _read_yaml(root / "config.yaml")
+    env_block = root_cfg["mcp_servers"]["localtool"]["env"]
     assert env_block["LOCALTOOL_TOKEN"] == "${LOCALTOOL_TOKEN}"
-    work_env = (root / "profiles" / "work" / ".env").read_text(encoding="utf-8")
-    assert "LOCALTOOL_TOKEN=tok-xyz" in work_env
+    root_env = (root / ".env").read_text(encoding="utf-8")
+    assert "LOCALTOOL_TOKEN=tok-xyz" in root_env
 
 
-def test_remove_scoped_to_profile(hermes_root):
+def test_remove_deletes_the_roots_server_and_leaves_a_bot_only_entry(hermes_root):
     root = hermes_root
     _result(
         _call(
@@ -331,19 +335,16 @@ def test_remove_scoped_to_profile(hermes_root):
             {"profile": "work", "name": "temp", "config": {"command": "temp-bin"}},
         )
     )
-    # Same-named server in a different profile must be unaffected by the remove.
-    _result(
-        _call(
-            "mcp.servers.add",
-            {"profile": "other", "name": "temp", "config": {"command": "temp-bin"}},
-        )
+    assert "temp" in _read_yaml(root / "config.yaml").get("mcp_servers", {})
+    # A same-named entry in a bot's own config must be unaffected by the remove.
+    (root / "profiles" / "other" / "config.yaml").write_text(
+        "mcp_servers:\n  temp:\n    command: temp-bin\n", encoding="utf-8"
     )
 
     resp = _result(_call("mcp.servers.remove", {"profile": "work", "name": "temp"}))
     assert resp["removed"] is True
 
-    assert "temp" not in _read_yaml(root / "profiles" / "work" / "config.yaml").get("mcp_servers", {})
-    # The 'other' profile still has its server.
+    assert "temp" not in _read_yaml(root / "config.yaml").get("mcp_servers", {})
     assert "temp" in _read_yaml(root / "profiles" / "other" / "config.yaml").get("mcp_servers", {})
 
 
@@ -397,7 +398,7 @@ def _saved_server(root: Path, profile: str, name: str) -> dict:
     return (_read_yaml(path).get("mcp_servers") or {}).get(name) or {}
 
 
-def test_add_catalog_id_in_profile_param_saves_manifest_in_that_profile(hermes_root):
+def test_add_catalog_id_in_profile_param_saves_manifest_in_the_root(hermes_root):
     """Desktop add-from-catalog sends {profile, name, preset} with a catalog id."""
     entry = _catalog_http_entry()
     result = _result(
@@ -409,16 +410,16 @@ def test_add_catalog_id_in_profile_param_saves_manifest_in_that_profile(hermes_r
 
     assert result["ok"] is True
     assert result["server"]["transport"] == "http"
-    saved = _saved_server(hermes_root, "work", entry.name)
+    saved = _saved_server(hermes_root, "", entry.name)
     assert saved["url"] == entry.transport.url
-    assert entry.name not in (_read_yaml(hermes_root / "config.yaml").get("mcp_servers") or {})
+    assert not _saved_server(hermes_root, "work", entry.name)
     other = _read_yaml(hermes_root / "profiles" / "other" / "config.yaml").get("mcp_servers") or {}
     assert entry.name not in other
 
 
-def test_oauth_catalog_add_follows_routed_profile_not_payload(hermes_root):
+def test_oauth_catalog_add_from_a_routed_profile_lands_in_the_root(hermes_root):
     """OAuth add sends {name, preset} only. requestGatewayForAgent carries the
-    profile as routing metadata, so the write follows the bound scope."""
+    profile as routing metadata, and the owner write still lands in the root."""
     from agent.secret_scope import is_multiplex_active, set_multiplex_active
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
 
@@ -437,11 +438,11 @@ def test_oauth_catalog_add_follows_routed_profile_not_payload(hermes_root):
 
     assert result["server"]["transport"] == "http"
     assert result["server"]["auth"] == "oauth"
-    saved = _saved_server(hermes_root, "work", entry.name)
+    saved = _saved_server(hermes_root, "", entry.name)
     assert saved["url"] == entry.transport.url
     assert saved["auth"] == "oauth"
     assert entry.auth.type == "oauth"
-    assert entry.name not in (_read_yaml(hermes_root / "config.yaml").get("mcp_servers") or {})
+    assert not _saved_server(hermes_root, "work", entry.name)
     assert not _saved_server(hermes_root, "other", entry.name)
 
 
@@ -472,11 +473,11 @@ def test_explicit_transport_wins_over_catalog_or_unknown_preset(hermes_root):
 
     assert catalog["server"]["command"] == "explicit-bin"
     assert catalog["server"]["url"] != entry.transport.url
-    saved_catalog = _saved_server(hermes_root, "work", "kept-catalog")
+    saved_catalog = _saved_server(hermes_root, "", "kept-catalog")
     assert saved_catalog["command"] == "explicit-bin"
     assert saved_catalog.get("url") != entry.transport.url
     assert unknown["server"]["url"] == "https://override.example/mcp"
-    assert _saved_server(hermes_root, "work", "kept-unknown")["url"] == "https://override.example/mcp"
+    assert _saved_server(hermes_root, "", "kept-unknown")["url"] == "https://override.example/mcp"
 
 
 def test_unknown_preset_returns_4063_and_writes_nothing(hermes_root):
@@ -505,7 +506,7 @@ def test_cli_preset_still_fills_transport_when_not_in_catalog(hermes_root):
         )
     )
 
-    saved = _saved_server(hermes_root, "work", "cli-preset")
+    saved = _saved_server(hermes_root, "", "cli-preset")
     assert result["server"]["command"] == expected["command"]
     assert saved["command"] == expected["command"]
     assert saved.get("args") == list(expected.get("args") or [])

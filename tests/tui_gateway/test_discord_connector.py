@@ -19,7 +19,7 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(root))
     monkeypatch.setattr("tools.connectors.portal.client.PortalConnectorClient.__init__",
                         lambda *_a, **_k: pytest.fail("reached the Nous Portal"))
-    return root / "profiles" / "work"
+    return root
 
 
 @pytest.fixture
@@ -122,7 +122,7 @@ def test_before_a_token_the_guide_hides_the_invite_links_and_starts_at_the_bot_s
     assert _reason(_call("connectors.discord.guilds")) == "NEEDS_SETUP"
 
 
-def test_the_saved_token_lives_only_in_the_profile_env_and_fills_the_invite_link(home, discord):
+def test_the_saved_token_lives_only_in_the_root_env_and_fills_the_invite_link(home, discord):
     assert _connect_token() == {"bot_name": "palbot", "application_id": BOT_ID}
     row = _row()
     links = {s["id"]: s for s in row["setup_guide"]["steps"]}["invite"]["links"]

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 
 from gateway import oauth_client_setup as setup_mod
+from hermes_cli.shared_catalog_connectors import owner_state_home, owner_write_scope, requested_profile_home
 from tui_gateway.contracts.connectors import (
     ConnectorCatalogStatus,
     ConnectorErrorReason,
@@ -42,6 +44,12 @@ def _public_url() -> str | None:
     return public_url_for(_home())
 
 
+def owner_scope(slug: str):
+    if slug == setup_mod.GOOGLE_PROVIDER:
+        return contextlib.nullcontext()
+    return owner_write_scope(slug)
+
+
 def providers() -> frozenset[str]:
     return frozenset({*setup_mod.GOOGLE_PROVIDERS, *setup_mod.preregistered_mcp_entries()})
 
@@ -71,7 +79,7 @@ def save(request) -> OAuthClientSetupResult:
     if connection_profile_home() is not None:
         raise OAuthClientRpcError(4030, ConnectorErrorReason.not_owner, "Only the owner can set up this app.")
     try:
-        setup_mod.save_client(setup_mod.build_store(), setup_mod.client_provider(provider), _home(),
+        setup_mod.save_client(setup_mod.build_store(), setup_mod.client_provider(provider), requested_profile_home(),
                               request.client_id_item, request.client_secret_item)
     except setup_mod.SetupError as exc:
         _raise(exc.reason)
@@ -191,7 +199,7 @@ def oauth_client_status(entry) -> ConnectorCatalogStatus:
     if entry.id == setup_mod.ADS_PROVIDER:
         if store.client(setup_mod.GOOGLE_PROVIDER) is None:
             return ConnectorCatalogStatus.needs_setup
-        status = setup_mod.google_status(store, _home(), entry.id)
+        status = setup_mod.google_status(store, owner_state_home(entry.id), entry.id)
         if status is setup_mod.ConnectionStatus.connected:
             return ConnectorCatalogStatus.connected
         return ConnectorCatalogStatus.needs_reconnect if status is not None else ConnectorCatalogStatus.not_connected

@@ -25,6 +25,11 @@ def work_home(tmp_path, monkeypatch):
     return root / "profiles" / PROFILE
 
 
+@pytest.fixture
+def root_home(work_home):
+    return work_home.parents[1]
+
+
 @pytest.fixture(autouse=True)
 def portal_forbidden(monkeypatch):
     def refuse(*_args, **_kwargs):
@@ -78,27 +83,28 @@ def test_a_no_auth_entry_added_through_the_mcp_path_shows_connected(work_home):
     assert _rows()[entry.id]["status"] == "connected"
 
 
-def test_an_api_key_entry_keeps_the_key_out_of_config_and_shows_connected(work_home):
+def test_an_api_key_entry_keeps_the_key_out_of_config_and_shows_connected(work_home, root_home):
     entry = _first(ConnectionMethod.API_KEY)
     key = "fake-key-for-test"
 
     _ok("mcp.servers.add", name=entry.id, config={"url": entry.mcp_url, "transport": "http"}, bearer_token=key)
 
     assert _rows()[entry.id]["status"] == "connected"
-    assert key not in (work_home / "config.yaml").read_text()
+    assert key not in (root_home / "config.yaml").read_text()
+    assert not (work_home / "config.yaml").exists() or key not in (work_home / "config.yaml").read_text()
 
 
 def test_an_oauth_entry_with_a_rejected_token_needs_reconnect_and_a_disabled_one_is_not_connected(
-        work_home, monkeypatch):
+        root_home, monkeypatch):
     entry = _first(ConnectionMethod.MCP_OAUTH)
     _ok("mcp.servers.add", name=entry.id, config={"url": entry.mcp_url, "transport": "http"})
     monkeypatch.setattr("tools.mcp_oauth.pending_reauth_reason", lambda name: "expired" if name == entry.id else None)
 
     assert _rows()[entry.id]["status"] == "needs_reconnect"
 
-    config = yaml.safe_load((work_home / "config.yaml").read_text())
+    config = yaml.safe_load((root_home / "config.yaml").read_text())
     config["mcp_servers"][entry.id]["enabled"] = False
-    (work_home / "config.yaml").write_text(yaml.safe_dump(config))
+    (root_home / "config.yaml").write_text(yaml.safe_dump(config))
 
     assert _rows()[entry.id]["status"] == "not_connected"
 

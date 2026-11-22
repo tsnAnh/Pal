@@ -6,8 +6,8 @@ from typing import Any, Callable, Iterator
 
 from hermes_cli.config_backend import require_file_tooling
 from hermes_cli.shared_catalog import (
-    catalog_active, catalog_dir, catalog_lock, catalog_skills_dir, has_transport, mcp_definitions_path, merge_server,
-    read_mcp_definitions, update_mcp_definitions,
+    CONNECTORS_ADOPTED_FILE, catalog_active, catalog_dir, catalog_lock, catalog_skills_dir, has_transport,
+    mcp_definitions_path, merge_server, read_mcp_definitions, update_mcp_definitions,
 )
 from hermes_cli.shared_catalog_backup import (
     STATUS_COMMITTED, STATUS_DONE, STATUS_PREPARED, STATUS_ROLLED_BACK, STATUS_ROLLING_BACK, discover_homes,
@@ -191,6 +191,7 @@ def rollback(*, say: Say = print) -> int:
         _preserve_edited(backup, manifest, say)
         remove_catalog_content(manifest)
         marker.unlink(missing_ok=True)
+        (catalog_dir() / CONNECTORS_ADOPTED_FILE).unlink(missing_ok=True)
         _seed_unrecorded_bots(unrecorded, say)
         write_status(backup, manifest, STATUS_ROLLED_BACK, rollback_skipped=skipped)
         say(f"Rolled back to {backup}")

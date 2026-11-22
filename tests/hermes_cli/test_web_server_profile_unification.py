@@ -108,7 +108,7 @@ class TestProfileScopedEnv:
 
 class TestProfileScopedMcp:
 
-    def test_mcp_bearer_secret_is_profile_scoped(self, client, isolated_profiles):
+    def test_mcp_bearer_secret_lands_in_the_root_profile_not_the_target(self, client, isolated_profiles):
         secret = "worker-only-secret"
         response = client.post(
             "/api/mcp/servers",
@@ -122,13 +122,14 @@ class TestProfileScopedMcp:
         )
 
         assert response.status_code == 200
-        worker_cfg = _cfg(isolated_profiles["worker_beta"])
-        assert worker_cfg["mcp_servers"]["profile-bearer"]["headers"] == {
+        root_cfg = _cfg(isolated_profiles["default"])
+        assert root_cfg["mcp_servers"]["profile-bearer"]["headers"] == {
             "Authorization": "Bearer ${MCP_PROFILE_BEARER_API_KEY}",
         }
-        assert secret in (isolated_profiles["worker_beta"] / ".env").read_text()
-        assert not (isolated_profiles["default"] / ".env").exists()
-        assert "profile-bearer" not in _cfg(isolated_profiles["default"]).get(
+        assert secret in (isolated_profiles["default"] / ".env").read_text()
+        worker_env = isolated_profiles["worker_beta"] / ".env"
+        assert not worker_env.exists() or secret not in worker_env.read_text()
+        assert "profile-bearer" not in _cfg(isolated_profiles["worker_beta"]).get(
             "mcp_servers", {}
         )
 

@@ -11,7 +11,9 @@ from urllib.parse import parse_qsl, urlsplit
 
 import hermes_yaml as yaml
 from hermes_cli.profile_admin_guard import require_profile_admin_grant
-from hermes_constants import CATALOG_MIGRATED_MARKER, get_shared_catalog_dir, get_shared_root
+from hermes_constants import (
+    CATALOG_MIGRATED_MARKER, get_default_hermes_root, get_hermes_home, get_shared_catalog_dir, get_shared_root,
+    hermes_home_key)
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ T = TypeVar("T")
 
 MCP_DEFINITIONS_FILE = "mcp_servers.yaml"
 CATALOG_LOCK_FILE = "catalog.lock"
+CONNECTORS_ADOPTED_FILE = ".connectors-adopted"
 OPT_OUT_APPLIED_FILE = ".no-bundled-skills.applied"
 NO_BUNDLED_SKILLS_MARKER = ".no-bundled-skills"
 TRANSPORT_KEYS = ("command", "url")
@@ -87,7 +90,7 @@ def _load_definitions_file(path: Path) -> dict[str, dict]:
     return {str(name): dict(entry) for name, entry in raw.items() if isinstance(entry, dict)}
 
 
-def read_mcp_definitions() -> dict[str, dict]:
+def _definitions_snapshot() -> dict[str, dict]:
     path = mcp_definitions_path()
     try:
         stat = path.stat()
@@ -98,11 +101,15 @@ def read_mcp_definitions() -> dict[str, dict]:
     with _definitions_cache_lock:
         cached = _definitions_cache.get(key)
     if cached is not None and cached[0] == signature:
-        return copy.deepcopy(cached[1])
+        return cached[1]
     definitions = _load_definitions_file(path)
     with _definitions_cache_lock:
         _definitions_cache[key] = (signature, definitions)
-    return copy.deepcopy(definitions)
+    return definitions
+
+
+def read_mcp_definitions() -> dict[str, dict]:
+    return copy.deepcopy(_definitions_snapshot())
 
 
 def write_mcp_definitions_locked(definitions: dict[str, dict]) -> None:
@@ -229,14 +236,12 @@ def merge_server(shared: dict, bot_entry: dict) -> dict:
     return merged
 
 
-def effective_mcp_servers(bot_servers: Any) -> dict:
-    if not isinstance(bot_servers, dict):
-        return {}
+def _merge_definitions(servers: dict) -> dict:
     if not catalog_active():
-        return bot_servers
+        return servers
     definitions = read_mcp_definitions()
     effective: dict = {}
-    for name, entry in bot_servers.items():
+    for name, entry in servers.items():
         shared = definitions.get(str(name))
         if shared is not None and isinstance(entry, dict):
             effective[name] = merge_server(shared, entry)
@@ -247,11 +252,15 @@ def effective_mcp_servers(bot_servers: Any) -> dict:
     return effective
 
 
+def effective_mcp_servers(bot_servers: Any) -> dict:
+    return _merge_definitions(with_root_connectors(bot_servers if isinstance(bot_servers, dict) else {}))
+
+
 def visible_mcp_servers(bot_servers: Any) -> dict:
-    servers = bot_servers if isinstance(bot_servers, dict) else {}
+    servers = with_root_connectors(bot_servers if isinstance(bot_servers, dict) else {})
     if not catalog_active():
         return servers
-    visible = effective_mcp_servers(servers)
+    visible = _merge_definitions(servers)
     for name, definition in read_mcp_definitions().items():
         if name not in visible:
             visible[name] = {**definition, "enabled": False}
@@ -259,7 +268,55 @@ def visible_mcp_servers(bot_servers: Any) -> dict:
 
 
 def shared_mcp_names() -> set[str]:
-    return set(read_mcp_definitions()) if catalog_active() else set()
+    return set(_definitions_snapshot()) if catalog_active() else set()
+
+
+def hosted_scope() -> bool:
+    from hermes_scope import current_scope
+
+    scope = current_scope()
+    return scope is not None and not scope.is_local
+
+
+def root_home() -> Path:
+    return get_default_hermes_root()
+
+
+def home_is_root(home: str | Path | None = None) -> bool:
+    return hermes_home_key(home if home is not None else get_hermes_home()) == hermes_home_key(root_home())
+
+
+def root_entries() -> dict:
+    from hermes_cli.config_backend import read_config_doc_readonly
+
+    try:
+        servers = read_config_doc_readonly(root_home() / "config.yaml").get("mcp_servers")
+    except FileNotFoundError:
+        return {}
+    return servers if isinstance(servers, dict) else {}
+
+
+def is_root_owned(name: Any) -> bool:
+    from tools.mcp_accounts import registration_name
+
+    if not isinstance(name, str) or hosted_scope():
+        return False
+    return isinstance(root_entries().get(registration_name(name)), dict)
+
+
+def connector_state_home(name: str, home: str | Path | None) -> str | Path | None:
+    if home_is_root(home):
+        return home
+    return root_home() if is_root_owned(name) else home
+
+
+def with_root_connectors(bot_servers: dict, *, home: str | Path | None = None) -> dict:
+    if hosted_scope() or home_is_root(home):
+        return bot_servers
+    owned = {name: entry for name, entry in root_entries().items() if isinstance(entry, dict)}
+    if not owned:
+        return bot_servers
+    return {**bot_servers, **copy.deepcopy(owned)}
 
 
 def prune_stale_bot_entries(bot_servers: dict) -> dict:

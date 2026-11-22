@@ -21,6 +21,7 @@ from hermes_cli._subprocess_compat import noninteractive_git_env
 from hermes_cli.colors import Colors, color
 from hermes_cli.config import load_config, save_config, get_env_value, save_env_value
 from hermes_cli.cli_output import prompt as _prompt_input
+from hermes_cli.shared_catalog_connectors import owner_write
 from utils import rmtree_readonly
 from hermes_cli._startup_fast import project_root_str
 
@@ -835,6 +836,7 @@ def recorded_catalog_install(name: str) -> Iterator[None]:
         record_mcp_install("catalog", name, "success")
 
 
+@owner_write(lambda entry, *_args, **_kwargs: entry.name)
 def install_entry(entry: CatalogEntry, *, enable: bool = True, preloaded_env: Optional[dict[str, str]] = None) -> None:
     with recorded_catalog_install(entry.name):
         _install_entry(entry, enable=enable, preloaded_env=preloaded_env)

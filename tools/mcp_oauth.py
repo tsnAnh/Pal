@@ -455,14 +455,16 @@ class HermesTokenStorage:
     """Persist OAuth state as ``HERMES_HOME/mcp-tokens/<server_name>`` + ``.json`` (tokens),
     ``.client.json`` (client info), ``.meta.json`` (server metadata), ``.cimd-off`` (CIMD refused), ``.redirect.json`` (app sign-in redirect preference)."""
 
-    def __init__(self, server_name: str, *, hermes_home: str | Path | None = None):
+    def __init__(self, server_name: str, *, hermes_home: str | Path | None = None, own_home_only: bool = False):
         from tools.mcp_accounts import split
 
         account = split(server_name)
         self._dir_parts: tuple[str, ...] = (ACCOUNT_DIR_NAME, account.slug) if account else ()
         self._stem = account.alias if account else _safe_filename(server_name)
         self._server_name = account.server_name if account else self._stem
+        self._connector = account.slug if account else self._stem
         self._hermes_home = Path(hermes_home) if hermes_home is not None else None
+        self._own_home_only = own_home_only
         # Issuer binding: ``loaded_issuer`` is what the token file on disk recorded (the authorization
         # server that granted the stored refresh token); ``_bound_issuer`` is stamped onto the next
         # ``set_tokens`` write. See ``tools.mcp_oauth_provider.enforce_refresh_token_issuer``.
@@ -470,7 +472,12 @@ class HermesTokenStorage:
         self._bound_issuer: str | None = None
 
     def _directory(self) -> Path:
-        return _get_token_dir(self._hermes_home).joinpath(*self._dir_parts)
+        home = self._hermes_home
+        if not self._own_home_only:
+            from hermes_cli.shared_catalog import connector_state_home
+
+            home = connector_state_home(self._connector, home)
+        return _get_token_dir(home).joinpath(*self._dir_parts)
 
     def _path(self, suffix: str) -> Path:
         return self._directory() / f"{self._stem}{suffix}"

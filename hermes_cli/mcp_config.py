@@ -6,7 +6,7 @@ import logging
 import os
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from hermes_cli.config import (
     cfg_get,
@@ -20,6 +20,7 @@ from hermes_cli.colors import Colors, color
 from hermes_constants import display_hermes_home
 from hermes_cli.mcp_security import validate_mcp_server_entry
 from hermes_cli.profile_admin_guard import ProfileAdminDenied
+from hermes_cli.shared_catalog_connectors import owner_write, owner_write_scope, requested_profile_home
 from tools.mcp_tool_config import _ENV_VAR_PATTERN
 from tools.mcp_tool_common import _env_ref_name, mcp_server_enabled
 
@@ -253,6 +254,7 @@ def _tool_filters(cfg: dict) -> tuple[Optional[list], Optional[list]]:
         exclude if isinstance(exclude, list) else None)
 
 
+@owner_write()
 def _save_mcp_server(name: str, server_config: dict, *, force_shared: bool = False) -> bool:
     """Add or update a server entry in config.yaml.
 
@@ -330,6 +332,7 @@ def _lookup_connection(
     return f"{slug}@{alias}", account_config(template, alias, accounts[alias])
 
 
+@owner_write()
 def _remove_mcp_server(name: str, *, everywhere: bool = False) -> bool:
     """Remove a server from config.yaml.  Returns True if it existed."""
     from tools.mcp_accounts import split, template_accounts
@@ -362,6 +365,7 @@ def _remove_mcp_server(name: str, *, everywhere: bool = False) -> bool:
     return True
 
 
+@owner_write(lambda *_args, **_kwargs: None)
 def _replace_mcp_servers(servers: dict[str, dict], *, force_shared: bool = False) -> tuple[bool, list[str]]:
     """Replace the WHOLE ``mcp_servers`` map in config.yaml.
 
@@ -477,7 +481,7 @@ def _apply_mcp_preset(
     return url, command, cmd_args, True
 
 
-def _resolve_mcp_server_config(config: dict) -> dict:
+def _resolve_mcp_server_config(config: dict, name: str | None = None) -> dict:
     """Resolve ``${ENV}`` placeholders in a server config before connecting.
 
     Mirrors ``_load_mcp_config()`` in ``tools/mcp_tool.py``; without it the discovery probe sent
@@ -498,7 +502,7 @@ def _resolve_mcp_server_config(config: dict) -> dict:
             load_hermes_dotenv()
         except Exception:  # pragma: no cover — defensive
             pass
-    return _interpolate_env_vars(config)
+    return _interpolate_env_vars(config, name)
 
 
 def _probe_single_server(
@@ -520,7 +524,7 @@ def _probe_single_server(
     from tools.mcp_tool_lifecycle import _stop_mcp_loop_if_idle
     from tools.mcp_tool_common import _parse_boolish
 
-    config = _resolve_mcp_server_config(config)
+    config = _resolve_mcp_server_config(config, name)
     if connect_timeout is None:
         try:
             connect_timeout = max(1.0, float(config.get("connect_timeout", 30)))
@@ -804,6 +808,7 @@ def cmd_mcp_add(args):
             if saved:
                 _success(f"Saved '{name}' to config (disabled)")
                 _info("Fix the issue, then: hermes mcp test " + name)
+        _announce_unsaved_missing_keys(saved, name, server_config)
         _record(saved, probe_failure_class(exc))
         return
 
@@ -843,13 +848,16 @@ def cmd_mcp_remove(args):
         _info("Cancelled.")
         return
     everywhere = bool(getattr(args, "everywhere", False))
+    from hermes_cli.shared_catalog import home_is_root, is_root_owned, shared_mcp_names
+    root_owned = not home_is_root(requested_profile_home()) and is_root_owned(name)
     try:
         _remove_mcp_server(name, everywhere=everywhere)
     except ProfileAdminDenied as exc:
         _error(str(exc))
         return
-    from hermes_cli.shared_catalog import shared_mcp_names
-    if name in shared_mcp_names():
+    if root_owned:
+        _success(f"Disconnected '{name}' for every bot")
+    elif name in shared_mcp_names():
         _success(f"Removed '{name}' from this bot; the shared definition stays for other bots")
         _info(f"To delete it for every bot: hermes mcp remove {name} --everywhere")
     else:
@@ -1008,6 +1016,7 @@ def cmd_mcp_test(args):
     return 0
 
 
+@owner_write()
 def _reauth_oauth_server(name: str, server_config: dict, *, flow: str | None = None) -> bool:
     """Force a fresh OAuth flow for one server. Returns True on success.
 
@@ -1263,6 +1272,51 @@ _MCP_USAGE = (
 )
 
 
+_OWNER_WRITE_ACTIONS = frozenset({"add", "remove", "rm", "configure", "config"})
+
+
+def _announce_shell_keys(name: str) -> None:
+    from hermes_cli.mcp_shell_keys import import_shell_keys
+
+    for var in import_shell_keys(name):
+        _success(f"Saved {var} from your shell to the shared setup so every bot can use it")
+
+
+def _announce_missing_keys(name: str, entry: Any) -> None:
+    from hermes_cli.mcp_shell_keys import missing_key_fixes
+
+    for line in missing_key_fixes(name, entry):
+        _warning(line)
+
+
+def _announce_unsaved_missing_keys(saved: bool, name: str, entry: Any) -> None:
+    if not saved:
+        _announce_missing_keys(name, entry)
+
+
+def _with_shell_keys(action: str, name: str, run: Callable[[], Any]) -> Any:
+    from hermes_cli.mcp_shell_keys import SHELL_IMPORT_AFTER, SHELL_IMPORT_BEFORE
+    from tools.mcp_accounts import registration_name
+
+    if action in SHELL_IMPORT_BEFORE:
+        _announce_shell_keys(name)
+    result = run()
+    if action in SHELL_IMPORT_AFTER:
+        _announce_shell_keys(name)
+    if action in SHELL_IMPORT_BEFORE | SHELL_IMPORT_AFTER:
+        _announce_missing_keys(name, _get_mcp_servers().get(registration_name(name)))
+    return result
+
+
+def _install_with_shell_keys(identifier: str, mcp_picker) -> int:
+    from hermes_cli.mcp_catalog import get_entry
+
+    entry = get_entry(identifier)
+    name = entry.name if entry else identifier
+    with owner_write_scope(name):
+        return _with_shell_keys("install", name, lambda: mcp_picker.install_by_name(identifier))
+
+
 def mcp_command(args):
     """Main dispatcher for ``hermes mcp`` subcommands."""
     action = getattr(args, "mcp_action", None)
@@ -1276,7 +1330,12 @@ def mcp_command(args):
             mcp_picker.show_catalog()
         else:
             import sys as _sys
-            rc = mcp_picker.install_by_name(getattr(args, "identifier", "") or "")
+            identifier = getattr(args, "identifier", "") or ""
+            try:
+                rc = _install_with_shell_keys(identifier, mcp_picker)
+            except ProfileAdminDenied as exc:
+                _error(str(exc))
+                rc = 1
             if rc:
                 _sys.exit(rc)
         return
@@ -1287,7 +1346,12 @@ def mcp_command(args):
     }.get(action)
     if handler:
         # A handler's int return is the process exit code (``main()`` exits non-zero on it).
-        return handler(args)
+        try:
+            with owner_write_scope(args.name) if action in _OWNER_WRITE_ACTIONS else contextlib.nullcontext():
+                return _with_shell_keys(action, args.name, lambda: handler(args))
+        except ProfileAdminDenied as exc:
+            _error(str(exc))
+            return 1
     # No subcommand — drop the user into the catalog picker (same UX as `hermes plugin`).
     from hermes_cli.mcp_picker import run_picker
     run_picker()

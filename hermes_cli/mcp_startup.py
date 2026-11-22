@@ -55,9 +55,11 @@ def _has_configured_mcp_servers() -> bool:
     """Cheap config probe so non-MCP users avoid importing the MCP stack."""
     try:
         from hermes_cli.config import read_raw_config
+        from hermes_cli.shared_catalog import with_root_connectors
 
         raw_config = read_raw_config() or {}
-        if isinstance(raw_config.get("mcp_servers"), dict) and raw_config["mcp_servers"]:
+        own_servers = raw_config.get("mcp_servers")
+        if with_root_connectors(own_servers if isinstance(own_servers, dict) else {}):
             return True
         from hermes_cli.agent_plugins import has_enabled_agent_plugin_mcp
 

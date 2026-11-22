@@ -17,6 +17,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+from hermes_cli.shared_catalog_connectors import owner_write_scope
 from hermes_cli.web_deps import late
 from hermes_cli.web_server_mcp import _mcp_oauth_flows, _mcp_server_summary, normalize_mcp_server_create
 from hermes_cli.web_models import MCPCatalogInstall, MCPEnabledToggle, MCPServerCreate, MCPServersReplace
@@ -121,7 +122,7 @@ async def add_mcp_server(body: MCPServerCreate, profile: Optional[str] = None):
         # _save_mcp_server does its own load→mutate→save; the duplicate-name
         # check sits under the same lock span so a concurrent add can't slip
         # between check and save.
-        with config_write_scope(body.profile or profile):
+        with config_write_scope(body.profile or profile), owner_write_scope(name):
             config_servers = _get_mcp_servers()
             from tui_gateway.mcp_rpc_helpers import server_configs_with_sources
 
@@ -206,7 +207,7 @@ async def replace_mcp_servers(body: MCPServersReplace, profile: Optional[str] = 
     ``enabled: false``, so removals wouldn't persist through it."""
 
     def _run():
-        with config_write_scope(body.profile or profile):
+        with config_write_scope(body.profile or profile), owner_write_scope():
             from tui_gateway.mcp_rpc_helpers import server_configs_with_sources
 
             _servers, plugins = server_configs_with_sources({})
@@ -226,7 +227,7 @@ async def remove_mcp_server(name: str, profile: Optional[str] = None, everywhere
     from hermes_cli.mcp_config import _get_mcp_servers, _remove_mcp_server
 
     def _run():
-        with config_write_scope(profile):
+        with config_write_scope(profile), owner_write_scope(name):
             config_servers = _get_mcp_servers()
             from tui_gateway.mcp_rpc_helpers import server_configs_with_sources
 
@@ -308,7 +309,7 @@ async def auth_mcp_server(name: str, request: Request, profile: Optional[str] = 
     process_home = _home()
 
     def _read():
-        with _profile_secret_scope(profile):
+        with _profile_secret_scope(profile), owner_write_scope(name):
             config_servers = _get_mcp_servers()
             from tui_gateway.mcp_rpc_helpers import server_configs_with_sources
 
@@ -414,7 +415,7 @@ async def set_mcp_server_enabled(name: str, body: MCPEnabledToggle, profile: Opt
     """Toggle ``enabled`` (takes effect on next session/gateway); disabled
     servers stay in config so they can be re-enabled without re-entry."""
     def _run():
-        with config_write_scope(body.profile or profile):
+        with config_write_scope(body.profile or profile), owner_write_scope(name):
             cfg = load_config()
             from tui_gateway.mcp_rpc_helpers import server_configs_with_sources
 
@@ -544,7 +545,7 @@ async def install_mcp_catalog_entry(body: MCPCatalogInstall, profile: Optional[s
     # secrets-only and nothing re-prompts on a non-TTY server.
     if body.env:
         def _write_env():
-            with _profile_scope(effective_profile):
+            with _profile_scope(effective_profile), owner_write_scope(name):
                 for spec in entry.auth.env or []:
                     value = (body.env or {}).get(spec.name)
                     if spec.secret and value:

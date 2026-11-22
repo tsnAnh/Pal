@@ -12,7 +12,8 @@ from hermes_cli import mcp_config as mc
 from hermes_cli.config import (
     _CONFIG_LOCK, get_env_value, is_managed, load_config, load_config_readonly, remove_env_value, save_config)
 from hermes_cli.pal_connectors import load_pal_connectors
-from hermes_cli.shared_catalog import visible_mcp_servers
+from hermes_cli.shared_catalog import home_is_root, is_root_owned, visible_mcp_servers
+from hermes_cli.shared_catalog_connectors import adopt_profile_connectors_if_due, root_secret_reader
 from tools.mcp_accounts import (
     ACCOUNTS_KEY, API_KEY_ENV_ATTR, DEFAULT_ACCOUNT, AccountError, AccountRef, account_config, has_accounts, parse_alias,
     parse_slug, registration_name, server_name, template_accounts, without_attempt_hints)
@@ -69,12 +70,16 @@ def _has_authorization_header(cfg: Mapping) -> bool:
 
 
 def _needs_migration(slug: str, cfg: Any) -> bool:
-    if not isinstance(cfg, Mapping):
+    if not isinstance(cfg, Mapping) or (not home_is_root() and is_root_owned(slug)):
         return False
     return bool(HermesTokenStorage(slug).state_paths()) or (not has_accounts(cfg) and _has_authorization_header(cfg))
 
 
 def migrate_legacy_accounts() -> list[str]:
+    try:
+        adopt_profile_connectors_if_due()
+    except Exception:  # health: allow BLE001 -- adoption is repeatable; a failed pass must not blank the MCP surfaces that call this
+        logger.warning("Adopting profile connector logins into the root profile failed", exc_info=True)
     entries = _entries(load_config_readonly())
     if not any(slug in entries and _needs_migration(slug, entries[slug]) for slug in capable_slugs()):
         return []
@@ -249,11 +254,12 @@ def rename_account(slug: str, old: str, new: str) -> None:
     _reconcile_live_servers()
 
 
-def _missing_credential(cfg: Mapping) -> bool:
+def _missing_credential(connection: str, cfg: Mapping) -> bool:
     headers = cfg.get("headers")
     if not isinstance(headers, Mapping):
         return False
-    return any(not get_env_value(match.group(1).strip())
+    read = root_secret_reader(connection) or (lambda var, _default=None: get_env_value(var))
+    return any(not read(match.group(1).strip())
                for value in headers.values() for match in _ENV_REFERENCE.finditer(str(value)))
 
 
@@ -266,7 +272,7 @@ def connection_state(connection: str, cfg: Mapping | None) -> tuple[str, str | N
         if reason := pending_reauth_reason(connection):
             return NEEDS_RECONNECT, reason
         return (CONNECTED, None) if HermesTokenStorage(connection).has_cached_tokens() else (NOT_CONNECTED, None)
-    return (NOT_CONNECTED, None) if _missing_credential(cfg) else (CONNECTED, None)
+    return (NOT_CONNECTED, None) if _missing_credential(connection, cfg) else (CONNECTED, None)
 
 
 def template_state(slug: str) -> str:

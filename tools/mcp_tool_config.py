@@ -568,12 +568,21 @@ def _packaged_npx_entry(command: str, args: list) -> Optional[tuple]:
     return node, [str(manifest.parent / bin_field), *rest[1:]]
 
 
-def _interpolate_env_vars(value):
+def _interpolate_env_vars(value, server_name: Optional[str] = None):
     """Recursively resolve ``${VAR}`` / Cursor ``${env:VAR}`` placeholders and context vars. Env
     refs resolve from the active profile's secret scope when multiplexing (the routed profile's
-    value, not another profile's in ``os.environ``). Unset (or empty) vars keep the literal placeholder;
-    a templated string comes back as a ``_RenderedStr`` recording how it resolved."""
-    from agent.secret_scope import get_secret as _get_secret
+    value, not another profile's in ``os.environ``); a server the root profile shares for every bot
+    (*server_name*) resolves them from the root profile's secrets instead. Unset (or empty) vars keep
+    the literal placeholder; a templated string comes back as a ``_RenderedStr`` recording how it resolved."""
+    from agent.secret_scope import get_secret
+    read = get_secret
+    if server_name is not None:
+        from hermes_cli.shared_catalog_connectors import root_secret_reader
+        read = root_secret_reader(server_name) or get_secret
+    return _render_env_refs(value, read)
+
+
+def _render_env_refs(value, read):
     if isinstance(value, str):
         if isinstance(value, _RenderedStr) and not value.missed:
             return value
@@ -584,7 +593,7 @@ def _interpolate_env_vars(value):
             resolver = _CONTEXT_VAR_RESOLVERS.get(m.group(1).strip())
             if resolver is not None:
                 return resolver()
-            resolved = _get_secret(_env_ref_name(m.group(1)), None)
+            resolved = read(_env_ref_name(m.group(1)), None)
             if not resolved:
                 missed.append(m.group(0))
             return resolved or m.group(0)
@@ -593,9 +602,9 @@ def _interpolate_env_vars(value):
         text = _ENV_VAR_PATTERN.sub(_replace, template)
         return _RenderedStr(text, template, missed=bool(missed), unset_ref=missed == [template])
     if isinstance(value, dict):
-        return {k: _interpolate_env_vars(v) for k, v in value.items()}
+        return {k: _render_env_refs(v, read) for k, v in value.items()}
     if isinstance(value, list):
-        return [_interpolate_env_vars(v) for v in value]
+        return [_render_env_refs(v, read) for v in value]
     return value
 
 
@@ -608,9 +617,11 @@ def _require_rendered_remote(server_name: str, config: dict) -> dict:
     values = [config.get("url") or "", *(config.get("headers") or {}).values()]
     unresolved = sorted({m.group(1) for value in values for m in _ENV_VAR_PATTERN.finditer(str(value))})
     if unresolved:
-        refs = ", ".join(f"${{{ref}}}" for ref in unresolved)
-        unset = ValueError(f"MCP server '{server_name}': {refs} in url/headers is not set in this profile's "
-                           ".env or secret source")
+        refs = ", ".join(unresolved)
+        from hermes_cli.shared_catalog_connectors import serves_from_root
+        owner = ("the shared connector setup; the owner adds it in Connect apps" if serves_from_root(server_name)
+                 else "this profile's secret settings")
+        unset = ValueError(f"MCP server '{server_name}': {refs} in url/headers is not set in {owner}")
         unset.failure_class = "missing_credentials"  # type: ignore[attr-defined]
         raise unset
     return config
@@ -780,7 +791,8 @@ def _load_mcp_config(*, interpolate: bool = True) -> dict[str, dict]:
         from tools.mcp_accounts import expand
         servers = expand(effective_mcp_servers(servers))
         # Validate what will be spawned: a benign-looking ``${VAR}`` can expand into a shell payload.
-        kept = _filter_suspicious_mcp_servers({name: _interpolate_env_vars(cfg) for name, cfg in servers.items()})
+        kept = _filter_suspicious_mcp_servers(
+            {name: _interpolate_env_vars(cfg, name) for name, cfg in servers.items()})
         for name, interpolated in kept.items():
             if not interpolate:
                 interpolated = servers[name]  # validated expanded; the caller asked for the stored form

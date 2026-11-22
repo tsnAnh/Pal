@@ -140,12 +140,15 @@ def _raw_server_entry_trust(server_name: str, home) -> Any:
     from tools.mcp_accounts import registration_name
     template_name = registration_name(server_name)
 
-    def entry(doc):
+    def entry(doc, entry_home=None):
+        from hermes_cli.shared_catalog import with_root_connectors
         servers = doc.get("mcp_servers") if isinstance(doc, dict) else None
+        if entry_home is not None:
+            servers = with_root_connectors(servers if isinstance(servers, dict) else {}, home=entry_home)
         return servers.get(template_name) if isinstance(servers, dict) else None
 
     try:
-        native = entry(read_config_doc_readonly(home / "config.yaml"))
+        native = entry(read_config_doc_readonly(home / "config.yaml"), home)
     except FileNotFoundError:
         native = None
     managed = entry(load_managed_config(strict=True))  # a lost admin ``trust: untrusted`` must not read as absent
