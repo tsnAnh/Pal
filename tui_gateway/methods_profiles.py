@@ -13,11 +13,9 @@ from .method_ctx import HandlerRegistry, bind_module
 _registry = HandlerRegistry()
 method = _registry.method
 
-# ext -> mime; iteration order is the on-disk lookup order for assets.
-_ASSET_EXTS = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}
-# ext -> [(start, end, magic bytes)]; format is sniffed, the declared mime is never trusted.
-_ASSET_MAGIC = {"png": [(0, 8, b"\x89PNG\r\n\x1a\n")], "jpg": [(0, 3, b"\xff\xd8\xff")],
-                "webp": [(0, 4, b"RIFF"), (8, 12, b"WEBP")]}
+from tools.image_asset import ASSET_EXTS as _ASSET_EXTS  # iteration order is the on-disk lookup order for assets
+
+_ASSET_ERROR_CODES = {"encoding": 4068, "size": 4069, "format": 4070}
 
 
 def _profile_handler(name: str, code: int):
@@ -305,26 +303,54 @@ def _(rid, params: dict) -> dict:
 
 @method("bot_mode.about_you.get")
 def _(rid, params: dict) -> dict:
-    """The owner facts every Bot Mode bot shares (install-wide, not per profile) → ``{name, timezone}``."""
-    from tools.bot_mode_about_you import read_about_you, read_timezone_auto
-    return _ok(rid, {**read_about_you(), "timezone_auto": read_timezone_auto()})
+    """The owner facts every Bot Mode bot shares (install-wide, not per profile)."""
+    from tools.bot_mode_about_you import read_owner_view
+    return _ok(rid, read_owner_view())
 
 
 @method("bot_mode.about_you.set")
 def _(rid, params: dict) -> dict:
     """Save owner facts (install-wide). A field left out is unchanged; ``null`` or blank clears it.
-    Validates server-side (4065 on an unknown time zone) and returns the normalized ``{name, timezone}``."""
-    from tools.bot_mode_about_you import read_timezone_auto, write_about_you
+    Validates server-side (4065 on an unknown time zone) and returns the normalized facts."""
+    from tools.bot_mode_about_you import read_owner_view, write_about_you
     fields = {key: params[key] for key in ("name", "timezone") if key in params}
     if "timezone_auto" in params:
         fields["timezone_auto"] = params["timezone_auto"] is True
     try:
-        facts = write_about_you(**fields)
-        return _ok(rid, {**facts, "timezone_auto": read_timezone_auto()})
+        write_about_you(**fields)
+        return _ok(rid, read_owner_view())
     except ValueError as e:
         return _err(rid, 4065, str(e))
     except OSError as e:
         return _err(rid, 5067, str(e))
+
+
+@method("bot_mode.about_you.set_photo")
+def _(rid, params: dict) -> dict:
+    """Save or remove the owner photo (install-wide). Errors: 4068/4069/4070 as ``profiles.set_asset``, 5067 storage."""
+    from tools.bot_mode_about_you import read_owner_view, write_photo
+    data = params.get("data")
+    if data is not None and not isinstance(data, str):
+        return _err(rid, 4067, "data must be a base64 string")
+    image_error = _lazy("tools.image_asset", "ImageAssetError")
+    try:
+        write_photo(data=data)
+    except image_error as e:
+        return _err(rid, _ASSET_ERROR_CODES[e.kind], str(e))
+    except OSError as e:
+        return _err(rid, 5067, str(e))
+    return _ok(rid, read_owner_view())
+
+
+@method("bot_mode.about_you.photo")
+def _(rid, params: dict) -> dict:
+    import base64
+    from tools.bot_mode_about_you import read_photo
+    photo = read_photo()
+    if photo is None:
+        return _ok(rid, {"data": "", "mime": "", "photo_version": ""})
+    return _ok(rid, {"data": base64.b64encode(photo.data).decode("ascii"), "mime": photo.mime,
+                     "photo_version": photo.version})
 
 
 @method("profiles.create")
@@ -518,8 +544,6 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 4063, "name required")
     if asset != "avatar":
         return _err(rid, 4066, f"unknown asset '{asset}' (supported: avatar)")
-    import base64
-    import re
     _name, profile_dir, err = _resolve_profile(rid, params)
     if err is not None:
         return err
@@ -529,16 +553,11 @@ def _(rid, params: dict) -> dict:
     data = str(params.get("data") or "")
     if not data:
         return _err(rid, 4067, "data required (data URL or base64)")
-    match = re.match(r"^data:(image/(?:png|jpeg|webp));base64,(.*)$", data, re.DOTALL)
+    image_error = _lazy("tools.image_asset", "ImageAssetError")
     try:
-        blob = base64.b64decode(match.group(2) if match else data, validate=True)
-    except Exception:
-        return _err(rid, 4068, "data is not valid base64")
-    if len(blob) > 2_000_000:
-        return _err(rid, 4069, f"asset too large ({len(blob)} bytes; max 2MB)")
-    ext = next((e for e, magic in _ASSET_MAGIC.items() if all(blob[a:b] == m for a, b, m in magic)), None)
-    if ext is None:
-        return _err(rid, 4070, "unsupported image format (PNG/JPEG/WebP only)")
+        blob, ext = _lazy("tools.image_asset", "decode_image")(data)
+    except image_error as e:
+        return _err(rid, _ASSET_ERROR_CODES[e.kind], str(e))
     assets_dir.mkdir(parents=True, exist_ok=True)
     _unlink_asset_files(assets_dir, asset)  # one canonical file per asset
     tmp = assets_dir / f"{asset}.{ext}.tmp"

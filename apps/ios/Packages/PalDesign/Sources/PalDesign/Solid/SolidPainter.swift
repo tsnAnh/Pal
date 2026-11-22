@@ -18,7 +18,7 @@ struct SolidCanvas: View {
             PalPerf.interval("avatar.canvas.draw") {
                 SolidPainter(solid: solid, size: size, inset: inset, outline: outline)
                     .paint(
-                        SolidPose.resolve(pose: pose, look: look, restTilt: solid.restTilt, reduceMotion: reduceMotion),
+                        SolidPose.resolve(pose: pose, look: look, restTilt: solid.restTilt, restTurn: solid.restTurn, reduceMotion: reduceMotion),
                         in: &context
                     )
             }

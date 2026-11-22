@@ -106,7 +106,7 @@ def test_import_reports_what_it_skipped_instead_of_failing(two_bots):
 def test_time_zone_auto_flag_round_trips_and_survives_other_writes(two_bots):
     assert _ok("bot_mode.about_you.get", {})["timezone_auto"] is False
     saved = _ok("bot_mode.about_you.set", {"timezone": "Asia/Ho_Chi_Minh", "timezone_auto": True})
-    assert saved == {"name": "", "timezone": "Asia/Ho_Chi_Minh", "timezone_auto": True}
+    assert saved == {"name": "", "timezone": "Asia/Ho_Chi_Minh", "timezone_auto": True, "photo_version": ""}
     assert _ok("bot_mode.about_you.set", {"name": "Ann"}) == {**saved, "name": "Ann"}
     assert _ok("bot_mode.about_you.set", {"timezone": "Europe/Paris"})["timezone_auto"] is True
     assert _ok("bot_mode.about_you.get", {})["timezone_auto"] is True
@@ -126,4 +126,5 @@ def test_time_zone_auto_must_be_a_real_boolean_and_a_bad_zone_changes_nothing(tw
         about.write_about_you(two_bots, timezone_auto="yes")
     _ok("bot_mode.about_you.set", {"timezone": "Asia/Ho_Chi_Minh", "timezone_auto": True})
     assert _rpc("bot_mode.about_you.set", {"timezone": "Mars/Base", "timezone_auto": False})["error"]["code"] == 4065
-    assert _ok("bot_mode.about_you.get", {}) == {"name": "", "timezone": "Asia/Ho_Chi_Minh", "timezone_auto": True}
+    assert _ok("bot_mode.about_you.get", {}) == {
+        "name": "", "timezone": "Asia/Ho_Chi_Minh", "timezone_auto": True, "photo_version": ""}

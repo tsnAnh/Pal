@@ -48,6 +48,7 @@ enum SettingsDefaults {
 final class SettingsHub {
     let connection: ConnectionModel
     let roster: RosterModel
+    let owner: OwnerProfile
 
     private(set) var usageHeadline: String?
     private(set) var usageOverview: UsageOverview?
@@ -60,13 +61,20 @@ final class SettingsHub {
     init(connection: ConnectionModel, roster: RosterModel) {
         self.connection = connection
         self.roster = roster
+        owner = OwnerProfile(
+            cache: connection.cache,
+            account: { [connection] in connection.accountKey },
+            api: { [connection, roster] in Self.api(connection: connection, roster: roster) }
+        )
     }
 
-    var api: SettingsAPI {
+    private static func api(connection: ConnectionModel, roster: RosterModel) -> SettingsAPI {
         SettingsAPI(profile: roster.bots.first(where: \.isDefault)?.name) { [connection] method, params in
             try await connection.rpc(method, params)
         }
     }
+
+    var api: SettingsAPI { Self.api(connection: connection, roster: roster) }
 
     func api(for profile: String?) -> SettingsAPI {
         guard let profile else { return api }
@@ -119,6 +127,7 @@ final class SettingsHub {
         let (permissionState, aboutYou) = await (permissions, facts)
         self.permissions = permissionState.map(PermissionsSummary.init)
         self.aboutYou = aboutYou
+        if let aboutYou { owner.adopt(aboutYou) }
         await keepTimeZoneInStep()
     }
 
@@ -126,7 +135,7 @@ final class SettingsHub {
         let previous = aboutYou
         aboutYou = SettingsWire.AboutYou(
             name: previous?.name ?? "", timezone: enabled ? deviceTimeZone : (previous?.timezone ?? deviceTimeZone),
-            timezoneAuto: enabled
+            timezoneAuto: enabled, photoVersion: previous?.photoVersion ?? ""
         )
         do {
             aboutYou = try await api.setTimeZone(automatic: enabled, identifier: enabled ? deviceTimeZone : nil)

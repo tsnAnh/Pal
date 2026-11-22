@@ -1,29 +1,40 @@
 """Facts about the owner that every Bot Mode bot shares: ``name`` and ``timezone``.
 
 Profiles are isolated islands on purpose; this is the one explicit, narrow exception. Nothing but
-these two facts is shared, and memories are never copied. The file lives at the Hermes ROOT
-(``<root>/bot-mode/about-you.yaml``, directory 0700, file 0600, atomic replace) so a bot saving
+these two facts is shared with bots, and memories are never copied. The file lives at the Hermes
+ROOT (``<root>/bot-mode/about-you.yaml``, directory 0700, file 0600, atomic replace) so a bot saving
 it through ``hermes profile about-you`` and the Desktop form write the same copy. Reads are
 tolerant (missing or garbage → no facts); writes validate and raise ``ValueError``.
+
+The owner photo sits beside it (``owner-photo.png`` or ``.jpg``, same modes, same lock) for the apps
+that show it. Bots never see it: it is in no prompt block and no bot-visible surface.
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import re
 import threading
 import unicodedata
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from tools.image_asset import ASSET_EXTS, decode_image
+from utils import atomic_write_bytes
 
 NAME_MAX_CHARS = 80
 ABOUT_YOU_DIR = "bot-mode"
 ABOUT_YOU_FILE = "about-you.yaml"
 _LOCK_FILE = ".about-you.lock"
 TIMEZONE_AUTO_KEY = "timezone_auto"
+PHOTO_STEM = "owner-photo"
+PHOTO_EXTS = ("png", "jpg")
+PHOTO_VERSION_CHARS = 16
 _TIMEZONE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_+\-/]*")
 _UNSET: Any = object()
 _thread_lock = threading.Lock()
@@ -152,6 +163,60 @@ def write_about_you(
         with contextlib.suppress(OSError):
             path.chmod(0o600)
     return facts
+
+
+@dataclass(frozen=True)
+class OwnerPhoto:
+    data: bytes
+    mime: str
+    version: str
+
+
+def _photo_version(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:PHOTO_VERSION_CHARS]
+
+
+def _photo_candidates(root: Path) -> list[Path]:
+    directory = about_you_path(root).parent
+    found = [directory / f"{PHOTO_STEM}.{ext}" for ext in PHOTO_EXTS]
+    return sorted((p for p in found if p.is_file()), key=lambda p: p.stat().st_mtime_ns, reverse=True)
+
+
+def read_photo(root: Path | None = None) -> OwnerPhoto | None:
+    root = root or about_you_root()
+    for _attempt in range(2):
+        try:
+            candidates = _photo_candidates(root)
+            if not candidates:
+                return None
+            data = candidates[0].read_bytes()
+        except OSError:
+            continue
+        return OwnerPhoto(data, ASSET_EXTS[candidates[0].suffix[1:]], _photo_version(data))
+    return None
+
+
+def read_photo_version(root: Path | None = None) -> str:
+    photo = read_photo(root)
+    return photo.version if photo else ""
+
+
+def write_photo(root: Path | None = None, *, data: str | None) -> str:
+    blob, ext = decode_image(data, PHOTO_EXTS) if data and data.strip() else (None, None)
+    root = root or about_you_root()
+    directory = about_you_path(root).parent
+    _ensure_private_dir(directory)
+    with _write_lock(directory):
+        if blob is not None:
+            atomic_write_bytes(directory / f"{PHOTO_STEM}.{ext}", blob, mode=0o600)
+        for other in PHOTO_EXTS:
+            if other != ext:
+                (directory / f"{PHOTO_STEM}.{other}").unlink(missing_ok=True)
+    return "" if blob is None else _photo_version(blob)
+
+
+def read_owner_view(root: Path | None = None) -> dict[str, Any]:
+    return {**read_about_you(root), TIMEZONE_AUTO_KEY: read_timezone_auto(root), "photo_version": read_photo_version(root)}
 
 
 def _owner_lines(facts: dict[str, str]) -> list[str]:

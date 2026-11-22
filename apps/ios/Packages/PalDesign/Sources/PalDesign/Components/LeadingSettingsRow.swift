@@ -118,21 +118,38 @@ public struct StatusDot: View {
 public struct InitialAvatar: View {
     public let initial: String
     public let diameter: CGFloat
+    public let photo: CGImage?
 
     @Environment(\.hermesTheme) private var theme
 
-    public init(initial: String, diameter: CGFloat = 40) {
+    public init(initial: String, diameter: CGFloat = 40, photo: CGImage? = nil) {
         self.initial = initial
         self.diameter = diameter
+        self.photo = photo
     }
 
     public var body: some View {
-        Text(initial)
-            .font(.system(size: diameter * 0.42, weight: .medium))
-            .foregroundStyle(Color(theme.palette.textPrimary))
+        face
             .frame(width: diameter, height: diameter)
             .background(Color(theme.palette.circleButtonFill), in: Circle())
+            .clipShape(Circle())
             .overlay(Circle().strokeBorder(Color(theme.palette.circleButtonStroke), lineWidth: PalMetrics.circleButtonStrokeWidth))
             .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var face: some View {
+        if let photo {
+            Image(decorative: photo, scale: 1)
+                .resizable()
+                .scaledToFill()
+        } else if initial.isEmpty {
+            PalIcon("person.fill", ink: .secondary)
+                .font(.system(size: diameter * 0.46))
+        } else {
+            Text(initial)
+                .font(.system(size: diameter * 0.42, weight: .medium))
+                .foregroundStyle(Color(theme.palette.textPrimary))
+        }
     }
 }

@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "PalConnect", targets: ["PalConnect"]),
         .library(name: "PalSettings", targets: ["PalSettings"]),
         .library(name: "PalKanban", targets: ["PalKanban"]),
+        .library(name: "PalLocalEngine", targets: ["PalLocalEngine"]),
     ],
     targets: [
         .target(name: "PalProtocol", dependencies: ["PalDiagnostics"]),
@@ -41,7 +42,9 @@ let package = Package(
         .target(name: "PalRoster", dependencies: ["PalProtocol", "PalDiagnostics", "PalTransport"]),
         .target(name: "PalBotProfile", dependencies: ["PalProtocol", "PalDiagnostics", "PalTransport", "PalRoster"]),
         .target(name: "PalRFB", dependencies: ["PalDiagnostics"]),
-        .target(name: "PalDevice", dependencies: ["PalProtocol", "PalDiagnostics", "PalTransport"]),
+        .target(name: "PalProcess"),
+        .target(name: "PalDevice", dependencies: ["PalProtocol", "PalDiagnostics", "PalTransport", "PalProcess"]),
+        .target(name: "PalLocalEngine", dependencies: ["PalProcess", "PalREST", "PalAuth"]),
         .target(
             name: "PalConnect",
             dependencies: ["PalProtocol", "PalDiagnostics", "PalTransport", "PalAuth"]
@@ -53,6 +56,7 @@ let package = Package(
             dependencies: [
                 "PalProtocol", "PalDiagnostics", "PalREST", "PalAuth", "PalTransport", "PalPush", "PalClient",
                 "PalChat", "PalRoster", "PalBotProfile", "PalRFB", "PalDevice", "PalConnect", "PalSettings", "PalKanban",
+                "PalProcess", "PalLocalEngine",
             ]
         ),
     ],

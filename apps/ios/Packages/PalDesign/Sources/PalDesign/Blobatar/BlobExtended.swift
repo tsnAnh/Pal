@@ -3,6 +3,7 @@ import Foundation
 struct ExtendedSilhouette: Equatable {
     var petals: [BlobFigure.Petal]
     var mainPath: String
+    var eyes: [BlobFigure.Eye]?
 
     private struct Star {
         var points: Int
@@ -20,6 +21,13 @@ struct ExtendedSilhouette: Equatable {
     private static let gemRound = 0.24
     private static let cloverReach = 0.55
     private static let cloverPetal = 0.52
+    private static let heartNominalRadius = 34.5
+    private static let heartRight: [(x: Double, y: Double)] = [
+        (0, 13.21), (0.5, -2.9), (11.16, -33.52), (23.27, -33.52),
+        (30.48, -33.52), (33.5, -27.83), (33.5, -22.29),
+        (33.5, -1.36), (0.41, 24.65), (0, 29.23),
+    ]
+    private static let heartEyes: [(x: Double, y: Double)] = [(-9, -3), (15, -8)]
 
     init?(_ kind: BlobKind, aroundBody pathData: String) {
         let values = JSCompat.numbers(in: pathData)
@@ -53,9 +61,32 @@ struct ExtendedSilhouette: Equatable {
             }
             petals = lobes + [.init(cx: cx, cy: cy, r: r * Self.cloverPetal)]
             mainPath = "M\(JSCompat.r2String(cx)) \(JSCompat.r2String(cy))Z"
+        case .heart:
+            let scale = r / Self.heartNominalRadius
+            petals = []
+            mainPath = Self.heartPath(cx: cx, cy: cy, scale: scale)
+            eyes = Self.heartEyes.map { spot in
+                BlobFigure.Eye(cx: cx + spot.x * scale, cy: cy + spot.y * scale, rx: 2.5, ry: 6, n: 2, rot: 0)
+            }
         default:
             return nil
         }
+    }
+
+    private static func heartPath(cx: Double, cy: Double, scale: Double) -> String {
+        func at(_ index: Int, mirrored: Bool = false) -> String {
+            let point = heartRight[index]
+            let x = cx + (mirrored ? -point.x : point.x) * scale
+            return "\(JSCompat.r2String(x)) \(JSCompat.r2String(cy + point.y * scale))"
+        }
+        var data = "M\(at(0))"
+        for start in stride(from: 1, to: heartRight.count, by: 3) {
+            data += "C\(at(start)) \(at(start + 1)) \(at(start + 2))"
+        }
+        for start in stride(from: heartRight.count - 2, through: 2, by: -3) {
+            data += "C\(at(start, mirrored: true)) \(at(start - 1, mirrored: true)) \(at(start - 2, mirrored: true))"
+        }
+        return data + "Z"
     }
 
     private static func starPath(_ star: Star, cx: Double, cy: Double, r: Double) -> String {

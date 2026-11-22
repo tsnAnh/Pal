@@ -169,10 +169,11 @@ struct RosterModelTests {
 
         let row = try #require(model.bot(named: "default"))
         #expect(row.usesPrimaryLook)
-        guard case .shape(.classic(let classic)) = row.spec else {
-            Issue.record("the primary bot keeps the classic squircle")
+        guard case .shape(.blob(let blob)) = row.spec else {
+            Issue.record("the primary bot is the heart blob")
             return
         }
-        #expect(classic.shape == .squircle)
+        #expect(blob.kind == .heart)
+        #expect(blob.headFillCSS == "#93dcf7")
     }
 }

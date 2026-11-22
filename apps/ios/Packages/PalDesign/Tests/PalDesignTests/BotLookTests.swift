@@ -61,9 +61,9 @@ struct BotLookGridTests {
     private let shapes = BotLookCatalog.shapeRowLengths
     private let swatches = BotLookCatalog.swatchRowLengths
 
-    @Test("the catalog rows are 5, 5, 3 shapes and 6, 5 colours")
+    @Test("the catalog rows are 5, 5, 4 shapes and 6, 5 colours")
     func rowLengths() {
-        #expect(shapes == [5, 5, 3])
+        #expect(shapes == [5, 5, 4])
         #expect(swatches == [6, 5])
     }
 
@@ -73,7 +73,8 @@ struct BotLookGridTests {
         #expect(BotLookCatalog.move(4, .right, rowLengths: shapes) == 4)
         #expect(BotLookCatalog.move(5, .left, rowLengths: shapes) == 5)
         #expect(BotLookCatalog.move(9, .right, rowLengths: shapes) == 9)
-        #expect(BotLookCatalog.move(12, .right, rowLengths: shapes) == 12)
+        #expect(BotLookCatalog.move(13, .right, rowLengths: shapes) == 13)
+        #expect(BotLookCatalog.move(12, .right, rowLengths: shapes) == 13)
         #expect(BotLookCatalog.move(2, .right, rowLengths: shapes) == 3)
         #expect(BotLookCatalog.move(7, .left, rowLengths: shapes) == 6)
         #expect(BotLookCatalog.move(5, .right, rowLengths: swatches) == 5)
@@ -85,7 +86,7 @@ struct BotLookGridTests {
         #expect(BotLookCatalog.move(2, .up, rowLengths: shapes) == 2)
         #expect(BotLookCatalog.move(2, .down, rowLengths: shapes) == 7)
         #expect(BotLookCatalog.move(7, .down, rowLengths: shapes) == 12)
-        #expect(BotLookCatalog.move(9, .down, rowLengths: shapes) == 12)
+        #expect(BotLookCatalog.move(9, .down, rowLengths: shapes) == 13)
         #expect(BotLookCatalog.move(10, .down, rowLengths: shapes) == 10)
         #expect(BotLookCatalog.move(12, .up, rowLengths: shapes) == 7)
         #expect(BotLookCatalog.move(10, .up, rowLengths: shapes) == 5)
@@ -104,14 +105,14 @@ struct BotLookGridTests {
     @Test("an index outside the grid lands on its nearest cell")
     func outOfRange() {
         #expect(BotLookCatalog.move(-4, .right, rowLengths: shapes) == 1)
-        #expect(BotLookCatalog.move(99, .left, rowLengths: shapes) == 11)
+        #expect(BotLookCatalog.move(99, .left, rowLengths: shapes) == 12)
         #expect(BotLookCatalog.move(0, .right, rowLengths: []) == 0)
     }
 
     @Test("VoiceOver reads a shape and a colour with their place in the catalog")
     func labels() {
-        #expect(BotLookCatalog.shapeAccessibilityLabel(.boxy, isSelected: true) == "Shape 3 of 13, Squircle, selected")
-        #expect(BotLookCatalog.shapeAccessibilityLabel(.round, isSelected: false) == "Shape 1 of 13, Round")
+        #expect(BotLookCatalog.shapeAccessibilityLabel(.boxy, isSelected: true) == "Shape 3 of 14, Squircle, selected")
+        #expect(BotLookCatalog.shapeAccessibilityLabel(.round, isSelected: false) == "Shape 1 of 14, Round")
         let orange = BotLookCatalog.swatches[4]
         #expect(BotLookCatalog.swatchAccessibilityLabel(orange, isSelected: true) == "Colour Orange, 5 of 11, selected")
         #expect(BotLookCatalog.swatchAccessibilityLabel(BotLookCatalog.swatches[10], isSelected: false) == "Colour Gray, 11 of 11")

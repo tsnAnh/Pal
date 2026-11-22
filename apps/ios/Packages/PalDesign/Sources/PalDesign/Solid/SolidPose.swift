@@ -18,7 +18,7 @@ struct SolidPose: Equatable, Sendable {
     var opacity = 1.0
     var dots = SIMD3<Double>(0, 0, 0)
 
-    static func resolve(pose: AvatarPose, look: AvatarLook, restTilt: Double, reduceMotion: Bool) -> SolidPose {
+    static func resolve(pose: AvatarPose, look: AvatarLook, restTilt: Double, restTurn: RestTurn = .full, reduceMotion: Bool) -> SolidPose {
         let amount = reduceMotion ? 0 : look.amount
         let facing = pose.front + (1 - pose.front) * amount
         let rest = 1 - facing
@@ -26,12 +26,12 @@ struct SolidPose: Equatable, Sendable {
         let lookY = reduceMotion ? 0 : look.y * amount
         let turn = SolidTuning.turn
         let reach = SolidTuning.eyeReach
-        let restYaw = rest * SolidTuning.restLook.x * turn
-        let restPitch = rest * SolidTuning.restLook.y * turn
+        let restYaw = rest * SolidTuning.restLook.x * turn * restTurn.look
+        let restPitch = rest * SolidTuning.restLook.y * turn * restTurn.look
         return SolidPose(
             yaw: restYaw + degrees(asin(clamp(reach * pose.eyeX))) + pose.yaw + lookX * turn,
             pitch: restPitch - degrees(asin(clamp(reach * pose.eyeY))) + pose.pitch - lookY * turn,
-            roll: pose.bodyRotation + restTilt * rest,
+            roll: pose.bodyRotation + restTilt * restTurn.tilt * rest,
             eyeRoll: SolidTuning.restEyeSlant * rest - pose.eyeRoll,
             pairSpin: -pose.pairSpin,
             eyeScale: pose.eyeScale,

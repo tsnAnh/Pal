@@ -28,6 +28,8 @@ public enum SettingsFailure: Error, Sendable, Equatable {
     }
 
     private static func classify(_ rpc: RPCError) -> SettingsFailure {
+        if let rejection = photoRejections[rpc.code] { return .rejected(code: rejection) }
+        if rpc.code == photoStorageFailureCode { return .unavailable }
         let code = rpc.data?["code"]?.stringValue ?? rpc.reasonCode ?? ""
         switch code {
         case "permission_denied", "profile_mismatch": return .notAllowed
@@ -56,7 +58,26 @@ public enum SettingsFailure: Error, Sendable, Equatable {
         "empty_text": "Write a rule first.",
         "invalid_text": "That rule can't be saved.",
         "viewer_mismatch": "Someone is using the computer right now.",
+        "photo_unreadable": "That picture couldn't be used. Try a JPEG or PNG under 10 MB.",
+        "photo_too_large": "That picture couldn't be used. Try a JPEG or PNG under 10 MB.",
+        "photo_format": "That picture couldn't be used. Try a JPEG or PNG under 10 MB.",
     ]
+
+    private static let photoStorageFailureCode = 5067
+
+    private static let photoRejections: [Int: String] = [
+        4068: "photo_unreadable", 4069: "photo_too_large", 4070: "photo_format",
+    ]
+}
+
+public struct OwnerPhotoDownload: Sendable, Equatable {
+    public let version: String
+    public let data: Data
+
+    public init(version: String, data: Data) {
+        self.version = version
+        self.data = data
+    }
 }
 
 public struct SettingsAPI: Sendable {
@@ -186,6 +207,23 @@ public struct SettingsAPI: Sendable {
         var params: [String: JSONValue] = ["timezone_auto": .bool(automatic)]
         if let identifier { params["timezone"] = .string(identifier) }
         return try await perform(SettingsWire.AboutYou.self, "bot_mode.about_you.set", params)
+    }
+
+    public func setOwnerName(_ name: String) async throws -> SettingsWire.AboutYou {
+        try await perform(SettingsWire.AboutYou.self, "bot_mode.about_you.set", ["name": .string(name)])
+    }
+
+    public func setOwnerPhoto(_ jpeg: Data?) async throws -> SettingsWire.AboutYou {
+        guard (jpeg?.count ?? 0) <= OwnerPhotoImage.maximumUploadBytes else { throw SettingsFailure.rejected(code: "photo_too_large") }
+        let data: JSONValue = jpeg.map { .string($0.base64EncodedString()) } ?? .null
+        return try await perform(SettingsWire.AboutYou.self, "bot_mode.about_you.set_photo", ["data": data])
+    }
+
+    public func ownerPhoto() async throws -> OwnerPhotoDownload? {
+        let payload = try await perform(SettingsWire.OwnerPhotoPayload.self, "bot_mode.about_you.photo")
+        guard !payload.photoVersion.isEmpty else { return nil }
+        guard let data = Data(base64Encoded: payload.data) else { throw SettingsFailure.unexpected }
+        return OwnerPhotoDownload(version: payload.photoVersion, data: data)
     }
 
     public func sharedMetrics() async throws -> SettingsWire.SharedMetrics {

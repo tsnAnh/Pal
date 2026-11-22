@@ -52,6 +52,18 @@ public struct SetupStatus: Sendable, Equatable {
     public var gatewayVersion: String?
 
     public init(
+        kind: SetupStatusClass = .internalFault, title: String, reason: String, actionTitle: String, code: String,
+        trace: String? = nil
+    ) {
+        self.kind = kind
+        self.title = title
+        self.reason = reason
+        self.actionTitle = actionTitle
+        self.code = code
+        self.trace = trace
+    }
+
+    public init(
         code: String, method: String? = nil, trace: String? = nil, gatewayVersion: String? = nil,
         subject: String? = nil, valueName: String = "token", device: String = "device", detail: String? = nil
     ) {

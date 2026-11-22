@@ -17,6 +17,7 @@ public enum SignInError: Error, Sendable, Equatable {
     case rateLimited
     case serverUnavailable
     case rejected
+    case localTokenUnavailable
 }
 
 struct NativeAuthAPI: Sendable {

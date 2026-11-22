@@ -51,7 +51,7 @@ struct BlobFigure: Equatable {
         }
         self.init(
             silhouette: kind, petals: shape.petals, extraPaths: [], mainPath: shape.mainPath,
-            eyes: base.eyes, palette: base.palette
+            eyes: shape.eyes ?? base.eyes, palette: base.palette
         )
     }
 

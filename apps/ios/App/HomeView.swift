@@ -10,6 +10,7 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.hermesTheme) private var theme
     @Environment(RoomsModel.self) private var rooms
+    @Environment(SettingsHub.self) private var hub
 
     var body: some View {
         ScrollView {
@@ -38,7 +39,9 @@ struct HomeView: View {
         .toolbar {
             ToolbarItem(placement: .leadingBar) {
                 Button { router.present(.settings) } label: {
-                    UserAvatarView(initial: connection.userInitial, link: roster.link)
+                    UserAvatarView(
+                        initial: hub.owner.initial(fallback: connection.userInitial), photo: hub.owner.photo, link: roster.link
+                    )
                 }
                 .accessibilityLabel(Text("Account and settings"))
                 .accessibilityIdentifier("userAvatarButton")
@@ -188,43 +191,6 @@ enum AdminErrorCopy {
         case .invalidName: String(localized: "Choose a name between 1 and 60 characters.")
         default: String(localized: "Try again in a moment.")
         }
-    }
-}
-
-private struct UserAvatarView: View {
-    let initial: String
-    let link: GatewayLink
-
-    @Environment(\.hermesTheme) private var theme
-
-    private var presenceColor: Color {
-        switch link {
-        case .connected: Color(theme.palette.accentBlue)
-        case .reconnecting: .orange
-        case .offline: Color(theme.palette.textTertiary)
-        }
-    }
-
-    private var presenceLabel: LocalizedStringKey {
-        switch link {
-        case .connected: "Connected"
-        case .reconnecting: "Reconnecting"
-        case .offline: "Offline"
-        }
-    }
-
-    var body: some View {
-        Text(initial)
-            .font(.headline)
-            .foregroundStyle(Color(theme.palette.textPrimary))
-            .overlay(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(presenceColor)
-                    .frame(width: 8, height: 8)
-                    .offset(x: 6, y: 4)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityValue(Text(presenceLabel))
     }
 }
 

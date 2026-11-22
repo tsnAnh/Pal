@@ -2,11 +2,11 @@ import Foundation
 
 public enum BlobKind: String, CaseIterable, Sendable {
     case round, organic, boxy, capsule, nub, cloud, droplet, hexagon, sun, triangle
-    case spark, clover, burst, gem
+    case spark, clover, burst, gem, heart
 
     var isExtended: Bool {
         switch self {
-        case .spark, .clover, .burst, .gem: true
+        case .spark, .clover, .burst, .gem, .heart: true
         default: false
         }
     }
@@ -23,7 +23,7 @@ public enum BlobKind: String, CaseIterable, Sendable {
         case .hexagon: 0.9325
         case .sun: 0.965
         case .triangle: 0.99
-        case .spark, .clover, .burst, .gem: 0.11
+        case .spark, .clover, .burst, .gem, .heart: 0.11
         }
     }
 }

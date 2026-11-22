@@ -1,6 +1,13 @@
 import CoreGraphics
 import SwiftUI
 
+struct RestTurn: Equatable {
+    var look: Double
+    var tilt: Double
+
+    static let full = RestTurn(look: 1, tilt: 1)
+}
+
 struct EyePlacement: Equatable {
     var centre: CGPoint
     var angle: Double
@@ -54,6 +61,7 @@ struct AvatarRig {
     var pivot: CGPoint
     var span: Double
     var restTilt: Double
+    var restTurn: RestTurn
     let surface: EyeSurface
 
     init(
@@ -63,7 +71,8 @@ struct AvatarRig {
         eyes: Eyes,
         dots: [AvatarDrawing.Element] = [],
         bounds: CGRect? = nil,
-        restTilt: Double = 0
+        restTilt: Double = 0,
+        restTurn: RestTurn = .full
     ) {
         self.viewBox = viewBox
         self.clipsToViewBox = clipsToViewBox
@@ -74,6 +83,7 @@ struct AvatarRig {
         pivot = CGPoint(x: box.midX, y: box.midY)
         span = (box.width + box.height) / 2
         self.restTilt = restTilt
+        self.restTurn = restTurn
         surface = EyeSurface.shared(mask: eyes.mask)
     }
 

@@ -62,7 +62,8 @@ enum BlobFaceDrawing {
                 mask: body
             ),
             bounds: bounds,
-            restTilt: -14
+            restTilt: -14,
+            restTurn: SolidTuning.restTurns[blob.kind ?? figure.silhouette] ?? .full
         )
     }
 
@@ -93,6 +94,9 @@ enum BlobFaceDrawing {
     private static func pillCentres(_ figure: BlobFigure) -> [CGPoint] {
         let boxes = figure.eyes.compactMap { Box(pathData: $0.path) }.sorted { $0.minX < $1.minX }
         guard boxes.count >= 2 else { return [] }
+        if figure.silhouette == .heart {
+            return boxes.map { CGPoint(x: ($0.minX + $0.maxX) / 2, y: ($0.minY + $0.maxY) / 2) }
+        }
         let left = boxes[0]
         let right = boxes[1]
         let midX = (left.minX + left.maxX + right.minX + right.maxX) / 4 + pill.shiftX

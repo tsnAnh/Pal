@@ -15,7 +15,7 @@ const BLOB_KIND_TRAIT = {
 
 export const KIND_TRAITS = BLOB_KIND_TRAIT
 
-export const EXTENDED_BLOB_KINDS = ['spark', 'clover', 'burst', 'gem']
+export const EXTENDED_BLOB_KINDS = ['spark', 'clover', 'burst', 'gem', 'heart']
 
 const CLASSIC_SHAPES = [
   'circle',
@@ -252,6 +252,8 @@ export const SHAPE_INPUTS = [
   'blobatar:abc:sun',
   'blobatar:abc:spark',
   'blobatar::gem',
+  'blobatar::heart',
+  'blobatar:abc:heart',
   'blobatar:abc:bogus',
   'blobatar:abc:',
   'blobatar::triangle',

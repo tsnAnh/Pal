@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+DRIVE=(osascript -l JavaScript "$IOS_DIR/Scripts/ax-drive.js")
+
+usage() {
+  cat <<USAGE
+usage: e2e-local-engine --app <Debug Pal.app> --shots <dir> [--install-timeout-seconds N]
+Drives the Mac app through Set up Pal on this Mac, Install, sign-in, the owner name popup, Settings > Server > This Mac
+(Start at login) and Remove (delete data checked) against a scratch engine home under ~/Library/Caches/pal-e2e-<random>,
+with the repository cloned from a snapshot of this checkout. Never touches ~/.hermes, ~/.local/bin or
+~/Library/LaunchAgents: it records them and the loaded gateway jobs before and after and fails when they differ (the
+scratch engine's own job plist lives in ~/Library/LaunchAgents only while installed, under a hash-suffixed label). Needs the Debug app built with ENABLE_HARDENED_RUNTIME=NO
+and Accessibility permission for the calling terminal. Screenshots land in --shots.
+USAGE
+}
+
+APP=""
+SHOTS=""
+INSTALL_TIMEOUT=3000
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --app) APP="$2"; shift 2 ;;
+    --shots) SHOTS="$2"; shift 2 ;;
+    --install-timeout-seconds) INSTALL_TIMEOUT="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+[ -n "$APP" ] && [ -x "$APP/Contents/MacOS/Pal" ] || { usage >&2; exit 2; }
+[ -n "$SHOTS" ] || { usage >&2; exit 2; }
+mkdir -p "$SHOTS"
+
+RANDOM_SUFFIX="$(python3 -c 'import secrets; print(secrets.token_hex(4))')"
+ROOT="$HOME/Library/Caches/pal-e2e-$RANDOM_SUFFIX"
+NAMESPACE="pal-e2e-ns-$RANDOM_SUFFIX"
+PORT="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+case "$PORT" in 9119|9120) echo "refusing port $PORT" >&2; exit 1 ;; esac
+PID=""
+JOB_LABEL=""
+
+snapshot_machine() {
+  {
+    echo "--- ~/.hermes"
+    ls -la "$HOME/.hermes"
+    echo "--- ~/.local/bin/hermes"
+    stat -f '%N %m %z' "$HOME/.local/bin/hermes" 2>&1 || true
+    echo "--- ~/Library/LaunchAgents"
+    ls -1 "$HOME/Library/LaunchAgents"
+    echo "--- loaded hermes jobs"
+    launchctl list | awk '{print $3}' | grep -i hermes | grep -v '^application\.' || true
+    echo "--- shell rc"
+    ls -la "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.bashrc" 2>&1 || true
+  } >"$1"
+}
+
+gateway_labels() {
+  launchctl list | awk '{print $3}' | grep '^ai\.hermes\.gateway' || true
+}
+
+LAUNCHER_REL="home/hermes-agent/.hermes/bin/hermes"
+engine() { HOME="$ROOT/user" HERMES_HOME="$ROOT/home" "$ROOT/$LAUNCHER_REL" "$@"; }
+
+cleanup() {
+  local status=$?
+  [ -z "$PID" ] || kill "$PID" 2>/dev/null || true
+  cp "$ROOT/home/logs/pal-app-install.log" "$SHOTS/install.log" 2>/dev/null || true
+  cp "$ROOT/home/logs/gateway.error.log" "$SHOTS/gateway.error.log" 2>/dev/null || true
+  if [ -x "$ROOT/$LAUNCHER_REL" ]; then
+    engine gateway uninstall >/dev/null 2>&1 || true
+  fi
+  if [ -n "${JOB_LABEL:-}" ] && [ "$JOB_LABEL" != "ai.hermes.gateway" ]; then
+    launchctl bootout "gui/$(id -u)/$JOB_LABEL" >/dev/null 2>&1 || true
+  fi
+  for service in "dev.tsnanh.hermes.bot.credentials.$NAMESPACE" "dev.tsnanh.hermes.bot.device.$NAMESPACE"; do
+    security delete-generic-password -s "$service" >/dev/null 2>&1 || true
+  done
+  [ -n "${PAL_E2E_KEEP:-}" ] || rm -rf "$ROOT"
+  exit "$status"
+}
+trap cleanup EXIT
+
+app_pid() {
+  local asn info real
+  real="$(cd "$APP" && pwd -P)"
+  for asn in $(lsappinfo find bundleid=dev.tsnanh.hermes.bot | grep -o '0x[0-9a-f]*-0x[0-9a-f]*' | sort -u); do
+    info="$(lsappinfo info -only bundlepath -only pid "ASN:$asn")"
+    if printf '%s' "$info" | grep -q "\"$real\""; then
+      printf '%s' "$info" | sed -n 's/.*pid = \([0-9]*\).*/\1/p'
+      return
+    fi
+  done
+}
+
+drive() { "${DRIVE[@]}" "$PID" "$@"; }
+
+shot() {
+  drive shot "$SHOTS/$1.png" >/dev/null
+  echo "shot $1"
+}
+
+snapshot_machine "$SHOTS/machine-before.txt"
+gateway_labels >"$SHOTS/gateway-labels-before.txt"
+
+mkdir -p "$ROOT/home" "$ROOT/user" "$ROOT/src"
+(
+  cd "$REPO"
+  python3 - "$ROOT/src" <<'PY'
+import os, shutil, subprocess, sys
+destination = sys.argv[1]
+listed = subprocess.run(["git", "ls-files", "-co", "--exclude-standard", "-z"], capture_output=True, check=True).stdout.split(b"\0")
+for raw in listed:
+    path = raw.decode()
+    if not path or path.startswith(("apps/ios/", "website/")) or not os.path.lexists(path):
+        continue
+    target = os.path.join(destination, path)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    if os.path.islink(path):
+        os.symlink(os.readlink(path), target)
+    else:
+        shutil.copy2(path, target)
+PY
+)
+git -C "$ROOT/src" init -q -b main
+git -C "$ROOT/src" add -A
+git -C "$ROOT/src" -c user.email=e2e@example.invalid -c user.name=e2e commit -q -m "e2e snapshot"
+
+open -n "$APP" --args \
+  -hermes-reset-credentials -hermes-keychain-namespace "$NAMESPACE" \
+  -hermes-test-engine-home "$ROOT/home" -hermes-test-engine-user-home "$ROOT/user" \
+  -hermes-test-engine-port "$PORT" -hermes-test-engine-repo "file://$ROOT/src" -hermes-test-engine-branch main
+for _ in $(seq 1 30); do
+  PID="$(app_pid)"
+  [ -z "$PID" ] || break
+  sleep 1
+done
+[ -n "$PID" ] || { echo "the app did not start" >&2; exit 1; }
+sleep 2
+open "$APP"
+echo "app pid $PID scratch $ROOT port $PORT"
+
+drive wait localEngineSetupButton 60 >/dev/null
+shot 1-sign-in
+drive click localEngineSetupButton >/dev/null
+drive wait localEngineIntroTitle 20 >/dev/null
+shot 2-intro
+drive click localEngineInstall >/dev/null
+drive wait localEngineInstallingTitle 20 >/dev/null
+shot 3-installing
+
+deadline=$(( $(date +%s) + INSTALL_TIMEOUT ))
+last_step=""
+captured_done=0
+while :; do
+  hit="$(drive waitany "rosterScreen,localEngineFailureTitle,localEngineDoneTitle" 10)"
+  case "$hit" in
+    rosterScreen) break ;;
+    localEngineFailureTitle) shot failed; echo "install failed" >&2; exit 1 ;;
+    localEngineDoneTitle)
+      if [ "$captured_done" = 0 ]; then shot 5-done; captured_done=1; fi ;;
+  esac
+  for step in 0 1 2 3 4; do
+    if [ "$(drive value "localEngineStep-$step")" = "Working" ] && [ "$last_step" != "$step" ]; then
+      last_step="$step"
+      shot "4-installing-step$step"
+    fi
+  done
+  [ "$(date +%s)" -lt "$deadline" ] || { shot timeout; echo "install timed out" >&2; exit 1; }
+done
+echo "home appeared"
+
+STATUS_JSON="$(engine gateway status --json)"
+printf '%s\n' "$STATUS_JSON" >"$SHOTS/gateway-status.json"
+JOB_LABEL="$(printf '%s' "$STATUS_JSON" | python3 -c 'import json, sys; print(json.load(sys.stdin)["label"])')"
+[ -n "$JOB_LABEL" ] && [ "$JOB_LABEL" != "ai.hermes.gateway" ] || { echo "FAIL: the scratch engine would use the real gateway label"; exit 1; }
+launchctl list "$JOB_LABEL" >"$SHOTS/gateway-job.txt" 2>&1 || { echo "FAIL: the gateway job is not loaded"; exit 1; }
+[ "$(stat -f '%Lp' "$ROOT/home/webapp/session-token")" = 600 ] || { echo "FAIL: the session token file is not private"; exit 1; }
+curl -fsS "http://127.0.0.1:$PORT/api/status" >"$SHOTS/api-status.json"
+echo "gateway job $JOB_LABEL"
+
+drive wait ownerIntroNameField 25 >/dev/null
+shot 6-owner-intro
+drive click ownerIntroNameField >/dev/null
+drive type "Alex" >/dev/null
+sleep 1
+shot 6b-owner-intro-name
+drive click ownerIntroContinue >/dev/null
+sleep 3
+shot 7-home
+
+osascript -e 'tell application "System Events" to keystroke "," using command down'
+drive wait settingsSheet 15 >/dev/null
+drive click macSettingsSection-server >/dev/null
+drive wait localEngineCard 30 >/dev/null
+drive wait hermesServiceState 30 >/dev/null
+sleep 2
+shot 8-settings-server-this-mac
+
+drive click localEngineLoginToggle >/dev/null
+for _ in $(seq 1 20); do
+  [ "$(engine gateway status --json | python3 -c 'import json, sys; print(json.load(sys.stdin)["start_on_login"])')" = False ] && break
+  sleep 1
+done
+engine gateway status --json >"$SHOTS/gateway-status-login-off.json"
+grep -q '"start_on_login": false' "$SHOTS/gateway-status-login-off.json" || { echo "FAIL: Start at login did not turn off"; exit 1; }
+launchctl list "$JOB_LABEL" >/dev/null 2>&1 || { echo "FAIL: turning off Start at login stopped the engine"; exit 1; }
+shot 8b-start-at-login-off
+
+drive click localEngineRemoveRow >/dev/null
+drive wait localEngineRemoveConfirm 10 >/dev/null
+drive click localEngineDeleteDataCheckbox >/dev/null
+sleep 1
+shot 9-remove-confirm
+drive click localEngineRemoveConfirm >/dev/null
+drive wait localEngineSetupButton 300 >/dev/null
+shot 10-after-remove
+
+kill "$PID" 2>/dev/null || true
+PID=""
+sleep 2
+
+fail=0
+[ -z "$(gateway_labels | grep -v -x -F -f "$SHOTS/gateway-labels-before.txt" || true)" ] || { echo "FAIL: a gateway job is still loaded"; fail=1; }
+! launchctl list "$JOB_LABEL" >/dev/null 2>&1 || { echo "FAIL: the scratch gateway job is still loaded"; fail=1; }
+[ ! -e "$ROOT/home/hermes-agent" ] || { echo "FAIL: the engine files remain"; fail=1; }
+{ [ ! -e "$ROOT/home/config.yaml" ] && [ ! -e "$ROOT/home/.env" ]; } || { echo "FAIL: user data remains after delete-data"; fail=1; }
+[ ! -e "$HOME/Library/LaunchAgents/$JOB_LABEL.plist" ] || { echo "FAIL: the gateway plist remains in LaunchAgents"; fail=1; }
+if curl -fsS --max-time 2 "http://127.0.0.1:$PORT/api/status" >/dev/null 2>&1; then echo "FAIL: the engine still answers on its port"; fail=1; fi
+snapshot_machine "$SHOTS/machine-after.txt"
+diff -u "$SHOTS/machine-before.txt" "$SHOTS/machine-after.txt" >"$SHOTS/machine.diff" || { echo "FAIL: ~/.hermes, ~/.local/bin, LaunchAgents or the loaded hermes jobs changed"; fail=1; }
+exit "$fail"

@@ -46,7 +46,7 @@ private struct SettingsDestination: View {
 
     var body: some View {
         switch route {
-        case .account: AccountScreen(connection: connection, back: back)
+        case .account: AccountScreen(hub: hub, connection: connection, back: back)
         case .usage: UsageScreen(hub: hub, back: back)
         case .vault: VaultScreen(hub: hub, back: back)
         case .permissions: PermissionsScreen(hub: hub, back: back)
@@ -133,7 +133,7 @@ struct SettingsRootView: View {
                 accessibilityIdentifier: "settingsAccountRow",
                 action: { open(.account) }
             ) {
-                InitialAvatar(initial: connection.userInitial)
+                InitialAvatar(initial: hub.owner.initial(fallback: connection.userInitial), photo: hub.owner.photo)
             }
             .frame(minHeight: 70)
             SettingsRow.navigate(

@@ -198,6 +198,7 @@ def build_gateway_parser(
     _flag(gateway_status, "--deep", help="Deep status check")
     _flag(gateway_status, "-l", "--full",
         help="Show full, untruncated service/log output where supported")
+    _flag(gateway_status, "--json", help="Print the macOS service state as one JSON document")
     _add_system_flag(gateway_status)
     _add_compat_platform_flag(gateway_status)
 

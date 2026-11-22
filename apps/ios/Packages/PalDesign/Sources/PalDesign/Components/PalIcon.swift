@@ -7,6 +7,7 @@ public enum PalIconInk: Equatable, Sendable {
     case destructive
     case success
     case onFill
+    case onInverseFill
     case custom(Color)
 
     public func resolvedRGB(in palette: PalPalette) -> RGB? {
@@ -17,6 +18,7 @@ public enum PalIconInk: Equatable, Sendable {
         case .destructive: palette.destructive
         case .success: palette.workingDot
         case .onFill: palette.primaryBadgeGlyph
+        case .onInverseFill: palette.chipSelectedText
         case .custom: nil
         }
     }

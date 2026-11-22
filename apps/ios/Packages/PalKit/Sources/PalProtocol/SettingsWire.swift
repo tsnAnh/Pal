@@ -197,12 +197,28 @@ public enum SettingsWire {
         public var name: String
         public var timezone: String
         public var timezoneAuto: Bool
+        public var photoVersion: String
 
-        public init(name: String = "", timezone: String = "", timezoneAuto: Bool = false) {
+        public init(name: String = "", timezone: String = "", timezoneAuto: Bool = false, photoVersion: String = "") {
             self.name = name
             self.timezone = timezone
             self.timezoneAuto = timezoneAuto
+            self.photoVersion = photoVersion
         }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: AboutYouKey.self)
+            name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+            timezone = try container.decodeIfPresent(String.self, forKey: .timezone) ?? ""
+            timezoneAuto = try container.decodeIfPresent(Bool.self, forKey: .timezoneAuto) ?? false
+            photoVersion = try container.decodeIfPresent(String.self, forKey: .photoVersion) ?? ""
+        }
+    }
+
+    public struct OwnerPhotoPayload: Decodable, Sendable, Equatable {
+        public var data: String
+        public var mime: String
+        public var photoVersion: String
     }
 
     public struct SharedMetrics: Codable, Sendable, Equatable {
@@ -224,4 +240,8 @@ public enum SettingsWire {
         public var key: String?
         public var value: JSONValue?
     }
+}
+
+private enum AboutYouKey: String, CodingKey {
+    case name, timezone, timezoneAuto, photoVersion
 }

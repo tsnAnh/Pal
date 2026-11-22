@@ -57,6 +57,9 @@ private struct MacDialogPanel: View {
             if let message = content.message {
                 messageView(message, scrolls: scrolls)
             }
+            if let checkbox = content.checkbox {
+                MacDialogCheckboxRow(checkbox: checkbox)
+            }
             HStack(spacing: 10) {
                 ForEach(content.displayOrder) { action in button(action) }
             }
@@ -95,6 +98,20 @@ private struct MacDialogPanel: View {
         .frame(width: 0, height: 0)
         .opacity(0)
         .accessibilityHidden(true)
+    }
+}
+
+private struct MacDialogCheckboxRow: View {
+    @Bindable var checkbox: MacDialogCheckbox
+
+    var body: some View {
+        Toggle(isOn: $checkbox.isOn) {
+            Text(checkbox.title)
+                .font(.system(size: 13))
+                .foregroundStyle(PalTokens.textPrimary)
+        }
+        .toggleStyle(.checkbox)
+        .accessibilityIdentifier(checkbox.identifier)
     }
 }
 #endif

@@ -15,15 +15,41 @@ struct StatusBlock: View {
     let status: SetupStatus
     var isBusy = false
     var identifierPrefix = "setupStatus"
+    var pinsAction = false
     let perform: () -> Void
 
     @State private var showsDetails = false
 
     var body: some View {
-        MacOverflowScroll { block }
+        if pinsAction {
+            VStack(spacing: 0) {
+                MacOverflowScroll { block(showsAction: false) }
+                    .frame(maxHeight: .infinity)
+                pinnedAction
+            }
+        } else {
+            MacOverflowScroll { block(showsAction: true) }
+        }
     }
 
-    private var block: some View {
+    private var pinnedAction: some View {
+        Button(action: perform) {
+            HStack(spacing: 8) {
+                if isBusy { ProgressView().controlSize(.small) }
+                Text(status.actionTitle)
+            }
+            .foregroundStyle(PalTokens.inverseText)
+            .frame(maxWidth: .infinity, minHeight: 40)
+        }
+        .buttonStyle(.glassProminent)
+        .buttonBorderShape(.capsule)
+        .tint(PalTokens.inverseFill)
+        .disabled(isBusy)
+        .keyboardShortcut(.defaultAction)
+        .accessibilityIdentifier("\(identifierPrefix)Action")
+    }
+
+    private func block(showsAction: Bool) -> some View {
         VStack(spacing: 14) {
             PalIcon(status.symbol, ink: .destructive)
                 .font(.system(size: 24))
@@ -43,9 +69,11 @@ struct StatusBlock: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("\(identifierPrefix)Reason")
             details
-            SetupButton(
-                title: status.actionTitle, kind: .primary, isBusy: isBusy, identifier: "\(identifierPrefix)Action", action: perform
-            )
+            if showsAction {
+                SetupButton(
+                    title: status.actionTitle, kind: .primary, isBusy: isBusy, identifier: "\(identifierPrefix)Action", action: perform
+                )
+            }
         }
         .frame(maxWidth: 420)
         .frame(maxWidth: .infinity)
