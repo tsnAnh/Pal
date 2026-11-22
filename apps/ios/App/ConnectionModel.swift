@@ -44,7 +44,6 @@ final class ConnectionModel {
     private var keychainUnavailable: Bool
     private let transport: any HTTPTransport
     private let diagnostics: Diagnostics
-    private let browser: WebAuthenticationBrowser
     let presence: ReachPresence
     private var connection: GatewayConnection?
     private var reopening: Task<GatewayConnection, any Error>?
@@ -68,7 +67,6 @@ final class ConnectionModel {
         self.keychainUnavailable = keychainUnavailable
         self.transport = transport
         self.diagnostics = diagnostics
-        self.browser = WebAuthenticationBrowser()
         self.baseURLText = initialBaseURL
         self.cache = cache ?? CacheStore.standard(diagnostics: diagnostics)
         if let identity = auth.restoredIdentity {
@@ -282,14 +280,9 @@ final class ConnectionModel {
 }
 
 extension ConnectionModel {
-    var passwordOption: SignInOption? {
-        guard case .ready(let options) = discovery else { return nil }
-        return options.first { $0.kind == .password }
-    }
-
-    var browserOptions: [SignInOption] {
-        guard case .ready(let options) = discovery else { return [] }
-        return options.filter { $0.kind == .browser }
+    var account: SignInOption? {
+        guard case .ready(let account) = discovery else { return nil }
+        return account
     }
 
     func addressChanged() {
@@ -339,21 +332,13 @@ extension ConnectionModel {
         }
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let secret = password
-        if option.kind == .password {
-            guard !name.isEmpty, !secret.isEmpty else {
-                phase = .failed("Enter your username and password.")
-                return
-            }
+        guard !name.isEmpty, !secret.isEmpty else {
+            phase = .failed("Enter your username and password.")
+            return
         }
         phase = .signingIn
         do {
-            let credentials: StoredCredentials
-            switch option.kind {
-            case .password:
-                credentials = try await nativeSignIn.signIn(baseURL: baseURL, provider: option.id, username: name, password: secret)
-            case .browser:
-                credentials = try await nativeSignIn.signIn(baseURL: baseURL, browser: browser, provider: option.id)
-            }
+            let credentials = try await nativeSignIn.signIn(baseURL: baseURL, provider: option.id, username: name, password: secret)
             try await auth.adopt(credentials)
             baseURLText = baseURL.displayString
         } catch {
