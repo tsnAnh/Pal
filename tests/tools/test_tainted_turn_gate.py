@@ -11,6 +11,7 @@ from tools import approval
 from tools.tainted_turn_gate import (
     GATE_FAILED,
     OWNER_DENIED,
+    OWNER_UNREACHABLE,
     CallGrant,
     admit_tainted_call,
     bound_call_grant,
@@ -140,3 +141,11 @@ def test_yolo_never_waives_the_owners_yes(monkeypatch, cards, turn):
     turn()
     admit_tainted_call("terminal", COMMAND)
     assert len(cards) == 1
+
+
+def test_a_tainted_call_with_no_reachable_owner_is_refused_not_waved_through(monkeypatch, cards, turn):
+    monkeypatch.delenv("SLACK_ALLOWED_USERS")
+    monkeypatch.delenv("SLACK_HOME_CHANNEL")
+    turn()
+    refusal, grant = admit_tainted_call("terminal", COMMAND)
+    assert grant is None and OWNER_UNREACHABLE in refusal and not cards

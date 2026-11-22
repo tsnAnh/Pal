@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 GATE_SERVER = "hermes"
 OWNER_DENIED = "owner_denied"
 GATE_FAILED = "owner_gate_failed"
+OWNER_UNREACHABLE = "owner_unreachable"
 
 
 class CallGrant:
@@ -103,8 +104,13 @@ def _admit(tool_name: str, args: dict[str, Any]) -> tuple[Optional[str], Optiona
     from gateway.desk.owner import turn_facts
     from gateway.session_context import get_session_env
     from toolsets import UNTRUSTED_SENDER_SAFE_TOOLS
+    if tool_name in UNTRUSTED_SENDER_SAFE_TOOLS:
+        return None, None
     facts = turn_facts(get_session_env("HERMES_SESSION_PLATFORM"))
-    if facts is None or facts.audience is not Audience.OWNER or tool_name in UNTRUSTED_SENDER_SAFE_TOOLS:
+    if facts is None:
+        return tool_error(f"'{tool_name}' needs the owner's approval, and the owner can't be reached from here, "
+                          f"so it was NOT run.", code=OWNER_UNREACHABLE), None
+    if facts.audience is not Audience.OWNER:
         return None, None
     refusal = _owner_approves(tool_name, args)
     return (refusal, None) if refusal else (None, CallGrant(tool_name, args))
