@@ -38,17 +38,26 @@ struct SlackBotChoice: View {
     let close: () -> Void
 
     var body: some View {
-        NavigationStack {
+        NavigationStack { page }
+            .task { await model.load() }
+            .iOSOnly { $0.accessibilityIdentifier("slackBotPicker") }
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        #if os(macOS)
+        SheetChrome(title: String(localized: "Slack"), accessibilityIdentifier: "slackBotPicker", onLeading: close) {
             content
-                .background(PalTokens.content)
-                .navigationTitle(Text("Slack"))
-                .toolbarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button(role: .close, action: close) }
-                }
         }
-        .task { await model.load() }
-        .accessibilityIdentifier("slackBotPicker")
+        #else
+        content
+            .background(PalTokens.content)
+            .navigationTitle(Text("Slack"))
+            .toolbarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(role: .close, action: close) }
+            }
+        #endif
     }
 
     @ViewBuilder

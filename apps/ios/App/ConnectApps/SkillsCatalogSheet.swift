@@ -130,6 +130,7 @@ struct SkillsCatalogSheet: View {
             do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
             await model.runSearch()
         }
+        .macModalFullHeight(.wide)
     }
 
     private var chipItems: [FilterChipItem<SkillFilter>] {

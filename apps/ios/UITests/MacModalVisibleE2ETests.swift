@@ -57,7 +57,7 @@ final class MacModalVisibleE2ETests: BotProfileTestCase {
         let app = signedInApp()
         let cases = [
             PanelCase(key: ",", panel: "settingsSheetPanel", label: nil, inside: "settingsSheet", size: .full),
-            PanelCase(key: "/", panel: "shortcutsSheet", label: "Keyboard shortcuts", inside: "shortcut-compactSidebar", size: .flow),
+            PanelCase(key: "/", panel: "shortcutsSheet", label: "Keyboard shortcuts", inside: "shortcut-compactSidebar", size: .wide),
             PanelCase(key: "k", panel: "searchPanel", label: nil, inside: "searchField", size: .palette),
         ]
         for width in [Self.windowWidth, MacLayoutMetrics.windowMin] {

@@ -4,6 +4,7 @@ import SwiftUI
 
 struct GoogleAdsFlowSession: Identifiable {
     let id = UUID()
+    let app: ConnectApp
     let model: StepFlowModel
 }
 
@@ -23,7 +24,7 @@ extension ConnectAppsModel {
             guard let flow else { return }
             await GoogleAdsFlow.recover(failure, in: flow)
         }
-        googleAdsFlow = GoogleAdsFlowSession(model: flow)
+        googleAdsFlow = GoogleAdsFlowSession(app: app, model: flow)
     }
 
     func closeGoogleAdsFlow() {
@@ -38,9 +39,9 @@ struct GoogleAdsFlowSheet: ViewModifier {
         content.macSheet(
             item: $model.googleAdsFlow,
             onDismiss: { Task { await model.reload() } },
-            size: .flow,
+            size: .stepper,
             content: { session in
-                StepFlowView(model: session.model, title: GoogleAdsConnector.name, close: { model.closeGoogleAdsFlow() }, accessory: { _ in EmptyView() })
+                StepFlowView(model: session.model, title: GoogleAdsConnector.name, app: session.app, close: { model.closeGoogleAdsFlow() })
             }
         )
     }

@@ -7,6 +7,6 @@ extension ConnectAppsModel {
         let model = StepFlowModel(
             engine: engine, runner: ShopifyFlow.runner(service: service), classify: { ShopifyFlow.classify($0) }
         )
-        shopifyFlow = AddressFlowItem(model: model)
+        shopifyFlow = AddressFlowItem(app: catalog.apps.first(where: \.isShopify), model: model)
     }
 }

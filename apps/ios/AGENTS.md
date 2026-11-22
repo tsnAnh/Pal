@@ -64,7 +64,7 @@ Glass is a control and navigation layer floating above content, never the conten
 | Chat rows name their side | `chatRowFrame(for: ChatSender)`: bot leading, user trailing, chips `.system`; no max- or fixed-width `.frame` without `alignment:` | `swift-chat-row-alignment` |
 | One design system | Mac and iOS share PalDesign components; no Electron (`apps/desktop` is not Pal) | review |
 | Design first | UI changes start from an owner-approved mockup (Rule 4) | review |
-| Mac popups: five size classes (`MacModalSize`) | `MacModalPanel(size:)` and `macSheet(size:)` take compact (440 wide, hugs), form (560, hugs), flow (720x600 fixed), full (70% of window, 640x440 floor) or palette (640, pinned 120pt from top); all capped at 90% width, 85% height; no `width:`/`height:` on `MacModalPanel`; `.macAlert`/`.macConfirm`; `.macModalEnvironment()` last | `swift-modal-size`, `MacModalSizingTests` |
+| Mac popups: size classes (`MacModalSize`) | `MacModalPanel(size:)`/`macSheet(size:)`: compact (440, hugs), form (560, hugs), stepper (540x500), wide (720, hugs, max 600), full (70% of window, 640x440 floor), palette (640, 120pt from top); capped at 90% width, 85% height; no `width:`/`height:` on `MacModalPanel`; `.macAlert`/`.macConfirm`; `.macModalEnvironment()` last | `swift-modal-size`, `MacModalSizingTests` |
 | Notification extension never requests Communication Notifications (app only) | entitlements exist | `swift-entitlements` |
 
 Apple sources: HIG Materials, Toolbars, Search fields, Color; WWDC25 219, 323, 356. Reduce Transparency and Increase Contrast are automatic for system glass: never branch on them.

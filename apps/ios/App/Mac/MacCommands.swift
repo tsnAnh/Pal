@@ -114,17 +114,17 @@ struct MacShortcutsSheet: View {
                 row(.settings, "Settings"),
                 row(.shortcuts, "Keyboard shortcuts")
             ]),
-            MacShortcutSection(title: "Chat", rows: [
-                row(.focusComposer, "Focus chat"),
-                row(.findInChat, "Find in chat")
+            MacShortcutSection(title: "Navigation", rows: [
+                MacShortcutRow(id: "stepBot", title: "Previous / next Bot", chords: chords(.previousBot, .nextBot), joiner: "/")
             ])
         ]
     }
 
     private var right: [MacShortcutSection] {
         [
-            MacShortcutSection(title: "Navigation", rows: [
-                MacShortcutRow(id: "stepBot", title: "Previous / next Bot", chords: chords(.previousBot, .nextBot), joiner: "/")
+            MacShortcutSection(title: "Chat", rows: [
+                row(.focusComposer, "Focus chat"),
+                row(.findInChat, "Find in chat")
             ]),
             MacShortcutSection(title: "Panels", rows: [
                 row(.details, "Details"),
@@ -149,10 +149,10 @@ struct MacShortcutsSheet: View {
                 column(left)
                 column(right)
             }
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 29)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.bottom, 24)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("shortcutsContent")
     }

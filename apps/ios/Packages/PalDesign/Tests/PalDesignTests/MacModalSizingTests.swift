@@ -28,7 +28,8 @@ struct MacModalSizingTests {
     @Test(arguments: [
         (MacModalSize.compact, CGFloat(440)),
         (MacModalSize.form, CGFloat(560)),
-        (MacModalSize.flow, CGFloat(720)),
+        (MacModalSize.stepper, CGFloat(540)),
+        (MacModalSize.wide, CGFloat(720)),
         (MacModalSize.full, CGFloat(896)),
         (MacModalSize.palette, CGFloat(640)),
     ])
@@ -50,8 +51,13 @@ struct MacModalSizingTests {
     }
 
     @Test(arguments: [CGSize(width: 1_280, height: 830), CGSize(width: 1_728, height: 1_117), CGSize(width: 900, height: 720)])
-    func aFlowKeepsOneFixedSizeSoStepsNeverResizeIt(window: CGSize) {
-        #expect(MacModalSize.flow.frame(in: window) == MacModalFrame(width: 720, maxHeight: 600, hugs: false))
+    func aStepperKeepsOneFixedSizeSoStepsNeverResizeIt(window: CGSize) {
+        #expect(MacModalSize.stepper.frame(in: window) == MacModalFrame(width: 540, maxHeight: 500, hugs: false))
+    }
+
+    @Test(arguments: [CGSize(width: 1_280, height: 830), CGSize(width: 1_728, height: 1_117), CGSize(width: 900, height: 720)])
+    func aWidePanelHugsItsContentUpToSixHundred(window: CGSize) {
+        #expect(MacModalSize.wide.frame(in: window) == MacModalFrame(width: 720, maxHeight: 600, hugs: true))
     }
 
     @Test func theFullPanelKeepsTheSharedSeventyPercentFrameInEveryWindow() {
@@ -80,7 +86,8 @@ struct MacModalSizingTests {
 
     @Test func aSmallWindowShrinksEveryClassBelowNinetyPercentWideAndEightyFivePercentTall() {
         let window = CGSize(width: 600, height: 400)
-        #expect(MacModalSize.flow.frame(in: window) == MacModalFrame(width: 540, maxHeight: 340, hugs: false))
+        #expect(MacModalSize.stepper.frame(in: window) == MacModalFrame(width: 540, maxHeight: 340, hugs: false))
+        #expect(MacModalSize.wide.frame(in: window) == MacModalFrame(width: 540, maxHeight: 340, hugs: true))
         #expect(MacModalSize.form.frame(in: window) == MacModalFrame(width: 540, maxHeight: 340, hugs: true))
         #expect(MacModalSize.compact.frame(in: window).width == 440)
         #expect(MacModalSize.palette.frame(in: window).width == 540)
@@ -94,7 +101,8 @@ struct MacModalSizingTests {
     @Test func beforeTheWindowIsMeasuredEachClassUsesItsNominalSize() {
         #expect(MacModalSize.compact.frame(in: .zero) == MacModalFrame(width: 440, maxHeight: MacModalSizing.sheetFallback.height, hugs: true))
         #expect(MacModalSize.form.frame(in: .zero).size == CGSize(width: 560, height: MacModalSizing.sheetFallback.height))
-        #expect(MacModalSize.flow.frame(in: .zero).size == CGSize(width: 720, height: 600))
+        #expect(MacModalSize.stepper.frame(in: .zero).size == CGSize(width: 540, height: 500))
+        #expect(MacModalSize.wide.frame(in: .zero).size == CGSize(width: 720, height: 600))
         #expect(MacModalSize.full.frame(in: .zero).size == MacModalSizing.sheetFallback)
         #expect(MacModalSize.palette.frame(in: .zero).topAnchor == 120)
     }

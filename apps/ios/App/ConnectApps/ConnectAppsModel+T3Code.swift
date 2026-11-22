@@ -3,6 +3,7 @@ import PalConnect
 
 struct AddressFlowItem: Identifiable {
     let id = UUID()
+    let app: ConnectApp?
     let model: StepFlowModel
 }
 
@@ -17,7 +18,7 @@ extension ConnectAppsModel {
         let model = StepFlowModel(
             engine: engine, runner: T3CodeFlow.runner(service: service), classify: { T3CodeFlow.classify($0) }
         )
-        t3Flow = AddressFlowItem(model: model)
+        t3Flow = AddressFlowItem(app: catalog.apps.first(where: \.isT3Code), model: model)
     }
 
     func probeT3Code() async {

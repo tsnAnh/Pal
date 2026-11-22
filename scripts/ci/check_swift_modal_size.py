@@ -2,7 +2,7 @@
 """Fail when a Mac modal carries its own size or a Mac alert goes around the shared dialog.
 
 Every Mac popup declares one of five size classes (``MacModalSize``, PalDesign) and the shared container sizes it:
-compact (440 wide, hugs its content), form (560 wide, hugs, scrolls past the cap), flow (720 x 600 fixed), full
+compact (440 wide, hugs its content), form (560 wide, hugs, scrolls past the cap), stepper (540 x 500 fixed), wide (720 wide, hugs, max 600), full
 (70% of the window, never under 640 x 440, ``MacModalSizing.frame(window:)``) and palette (640 wide, pinned 120pt from
 the top, grows with its results). Every class except full is capped at 90% of the window width and 85% of its height.
 ``MacModalPanel(size:)`` and ``macSheet(size:)`` take the class; neither has a default, so a new popup cannot skip the
@@ -60,7 +60,7 @@ PANEL_SIZE_LABEL = re.compile(r"(?<![A-Za-z0-9_.])(width|height)\s*:")
 PANEL_SIZE_DECL = re.compile(r"^\s*(?:let|var)\s+(width|height)\s*:")
 ROOT_FRAME = re.compile(r"^\s{8}\.frame\([^\n]*\b(?:width|height|minWidth|minHeight|idealWidth|idealHeight)\s*:\s*\d")
 IF_OS = re.compile(r"^\s*#if\s+os\((macOS|iOS)\)\s*$")
-FIX_PANEL = "MacModalPanel sizes itself from its MacModalSize class; drop the number and pick the class (compact, form, flow, full, palette)"
+FIX_PANEL = "MacModalPanel sizes itself from its MacModalSize class; drop the number and pick the class (compact, form, stepper, wide, full, palette)"
 FIX_ROOT = "size comes from the MacModalSize class of the MacModalPanel or macSheet; drop the literal, or read a number from MacModalSizing"
 FIX_OVERFLOW = (
     "content can outgrow a 640 x 440 window-fit panel and would clip; wrap it in the shared scroll container, "

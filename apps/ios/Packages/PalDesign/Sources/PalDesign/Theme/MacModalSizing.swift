@@ -52,7 +52,8 @@ public struct MacModalFrame: Sendable, Equatable {
 public enum MacModalSize: Sendable, Equatable, CaseIterable {
     case compact
     case form
-    case flow
+    case stepper
+    case wide
     case full
     case palette
 
@@ -75,7 +76,8 @@ public enum MacModalSize: Sendable, Equatable, CaseIterable {
         return switch self {
         case .compact: MacModalFrame(width: 440, maxHeight: .infinity, hugs: true)
         case .form: MacModalFrame(width: 560, maxHeight: .infinity, hugs: true)
-        case .flow: MacModalFrame(width: 720, maxHeight: 600, hugs: false)
+        case .stepper: MacModalFrame(width: 540, maxHeight: 500, hugs: false)
+        case .wide: MacModalFrame(width: 720, maxHeight: 600, hugs: true)
         case .palette: MacModalFrame(width: 640, maxHeight: .infinity, hugs: true, topAnchor: 120)
         case .full: MacModalFrame(width: panel.width, maxHeight: panel.height, hugs: false)
         }

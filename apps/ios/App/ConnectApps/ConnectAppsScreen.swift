@@ -114,11 +114,11 @@ private struct ConnectAppsPresentations: ViewModifier {
                     ]
                 )
             }
-            .macSheet(isPresented: $model.showsSkills, size: .flow) {
+            .macSheet(isPresented: $model.showsSkills, size: .wide) {
                 SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
             }
-            .macSheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, size: .flow, content: mcpSignInSheet)
-            .macSheet(isPresented: $model.showsSlackPicker, size: .compact) {
+            .macSheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, size: .stepper, content: mcpSignInSheet)
+            .macSheet(isPresented: $model.showsSlackPicker, size: .stepper) {
                 SlackBotChoice(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
             }
             .modifier(OwnerSetupSheet(model: model))
@@ -141,7 +141,7 @@ private struct OwnerSetupSheet: ViewModifier {
         content.macSheet(
             item: $model.ownerSetup,
             onDismiss: { Task { await model.reload() } },
-            size: .flow,
+            size: .stepper,
             content: { setup in OwnerSetupView(model: setup) }
         )
     }
@@ -191,6 +191,7 @@ struct CredentialSheet: View {
                     )
                     .id(key)
                     .padding(.horizontal, PalMetrics.screenMargin)
+                    .macOnly { view in ScrollView { view }.scrollBounceBehavior(.basedOnSize) }
                 }
             }
         )

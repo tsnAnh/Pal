@@ -57,7 +57,8 @@ struct OwnerSetupView: View {
                 }
             case .ready(let flow):
                 StepFlowView(
-                    model: flow, title: model.app.name, savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."),
+                    model: flow, title: model.app.name, app: model.app,
+                    savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."),
                     close: { finish() }, accessory: { step in OwnerSetupAccessory(model: model, step: step) }
                 )
             }
@@ -69,7 +70,7 @@ struct OwnerSetupView: View {
     }
 
     private func framed<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        SetupChrome(title: model.app.name, accessibilityIdentifier: "ownerSetupFrame", close: { finish() }, content: content)
+        SetupChrome(title: model.app.name, app: model.app, accessibilityIdentifier: "ownerSetupFrame", close: { finish() }, content: content)
     }
 }
 

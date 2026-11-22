@@ -156,6 +156,7 @@ struct TeachReviewSheet: View {
             DelayedProgressView()
                 .tint(Color(theme.palette.textSecondary))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .macOnly { $0.frame(minHeight: 240) }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Text("Loading the draft"))
                 .accessibilityIdentifier("teachReviewLoading")
@@ -272,7 +273,7 @@ private struct TeachPresentation: ViewModifier {
                 await model.observe()
             }
             .toast(Binding(get: { active ? model.toast : nil }, set: { if active { model.toast = $0 } }), accessibilityIdentifier: "teachToast")
-            .macSheet(isPresented: Binding(get: { active && model.showsReview }, set: { if !$0 { model.showsReview = false } }), size: .flow) {
+            .macSheet(isPresented: Binding(get: { active && model.showsReview }, set: { if !$0 { model.showsReview = false } }), size: .wide) {
                 TeachReviewSheet(model: model)
             }
             .macConfirm(isPresented: Binding(get: { active && model.confirmation != nil }, set: { if !$0 { model.confirmation = nil } })) {

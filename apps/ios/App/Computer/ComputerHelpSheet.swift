@@ -141,8 +141,7 @@ struct ComputerHelpSheet: View {
             }
             .scrollEdgeEffectStyle(.soft, for: .top)
         }
-        .presentationDetents([.fraction(0.955)])
-        .presentationDragIndicator(.hidden)
+        .iOSOnly { $0.presentationDetents([.fraction(0.955)]).presentationDragIndicator(.hidden) }
     }
 }
 

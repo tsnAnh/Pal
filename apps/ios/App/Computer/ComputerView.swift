@@ -69,7 +69,7 @@ struct ComputerView: View {
         .onDisappear { teach.control = nil }
         .onChange(of: model.phase == .live, initial: true) { _, live in teach.setScreenLive(live) }
         .teachPresentations(teach, surface: .computer)
-        .macSheet(isPresented: $model.showsHelp, size: .flow) { ComputerHelpSheet { model.showsHelp = false } }
+        .macSheet(isPresented: $model.showsHelp, size: .wide) { ComputerHelpSheet { model.showsHelp = false } }
         .toast($model.toast)
     }
 

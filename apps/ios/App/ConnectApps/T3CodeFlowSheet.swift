@@ -6,7 +6,7 @@ struct T3CodeFlowSheet: View {
     let close: () -> Void
 
     var body: some View {
-        StepFlowView(model: flow.model, title: T3CodeConnector.name, close: close, accessory: { _ in EmptyView() })
+        StepFlowView(model: flow.model, title: T3CodeConnector.name, app: flow.app, close: close, accessory: { _ in EmptyView() })
             .task(id: flow.model.engine.current.id) { await prefillAddress() }
     }
 
@@ -24,7 +24,7 @@ struct T3CodeSheet: ViewModifier {
     @Bindable var model: ConnectAppsModel
 
     func body(content: Content) -> some View {
-        content.macSheet(item: $model.t3Flow, onDismiss: { Task { await model.reload() } }, size: .flow, content: { flow in
+        content.macSheet(item: $model.t3Flow, onDismiss: { Task { await model.reload() } }, size: .stepper, content: { flow in
             T3CodeFlowSheet(flow: flow) { model.t3Flow = nil }
         })
     }
