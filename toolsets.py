@@ -37,8 +37,7 @@ _HERMES_CORE_TOOLS = [
     "slack_post_message", "slack_send_dm",
 ]
 
-# Webhook payloads are untrusted third-party content: no file/system execution.
-_HERMES_WEBHOOK_SAFE_TOOLS = ["web_search", "web_extract", "vision_analyze", "clarify"]
+UNTRUSTED_SENDER_SAFE_TOOLS = ["web_search", "web_extract", "vision_analyze", "clarify"]
 _FEISHU_TOOLS = [
     "feishu_doc_read", "feishu_drive_list_comments", "feishu_drive_list_comment_replies",
     "feishu_drive_reply_comment", "feishu_drive_add_comment",
@@ -129,6 +128,11 @@ TOOLSETS = {
     "session_search": _ts("Search and recall past conversations with summarization", ["session_search"]),
     "slack": _ts("This bot's own Slack workspace: channels it joined, its DMs, and approved posts",
                  [t for t in _HERMES_CORE_TOOLS if t.startswith("slack_")]),
+    "member": _ts(
+        "Member lane: what a workspace member's conversation with the bot may use",
+        [*UNTRUSTED_SENDER_SAFE_TOOLS, "slack_read_thread", "slack_read_channel"],
+        posture=True,
+    ),
     "connections": _ts("Remote connector discovery, execution, and account authorization", ["manage_connections"]),
     "project": _ts("Desktop Projects — create/switch named workspaces (GUI sessions only)", ["desktop_project"]),
     "bot_room": _ts("Verified text-only Group Chat turn capabilities"),
@@ -229,7 +233,7 @@ TOOLSETS = {
     "hermes-wecom": _bundle("WeCom bot toolset - enterprise WeChat messaging (full access)"),
     "hermes-wecom-callback": _bundle("WeCom callback toolset - enterprise self-built app messaging (full access)"),
     "hermes-sms": _bundle("SMS bot toolset - interact with Hermes via SMS (Twilio)"),
-    "hermes-webhook": _ts("Webhook toolset - receive and process external webhook events", _HERMES_WEBHOOK_SAFE_TOOLS),
+    "hermes-webhook": _ts("Webhook toolset - receive and process external webhook events", UNTRUSTED_SENDER_SAFE_TOOLS),
     "hermes-gateway": _ts(
         "Gateway toolset - union of all messaging platform tools",
         [],

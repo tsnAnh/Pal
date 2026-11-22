@@ -20,6 +20,7 @@ from contextlib import suppress
 from pathlib import Path
 
 from agent.i18n import t
+from gateway.audience.model import Audience
 from gateway.config import Platform
 from gateway.inbound_reply_context import reply_pointer
 from gateway.platforms.base import EphemeralReply
@@ -225,6 +226,8 @@ class GatewayInboundMixin(
             return None
         source = event.source
 
+        if source.audience is Audience.MEMBER:
+            return (event, source, False) if await self._admit_member_event(event, source) else None
         if not self._is_user_authorized_for_source(source):
             if source.user_id is None:
                 # No user identity (Telegram service messages, channel forwards, anonymous admin

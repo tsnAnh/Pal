@@ -120,6 +120,8 @@ def restore_routed_session(authority, sid):
     # Re-pin the persisted receiving bot so delivery after a restart goes through it or nowhere,
     # never the default bot by heuristic (gateway/AGENTS.md § Identity survives the process).
     source = authority.runner._restored_source(entry)
+    if source is None:
+        return None
     if sid not in authority.sessions:
         live = authority.sessions[sid] = LiveSession(source, route)
         if routed is None and _names_another_conversation(authority, sid, route):

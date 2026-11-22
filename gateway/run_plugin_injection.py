@@ -268,7 +268,10 @@ class GatewayPluginInjectionMixin:
         if entry is None or entry.origin is None:
             return True
         from gateway.session_identity import replace_source
-        source = replace_source(self._restored_source(entry))
+        restored = self._restored_source(entry)
+        if restored is None:
+            return False
+        source = replace_source(restored)
         if source.platform == Platform.LOCAL:
             return self._plugin_local_session(source, session_key, plugin_home=plugin_home,
                                               plugin_id=plugin_id) is not None
@@ -319,7 +322,10 @@ class GatewayPluginInjectionMixin:
             return False
 
         from gateway.session_identity import replace_source
-        source = replace_source(self._restored_source(entry))
+        restored = self._restored_source(entry)
+        if restored is None:
+            return False
+        source = replace_source(restored)
         if source.platform == Platform.LOCAL:
             return await self._dispatch_plugin_local_injection(source, entry, content=content, plugin_id=plugin_id,
                                                                plugin_home=plugin_home)

@@ -13,6 +13,8 @@ from dataclasses import dataclass, field, fields
 from typing import Dict, List, Optional, Any
 
 from .config import Platform, GatewayConfig, HomeChannel
+from gateway.audience.model import Audience
+from gateway.audience.posture import MEMBER_MARKER
 from .whatsapp_identity import canonical_whatsapp_identifier
 from gateway.session_detached import detached_route_of
 from gateway.session_identity import transport_profile_of
@@ -108,6 +110,7 @@ class SessionSource:
     # (gateway/session_detached.py). It replaces the chat's key, so nothing keyed by route reaches
     # the chat's current conversation, and delivery goes nowhere.
     detached_route: Optional[str] = field(default=None, repr=False, compare=False)
+    audience: Audience = Audience.OWNER
 
     def __post_init__(self) -> None:
         # Mirror scope_id/guild_id onto each other (scope_id wins) so readers of EITHER agree.
@@ -156,6 +159,8 @@ class SessionSource:
         _optional(self._OPTIONAL_TAIL)
         if self.shared_session:
             d["shared_session"] = True
+        if self.audience is Audience.MEMBER:
+            d["audience"] = Audience.MEMBER.value
         return d
 
     @classmethod
@@ -170,7 +175,8 @@ class SessionSource:
             chat_type=data.get("chat_type", "dm"),
             scope_id=data.get("scope_id", data.get("guild_id")),
             auto_thread_created=bool(data.get("auto_thread_created", False)),
-            shared_session=bool(data.get("shared_session", False)), **plain,
+            shared_session=bool(data.get("shared_session", False)),
+            audience=Audience.MEMBER if data.get("audience") == Audience.MEMBER.value else Audience.OWNER, **plain,
         )
 
 
@@ -765,6 +771,8 @@ def build_session_key(
     user_part = [str(participant_id)] if isolate_user and participant_id else []
     thread_part = [thread_id] if thread_id else []
     parts += user_part + thread_part if is_dm else thread_part + user_part
+    if getattr(source, "audience", Audience.OWNER) is Audience.MEMBER:
+        parts.append(MEMBER_MARKER)
     return ":".join(str(part) for part in parts)
 
 

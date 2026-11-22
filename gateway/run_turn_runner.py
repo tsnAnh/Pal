@@ -1341,8 +1341,13 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
         from gateway.session_api_turn import api_policy_scope
         from gateway.session_authorities import active_authority
         from persistence.core.errors import AuthorityRefusal
+        from gateway.audience.posture import posture_for_key
+        from tools.url_safety import forbid_private_urls
         policy = policy_for_source(self._runner, self._ctx.source)
+        self._ctx.posture = posture = posture_for_key(self._ctx.session_key or "")
         with ExitStack() as scope:
+            if posture is not None:
+                scope.enter_context(forbid_private_urls())
             try:
                 scope.enter_context(policy_scope(policy, authority=active_authority(self._runner)))
             except AuthorityRefusal as exc:
@@ -1417,6 +1422,9 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
         if room is not None:
             max_iterations = room.max_iterations
             ctx.enabled_toolsets = list(room.enabled_toolsets)
+        if ctx.posture is not None:
+            ctx.enabled_toolsets = list(ctx.posture.toolsets)
+            combined_ephemeral = ctx.posture.ephemeral_prompt
         try:
             model, runtime_kwargs = runner._resolve_session_agent_runtime(
                 source=ctx.source, session_key=ctx.session_key, user_config=ctx.user_config,

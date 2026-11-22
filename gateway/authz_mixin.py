@@ -14,6 +14,12 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+from gateway.audience.admission import RateVerdict, decide_admission
+from gateway.audience.ingress import MemberRates, member_command_allowed
+from gateway.audience.model import Admission, AudiencePolicy, SenderFacts
+from gateway.audience.posture import (
+    MEMBER_COMMAND_REFUSAL, MEMBER_RATE_NOTICE, audience_of_key,
+)
 from gateway.bot_loop_guard import BotLoopGuard
 from gateway.config import Platform
 from gateway.session import SessionSource
@@ -558,6 +564,10 @@ class GatewayAuthorizationMixin:
         if source is None:
             return None
         from gateway.session_identity import identity_of, restore_identity
+        if audience_of_key(getattr(entry, "session_key", "") or "") is not source.audience:
+            logger.warning("Refusing to restore session %s: its stored audience disagrees with its key",
+                           getattr(entry, "session_key", ""))
+            return None
         restore_identity(source, runner=self, transport_profile=getattr(entry, "transport_profile", None))
         if (getattr(getattr(self, 'config', None), 'multiplex_profiles', False)
                 and not self._names_receiving_bot(source, identity_of(source))
@@ -866,6 +876,55 @@ class GatewayAuthorizationMixin:
             return True
         # The guard judges the final verdict: a chat allowlist admits a bot before the ALLOW_BOTS block runs.
         return not self._bot_loop_guard_instance().blocked(self._bot_loop_guard_conversation(source))
+
+    def _admission_for_source(self, source: SessionSource, facts: Optional[SenderFacts]) -> Admission:
+        return self._under_authorization_profile(source, lambda: self._admission_verdict(source, facts))
+
+    def _admission_verdict(self, source: SessionSource, facts: Optional[SenderFacts]) -> Admission:
+        return decide_admission(
+            self._is_user_authorized(source), self._pending_ask_for_source(source),
+            self._audience_policy_for(source), facts)
+
+    def _pending_ask_for_source(self, source: SessionSource) -> Optional[str]:
+        return None
+
+    def _audience_policy_for(self, source: SessionSource) -> AudiencePolicy:
+        from hermes_cli.config import read_raw_config_readonly
+        platforms = read_raw_config_readonly().get("platforms")
+        block = platforms.get(source.platform.value) if isinstance(platforms, dict) else None
+        return AudiencePolicy.from_config(block.get("audience") if isinstance(block, dict) else None)
+
+    def _member_policy_admits(self, source: SessionSource) -> bool:
+        return self._under_authorization_profile(
+            source, lambda: self._audience_policy_for(source).admits(getattr(source, "_sender_facts", None)))
+
+    def _member_resume_authorized(self, source: SessionSource) -> bool:
+        return self._under_authorization_profile(
+            source, lambda: self._audience_policy_for(source).admits_user(source.user_id))
+
+    async def _admit_member_event(self, event, source: SessionSource) -> bool:
+        policy = self._under_authorization_profile(source, lambda: self._audience_policy_for(source))
+        if not policy.admits(getattr(source, "_sender_facts", None)):
+            logger.info("Dropping a member message: the audience policy no longer admits its sender (platform=%s)",
+                        source.platform.value)
+            return False
+        adapter = self._delivery_adapter_for(source)
+        if not member_command_allowed(event):
+            if adapter is not None:
+                await self._send_busy_reply(event, adapter, MEMBER_COMMAND_REFUSAL)
+            return False
+        from gateway.session_ingress import executing_admission
+        if event.get_command() is not None or getattr(event, "_member_charged", False) or executing_admission.get():
+            return True
+        rates = self.__dict__.setdefault("_member_rates", MemberRates())
+        home = self._authorization_home_for_source(source)
+        verdict = rates.check(str(home or ""), policy.member_turns_per_hour)
+        if verdict is RateVerdict.NOTICE and adapter is not None:
+            await self._send_busy_reply(event, adapter, MEMBER_RATE_NOTICE)
+        if verdict is not RateVerdict.ALLOWED:
+            return False
+        event._member_charged = True
+        return True
 
     def _principal_authorized(self, source: SessionSource, *, allow_adapter_delegation: bool) -> bool:
         """The allowlist verdict alone, before the bot loop guard."""

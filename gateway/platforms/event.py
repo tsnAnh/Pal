@@ -138,6 +138,7 @@ class MessageEvent:
     # display data only, never a path. Appended for positional compat.
     media_filenames: list[str] = field(default_factory=list)
     typed_text: Optional[str] = field(default=None, repr=False, compare=False)
+    carries_member_content: bool = False
 
     # Process-local admission receipt, never routing metadata or execution acknowledgement.
     _gateway_accepted: bool = field(default=False, init=False, repr=False, compare=False)
