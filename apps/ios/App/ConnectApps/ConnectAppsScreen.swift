@@ -95,6 +95,16 @@ private struct ConnectAppsPresentations: ViewModifier {
         McpSignInSheet(controller: controller) { model.mcpSignIn = nil }
     }
 
+    @ViewBuilder
+    private var slackSheet: some View {
+        if let target = model.slackTarget {
+            SlackEntryView(
+                botName: target.botName, displayName: target.displayName, spec: target.spec, services: target.services,
+                source: target.source, closeSheet: { model.closeSlack() }
+            )
+        }
+    }
+
     func body(content: Content) -> some View {
         content
             .macAlert(item: $model.notice) { notice in
@@ -118,9 +128,12 @@ private struct ConnectAppsPresentations: ViewModifier {
                 SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
             }
             .macSheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, size: .stepper, content: mcpSignInSheet)
-            .macSheet(isPresented: $model.showsSlackPicker, size: .stepper) {
-                SlackBotChoice(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
-            }
+            .macSheet(
+                isPresented: $model.showsSlack,
+                onDismiss: { Task { await model.loadSlack() } },
+                size: .stepper,
+                content: { slackSheet }
+            )
             .modifier(OwnerSetupSheet(model: model))
             .macSheet(item: $model.keyRequest, size: .compact) { request in
                 CapabilityKeyEntrySheet(model: model, request: request)

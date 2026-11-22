@@ -93,14 +93,14 @@ final class ConnectAppsModel {
     var showsSkills = false
     var mcpSignIn: McpSignInController?
     var ownerSetup: OwnerSetupModel?
-    var showsSlackPicker = false
+    var showsSlack = false
+    var slackStatus = ProfileSlackStatus.loading
     var t3Flow: AddressFlowItem?
     var shopifyFlow: AddressFlowItem?
     var t3Reach: T3Reach?
     var discordFlow: DiscordFlowSession?
     var googleAdsFlow: GoogleAdsFlowSession?
-    let slack: SlackBotsModel
-    let slackWizard: SlackWizardContext
+    let slackTarget: SlackTarget?
     var failures: [String: String] = [:]
     var setupRecords: [SetupProgressRecord] = []
     private(set) var mode: Mode = .list
@@ -139,13 +139,17 @@ final class ConnectAppsModel {
     ) {
         let tally = OSAllocatedUnfairLock(initialState: 0)
         rpcTally = tally
-        slackWizard = SlackWizardContext(bots: bots, connection: connection)
-        slack = SlackBotsModel(bots: slackWizard.slackBots())
         self.profile = profile
         self.botName = botName
         devices = DeviceConnectorsModel(pool: pool, profile: profile, surfaces: connection.surfaces)
         self.bots = bots
         self.currentBot = currentBot
+        slackTarget = (profile ?? currentBot).map { name in
+            SlackTarget(
+                botName: name, displayName: botName, spec: bots.first(where: { $0.name == name })?.spec,
+                services: BotsServices(connection: connection), source: ChatInstallSource.make(botName: name, connection: connection)
+            )
+        }
         let signInRPC = OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally)))
         let connectService = ConnectAppsService(
             rpc: ConnectorDetailsScript.wrap(ShopifyScript.wrap(signInRPC)), profile: profile,
@@ -183,7 +187,7 @@ final class ConnectAppsModel {
     func start() async {
         openInterval = PalPerf.begin("connect.open")
         rpcTally.withLock { $0 = 0 }
-        Task { await slack.load() }
+        Task { await loadSlack() }
         await reload()
         Task { await devices.start() }
         await loadCapabilities()

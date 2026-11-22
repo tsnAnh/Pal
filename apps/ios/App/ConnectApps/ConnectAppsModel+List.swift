@@ -11,19 +11,13 @@ struct ConnectListEntry: Identifiable {
 }
 
 extension ConnectAppsModel {
-    private var botInstall: ConnectBotInstall {
-        if slack.needsReinstall { return .needsReinstall(summary: String(localized: "Needs reinstall for a new permission")) }
-        if slack.installedCount > 0 { return .installed(summary: slack.summary) }
-        return .notInstalled
-    }
-
     func listRow(for listed: ConnectApp) -> ConnectListRow {
         let app = listed.applying(t3Reach: t3Reach)
         let bot = app.isBotApp ? botInstall : nil
         let state = ConnectRowState.resolve(ConnectRowInput(app: app, isBusy: busy.contains(app.id), bot: bot))
         var botSummary: String?
         switch bot {
-        case .notInstalled: botSummary = String(localized: "Per bot · one-time setup")
+        case .notInstalled: botSummary = String(localized: "Add \(botName) to Slack")
         case .installed(let summary): botSummary = summary
         case .needsReinstall, nil: break
         }
@@ -52,7 +46,7 @@ extension ConnectAppsModel {
         } else if case .custom = app.source {
             manage(app)
         } else if app.isBotApp {
-            showsSlackPicker = true
+            openSlack()
         } else if app.oauthClientEntry != nil {
             oauthClientAction(app)
         } else if state == .connected, !app.requiresToken {
@@ -60,11 +54,6 @@ extension ConnectAppsModel {
         } else {
             Task { await connect(app) }
         }
-    }
-
-    func closeSlackPicker() {
-        showsSlackPicker = false
-        Task { await slack.load() }
     }
 }
 

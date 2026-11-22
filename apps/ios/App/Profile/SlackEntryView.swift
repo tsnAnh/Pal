@@ -8,9 +8,12 @@ struct SlackEntryView: View {
     let spec: BotAvatarSpec?
     let services: BotsServices
     let source: ChatInstallSource
+    var closeSheet: (() -> Void)?
 
     @State private var tokensConnected: Bool?
     @Environment(\.dismiss) private var dismiss
+
+    private var close: () -> Void { closeSheet ?? { dismiss() } }
 
     var body: some View {
         Group {
@@ -18,16 +21,20 @@ struct SlackEntryView: View {
             case .none:
                 DelayedReveal { ProgressView() }
             case .some(true):
-                legacy
+                if let closeSheet {
+                    SheetChrome(title: String(localized: "Slack"), accessibilityIdentifier: "slackScreenSheet", onLeading: closeSheet) { legacy }
+                } else {
+                    legacy
+                }
             case .some(false):
                 ModelHost {
                     SlackSetupModel(botName: botName, displayName: displayName, spec: spec, client: source.client, members: source.members)
                 } content: {
-                    SlackSetupScreen(model: $0, spec: spec, events: source.events, close: { dismiss() }, advanced: { legacy })
+                    SlackSetupScreen(model: $0, spec: spec, events: source.events, close: close, advanced: { legacy })
                 }
             }
         }
-        .environment(\.sheetChromeHostedInNavigation, true)
+        .environment(\.sheetChromeHostedInNavigation, closeSheet == nil)
         .task {
             guard tokensConnected == nil else { return }
             let status = try? await services.slack.status(profile: botName)
