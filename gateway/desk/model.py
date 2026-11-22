@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 
 class ItemKind(str, Enum):
@@ -22,10 +22,11 @@ class ItemState(str, Enum):
     EXPIRED = "expired"
     UNKNOWN = "unknown"
     CANCELLED = "cancelled"
+    FAILED = "failed"
 
 
 TERMINAL_STATES = frozenset({ItemState.DONE, ItemState.DECLINED, ItemState.EXPIRED, ItemState.UNKNOWN,
-                             ItemState.CANCELLED})
+                             ItemState.CANCELLED, ItemState.FAILED})
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class HandoffPayload:
     requester_name: str
     conversation_id: str
     thread_ts: Optional[str]
+    where: str = ""
 
 
 @dataclass(frozen=True)
@@ -71,7 +73,7 @@ class SendPayload:
     label: str
 
 
-Payload = Union[AskPayload, HandoffPayload, SendPayload]
+Payload = AskPayload | HandoffPayload | SendPayload
 
 
 @dataclass(frozen=True)

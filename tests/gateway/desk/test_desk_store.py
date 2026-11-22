@@ -164,3 +164,21 @@ def test_the_database_is_private_to_the_profile_home(store, tmp_path):
     store.reserve(ask_item())
     assert (tmp_path / "desk.db").exists()
     assert (tmp_path / "desk.db").stat().st_mode & 0o077 == 0
+
+
+def test_pruning_removes_only_old_settled_items_that_were_delivered_and_whose_card_is_closed(store, clock):
+    for item_id in ("dk_old", "dk_new", "dk_undelivered", "dk_card_open", "dk_open"):
+        store.reserve(ask_item(item_id, state=ItemState.OPEN))
+    clock.now = 1_100.0
+    for item_id in ("dk_old", "dk_undelivered", "dk_card_open"):
+        store.transition(item_id, ItemState.OPEN, ItemState.CANCELLED, revision=0)
+    clock.now = 5_000.0
+    store.transition("dk_new", ItemState.OPEN, ItemState.CANCELLED, revision=0)
+    for item_id in ("dk_old", "dk_new", "dk_card_open"):
+        store.mark_delivered(item_id, 1)
+    store.set_card_ref("dk_card_open", {"channel": "D0OWNER", "ts": "1.1"})
+    assert store.prune(settled_before=2_000.0) == 1
+    assert store.get("dk_old") is None
+    assert all(store.get(i) is not None for i in ("dk_new", "dk_undelivered", "dk_card_open", "dk_open"))
+    store.mark_card_closed("dk_card_open")
+    assert store.prune(settled_before=2_000.0) == 1

@@ -158,8 +158,11 @@ class DeskStore:
         return _item(row)
 
     def open_asks_for(self, platform: str, scope_id: str, conversation_id: str, user_id: str) -> list[DeskItem]:
-        return self._items("kind = 'ask' AND state = 'open' AND platform = ? AND scope_id = ? AND "
-                           "reply_conversation = ? AND reply_user = ?", (platform, scope_id, conversation_id, user_id))
+        where = "kind = 'ask' AND state = 'open' AND platform = ? AND reply_conversation = ? AND reply_user = ?"
+        args = [platform, conversation_id, user_id]
+        if scope_id:
+            where, args = where + " AND scope_id = ?", [*args, scope_id]
+        return self._items(where, args)
 
     def open_asks(self, platform: str, limit: int) -> list[DeskItem]:
         return self._items("kind = 'ask' AND state = 'open' AND platform = ?", (platform,))[:limit]
@@ -216,6 +219,14 @@ class DeskStore:
                 clauses.append(f"{column} IN ({','.join('?' * len(values))})")
                 args.extend(sorted(v.value for v in values))
         return self._items(" AND ".join(clauses), args)
+
+    def prune(self, *, settled_before: float) -> int:
+        with self._write() as conn:
+            cursor = conn.execute(
+                f"DELETE FROM items WHERE state IN ({','.join('?' * len(_TERMINAL))}) AND settled_at <= ? "
+                "AND delivered_at IS NOT NULL AND (card_ref_json IS NULL OR card_closed_at IS NOT NULL)",
+                (*_TERMINAL, settled_before))
+            return cursor.rowcount
 
     def cancel_open_asks(self, session_key: str) -> list[DeskItem]:
         cancelled = []

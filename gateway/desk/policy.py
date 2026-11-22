@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Union
+from typing import Optional
 
 from gateway.audience.model import Audience
 from gateway.desk.model import AskPayload, DeskItem, ItemKind, ItemState, Recipient
@@ -50,7 +50,7 @@ def outbound_decision(turn: TurnFacts, to: Recipient) -> Outbound:
 
 def match_reply(
     open_asks: Sequence[DeskItem], *, user_id: str, conversation_id: str, thread_ts: Optional[str],
-) -> Union[DeskItem, _Ambiguous, None]:
+) -> DeskItem | _Ambiguous | None:
     mine = [item for item in open_asks
             if item.kind is ItemKind.ASK and item.state is ItemState.OPEN and isinstance(item.payload, AskPayload)
             and item.payload.target.user_id == user_id and item.payload.target.conversation_id == conversation_id]

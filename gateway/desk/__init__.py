@@ -7,10 +7,14 @@
   ask a sender's message answers).
 - ``store``: ``DeskStore``, sqlite under the profile home, every move a compare-and-set on state and revision.
 - ``owner``: the owner contact and turn facts read from the running turn.
-- ``service``: ``Desk``, the one object that opens, decides, claims, expires and executes items.
+- ``service``: ``Desk``, the one object that opens, decides, claims, expires and executes items. Import it from
+  ``gateway.desk.service``: it pulls in the session stack, which tools that only need the model must not pay for.
 - ``delivery``: wakes an item's origin session and renders the texts owners and members read.
+- ``runtime``: the gateway-side entry points (reply claims, card clicks, session-boundary cancels).
 - ``ticker``: the supervised loop that posts cards, expires items and redelivers outcomes per served profile.
 """
+
+from __future__ import annotations
 
 from gateway.desk.model import (
     TERMINAL_STATES,
@@ -25,6 +29,13 @@ from gateway.desk.model import (
     SendPayload,
     item_id_for_call,
     send_digest,
+)
+from gateway.desk.owner import (
+    OwnerContact,
+    clamped_wait_minutes,
+    desk_settings,
+    owner_contact,
+    turn_facts,
 )
 from gateway.desk.policy import AMBIGUOUS_REPLY, Outbound, TurnFacts, match_reply, outbound_decision
 from gateway.desk.store import DeskStore
@@ -41,11 +52,16 @@ __all__ = [
     "Origin",
     "Outbound",
     "OwnerCard",
+    "OwnerContact",
     "Recipient",
     "SendPayload",
     "TurnFacts",
+    "clamped_wait_minutes",
+    "desk_settings",
     "item_id_for_call",
     "match_reply",
     "outbound_decision",
+    "owner_contact",
     "send_digest",
+    "turn_facts",
 ]

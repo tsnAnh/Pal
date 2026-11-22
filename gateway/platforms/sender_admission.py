@@ -4,6 +4,7 @@ import logging
 from typing import Any, Callable, Optional
 
 from gateway.audience.model import Admission, AdmissionKind, SenderFacts
+from gateway.platforms.owner_desk import OwnerDeskMixin
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ AuthorizationCheck = Callable[..., bool]
 AdmissionCheck = Callable[..., Admission]
 
 
-class SenderAdmissionMixin:
+class SenderAdmissionMixin(OwnerDeskMixin):
     _authorization_check: Optional[AuthorizationCheck] = None
     _admission_check: Optional[AdmissionCheck] = None
 
@@ -52,11 +53,13 @@ class SenderAdmissionMixin:
 
     def _sender_admission(self, user_id: Optional[str], chat_type: Optional[str] = None,
                           chat_id: Optional[str] = None, *, is_bot: bool = False,
-                          thread_id: Optional[str] = None, facts: Optional[SenderFacts] = None) -> Admission:
+                          thread_id: Optional[str] = None, facts: Optional[SenderFacts] = None,
+                          message_id: Optional[str] = None) -> Admission:
         if user_id and self._admission_check is not None:
             try:
                 verdict = self._admission_check(
-                    user_id, chat_type, chat_id, is_bot=is_bot, thread_id=thread_id, facts=facts)
+                    user_id, chat_type, chat_id, is_bot=is_bot, thread_id=thread_id, facts=facts,
+                    message_id=message_id)
             except Exception:
                 logger.warning("[%s] Admission check raised for user %s; falling back to the owner check",
                                self.name, user_id, exc_info=True)

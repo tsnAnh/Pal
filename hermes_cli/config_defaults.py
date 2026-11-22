@@ -1752,10 +1752,10 @@ DEFAULT_CONFIG = {
         "min_gap_minutes": 60,
         "quiet_hours": {"start": "22:00", "end": "08:00"},
         "domain_tiers": {"cron": "notify", "suggestions": "suggest"},
-        "muted_domains": [],
-        "messaging_window_minutes": 30,
+        "muted_domains": [], "messaging_window_minutes": 30,
     },
 
+    "desk": {"ask_timeout_minutes": 1440, "decision_timeout_minutes": 4320},
     "cron": {
         "catch_up_missed": True,  # False skips recurring misses beyond the local grace window.
         # Let cron-spawned agents use the cronjob toolset (the "cron-librarian" pattern). Off by

@@ -263,6 +263,9 @@ def _snapshot_native(runner, event, provenance, fresh_roles=False, encoded_sourc
         envelope['event']['inherit_channel_pin'] = True
     if event.carries_member_content is True:
         envelope['event']['carries_member_content'] = True
+    for named in ('named_user_ids', 'named_conversation_ids'):
+        if getattr(event, named):
+            envelope['event'][named] = list(getattr(event, named))
     if metadata := _native_metadata(event):
         envelope['event']['metadata'] = metadata
     # COMMAND that passed admission is path text (``/Users/x is broken``): replay it as text.
