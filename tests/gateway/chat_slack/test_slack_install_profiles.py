@@ -37,10 +37,13 @@ from tui_gateway.contracts import chat_provider as wire
 
 BOT = "scout"
 TEAM = "T1"
-APP_KEY = "xapp-1-A0SCOUT-4242-ScoutGuidedAppKeySecretValue"
 SLACK_ENV_KEYS = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS")
 GUIDED = {"icon_ok": False, "app_token_ok": False, "redirect_ok": False}
 CAP = wire.ProviderCapability
+
+
+def app_key_for(app_id: str) -> str:
+    return f"xapp-1-{app_id}-4242-ScoutGuidedAppKeySecretValue"
 
 
 class LiveGateway:
@@ -76,7 +79,17 @@ class Rig:
         self.client = TestClient(app)
         self.vault = VaultStore(get_profile_dir(BOT) / "vault")
         self.config_item = self._secret("Slack configuration token", REFRESH)
-        self.app_key_item = self._secret("Slack app key", APP_KEY)
+        self._app_key_items: dict[str, str] = {}
+
+    @property
+    def app_id(self) -> str:
+        return self.records(BOT).app(BOT, "w1")["app_id"]
+
+    @property
+    def app_key_item(self) -> str:
+        if self.app_id not in self._app_key_items:
+            self._app_key_items[self.app_id] = self._secret("Slack app key", app_key_for(self.app_id))
+        return self._app_key_items[self.app_id]
 
     def _provider(self, **deps) -> SlackProvider:
         return SlackProvider(**deps, api=SlackApi(self.slack.transport, sleep=lambda _s: None),
@@ -176,7 +189,7 @@ def test_guided_install_delivers_the_pasted_app_key_to_the_bots_env(rig):
     r = rig(**GUIDED)
     assert r.allow(r.to_allow()).status_code == 200
     assert r.status().step is wire.SetupStep.ready
-    assert r.env_of(BOT)["SLACK_APP_TOKEN"] == APP_KEY
+    assert r.env_of(BOT)["SLACK_APP_TOKEN"] == app_key_for(r.app_id)
 
 
 def test_app_key_step_without_a_key_is_refused_and_changes_nothing(rig):
@@ -187,6 +200,21 @@ def test_app_key_step_without_a_key_is_refused_and_changes_nothing(rig):
     response = r.advance(state, "manual_step_done", manual_step="app_level_credential")
     assert response["error"]["data"]["reason"] == "invalid_event"
     assert r.status() == state
+
+
+def test_an_app_key_from_another_slack_app_is_rejected_and_the_right_key_is_accepted_on_retry(rig):
+    r = rig(**GUIDED)
+    state = r.to_manual_or_allow()
+    while state.next_action.action_id != CAP.app_level_credential.value:
+        state = r.state(r.advance(state, "manual_step_done"))
+    foreign = r._secret("Slack app key", app_key_for("A0OTHERAPP"))
+    failed = r.state(r.advance(state, "manual_step_done", vault_item_id=foreign))
+    assert failed.step is wire.SetupStep.error and failed.error.code is wire.SetupErrorCode.credential_rejected
+    assert "app_token_item_id" not in r.records(BOT).app(BOT, "w1")
+    retried = r.state(r.advance(failed, "retry"))
+    accepted = r.state(r.advance(retried, "manual_step_done", vault_item_id=r.app_key_item))
+    assert accepted.step is not wire.SetupStep.error
+    assert r.records(BOT).app(BOT, "w1")["app_token_item_id"] == r.app_key_item
 
 
 def test_a_pasted_value_that_is_not_an_app_key_is_rejected_and_the_step_can_be_retried(rig):

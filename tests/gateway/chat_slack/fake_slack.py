@@ -106,7 +106,7 @@ class FakeSlack:
         return {"ok": True} if self.icon_ok else {"ok": False, "error": "unknown_method"}
 
     def m_apps_token_create(self, form):
-        return {"ok": True, "token": f"xapp-{FAKE_TOKEN}"} if self.app_token_ok else {"ok": False, "error": "unknown_method"}
+        return {"ok": True, "token": f"xapp-1-{form['app_id']}-1-{FAKE_TOKEN}"} if self.app_token_ok else {"ok": False, "error": "unknown_method"}
 
     def m_oauth_v2_access(self, form):
         if form.get("client_secret") != CLIENT_SECRET:

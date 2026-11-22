@@ -61,6 +61,7 @@ GONE_ERRORS = {"app_not_found", "token_revoked", "invalid_auth"}
 REFRESH_LIFETIME_UNKNOWN = "unknown"
 BOT_TOKEN_PREFIX = "xoxb-"
 APP_TOKEN_PREFIX = "xapp-"
+APP_TOKEN_APP_ID = re.compile(r"xapp-\d+-([A-Z0-9]+)-\d+-\S+")
 PROBE_ABORTING = (SetupErrorCode.credential_rejected, SetupErrorCode.credential_expired)
 MEMBER_ID = re.compile(r"[UW][A-Z0-9]{6,20}")
 AVATAR_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
@@ -85,6 +86,11 @@ def profile_identity(bot: str) -> BotIdentitySource:
         avatar = icon
     return BotIdentitySource(bot=bot, display_name=read_profile_meta(home).get("display_name") or bot,
                              avatar_path=str(avatar) if avatar else None)
+
+
+def _app_token_app_id(key: str) -> str | None:
+    match = APP_TOKEN_APP_ID.fullmatch(key)
+    return match.group(1) if match else None
 
 
 def _username(name: str) -> str:
@@ -256,7 +262,10 @@ class SlackProvider(ChatProvider):
             raise SlackSetupError(SetupErrorCode.credential_rejected) from None
         if not key.startswith(APP_TOKEN_PREFIX):
             raise SlackSetupError(SetupErrorCode.credential_rejected)
-        previous = self.records.app(bot, workspace).get("app_token_item_id")
+        record = self.records.app(bot, workspace)
+        if record.get("app_id") and _app_token_app_id(key) != record["app_id"]:
+            raise SlackSetupError(SetupErrorCode.credential_rejected)
+        previous = record.get("app_token_item_id")
         self.records.update_app(bot, workspace, app_token_item_id=vault_item_id)
         if previous and previous != vault_item_id:
             self.vault.remove_item(previous)
