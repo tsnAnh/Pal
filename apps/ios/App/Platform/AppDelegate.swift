@@ -47,7 +47,19 @@ enum PlatformApplication {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let push = PushNotifications()
+    let push: PushNotifications
+    let updater: AppUpdater?
+
+    override init() {
+        let push = PushNotifications()
+        self.push = push
+        updater = AppUpdater.make(notices: push)
+        super.init()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        updater?.start()
+    }
 
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Task { await push.didRegister(deviceToken: deviceToken) }

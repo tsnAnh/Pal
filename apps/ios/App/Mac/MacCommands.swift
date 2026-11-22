@@ -9,8 +9,17 @@ struct MacCommands: Commands {
     let router: AppRouter
     let connection: ConnectionModel
     let shortcuts: ShortcutStore
+    let updater: AppUpdater?
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            if let updater {
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                if updater.staged != nil {
+                    Button("Restart to Update") { updater.restartToUpdate() }
+                }
+            }
+        }
         CommandGroup(replacing: .newItem) {
             item(.newBot) { router.present(.createBot) }
         }
