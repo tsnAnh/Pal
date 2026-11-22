@@ -12,33 +12,27 @@ auth:
   type: oauth
   signin_on: owner_app
 
-# The tool names below are the naming-convention guess (the server could not be reached when this was
-# written). A wrong read name only makes a read ask for approval; it can never let a write run.
 action_policy:
   read_tools:
-    - get_current_user
-    - get_my_profile
-    - get_organization
-    - search_jobs
-    - get_job
-    - get_job_details
-    - search_freelancers
-    - get_freelancer
-    - get_freelancer_profile
-    - list_proposals
-    - get_proposal
-    - list_contracts
-    - get_contract
-    - list_milestones
-    - get_milestone
-    - list_offers
-    - get_offer
-    - list_rooms
-    - get_room
-    - list_messages
-    - get_room_messages
-    - get_connects_balance
-    - list_categories
+    - upwork__find_freelancers
+    - upwork__find_jobs
+    - upwork__find_saved_jobs
+    - upwork__get_account
+    - upwork__get_agency
+    - upwork__get_freelancer_dashboard
+    - upwork__get_freelancer_financials
+    - upwork__get_freelancer_work
+    - upwork__get_messages
+    - upwork__get_preview
+    - upwork__get_profile
+    - upwork__get_tool_help
+    - upwork__get_upload_status
+    - upwork__list_accounts
+    - upwork__list_contracts
+    - upwork__list_freelancer_proposals
+    - upwork__list_milestones
+    - upwork__list_offers
+    - upwork__search_help_center
   refused_tools:
     - fund_escrow
     - fund_milestone

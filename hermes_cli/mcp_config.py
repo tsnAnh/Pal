@@ -1294,10 +1294,12 @@ def _announce_unsaved_missing_keys(saved: bool, name: str, entry: Any) -> None:
         _announce_missing_keys(name, entry)
 
 
-def _with_shell_keys(action: str, name: str, run: Callable[[], Any]) -> Any:
+def _with_shell_keys(action: str, name: Optional[str], run: Callable[[], Any]) -> Any:
     from hermes_cli.mcp_shell_keys import SHELL_IMPORT_AFTER, SHELL_IMPORT_BEFORE
     from tools.mcp_accounts import registration_name
 
+    if not name:
+        return run()
     if action in SHELL_IMPORT_BEFORE:
         _announce_shell_keys(name)
     result = run()
@@ -1347,8 +1349,9 @@ def mcp_command(args):
     if handler:
         # A handler's int return is the process exit code (``main()`` exits non-zero on it).
         try:
-            with owner_write_scope(args.name) if action in _OWNER_WRITE_ACTIONS else contextlib.nullcontext():
-                return _with_shell_keys(action, args.name, lambda: handler(args))
+            name = getattr(args, "name", None)
+            with owner_write_scope(name) if action in _OWNER_WRITE_ACTIONS else contextlib.nullcontext():
+                return _with_shell_keys(action, name, lambda: handler(args))
         except ProfileAdminDenied as exc:
             _error(str(exc))
             return 1
