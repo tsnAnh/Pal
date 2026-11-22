@@ -18,6 +18,8 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     PAL_UPDATE_FEED: ""
     PAL_UPDATE_PUBLIC_KEY: 0VZX/1gQCTn6WEu4cTcE9pXnHiUGeq+BLaEni7/Ovsc=
+    PAL_MAC_APP_PROFILE: ""
+    PAL_MAC_NSE_PROFILE: ""
 packages:
   PalKit:
     path: Packages/PalKit
@@ -93,6 +95,7 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         CODE_SIGN_ENTITLEMENTS: App/Pal.entitlements
         CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: App/Pal-macOS.entitlements
+        PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]: $(PAL_MAC_APP_PROFILE)
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]: "$(inherited) @executable_path/../Frameworks"
@@ -170,6 +173,7 @@ targets:
         SKIP_INSTALL: YES
         CODE_SIGN_ENTITLEMENTS: NotificationService/NotificationService.entitlements
         CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: NotificationService/NotificationService-macOS.entitlements
+        PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]: $(PAL_MAC_NSE_PROFILE)
         ENABLE_HARDENED_RUNTIME: YES
       configs:
         Debug:

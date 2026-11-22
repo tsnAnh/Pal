@@ -3,15 +3,30 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: Scripts/release-mac [--build-number N] [--notes FILE] [--notary-profile NAME] [--dry-run]
+Usage: Scripts/release-mac [--version X.Y.Z] [--build-number N] [--notes FILE] [--dry-run]
+                           [--tag TAG] [--notary-profile NAME]
+                           [--asc-key-file P8 --asc-key-id ID --asc-issuer-id ID]
+                           [--ed-key-file FILE] [--profile FILE --profile FILE]
 
 Archives Pal for macOS, signs it with Developer ID (team G94PJ7VQBJ), notarizes and
-staples it, then publishes the zip as GitHub release pal-mac-<build> on tsnAnh/Pal and
-refreshes the Sparkle appcast on the pal-mac-feed release.
+staples it, then publishes the zip as a GitHub release on tsnAnh/Pal (pal-mac-<build>, or
+TAG with --tag) and refreshes the Sparkle appcast on the pal-mac-feed release.
 
+  --version X.Y.Z        CFBundleShortVersionString to stamp, 1-3 dotted digits (default: project.yml)
   --build-number N       CFBundleVersion to stamp (default: UTC yymmdd.HHMM); must be newer than the live feed
   --notes FILE           release notes markdown (default: "Pal for Mac <version> (<build>)")
+  --tag TAG              publish on the existing git tag TAG (must point at HEAD) instead of pal-mac-<build>;
+                         rerunning converges on the same release
   --notary-profile NAME  notarytool keychain profile (default: pal-notary)
+  --asc-key-file P8      App Store Connect API key for provisioning and notarization, instead of the
+  --asc-key-id ID        keychain and the notary profile; all three --asc-* flags go together
+  --asc-issuer-id ID
+  --ed-key-file FILE     Sparkle EdDSA private key file, instead of the login keychain
+  --profile FILE         Developer ID .provisionprofile, given once for dev.tsnanh.pal and once for
+                         dev.tsnanh.pal.notification-service; switches to manual signing, where the
+                         archive is signed with the Developer ID Application certificate and these
+                         profiles instead of Xcode's automatic signing, with no Apple ID or API key
+                         needed by xcodebuild (default: automatic signing)
   --dry-run              archive, export, verify, zip and generate the appcast locally;
                          skip notarization, stapling and every GitHub write
 USAGE
@@ -23,14 +38,28 @@ FEED_URL="https://github.com/$REPO/releases/download/$FEED_TAG/appcast.xml"
 TEAM=G94PJ7VQBJ
 
 build_number="$(date -u +%y%m%d.%H%M)"
+marketing_version=""
 notes=""
 notary_profile=pal-notary
+release_tag=""
+asc_key_file=""
+asc_key_id=""
+asc_issuer_id=""
+ed_key_file=""
+profile_files=()
 dry_run=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --version) marketing_version="${2:?--version needs a value}"; shift 2 ;;
     --build-number) build_number="${2:?--build-number needs a value}"; shift 2 ;;
     --notes) notes="${2:?--notes needs a file}"; shift 2 ;;
+    --tag) release_tag="${2:?--tag needs a name}"; shift 2 ;;
     --notary-profile) notary_profile="${2:?--notary-profile needs a name}"; shift 2 ;;
+    --asc-key-file) asc_key_file="${2:?--asc-key-file needs a file}"; shift 2 ;;
+    --asc-key-id) asc_key_id="${2:?--asc-key-id needs a value}"; shift 2 ;;
+    --asc-issuer-id) asc_issuer_id="${2:?--asc-issuer-id needs a value}"; shift 2 ;;
+    --ed-key-file) ed_key_file="${2:?--ed-key-file needs a file}"; shift 2 ;;
+    --profile) profile_files+=("${2:?--profile needs a file}"); shift 2 ;;
     --dry-run) dry_run=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -38,11 +67,24 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "$build_number" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "--build-number must be dotted digits, got: $build_number" >&2; exit 2; }
+[[ -z "$marketing_version" || "$marketing_version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] \
+  || { echo "--version must be 1-3 dotted digits, got: $marketing_version" >&2; exit 2; }
 [[ -z "$notes" || -f "$notes" ]] || { echo "notes file not found: $notes" >&2; exit 2; }
+[[ -z "$release_tag" || "$release_tag" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "--tag has characters outside A-Za-z0-9._-: $release_tag" >&2; exit 2; }
+[[ -z "$ed_key_file" || -f "$ed_key_file" ]] || { echo "Sparkle key file not found: $ed_key_file" >&2; exit 2; }
+for profile_file in ${profile_files[@]+"${profile_files[@]}"}; do
+  [[ -f "$profile_file" ]] || { echo "provisioning profile not found: $profile_file" >&2; exit 2; }
+done
+if [[ -n "$asc_key_file$asc_key_id$asc_issuer_id" ]]; then
+  [[ -n "$asc_key_file" && -n "$asc_key_id" && -n "$asc_issuer_id" ]] \
+    || { echo "--asc-key-file, --asc-key-id and --asc-issuer-id must be given together" >&2; exit 2; }
+  [[ -f "$asc_key_file" ]] || { echo "App Store Connect key file not found: $asc_key_file" >&2; exit 2; }
+fi
 
-ios_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ios_dir="$(dirname "$scripts_dir")"
 out="$ios_dir/build/release-mac/$build_number"
-tag="pal-mac-$build_number"
+tag="${release_tag:-pal-mac-$build_number}"
 zip_name="Pal-$build_number.zip"
 archive="$out/Pal.xcarchive"
 app="$out/export/Pal.app"
@@ -51,6 +93,91 @@ stage="$out/stage"
 download_prefix="https://github.com/$REPO/releases/download/$tag/"
 
 die() { echo "$*" >&2; exit 1; }
+
+APP_BUNDLE_ID=dev.tsnanh.pal
+NSE_BUNDLE_ID=dev.tsnanh.pal.notification-service
+PROFILE_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+
+profile_plist="$(mktemp)"
+trap 'rm -f "$profile_plist"' EXIT
+
+read_profile() {
+  local file="$1" now expires
+  security cms -D -i "$file" > "$profile_plist" 2>/dev/null || die "not a readable provisioning profile: $file"
+  profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$profile_plist" 2>/dev/null)" || die "$file has no UUID"
+  profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$profile_plist" 2>/dev/null)" || die "$file has no Name"
+  /usr/libexec/PlistBuddy -c 'Print :Platform' "$profile_plist" 2>/dev/null | grep -qx '[[:space:]]*OSX[[:space:]]*' \
+    || die "$file ($profile_name) is not a macOS profile"
+  profile_bundle="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$profile_plist" 2>/dev/null)" \
+    || die "$file has no application identifier"
+  profile_bundle="${profile_bundle#"$TEAM".}"
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$profile_plist" 2>/dev/null || true)" == "true" ]] \
+    || die "$file ($profile_name) is not a Developer ID profile (it lists specific devices)"
+  /usr/libexec/PlistBuddy -c 'Print :TeamIdentifier' "$profile_plist" 2>/dev/null | grep -qx "[[:space:]]*${TEAM}[[:space:]]*" \
+    || die "$file ($profile_name) does not belong to team $TEAM"
+  expires="$(plutil -extract ExpirationDate raw -o - "$profile_plist" 2>/dev/null)" || die "$file has no ExpirationDate"
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  [[ "$expires" > "$now" ]] || die "$file ($profile_name) expired $expires"
+}
+
+install_profile() {
+  local file="$1" target="$PROFILE_DIR/$2.provisionprofile"
+  mkdir -p "$PROFILE_DIR"
+  cmp -s "$file" "$target" || cp "$file" "$target"
+}
+
+load_profiles() {
+  local file uuids=() i=0
+  app_profile=""
+  nse_profile=""
+  for file in "$@"; do
+    read_profile "$file"
+    case "$profile_bundle" in
+      "$APP_BUNDLE_ID") [[ -z "$app_profile" ]] || die "more than one profile for $APP_BUNDLE_ID"; app_profile="$profile_uuid" ;;
+      "$NSE_BUNDLE_ID") [[ -z "$nse_profile" ]] || die "more than one profile for $NSE_BUNDLE_ID"; nse_profile="$profile_uuid" ;;
+      *) die "$file ($profile_name) is for $profile_bundle, expected $APP_BUNDLE_ID or $NSE_BUNDLE_ID" ;;
+    esac
+    uuids+=("$profile_uuid")
+  done
+  [[ -n "$app_profile" ]] || die "no --profile for $APP_BUNDLE_ID"
+  [[ -n "$nse_profile" ]] || die "no --profile for $NSE_BUNDLE_ID"
+  for file in "$@"; do
+    install_profile "$file" "${uuids[i]}"
+    i=$((i + 1))
+  done
+}
+
+signing=automatic
+[[ ${#profile_files[@]} -eq 0 ]] || signing=manual
+
+xcode_auth=()
+archive_signing=()
+notary_auth=(--keychain-profile "$notary_profile")
+case "$signing" in
+  automatic)
+    xcode_auth=(-allowProvisioningUpdates)
+    if [[ -n "$asc_key_file" ]]; then
+      xcode_auth+=(-authenticationKeyPath "$asc_key_file" -authenticationKeyID "$asc_key_id" -authenticationKeyIssuerID "$asc_issuer_id")
+    fi
+    ;;
+  manual)
+    load_profiles "${profile_files[@]}"
+    archive_signing=(
+      CODE_SIGN_STYLE=Manual
+      DEVELOPMENT_TEAM="$TEAM"
+      CODE_SIGN_IDENTITY="Developer ID Application"
+      PAL_MAC_APP_PROFILE="$app_profile"
+      PAL_MAC_NSE_PROFILE="$nse_profile"
+    )
+    ;;
+esac
+if [[ -n "$asc_key_file" ]]; then
+  notary_auth=(--key "$asc_key_file" --key-id "$asc_key_id" --issuer "$asc_issuer_id")
+fi
+version_setting=()
+[[ -z "$marketing_version" ]] || version_setting=(MARKETING_VERSION="$marketing_version")
+ed_key_args=()
+[[ -z "$ed_key_file" ]] || ed_key_args=(--ed-key-file "$ed_key_file")
 
 sha256_of() { shasum -a 256 "$1" | awk '{print $1}'; }
 
@@ -66,8 +193,12 @@ preflight() {
     [[ -z "$(git -C "$ios_dir" status --porcelain -- "$ios_dir")" ]] || die "apps/ios has uncommitted changes; commit or stash them first"
     git -C "$ios_dir" fetch --quiet origin main || die "could not fetch origin/main"
     git -C "$ios_dir" merge-base --is-ancestor HEAD origin/main || die "HEAD is not contained in origin/main; merge first"
-    xcrun notarytool history --keychain-profile "$notary_profile" >/dev/null 2>&1 \
-      || die "notarytool profile '$notary_profile' is unusable; run: xcrun notarytool store-credentials $notary_profile"
+    if [[ -n "$release_tag" ]]; then
+      [[ "$(git -C "$ios_dir" rev-parse "$release_tag^{commit}" 2>/dev/null)" == "$(git -C "$ios_dir" rev-parse HEAD)" ]] \
+        || die "tag $release_tag does not exist or does not point at HEAD"
+    fi
+    xcrun notarytool history "${notary_auth[@]}" >/dev/null 2>&1 \
+      || die "notarytool credentials are unusable; run: xcrun notarytool store-credentials $notary_profile (or check the --asc-* key)"
   fi
   rm -rf "$archive" "$out/export" "$stage"
   mkdir -p "$out" "$stage"
@@ -75,7 +206,7 @@ preflight() {
 
 sparkle_bin() {
   local bin="$out/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin"
-  [[ -x "$bin/generate_appcast" && -x "$bin/generate_keys" ]] \
+  [[ -x "$bin/generate_appcast" && -x "$bin/sign_update" ]] \
     || die "Sparkle tools not found in $bin; the archive step should have resolved the Sparkle package"
   echo "$bin"
 }
@@ -90,6 +221,39 @@ live_feed_version() {
   esac
 }
 
+export_options_signing() {
+  case "$signing" in
+    automatic)
+      echo '  <key>signingStyle</key><string>automatic</string>'
+      ;;
+    manual)
+      cat <<PLIST
+  <key>signingStyle</key><string>manual</string>
+  <key>signingCertificate</key><string>Developer ID Application</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>$APP_BUNDLE_ID</key><string>$app_profile</string>
+    <key>$NSE_BUNDLE_ID</key><string>$nse_profile</string>
+  </dict>
+PLIST
+      ;;
+  esac
+}
+
+write_export_options() {
+  cat <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>developer-id</string>
+  <key>teamID</key><string>$TEAM</string>
+$(export_options_signing)
+</dict>
+</plist>
+PLIST
+}
+
 archive_and_export() {
   (cd "$ios_dir" && xcodegen generate --quiet)
 
@@ -100,46 +264,46 @@ archive_and_export() {
     -destination generic/platform=macOS \
     -derivedDataPath "$out/DerivedData" \
     -archivePath "$archive" \
-    -allowProvisioningUpdates \
+    ${xcode_auth[@]+"${xcode_auth[@]}"} \
+    ${archive_signing[@]+"${archive_signing[@]}"} \
     CURRENT_PROJECT_VERSION="$build_number" \
     PAL_UPDATE_FEED="$FEED_URL" \
+    ${version_setting[@]+"${version_setting[@]}"} \
     | tee "$out/archive.log" | grep -E "error:|warning: .*signing|ARCHIVE (SUCCEEDED|FAILED)" || true
   [[ -d "$archive" ]] || die "archive failed; see $out/archive.log"
 
-  cat > "$options" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>method</key><string>developer-id</string>
-  <key>teamID</key><string>$TEAM</string>
-  <key>signingStyle</key><string>automatic</string>
-</dict>
-</plist>
-PLIST
+  write_export_options > "$options"
 
   xcodebuild -exportArchive \
     -archivePath "$archive" \
     -exportOptionsPlist "$options" \
     -exportPath "$out/export" \
-    -allowProvisioningUpdates \
+    ${xcode_auth[@]+"${xcode_auth[@]}"} \
     > "$out/export.log" 2>&1 || { tail -40 "$out/export.log" >&2; exit 1; }
   [[ -d "$app" ]] || die "export produced no Pal.app; see $out/export.log"
 
   short_version="$(plist_value "$app" CFBundleShortVersionString)"
+  [[ -z "$marketing_version" || "$short_version" == "$marketing_version" ]] \
+    || die "CFBundleShortVersionString is '$short_version', expected $marketing_version"
+}
+
+verify_signing_key() {
+  local embedded_key="$1" probe="$out/signing-probe.txt" signature
+  printf 'pal-mac-release-signing-probe\n' > "$probe"
+  signature="$("$(sparkle_bin)/sign_update" -p ${ed_key_args[@]+"${ed_key_args[@]}"} "$probe")" \
+    || die "sign_update could not sign with the Sparkle key"
+  xcrun swift "$scripts_dir/sparkle-signature-check.swift" "$embedded_key" "$signature" "$probe" \
+    || die "the Sparkle signing key does not match PAL_UPDATE_PUBLIC_KEY ($embedded_key) embedded in the app"
 }
 
 verify_bundle() {
-  local feed bundle_version embedded_key signing_key details live
+  local feed bundle_version details live
   feed="$(plist_value "$app" SUFeedURL)"
   [[ "$feed" == "$FEED_URL" ]] || die "SUFeedURL is '$feed', expected $FEED_URL"
   bundle_version="$(plist_value "$app" CFBundleVersion)"
   [[ "$bundle_version" == "$build_number" ]] || die "CFBundleVersion is '$bundle_version', expected $build_number"
 
-  embedded_key="$(plist_value "$app" SUPublicEDKey)"
-  signing_key="$("$(sparkle_bin)/generate_keys" -p)" || die "generate_keys could not read the Sparkle signing key from the keychain"
-  [[ -n "$signing_key" && "$embedded_key" == "$signing_key" ]] \
-    || die "SUPublicEDKey in the app does not match the keychain signing key; run generate_keys once and set PAL_UPDATE_PUBLIC_KEY in project.yml"
+  verify_signing_key "$(plist_value "$app" SUPublicEDKey)"
 
   codesign --verify --deep --strict "$app" || die "codesign verification failed for $app"
   details="$(codesign -dvv "$app" 2>&1)"
@@ -161,13 +325,13 @@ notarize() {
   else
     local submission status id
     ditto -c -k --keepParent "$app" "$out/notarize.zip"
-    xcrun notarytool submit "$out/notarize.zip" --keychain-profile "$notary_profile" --wait --output-format json > "$out/notarize.json" \
+    xcrun notarytool submit "$out/notarize.zip" "${notary_auth[@]}" --wait --output-format json > "$out/notarize.json" \
       || { cat "$out/notarize.json" >&2; die "notarytool submit failed"; }
     status="$(plutil -extract status raw -o - "$out/notarize.json")"
     id="$(plutil -extract id raw -o - "$out/notarize.json")"
     if [[ "$status" != "Accepted" ]]; then
       submission="$out/notarize-log.json"
-      xcrun notarytool log "$id" --keychain-profile "$notary_profile" "$submission" >/dev/null 2>&1 || true
+      xcrun notarytool log "$id" "${notary_auth[@]}" "$submission" >/dev/null 2>&1 || true
       die "notarization $status (submission $id); see $submission"
     fi
     xcrun stapler staple "$app" || die "stapling failed"
@@ -183,6 +347,7 @@ make_feed() {
     printf 'Pal for Mac %s (%s)\n' "$short_version" "$build_number" > "$stage/Pal-$build_number.md"
   fi
   "$(sparkle_bin)/generate_appcast" \
+    ${ed_key_args[@]+"${ed_key_args[@]}"} \
     --download-url-prefix "$download_prefix" \
     --embed-release-notes \
     -o "$stage/appcast.xml" \
@@ -197,7 +362,38 @@ make_feed() {
   [[ -n "$signature" ]] || die "appcast enclosure has no sparkle:edSignature"
 }
 
-publish_archive() {
+verify_public_download() {
+  curl -fsSL -o "$out/public-$zip_name" "${download_prefix}$zip_name" || die "published asset is not downloadable"
+  [[ "$(sha256_of "$out/public-$zip_name")" == "$(sha256_of "$stage/$zip_name")" ]] \
+    || die "public download of $zip_name does not match the local zip"
+}
+
+live_enclosure_url() {
+  curl -fsSL "$FEED_URL" 2>/dev/null | xmllint --xpath 'string((//item)[1]/enclosure/@url)' - 2>/dev/null || true
+}
+
+publish_tag_release() {
+  local title="Pal for Mac $short_version ($build_number)" asset
+  if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+    [[ "$(live_enclosure_url)" != */download/"$tag"/* ]] || die "release $tag is already live in the appcast; use a new tag"
+    gh release upload "$tag" "$stage/$zip_name" --repo "$REPO" --clobber
+    while IFS= read -r asset; do
+      [[ "$asset" == Pal-*.zip && "$asset" != "$zip_name" ]] || continue
+      gh release delete-asset "$tag" "$asset" --repo "$REPO" --yes
+    done < <(gh release view "$tag" --repo "$REPO" --json assets --jq '.assets[].name')
+    gh release edit "$tag" --repo "$REPO" --title "$title" --latest
+  else
+    gh release create "$tag" "$stage/$zip_name" \
+      --repo "$REPO" \
+      --verify-tag \
+      --title "$title" \
+      --notes-file "$stage/Pal-$build_number.md" \
+      --latest
+  fi
+  verify_public_download
+}
+
+publish_build_release() {
   local local_sha remote_sha
   local_sha="$(sha256_of "$stage/$zip_name")"
   if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
@@ -214,8 +410,15 @@ publish_archive() {
     --title "Pal for Mac $short_version ($build_number)" \
     --notes-file "$stage/Pal-$build_number.md" \
     --latest=false
-  curl -fsSL -o "$out/public-$zip_name" "${download_prefix}$zip_name" || die "published asset is not downloadable"
-  [[ "$(sha256_of "$out/public-$zip_name")" == "$local_sha" ]] || die "public download of $zip_name does not match the local zip"
+  verify_public_download
+}
+
+publish_archive() {
+  if [[ -n "$release_tag" ]]; then
+    publish_tag_release
+  else
+    publish_build_release
+  fi
 }
 
 publish_feed() {
@@ -223,8 +426,7 @@ publish_feed() {
     || gh release create "$FEED_TAG" --repo "$REPO" --prerelease --latest=false \
          --title "Pal for Mac update feed" --notes "Sparkle feed. Do not delete."
   gh release upload "$FEED_TAG" "$stage/appcast.xml" --repo "$REPO" --clobber
-  local i
-  for i in $(seq 1 10); do
+  for _ in $(seq 1 10); do
     if curl -fsSL "$FEED_URL" | grep -q "$build_number"; then
       return
     fi
