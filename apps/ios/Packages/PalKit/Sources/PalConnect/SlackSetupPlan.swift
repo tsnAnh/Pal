@@ -167,8 +167,8 @@ public struct SlackSetupPlan: Sendable, Equatable {
     }
 
     private static func manual(_ task: ChatProviderCapability, name: String, state: ChatSetupStateWire?) -> FlowStep {
-        let link = state.flatMap { $0.nextAction.actionId == task.rawValue ? $0.nextAction.link : nil }
-            .flatMap(URL.init(string:)).map { SetupLink(label: String(localized: "Open the Slack page"), url: $0) }
+        let action = state.flatMap { $0.nextAction.actionId == task.rawValue ? $0.nextAction : nil }
+        let link = action?.link.flatMap(URL.init(string:)).map { SetupLink(label: String(localized: "Open the Slack page"), url: $0) }
         let done = String(localized: "Done")
         let saving = FlowStep.Kind.action(waitingTitle: String(localized: "Saving"), waitingBody: "")
         switch task {
@@ -185,7 +185,11 @@ public struct SlackSetupPlan: Sendable, Equatable {
             return FlowStep(
                 id: manualID(task), title: String(localized: "Add Pal's return address"),
                 body: String(localized: "Open the Slack page, add this address under Redirect URLs, then click Save URLs."),
-                kind: saving, primaryTitle: done, pageLink: link, allowsBack: false
+                kind: .action(
+                    waitingTitle: String(localized: "Saving"), waitingBody: "",
+                    copies: action?.copyText.map { [SetupCopy(label: String(localized: "Return address"), value: $0)] } ?? []
+                ),
+                primaryTitle: done, pageLink: link, allowsBack: false
             )
         default:
             return FlowStep(
