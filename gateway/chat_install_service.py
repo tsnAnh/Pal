@@ -372,7 +372,6 @@ class ChatInstallService:
         state = self._current(bot, provider_id, workspace)
         installation = self.store.installation(state.installation_id) if state.installation_id else None
         if installation is not None:
-            self._call(state, lambda: provider.revoke(installation))
             keys = self.store.env_keys(installation.id)
             try:
                 self.control.apply_env(bot, provider_id, {}, keys)
@@ -380,6 +379,7 @@ class ChatInstallService:
             except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
                 logger.warning("chat install adapter stop failed provider=%s error=%s", provider_id, type(exc).__name__)
                 raise ChatServiceError(GatewayReason.provider_failed, state) from None
+            self._call(state, lambda: provider.revoke(installation))
             self.store.delete_bindings(installation.id)
             self.store.mark_revoked(installation.id, self.clock())
         try:

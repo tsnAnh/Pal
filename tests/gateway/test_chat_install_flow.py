@@ -288,6 +288,18 @@ def test_revoke_clears_env_and_bindings_and_reinstall_creates_a_fresh_app(env):
     assert ChatInstallStore(env.home).authorize_link((BOT, "fake-credential", "w1")).endswith(fresh[1])
 
 
+def test_a_revoke_whose_adapter_stop_fails_keeps_the_provider_install_so_a_retry_finishes(env):
+    state = drive_to_allow("fake-credential")
+    allow(env, state)
+    installs = env.providers["fake-credential"].installs
+    env.control.fail_apply = True
+    failed = call("chat.install.revoke", provider_id="fake-credential")
+    assert "error" in failed and len(installs) == 1
+    env.control.fail_apply = False
+    retried = call("chat.install.revoke", provider_id="fake-credential")
+    assert state_of(retried).step is wire.SetupStep.revoked and installs == {}
+
+
 def test_store_state_survives_a_restart_and_events_are_one_per_revision(env):
     state = drive_to_allow("fake-credential")
     allow(env, state)
