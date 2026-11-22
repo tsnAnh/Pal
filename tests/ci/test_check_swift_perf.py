@@ -21,6 +21,17 @@ DESIGN = "Packages/PalDesign/Sources/PalDesign/Part.swift"
 CACHE = "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"
 ROSTER = "App/RosterModel.swift"
 ROWS = "App/Chat/ChatRows.swift"
+CHAT_MODEL = "App/ChatModel.swift"
+CHAT_VIEW = "App/ChatView.swift"
+SHELL_LAYOUT = "App/Mac/MacShellLayout.swift"
+SCROLL_CONTROLLER = "App/Chat/ChatScrollController.swift"
+MARKDOWN_VIEW = "App/Chat/MarkdownView.swift"
+SELECTABLE_TEXT = "App/Chat/SelectableMarkdownText.swift"
+SELECTABLE_LAYOUT = "App/Chat/SelectableTextLayout.swift"
+TIMESTAMP_CACHE = "App/Chat/ChatTimestampCache.swift"
+ASSISTANT_BUBBLE = "App/Chat/AssistantBubble.swift"
+SOLID = "Packages/PalDesign/Sources/PalDesign/Solid/SolidGeometry.swift"
+MESSAGE_ACTIONS = "App/Mac/MacMessageActions.swift"
 
 
 def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -121,6 +132,9 @@ CASES = [
     ("perf-unguarded-write", ROSTER, "        live = snapshot.live\n", "        assignIfChanged(\\.live, snapshot.live)\n"),
     ("perf-unguarded-write", ROSTER, "        self.bots = next\n", "        let bots = next\n"),
     ("perf-unguarded-write", ROSTER, "        isLoaded = true\n", "        let isLoaded = true\n"),
+    ("perf-unguarded-write", CHAT_MODEL, "        findMatches = []\n", "        assignIfChanged(\\.findMatches, [])\n"),
+    ("perf-unguarded-write", CHAT_MODEL, "        isRunning = snapshot?.isRunning ?? false\n", "        assignIfChanged(\\.isRunning, snapshot?.isRunning ?? false)\n"),
+    ("perf-unguarded-write", "App/ChatModel+StreamingPatch.swift", "        rowIDs = next.map(\\.id)\n", "        assignIfChanged(\\.rowIDs, next.map(\\.id))\n"),
     ("perf-dropped-value", ROSTER,
      "    private func publish() {\n        let next = combined.sorted()\n    }\n",
      "    private func publish() {\n        assignIfChanged(\\.bots, combined.sorted())\n    }\n"),
@@ -147,6 +161,88 @@ CASES = [
     ("perf-glass-over-fill", DESIGN,
      "configuration.label\n    .background(fill ?? PalTokens.control, in: Capsule())\n    .palGlass(Capsule())\n",
      "configuration.label\n    .palGlass(Capsule())\n"),
+    ("perf-screen-reads-draft", CHAT_VIEW,
+     "struct ChatView: View {\n    @State var draft = \"\"\n    var body: some View {\n        content.composerActivity(focused: composerFocused, draft: draft)\n    }\n}\n",
+     "struct ChatView: View {\n    @State var draft = \"\"\n    var body: some View {\n        ChatBottomBar(draft: $draft, focused: $composerFocused)\n    }\n}\n"),
+    ("perf-screen-reads-draft", CHAT_VIEW,
+     "struct ChatView: View {\n    var body: some View {\n        Button(\"Send\") {}.disabled(draft.isEmpty)\n    }\n}\n",
+     "struct ChatView: View {\n    var body: some View {\n        Button(\"Send\") {}.reportsComposerDraft(activity.draft)\n    }\n}\n"),
+    ("perf-screen-reads-stream", CHAT_VIEW,
+     "struct ChatView: View {\n    var body: some View {\n        ForEach(model.rowsNewestFirst) { row in Row(row) }\n    }\n}\n",
+     "struct ChatView: View {\n    var body: some View {\n        ChatTranscriptList(model: model, scroll: scroll)\n    }\n}\n"),
+    ("perf-screen-reads-stream", CHAT_VIEW,
+     "struct ChatView: View {\n    var body: some View {\n        content.task(id: OlderDemand(wants: scroll.wantsOlder, state: model.olderHistory)) { await page() }\n    }\n}\n",
+     "struct ChatView: View {\n    var body: some View {\n        content.modifier(ChatOlderPaging(model: model, scroll: scroll))\n    }\n}\n"),
+    ("perf-shell-layout-probe", SHELL_LAYOUT,
+     "struct MacShellLayout: Layout {\n    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {\n"
+     "        let ideal = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0\n        return CGSize(width: 1, height: ideal)\n    }\n}\n",
+     "struct MacShellLayout: Layout {\n    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {\n"
+     "        CGSize(width: max(proposal.width ?? 1, 1), height: max(proposal.height ?? 1, 1))\n    }\n}\n"),
+    ("perf-shell-layout-probe", SHELL_LAYOUT,
+     "struct MacShellLayout: Layout {\n    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {\n"
+     "        let sidebar = subviews[0].sizeThatFits(.unspecified).width\n    }\n}\n",
+     "struct MacShellLayout: Layout {\n    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {\n"
+     "        let sidebar = subviews[0].sizeThatFits(ProposedViewSize(width: nil, height: bounds.height)).width\n    }\n}\n"),
+    ("perf-shell-layout-probe", SHELL_LAYOUT,
+     "struct MacShellLayout: Layout {\n    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {\n"
+     "        let size = subviews[0].sizeThatFits(proposal)\n        return size\n    }\n}\n",
+     "struct MacShellLayout: Layout {\n    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {\n"
+     "        proposal.replacingUnspecifiedDimensions()\n    }\n}\n"),
+    ("perf-observed-frame-image", "App/Computer/ComputerModel.swift",
+     "@MainActor\n@Observable\nfinal class ComputerModel {\n    private(set) var frame: CGImage?\n}\n",
+     "@MainActor\n@Observable\nfinal class ComputerModel {\n    let frames = ComputerFrameSink()\n}\n"),
+    ("perf-observed-frame-image", "App/Computer/ComputerModel.swift",
+     "@MainActor\n@Observable\nfinal class ComputerModel {\n    var buffer: CVPixelBuffer?\n}\n",
+     "@MainActor\n@Observable\nfinal class ComputerModel {\n    @ObservationIgnored var buffer: CVPixelBuffer?\n}\n"),
+    ("perf-frame-cpu-draw", "App/Computer/ComputerSurface+macOS.swift",
+     "override func draw(_ dirtyRect: NSRect) {\n    context.draw(image, in: CGRect(x: 0, y: 0, width: frame.width, height: frame.height))\n}\n",
+     "private func show(_ image: CGImage) {\n    layer?.contents = image\n}\n"),
+    ("perf-unguarded-scroll-write", SCROLL_CONTROLLER,
+     "func rowMoved() {\n    distanceFromNewest += delta\n    position.scrollTo(y: distanceFromNewest)\n}\n",
+     "func rowMoved() {\n    distanceFromNewest += delta\n    write { $0.scrollTo(y: distanceFromNewest) }\n}\n"),
+    ("perf-unguarded-scroll-write", SCROLL_CONTROLLER,
+     "private func keepNewestInView() {\n    guard mode == .following else { return }\n    position.scrollTo(edge: .top)\n}\n",
+     "private func jumpToBottom() {\n    withTransaction(transaction) { position.scrollTo(edge: .top) }\n}\n"),
+    ("perf-foreach-regroup", "App/Profile/LibraryView.swift",
+     "struct LibraryView: View {\n    @ViewBuilder\n    private var readySections: some View {\n        ForEach(MacLibraryGroup.groups(model.entries)) { group in macSection(group) }\n    }\n}\n",
+     "struct LibraryView: View {\n    @ViewBuilder\n    private var readySections: some View {\n        ForEach(model.macItems) { item in macItem(item) }\n    }\n}\n"),
+    ("perf-textkit-outside-layout", SELECTABLE_TEXT,
+     "final class Coordinator {\n    private let measureLayout = NSLayoutManager()\n    private let measureStorage = NSTextStorage()\n}\n",
+     "final class Coordinator {\n    func size(width: CGFloat) -> CGSize { SelectableSizeCache.shared.size(for: text, width: width) ?? .zero }\n}\n"),
+    ("perf-textkit-outside-layout", SELECTABLE_TEXT,
+     "func size() {\n    measureLayout.ensureLayout(for: measureContainer)\n    let used = measureLayout.usedRect(for: measureContainer)\n}\n",
+     "func size() {\n    let used = session.size(width: width)\n}\n"),
+    ("perf-row-openurl-closure", ASSISTANT_BUBBLE,
+     "        .environment(\\.openURL, OpenURLAction { url in\n            return .handled\n        })\n",
+     "        .environment(\\.openURL, links.action(files: files, open: openFile))\n"),
+    ("perf-textview-scroll", SELECTABLE_TEXT,
+     "final class PassiveTextView: NSTextView {\n    override func scrollWheel(with event: NSEvent) {\n        nextResponder?.scrollWheel(with: event)\n    }\n}\n",
+     "final class PassiveTextView: NSTextView {\n    override func scroll(_ point: NSPoint) {\n        guard window?.firstResponder === self else { return }\n        super.scroll(point)\n    }\n}\n"),
+    ("perf-markdown-foreach-not-equatable", MARKDOWN_VIEW,
+     "ForEach(items) { item in\n    MarkdownItemView(item: item, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)\n}\n",
+     "ForEach(items) { item in\n    MarkdownItemView(item: item, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)\n        .equatable()\n}\n"),
+    ("perf-markdown-foreach-not-equatable", MARKDOWN_VIEW,
+     "MarkdownQuote(content: ForEach(blocks) { block in\n    MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: false, isStreaming: false)\n})\n",
+     "case .block(let block):\n    MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: false, isStreaming: false)\n"),
+    ("perf-markdown-foreach-not-equatable", "App/Chat/ImageViewer/MacDocumentViewer.swift",
+     "ForEach(items) { item in\n    MarkdownItemView(item: item)\n}\n",
+     "ForEach(items) { item in\n    MarkdownItemView(item: item)\n        .equatable()\n}\n"),
+    ("perf-markdown-foreach-not-equatable", MARKDOWN_VIEW,
+     "ForEach(runs) { run in\n    MarkdownRunView(run: run, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)\n}\n",
+     "ForEach(runs) { run in\n    MarkdownRunView(run: run, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)\n        .equatable()\n}\n"),
+    ("perf-path-description-key", "Packages/PalDesign/Sources/PalDesign/EyeSurface.swift",
+     "let key = mask.map { \"\\($0.fill != nil) \\($0.path.description)\" }.joined(separator: \"|\")\n",
+     "let key = Key(mask)\n"),
+    ("perf-path-description-key", "App/Chat/AvatarView.swift",
+     "let key = shape.path.description\n",
+     "let key = ShapeKey(shape)\n"),
+    ("perf-path-description-key", SOLID,
+     "let body = rig.body.map { \"\\($0.fill != nil) \\($0.path.description)\" }\nlet key = \"\\(detail)|\" + body.joined(separator: \"|\")\n",
+     "let key = Key(detail: detail, signature: signature)\n"),
+    ("perf-timestamp-uncached", ROWS, "ChatTimeSeparator(text: ChatTimestamp.label(for: date))\n", "ChatTimeSeparator(text: ChatTimestampCache.shared.label(for: date))\n"),
+    ("perf-hover-bar-unconditional", MESSAGE_ACTIONS,
+     "MessageChromeLayout(bubble: b, region: r, slot: s, hasReaction: false) {\n    MacMessageHoverBar(actions: actions)\n}\n",
+     "MessageChromeLayout(bubble: b, region: r, slot: s, hasReaction: false) {\n    if barBuilt {\n        MacMessageHoverBar(actions: actions, layout: layout, visible: shown, focus: $focus)\n    }\n}\n"),
 ]
 
 
@@ -174,7 +270,8 @@ def test_messages_name_the_replacement() -> None:
         "perf-main-json": "loadDetached",
         "perf-queue-sync": "loadDetached",
         "perf-monitor-per-view": "shared monitor",
-        "perf-state-model-init": "@State private var model",
+        "perf-state-model-init": "@LazyState",
+        "perf-model-in-body": "ModelHost",
         "perf-unguarded-write": "assignIfChanged",
         "perf-timeline-unlisted": csp.ALLOWLIST_NAME,
         "perf-hover-unlisted": csp.ALLOWLIST_NAME,
@@ -268,14 +365,6 @@ def test_planted_violation_is_reported_with_file_line_rule_and_fix(tmp_path: Pat
 
 
 REAL_SITES = [
-    ("perf-body-parse", "App/Chat/RoutineOutputRow.swift"),
-    ("perf-main-disk-read", "App/Chat/Rich/MermaidRenderer.swift"),
-    ("perf-main-disk-read", "App/Chat/FilePreviewSheet.swift"),
-    ("perf-main-json", "App/RosterModel.swift"),
-    ("perf-queue-sync", "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"),
-    ("perf-eager-stack", "App/Mac/MacSidebarRail.swift"),
-    ("perf-state-model-init", "App/Mac/MacInspector.swift"),
-    ("perf-model-in-body", "App/PalApp.swift"),
     ("perf-shadow-radius", "App/Mac/MacModalSupport.swift"),
     ("perf-glass-over-fill", "Packages/PalDesign/Sources/PalDesign/Components/PalControls.swift"),
 ]
@@ -631,3 +720,92 @@ def test_pre_fix_hover_pill_fails_naming_the_placement_function_and_the_real_fil
     assert not csp.violations(rel, current, csp.load_allowlist(ios / csp.ALLOWLIST_NAME))
     entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
     assert not [e for e in entries if e["file"] == rel.as_posix()]
+
+
+def test_lazy_state_and_model_host_are_the_sanctioned_model_owners(tmp_path: Path) -> None:
+    lazy = (
+        "struct Inspector: View {\n    @LazyState private var profile: BotProfileModel\n    init(name: String) {\n"
+        "        _profile = LazyState { BotProfileModel(botName: name) }\n    }\n}\n"
+    )
+    host = (
+        "struct Host: View {\n    @ViewBuilder\n    private func destination() -> some View {\n"
+        "        ModelHost { ChatModel(bot: bot) } content: { model in\n            ChatView(model: model, router: router)\n        }\n    }\n}\n"
+    )
+    assert _rules(tmp_path / "lazy", SCREEN, lazy) == []
+    assert _rules(tmp_path / "host", SCREEN, host) == []
+
+
+def test_new_rule_messages_name_the_replacement() -> None:
+    wanted = {
+        "perf-screen-reads-draft": "reportsComposerDraft",
+        "perf-screen-reads-stream": "ChatTranscriptReaders",
+        "perf-observed-frame-image": "ComputerFrameSink",
+        "perf-frame-cpu-draw": "layer.contents",
+        "perf-unguarded-scroll-write": "write {",
+        "perf-foreach-regroup": "MacLibraryItems",
+        "perf-textkit-outside-layout": "SelectableSizeCache",
+        "perf-row-openurl-closure": "FileLinkRouter",
+        "perf-path-description-key": "Hashable struct",
+        "perf-timestamp-uncached": "ChatTimestampCache",
+    }
+    messages = {lr.rule: lr.message for lr in csp.LINE_RULES}
+    for rule, needle in wanted.items():
+        assert needle in messages[rule], rule
+    probe = " ".join(m for _, m in csp.shell_layout_probe(csp.Source("x.sizeThatFits(.zero)\n")))
+    assert "ProposedViewSize(width: nil, height: bounds.height)" in probe
+    unequatable = " ".join(m for _, m in csp.markdown_foreach_not_equatable(csp.Source("ForEach(a) { MarkdownItemView(item: $0) }\n")))
+    assert ".equatable()" in unequatable
+    bar = " ".join(m for _, m in csp.hover_bar_unconditional(csp.Source("MacMessageHoverBar(actions: a)\n")))
+    assert "barBuilt" in bar
+    textview = " ".join(m for _, m in csp.textview_scrolls_transcript(csp.Source("final class T: NSTextView {\n}\n")))
+    assert "override func scroll(_ point: NSPoint)" in textview
+
+
+def test_screen_rules_reach_only_the_chat_screen(tmp_path: Path) -> None:
+    body = "struct Other: View {\n    var body: some View { Text(\"\\(model.rows.count)\") }\n    func f() { send(draft) }\n}\n"
+    assert _rules(tmp_path, "App/Chat/ChatTranscriptReaders.swift", body) == []
+
+
+def test_healthy_per_key_image_slot_is_not_an_observed_frame(tmp_path: Path) -> None:
+    slot = "@MainActor\n@Observable\nfinal class Slot {\n    fileprivate(set) var image: PlatformImage?\n}\n"
+    assert _rules(tmp_path, "App/Chat/FaviconStore.swift", slot) == []
+    sink = "@MainActor\nfinal class ComputerFrameSink {\n    private(set) var latest: CGImage?\n}\n"
+    assert _rules(tmp_path / "sink", "App/Computer/ComputerFrameSink.swift", sink) == []
+
+
+def test_textkit_is_allowed_in_the_layout_home_only(tmp_path: Path) -> None:
+    body = "final class Session {\n    private let manager = NSLayoutManager()\n    func size() { manager.ensureLayout(for: container) }\n}\n"
+    assert _rules(tmp_path / "home", "App/Chat/SelectableTextLayout.swift", body) == []
+    assert "perf-textkit-outside-layout" in _rules(tmp_path / "elsewhere", "App/Chat/Other.swift", body)
+
+
+def test_a_document_viewer_may_own_its_open_url_action(tmp_path: Path) -> None:
+    body = "content.environment(\\.openURL, OpenURLAction(handler: route))\n"
+    assert "perf-row-openurl-closure" not in _rules(tmp_path, "App/Chat/ImageViewer/MacDocumentViewer.swift", body)
+
+
+PRE_FIX_SHARED_COUNTER_TEST = """\
+@Test("drawing the same pose twice builds the silhouette once")
+func samePoseBuildsOnce() {
+    let before = SolidFrame.cache.statistics
+    let first = make(avatar, pose)
+    let after = SolidFrame.cache.statistics
+    #expect(after.misses - before.misses == 1)
+}
+"""
+
+
+def test_a_test_reading_a_process_wide_cache_counter_fails_and_the_real_tests_pass(tmp_path: Path) -> None:
+    rel = "Packages/PalDesign/Tests/PalDesignTests/SolidFrameCacheTests.swift"
+    root = _tree(tmp_path, {rel: PRE_FIX_SHARED_COUNTER_TEST})
+    assert [(f.rule, f.line) for f in csp.scan(root)] == [("perf-test-shared-counter", 3), ("perf-test-shared-counter", 5)]
+    real = REPO / "apps" / "ios" / rel
+    assert csp.violations(Path(rel), real.read_text(encoding="utf-8"), None, csp.TEST_LINE_RULES, ()) == []
+
+
+def test_test_files_get_only_the_test_rules(tmp_path: Path) -> None:
+    root = _tree(tmp_path, {
+        "Tests/ParseTests.swift": "var body: some View { MarkdownDocument(parsing: text) }\n",
+        "Tests/Fixtures/Cache.swift": "let s = SolidFrame.cache.statistics\n",
+    })
+    assert csp.scan(root) == []

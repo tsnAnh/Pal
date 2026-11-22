@@ -49,7 +49,7 @@ CONTROLLER = (
 
 
 def _tree(tmp_path: Path, view: str = VIEW, controller: str = CONTROLLER) -> Path:
-    for name, body in {"App/ChatView.swift": view, "App/Chat/ChatScrollController.swift": controller}.items():
+    for name, body in {"App/Chat/ChatTranscriptList.swift": view, "App/Chat/ChatScrollController.swift": controller}.items():
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
@@ -81,7 +81,7 @@ def test_a_list_without_the_ios_width_pin_fails(tmp_path):
 def test_the_pin_in_the_mac_build_fails_naming_the_line_and_the_fix(tmp_path):
     found = css.scan(_tree(tmp_path, view=PRE_FIX_VIEW))
     assert len(found) == 1
-    assert found[0].startswith("App/ChatView.swift:7:")
+    assert found[0].startswith("App/Chat/ChatTranscriptList.swift:7:")
     assert "macOS build" in found[0] and "#if os(iOS)" in found[0] and ".chatColumn()" in found[0]
 
 

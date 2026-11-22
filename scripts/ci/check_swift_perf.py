@@ -15,7 +15,11 @@ perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
 perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired, perf-dropped-value,
 perf-avatar-row-slot, perf-drag-writes-binding, perf-open-ungated, perf-hover-state-in-row-body, perf-selection-island,
-perf-table-in-text-bubble, perf-hover-pill-outside-tracker, perf-hover-tracker-per-bubble.
+perf-table-in-text-bubble, perf-hover-pill-outside-tracker, perf-hover-tracker-per-bubble, perf-screen-reads-draft,
+perf-screen-reads-stream, perf-shell-layout-probe, perf-observed-frame-image, perf-frame-cpu-draw, perf-unguarded-scroll-write,
+perf-foreach-regroup, perf-textkit-outside-layout, perf-row-openurl-closure, perf-markdown-foreach-not-equatable,
+perf-path-description-key, perf-timestamp-uncached, perf-hover-bar-unconditional, perf-textview-scroll,
+perf-test-shared-counter (test files).
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -47,13 +51,22 @@ OPT_OUT = "perf-lint: ok"
 BASELINE_NAME = ".perf-lint-baseline.json"
 ALLOWLIST_NAME = ".perf-lint-allowlist.json"
 SKIP = SKIP_DIRS | {"Tools"}
+TEST_DIR = "Tests"
 ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-monitor-per-view")
 SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
 ROW_FILES = {("App", "Chat", "ChatRows.swift"), ("App", "Chat", "AssistantBubble.swift")}
 AVATAR_ROW_FILES = {("App", "Mac", "MacSidebar.swift"), ("App", "HomeView.swift"), ("App", "Rooms", "RoomRows.swift")}
-GUARDED_WRITE_FIELDS = {("App", "RosterModel.swift"): ("live", "capabilities", "bots", "isLoaded")}
+CHAT_MODEL_GUARDED = (
+    "rows", "rowsNewestFirst", "rowIDs", "connection", "isRunning", "workingStatus", "hasPendingClarify", "hasPendingPrompt",
+    "olderHistory", "findMatches", "findPosition",
+)
+GUARDED_WRITE_FIELDS = {
+    ("App", "RosterModel.swift"): ("live", "capabilities", "bots", "isLoaded"),
+    ("App", "ChatModel.swift"): CHAT_MODEL_GUARDED,
+    ("App", "ChatModel+StreamingPatch.swift"): CHAT_MODEL_GUARDED,
+}
 
 
 def in_app(parts: tuple[str, ...], text: str) -> bool:
@@ -98,6 +111,34 @@ def avatar_row_file(parts: tuple[str, ...], text: str) -> bool:
 
 def guarded_model(parts: tuple[str, ...], text: str) -> bool:
     return parts in GUARDED_WRITE_FIELDS
+
+
+def in_files(*files: tuple[str, ...]) -> Callable[[tuple[str, ...], str], bool]:
+    return lambda parts, text: parts in files
+
+
+def app_except(home: tuple[str, ...]) -> Callable[[tuple[str, ...], str], bool]:
+    return lambda parts, text: parts[0] == "App" and parts != home
+
+
+def observable_app_file(parts: tuple[str, ...], text: str) -> bool:
+    return parts[0] == "App" and "@Observable" in text
+
+
+def under(*prefix: str) -> Callable[[tuple[str, ...], str], bool]:
+    return lambda parts, text: parts[: len(prefix)] == prefix
+
+
+CHAT_SCREEN = in_files(("App", "ChatView.swift"))
+SHELL_LAYOUT = in_files(("App", "Mac", "MacShellLayout.swift"))
+SCROLL_CONTROLLER = in_files(("App", "Chat", "ChatScrollController.swift"))
+SELECTABLE_LAYOUT_HOME = ("App", "Chat", "SelectableTextLayout.swift")
+TIMESTAMP_HOME = ("App", "Chat", "ChatTimestampCache.swift")
+PAL_DESIGN_SOURCES = under("Packages", "PalDesign", "Sources")
+STREAMING_MODEL_FIELDS = (
+    "rows|rowsNewestFirst|olderHistory|isRunning|workingStatus|hasPendingClarify|hasPendingPrompt|connection|isCatchingUp|isFinding"
+    "|isOpening|currentFindRowID|findMatches|findPosition|rowContextSource"
+)
 
 
 @dataclass(frozen=True)
@@ -203,6 +244,84 @@ LINE_RULES = (
         "ChatRows.swift (rowHoverWiring) and let the carrier bubble report its frame with .messageActions(side:placement:)",
     ),
     LineRule(
+        "perf-screen-reads-draft",
+        re.compile(r"(?<![\w$.])draft\b(?!\s*(?::(?!:)|=(?!=)))"),
+        CHAT_SCREEN,
+        "the chat screen reads the composer draft by value, so every keystroke re-runs ChatView.body and everything under it. "
+        "Hand the draft down only as $draft (ChatBottomBar owns it); a reader of the live text uses "
+        ".reportsComposerDraft(draft) on the composer, which fills ComposerActivity.draft and invalidates no ancestor",
+        skip=re.compile(r"\bvar\s+draft\b"),
+    ),
+    LineRule(
+        "perf-screen-reads-stream",
+        re.compile(rf"\bmodel\.(?:{STREAMING_MODEL_FIELDS})\b|\bscroll\.(?:wantsOlder|showsJumpButton|unseen|mode)\b"),
+        CHAT_SCREEN,
+        "the chat screen reads state that changes with every streamed token or scroll tick, so ChatView.body re-runs per update. "
+        "Read it in the narrow view or modifier that needs it (ChatTranscriptList, ChatRowsSync, ChatOlderPaging, "
+        "ChatScreenAccessibility in ChatTranscriptReaders) and keep ChatView to stable references",
+    ),
+    LineRule(
+        "perf-observed-frame-image",
+        re.compile(r"^\s*(?:(?:private|fileprivate|public)(?:\(set\))?\s+)*var\s+\w+\s*:\s*(?:CGImage|CVPixelBuffer|CVImageBuffer)\??"),
+        observable_app_file,
+        "a decoded frame (CGImage or pixel buffer) held in a property the @Observable macro tracks: every frame invalidates "
+        "each view that reads the model. Submit frames to a plain-class sink the surface drains on its display link and shows "
+        "as layer.contents (ComputerFrameSink, ComputerFrameDelivery), or mark the property @ObservationIgnored",
+    ),
+    LineRule(
+        "perf-frame-cpu-draw",
+        re.compile(r"\b(?:context|ctx|cgContext)\.draw\(\s*\w*[iI]mage\b"),
+        in_app,
+        "an image redrawn with CoreGraphics on every update (draw(_:) per frame). Hand the CGImage to the layer "
+        "(layer.contents through ComputerFrameDelivery) so the compositor scales and presents it",
+    ),
+    LineRule(
+        "perf-unguarded-scroll-write",
+        re.compile(r"^\s*(?:self\.)?position\.scrollTo\(\s*(?:y:|edge:)"),
+        SCROLL_CONTROLLER,
+        "ScrollPosition written without an equality guard: ChatScrollController.position is observed, so every write "
+        "re-runs the list even when the position is unchanged. Write through write { $0.scrollTo(...) }, which skips an equal position",
+    ),
+    LineRule(
+        "perf-foreach-regroup",
+        re.compile(r"\bForEach\(\s*(?:Array\(\s*)?[A-Z]\w*\.\w+\(\s*(?:self\.)?model\."),
+        in_app,
+        "ForEach data rebuilt from the model on every body pass (grouped, sorted or bucketed by date). Build the flat items "
+        "once when the model changes and cache them on the model keyed by a version (LibraryModel.macItems, MacLibraryItems), "
+        "then ForEach over the stored items",
+    ),
+    LineRule(
+        "perf-textkit-outside-layout",
+        re.compile(r"\bNSLayoutManager\(|\bNSTextStorage\(|\bNSTextContainer\(|\.ensureLayout\(|\.usedRect\("),
+        app_except(SELECTABLE_LAYOUT_HOME),
+        "TextKit layout objects or a main-actor measure outside SelectableTextLayout: a layout stack per view or a measure per "
+        "row on the main actor is what stalled chat scrolling. Size text through SelectableSizeCache and "
+        "SelectableTextLayout.Session, prefetched off the main actor by SelectableTextPrefetcher",
+    ),
+    LineRule(
+        "perf-row-openurl-closure",
+        re.compile(r"\.environment\(\\\.openURL,\s*OpenURLAction\b"),
+        row_file,
+        "a chat row builds a new OpenURLAction on every body pass, so the environment value changes and every reader "
+        "(each SelectableMarkdownText) is invalidated. Keep one router per row (FileLinkRouter in AssistantBubble: @State, "
+        "returns one stable OpenURLAction) and update its data instead",
+    ),
+    LineRule(
+        "perf-path-description-key",
+        re.compile(r"\bpath\.description\b"),
+        lambda parts, text: in_app(parts, text) or PAL_DESIGN_SOURCES(parts, text),
+        "a cache key built from CGPath.description: the string is thousands of characters and is rebuilt on every lookup. "
+        "Key on a Hashable struct of the inputs (SolidGeometry.Key, SolidEyeKey)",
+        keeps_strings=True,
+    ),
+    LineRule(
+        "perf-timestamp-uncached",
+        re.compile(r"\bChatTimestamp\.label\("),
+        app_except(TIMESTAMP_HOME),
+        "a chat timestamp formatted per row on every body pass. Read ChatTimestampCache.shared.label(for:), which memoizes "
+        "per date and expires on locale, time zone and day change",
+    ),
+    LineRule(
         "perf-observed-image-dictionary",
         re.compile(r"\bvar\s+\w+\s*:\s*\[\s*String\s*:\s*PlatformImage\s*\]"),
         in_app,
@@ -282,25 +401,30 @@ LINE_RULES = (
         "perf-state-model-init",
         re.compile(rf"\bState\(\s*initialValue:\s*{OWNED_TYPE}\(|\bStateObject\(\s*wrappedValue:\s*{OWNED_TYPE}\("),
         in_app,
-        "model built in a View init: every parent body builds and discards one. Declare "
-        "`@State private var model = ...` (or take the model as a parameter) and load it in .task",
+        "model built in a View init: every parent body builds and discards one. Declare `@LazyState private var model: Model`, "
+        "assign `_model = LazyState { Model(...) }` in init (App/Platform/LazyState.swift builds it once), or take the model "
+        "as a parameter, and load it in .task",
         in_view_type=True,
     ),
     LineRule(
         "perf-model-in-body",
         re.compile(r"\b\w+:\s*[A-Z]\w*(?:Model|Store)(?:\.\w+)?\("),
         view_file,
-        "model constructed while building a view. Every parent body builds and discards one: hold it in "
-        "`@State private var model = ...` on the screen that owns it and load it in .task",
+        "model constructed while building a view. Every parent body builds and discards one: build it inside "
+        "ModelHost { Model(...) } content: { model in ... } or hold it in @LazyState on the screen that owns it "
+        "(App/Platform/LazyState.swift), and load it in .task",
         in_view=True,
     ),
-    LineRule(
-        "perf-unguarded-write",
-        re.compile(rf"^\s*(?:self\.)?(?:{'|'.join(sorted({f for fields in GUARDED_WRITE_FIELDS.values() for f in fields}))})\s*=(?!=)"),
-        guarded_model,
-        "snapshot field of an @Observable model assigned without an equality guard: every assignment notifies every "
-        "observer, even when the value is equal. Write it with assignIfChanged(\\.field, value) (PalRoster), which "
-        "skips an equal value",
+    *(
+        LineRule(
+            "perf-unguarded-write",
+            re.compile(rf"^\s*(?:self\.)?(?:{'|'.join(sorted(fields))})\s*=(?!=)"),
+            lambda parts, text, guarded=guarded: parts == guarded,
+            "snapshot field of an @Observable model assigned without an equality guard: every assignment notifies every "
+            "observer, even when the value is equal. Write it with assignIfChanged(\\.field, value) (PalRoster), which "
+            "skips an equal value",
+        )
+        for guarded, fields in GUARDED_WRITE_FIELDS.items()
     ),
     LineRule(
         "perf-shadow-radius",
@@ -458,6 +582,61 @@ def selection_over_markdown(src: Source) -> Iterator[tuple[int, str]]:
                                            "(SelectableMarkdownText selects the whole bubble on Mac)")
 
 
+SUBVIEW_PROBE = re.compile(r"\.sizeThatFits\(")
+UNCONSTRAINED_PROPOSAL = re.compile(r"\(\s*(?:ProposedViewSize)?\.(?:unspecified|zero|infinity)\s*\)")
+
+
+def shell_layout_probe(src: Source) -> Iterator[tuple[int, str]]:
+    for m in SUBVIEW_PROBE.finditer(src.text):
+        paren = m.end() - 1
+        unconstrained = UNCONSTRAINED_PROPOSAL.match(src.text, paren)
+        measuring = any(
+            re.search(r"\bfunc\s+sizeThatFits\b", src.text[src.starts[src.line_of(o) - 1]:o]) for o in src.enclosing(m.start())
+        )
+        if unconstrained or measuring:
+            yield src.line_of(m.start()), ("the Mac shell layout probes subviews with an unconstrained proposal or measures them "
+                                           "inside sizeThatFits: every window resize frame re-measures the whole content tree. "
+                                           "sizeThatFits answers from the proposal alone; placeSubviews measures only the sidebar, "
+                                           "at a concrete height: subviews[0].sizeThatFits(ProposedViewSize(width: nil, height: bounds.height))")
+
+
+EQUATABLE_MARKDOWN_VIEW = re.compile(r"\bMarkdown(?:Item|Block|Run)View\(")
+APPLIES_EQUATABLE = re.compile(r"\s*\.equatable\(\)")
+
+
+def markdown_foreach_not_equatable(src: Source) -> Iterator[tuple[int, str]]:
+    for start, _, end in src.calls(FOREACH):
+        for m in EQUATABLE_MARKDOWN_VIEW.finditer(src.text, start, end):
+            paren = m.end() - 1
+            if paren in src.close and not APPLIES_EQUATABLE.match(src.text, src.close[paren] + 1):
+                yield src.line_of(m.start()), ("a markdown item, block or run view built in a ForEach without .equatable(): every "
+                                               "streamed delta re-evaluates every unchanged block. These views are Equatable; "
+                                               "apply .equatable() to each one built in the ForEach")
+
+
+def hover_bar_unconditional(src: Source) -> Iterator[tuple[int, str]]:
+    for m in re.finditer(r"\bMacMessageHoverBar\(", src.text):
+        headers = (src.text[src.starts[src.line_of(o) - 1]:o] for o in src.enclosing(m.start()) if src.text[o] == "{")
+        if not any(re.search(r"\bif\b", header) for header in headers):
+            yield src.line_of(m.start()), ("the hover bar is built for every row while hidden: each row pays for a "
+                                           "GlassEffectContainer and its buttons. Build MacMessageHoverBar only while the row is "
+                                           "hovered, focused or showing its menu (the barBuilt gate in MacMessageChrome)")
+
+
+TEXT_VIEW_SUBCLASS = re.compile(r"\bclass\s+\w+\s*:\s*NSTextView\b")
+SCROLL_OVERRIDE = re.compile(r"\boverride\s+func\s+scroll\s*\(\s*_\s+\w+\s*:\s*NSPoint\s*\)")
+
+
+def textview_scrolls_transcript(src: Source) -> Iterator[tuple[int, str]]:
+    for m in TEXT_VIEW_SUBCLASS.finditer(src.text):
+        opener = src.text.find("{", m.end())
+        if opener in src.close and not SCROLL_OVERRIDE.search(src.text, opener, src.close[opener]):
+            yield src.line_of(m.start()), ("an NSTextView subclass without override func scroll(_ point: NSPoint): while it lays out, "
+                                           "AppKit calls scroll(_:) on the text view, which scrolls the enclosing transcript scroll view. "
+                                           "The transcript jumps, SwiftUI realizes extra rows around the jump, and the chat open pays "
+                                           "for them. Override it and scroll only while the view is the first responder")
+
+
 BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = (
     ("perf-eager-stack", in_app, eager_stack),
     ("perf-geometry-per-row", in_app, geometry_per_row),
@@ -467,6 +646,20 @@ BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[
     ("perf-drag-writes-binding", in_app, drag_writes_binding),
     ("perf-open-ungated", in_app, open_ungated),
     ("perf-selection-island", row_file, selection_over_markdown),
+    ("perf-shell-layout-probe", SHELL_LAYOUT, shell_layout_probe),
+    ("perf-markdown-foreach-not-equatable", in_app, markdown_foreach_not_equatable),
+    ("perf-hover-bar-unconditional", in_app, hover_bar_unconditional),
+    ("perf-textview-scroll", in_app, textview_scrolls_transcript),
+)
+
+TEST_LINE_RULES = (
+    LineRule(
+        "perf-test-shared-counter",
+        re.compile(r"\b[A-Z]\w*\.(?:cache|shared)\.(?:statistics|hits|misses|buildCount|callCount)\b"),
+        anywhere,
+        "a test reads hit or build counters of a process-wide cache. Test suites run in parallel and share it, so the "
+        "delta races and the test flakes. Assert on a cache the test owns (SolidCache(capacity:)) or on key equality",
+    ),
 )
 
 
@@ -498,7 +691,13 @@ def _in_view_type(src: Source, index: int) -> bool:
     return False
 
 
-def violations(rel: Path, source: str, allowlist: Allowlist | None = None) -> list[Finding]:
+def violations(
+    rel: Path,
+    source: str,
+    allowlist: Allowlist | None = None,
+    line_rules: tuple[LineRule, ...] = LINE_RULES,
+    block_rules: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = BLOCK_RULES,
+) -> list[Finding]:
     allowlist = allowlist or Allowlist(frozenset())
     src = Source(source)
     found: list[Finding] = []
@@ -509,7 +708,7 @@ def violations(rel: Path, source: str, allowlist: Allowlist | None = None) -> li
         if OPT_OUT not in text:
             found.append(Finding(rule, rel.as_posix(), line, text.strip(), message))
 
-    for lr in LINE_RULES:
+    for lr in line_rules:
         if not lr.applies(rel.parts, source):
             continue
         if lr.allowlisted and allowlist.allows(lr.rule, rel):
@@ -525,7 +724,7 @@ def violations(rel: Path, source: str, allowlist: Allowlist | None = None) -> li
             if lr.in_view_type and not _in_view_type(src, at):
                 continue
             add(lr.rule, i + 1, lr.message)
-    for rule, applies, fn in BLOCK_RULES:
+    for rule, applies, fn in block_rules:
         if applies(rel.parts, source):
             for line, message in fn(src):
                 add(rule, line, message)
@@ -537,6 +736,9 @@ def scan(root: Path, allowlist: Allowlist | None = None) -> list[Finding]:
     found: list[Finding] = []
     for path in sorted(root.rglob("*.swift")):
         rel = path.relative_to(root)
+        if TEST_DIR in rel.parts and not (SKIP - {TEST_DIR}).intersection(rel.parts):
+            found += violations(rel, path.read_text(encoding="utf-8-sig"), allowlist, TEST_LINE_RULES, ())
+            continue
         if SKIP.intersection(rel.parts):
             continue
         found += violations(rel, path.read_text(encoding="utf-8-sig"), allowlist)
