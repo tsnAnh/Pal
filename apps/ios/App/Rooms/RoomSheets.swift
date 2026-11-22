@@ -65,38 +65,74 @@ struct CreateRoomSheet: View {
                     identifier: "roomCreateButton"
                 ) { Task { await create() } }
             },
-            content: {
-                List {
-                    Section {
-                        TextField("", text: $model.name, prompt: Text(String(localized: "Group chat name")))
-                            .focused($nameFocused)
-                            .accessibilityLabel(Text("Group chat name"))
-                            .accessibilityIdentifier("roomNameField")
-                            .listRowBackground(rowFill)
-                    }
-                    Section {
-                        ForEach(rooms.seatableBots) { bot in pickRow(bot) }
-                    } header: {
-                        Text("Bots (2 to 6)")
-                            .hermesText(.sectionCaption)
-                            .foregroundStyle(Color(theme.palette.sectionCaption))
-                            .textCase(nil)
-                            .accessibilityIdentifier("createRoomBotsCaption")
-                    } footer: {
-                        if let failure = model.failure {
-                            Text(failure)
-                                .hermesText(.rowSubtitle)
-                                .foregroundStyle(Color(theme.palette.destructive))
-                                .accessibilityIdentifier("createRoomFailure")
-                        }
-                    }
-                }
-                .roomListStyle()
-                .scrollContentBackground(.hidden)
-                .scrollDismissesKeyboard(.interactively)
-            }
+            content: { form }
         )
         .macSheetDismissDisabled(model.isCreating)
+    }
+
+    @ViewBuilder
+    private var form: some View {
+        #if os(macOS)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                RoomNameField(
+                    label: String(localized: "Group chat name"), prompt: String(localized: "Group chat name"),
+                    text: $model.name, identifier: "roomNameField"
+                )
+                .focused($nameFocused)
+                SectionCaption(String(localized: "Bots (2 to 6)"), accessibilityIdentifier: "createRoomBotsCaption")
+                    .padding(.top, PalMetrics.cardGap)
+                    .padding(.bottom, PalMetrics.captionToCardGap)
+                GroupedCard(accessibilityIdentifier: "createRoomBots") {
+                    ForEach(rooms.seatableBots) { bot in
+                        pickRow(bot)
+                            .padding(.horizontal, PalMetrics.rowInset)
+                            .frame(minHeight: PalMetrics.rowMinimumHeight)
+                    }
+                }
+                failureNote
+                    .padding(.horizontal, PalMetrics.screenMargin)
+                    .padding(.top, PalMetrics.captionToCardGap)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 32)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        #else
+        List {
+            Section {
+                TextField("", text: $model.name, prompt: Text(String(localized: "Group chat name")))
+                    .focused($nameFocused)
+                    .accessibilityLabel(Text("Group chat name"))
+                    .accessibilityIdentifier("roomNameField")
+                    .listRowBackground(rowFill)
+            }
+            Section {
+                ForEach(rooms.seatableBots) { bot in pickRow(bot) }
+            } header: {
+                Text("Bots (2 to 6)")
+                    .hermesText(.sectionCaption)
+                    .foregroundStyle(Color(theme.palette.sectionCaption))
+                    .textCase(nil)
+                    .accessibilityIdentifier("createRoomBotsCaption")
+            } footer: {
+                failureNote
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        #endif
+    }
+
+    @ViewBuilder
+    private var failureNote: some View {
+        if let failure = model.failure {
+            Text(failure)
+                .hermesText(.rowSubtitle)
+                .foregroundStyle(Color(theme.palette.destructive))
+                .accessibilityIdentifier("createRoomFailure")
+        }
     }
 
     private var rowFill: Color { Color(theme.palette.groupedCard) }
@@ -199,16 +235,5 @@ struct RoomDetailsSheet: View {
             isRenaming = false
             if renamed { dismiss() }
         }
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func roomListStyle() -> some View {
-        #if os(macOS)
-        listStyle(.inset)
-        #else
-        listStyle(.insetGrouped)
-        #endif
     }
 }
