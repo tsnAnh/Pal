@@ -325,6 +325,9 @@ class ChatInstallStore:
         found = [Installation.model_validate_json(row["installation_json"]) for row in rows]
         return [item for item in found if item.status is InstallationStatus.active]
 
+    def has_active_installation(self, bot: str) -> bool:
+        return self._path.exists() and bool(self.active_installations(bot))
+
     def mark_identity_pending(self, installation_id: str) -> float:
         with self._write() as conn:
             row = conn.execute("SELECT marked_at FROM identity_pending WHERE installation_id=?",

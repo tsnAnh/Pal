@@ -19,6 +19,7 @@ from agent.session_activity import format_iteration_progress
 from contextlib import nullcontext, suppress
 from contextvars import copy_context
 from gateway.bot_peer_notices import automatic_notices_allowed
+from gateway.chat_failure_reply import MODEL_LOGIN_REASONS, chat_failure_reply, is_model_login_failure
 from gateway.config import Platform
 from storage_user_copy import error_type_name
 from gateway.media_repair import repair_explicit_computer_use_media_paths
@@ -331,6 +332,10 @@ class GatewayTurnPersistenceMixin:
         """Make failed-turn delivery explicit without replacing the provider-specific guidance."""
         response = str(response or "").strip()
         return f"{response}\n\n{notice}" if response else notice
+
+    def _hmwa_failed_turn_response(self, response, agent_result, source):
+        reply = chat_failure_reply(self, source, model_login=agent_result.get("failure_reason") in MODEL_LOGIN_REASONS)
+        return reply or self._hmwa_add_failed_turn_notice(response, self._hmwa_failed_turn_notice(agent_result))
 
     def _hmwa_failed_turn_notice(self, agent_result):
         """Choose retry guidance without assuming completed tool effects can be repeated safely."""
@@ -899,6 +904,8 @@ class GatewayTurnPersistenceMixin:
             # The failure is recorded for the operator; the bot peer gets no apology to answer (#137027).
             record_unexecuted_failure(t("gateway.errors.generic_failed"))
             return None
+        if (reply := chat_failure_reply(self, source, model_login=is_model_login_failure(e))) is not None:
+            return record_unexecuted_failure(reply)
         if getattr(e, "reason", None) == "launch_credentials_unavailable":
             # The session's own route key is gone or changed: /retry repeats it, /new is the way out.
             from agent.turn_failure_copy import launch_credentials_copy
