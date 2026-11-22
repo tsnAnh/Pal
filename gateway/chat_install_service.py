@@ -55,6 +55,7 @@ CLIENT_EVENTS = frozenset({
     SetupEventKind.credential_saved, SetupEventKind.manual_step_done, SetupEventKind.allow_granted,
     SetupEventKind.owner_confirmed, SetupEventKind.retry,
 })
+CREDENTIAL_FAILURES = frozenset({SetupErrorCode.credential_rejected, SetupErrorCode.credential_expired})
 SETTLE_ATTEMPTS = 3
 SET_PUBLIC_URL_ACTION = NextAction(kind=NextActionKind.button, action_id="set_public_url")
 
@@ -115,7 +116,10 @@ class ChatInstallService:
         return self.store.load((bot, provider_id, workspace)) or initial_state(bot, provider_id, workspace, self.clock())
 
     def _apply(self, provider: ChatProvider, state: SetupState, event: SetupEvent) -> SetupState:
-        new = pure_advance(state, event, provider.capabilities(state.workspace), self.clock())
+        caps = provider.capabilities(state.workspace)
+        on_file = event.kind is SetupEventKind.begin and caps.requires_config_credential \
+            and provider.has_config_credential(state.workspace)
+        new = pure_advance(state, event, caps, self.clock(), credential_on_file=on_file)
         if new is not state:
             new = self._with_manual_action(provider, new)
             self.store.save(new, state.revision)
@@ -158,7 +162,7 @@ class ChatInstallService:
                 created = provider.begin_install(state, self.store.config_item(key))
             except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
                 logger.warning("chat install app creation failed provider=%s error=%s", state.provider_id, type(exc).__name__)
-                return self._fail(provider, state, SetupErrorCode.app_create_failed)
+                return self._fail(provider, state, self._creation_error_code(exc))
             self.store.set_authorize_link(key, created.authorize_link)
             state = self._apply(provider, state, SetupEvent(
                 kind=SetupEventKind.app_created, app_id=created.app_id,
@@ -170,7 +174,7 @@ class ChatInstallService:
                 raise
             except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
                 logger.warning("chat install link failed provider=%s error=%s", state.provider_id, type(exc).__name__)
-                return self._fail(provider, state, SetupErrorCode.app_create_failed)
+                return self._fail(provider, state, self._creation_error_code(exc))
         if state.step is SetupStep.installing:
             state = self._finish(provider, state)
         return state
@@ -241,7 +245,7 @@ class ChatInstallService:
             return state
         if event is SetupEventKind.credential_saved and vault_item_id:
             try:
-                provider.accept_config_credential(new, vault_item_id, refresh_vault_item_id)
+                vault_item_id = provider.accept_config_credential(new, vault_item_id, refresh_vault_item_id) or vault_item_id
             except Exception as exc:  # health: allow BLE001 -- provider errors carry provider text, so only the exception type is logged
                 logger.warning("chat install credential rejected provider=%s error=%s", state.provider_id, type(exc).__name__)
                 return self._fail(provider, new, self._error_code(exc))
@@ -252,6 +256,11 @@ class ChatInstallService:
     def _error_code(exc: Exception) -> SetupErrorCode:
         code = getattr(exc, "code", None)
         return code if isinstance(code, SetupErrorCode) else SetupErrorCode.credential_rejected
+
+    @staticmethod
+    def _creation_error_code(exc: Exception) -> SetupErrorCode:
+        code = getattr(exc, "code", None)
+        return code if code in CREDENTIAL_FAILURES else SetupErrorCode.app_create_failed
 
     def _credential_step(self, provider: ChatProvider, state: SetupState, step, vault_item_id: str | None) -> SetupState:
         if state.step is not SetupStep.needs_manual_step:

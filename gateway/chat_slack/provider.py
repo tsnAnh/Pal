@@ -14,6 +14,7 @@ from PIL import Image
 
 from agent.vault_store import VaultError, VaultStore, get_vault_store
 from hermes_cli.slack_cli import _build_full_manifest
+from hermes_constants import get_default_hermes_root
 from tui_gateway.chat_install import (
     SLACK_CAPABILITIES,
     SLACK_IDENTITY_POLICY,
@@ -130,17 +131,21 @@ class SlackProvider(ChatProvider):
 
     def __init__(self, *, redirect_url: str | None = None, vault: VaultStore | None = None,
                  api: SlackApi | None = None, records: SlackRecords | None = None,
+                 workspace_vault: VaultStore | None = None, workspace_records: SlackRecords | None = None,
                  identity: Callable[[str], BotIdentitySource] = profile_identity,
                  clock: Callable[[], float] = time.time):
         self.redirect_url = redirect_url
         self.vault = vault or get_vault_store()
         self.api = api or SlackApi()
         self.records = records or SlackRecords()
-        self.tokens = ConfigTokenStore(self.vault, self.api, self.records, clock=clock)
+        root = get_default_hermes_root()
+        self.workspace_vault = workspace_vault or VaultStore(root / "vault")
+        self.workspace_records = workspace_records or SlackRecords(root / "chat_slack" / "workspaces.json")
+        self.tokens = ConfigTokenStore(self.workspace_vault, self.api, self.workspace_records, clock=clock)
         self._identity, self._clock = identity, clock
 
     def capabilities(self, workspace: str | None = None) -> Capabilities:
-        stored = self.records.workspace(workspace).get("capabilities", {}) if workspace is not None else {}
+        stored = self.workspace_records.workspace(workspace).get("capabilities", {}) if workspace is not None else {}
         entries = [CapabilityEntry(capability=e.capability, mode=CapabilityMode(stored.get(e.capability.value, e.mode.value)))
                    for e in SLACK_CAPABILITIES.capabilities]
         return SLACK_CAPABILITIES.model_copy(update={"capabilities": entries})
@@ -233,25 +238,27 @@ class SlackProvider(ChatProvider):
             item = self.vault.add_item("api_key", f"Slack app {app_id} app-level token", {"api_key": str(body["token"])})
             self.records.update_app(bot, workspace, app_token_item_id=item.id)
 
-    def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> None:
+    def has_config_credential(self, workspace: str) -> bool:
+        return self.tokens.has_usable(workspace)
+
+    def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> str:
         workspace = state.workspace
         access = self._secret(vault_item_id)
         refresh = self._secret(refresh_vault_item_id) if refresh_vault_item_id else None
         if refresh is not None and not refresh.startswith(REFRESH_TOKEN_PREFIX):
             raise SlackSetupError(SetupErrorCode.credential_rejected)
         stored_pair = access.startswith((REFRESH_TOKEN_PREFIX, "{"))
-        if stored_pair:
-            self.tokens.bind(workspace, vault_item_id)
-        else:
-            self.tokens.adopt_pair(workspace, vault_item_id, access, refresh)
+        held = self.tokens.adopt(workspace, access) if stored_pair else self.tokens.adopt_pair(workspace, access, refresh)
         renewable = stored_pair or refresh is not None
-        stored = dict(self.records.workspace(workspace).get("capabilities", {}))
+        stored = dict(self.workspace_records.workspace(workspace).get("capabilities", {}))
         stored[ProviderCapability.unattended_refresh.value] = (CapabilityMode.automatic if renewable else CapabilityMode.guided).value
-        self.records.update_workspace(workspace, capabilities=stored)
-        if refresh_vault_item_id:
-            self.vault.remove_item(refresh_vault_item_id)
+        self.workspace_records.update_workspace(workspace, capabilities=stored)
+        for source in (vault_item_id, refresh_vault_item_id):
+            if source and source != held:
+                self.vault.remove_item(source)
         if renewable:
             self._probe_after_credential(workspace)
+        return held
 
     def _probe_after_credential(self, workspace: str) -> None:
         try:
@@ -471,7 +478,7 @@ class SlackProvider(ChatProvider):
         finally:
             self._delete_probe_app(token, app_id)
         modes = {c.capability.value: (CapabilityMode.automatic if c.passed else CapabilityMode.guided).value for c in checks}
-        self.records.update_workspace(workspace, capabilities=modes, refresh_token_lifetime=REFRESH_LIFETIME_UNKNOWN,
+        self.workspace_records.update_workspace(workspace, capabilities=modes, refresh_token_lifetime=REFRESH_LIFETIME_UNKNOWN,
                                       probed_at=self._clock())
         return checks
 

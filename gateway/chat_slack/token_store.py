@@ -19,6 +19,9 @@ ROTATE_MARGIN_S = 30 * 60
 WRITE_ATTEMPTS = 3
 REFRESH_TOKEN_PREFIX = "xoxe-"
 ACCESS_LIFETIME_S = 12 * 60 * 60
+CONFIG_ITEM_LABEL = "Slack configuration token"
+_LOCKS: dict[str, threading.Lock] = {}
+_LOCKS_GUARD = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -32,18 +35,33 @@ class ConfigTokenStore:
     def __init__(self, vault: VaultStore, api: SlackApi, records: SlackRecords, *,
                  clock: Callable[[], float] = time.time):
         self._vault, self._api, self._records, self._clock = vault, api, records, clock
-        self._locks: dict[str, threading.Lock] = {}
-        self._locks_guard = threading.Lock()
         self._unwritten: dict[str, TokenPair] = {}
 
     def bind(self, workspace: str, vault_item_id: str) -> None:
         self._records.update_workspace(workspace, config_item_id=vault_item_id)
 
-    def adopt_pair(self, workspace: str, item_id: str, access_token: str, refresh_token: str | None) -> None:
+    def adopt_pair(self, workspace: str, access_token: str, refresh_token: str | None) -> str:
         pair = TokenPair(access_token, refresh_token or "", 0.0 if refresh_token else self._clock() + ACCESS_LIFETIME_S)
+        return self.adopt(workspace, json.dumps(asdict(pair)))
+
+    def adopt(self, workspace: str, raw: str) -> str:
         with self._lock(workspace):
-            self._write(workspace, item_id, pair)
-        self.bind(workspace, item_id)
+            self._unwritten.pop(workspace, None)
+            item_id = self._held_item(workspace)
+            if item_id is None:
+                item_id = self._vault.add_item("api_key", CONFIG_ITEM_LABEL, {"api_key": raw}).id
+                self.bind(workspace, item_id)
+            else:
+                self._put(workspace, item_id, raw)
+            return item_id
+
+    def has_usable(self, workspace: str) -> bool:
+        with self._lock(workspace):
+            try:
+                pair = self._unwritten.get(workspace) or self._load(self._item_id(workspace))
+            except SlackSetupError:
+                return False
+            return bool(pair.refresh_token) or (bool(pair.access_token) and self._fresh(pair))
 
     def valid_config_token(self, workspace: str) -> str:
         return self._token(workspace, force=False)
@@ -51,9 +69,21 @@ class ConfigTokenStore:
     def rotate(self, workspace: str) -> str:
         return self._token(workspace, force=True)
 
-    def _lock(self, workspace: str) -> threading.Lock:
-        with self._locks_guard:
-            return self._locks.setdefault(workspace, threading.Lock())
+    @staticmethod
+    def _lock(workspace: str) -> threading.Lock:
+        with _LOCKS_GUARD:
+            return _LOCKS.setdefault(workspace, threading.Lock())
+
+    def _fresh(self, pair: TokenPair) -> bool:
+        return pair.expires_at - self._clock() > ROTATE_MARGIN_S
+
+    def _held_item(self, workspace: str) -> str | None:
+        try:
+            item_id = self._item_id(workspace)
+            self._vault.resolve_secret(item_id)
+        except (SlackSetupError, VaultError):
+            return None
+        return item_id
 
     def _token(self, workspace: str, *, force: bool) -> str:
         with self._lock(workspace):
@@ -63,7 +93,7 @@ class ConfigTokenStore:
                 self._write(workspace, item_id, pair)
             else:
                 pair = self._load(item_id)
-            if not force and pair.access_token and pair.expires_at - self._clock() > ROTATE_MARGIN_S:
+            if not force and pair.access_token and self._fresh(pair):
                 return pair.access_token
             return self._rotate(workspace, item_id, pair)
 
@@ -96,9 +126,12 @@ class ConfigTokenStore:
         return fresh.access_token
 
     def _write(self, workspace: str, item_id: str, pair: TokenPair) -> None:
+        self._put(workspace, item_id, json.dumps(asdict(pair)))
+
+    def _put(self, workspace: str, item_id: str, raw: str) -> None:
         for _ in range(WRITE_ATTEMPTS):
             try:
-                self._vault.update_item(item_id, secret={"api_key": json.dumps(asdict(pair))})
+                self._vault.update_item(item_id, secret={"api_key": raw})
             except (VaultError, OSError):
                 continue
             self._unwritten.pop(workspace, None)

@@ -7,6 +7,7 @@ profile, never the launch profile's.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 from urllib.parse import parse_qs, urlsplit
@@ -29,13 +30,14 @@ from plugins.platforms.slack import adapter_install_events as install_events
 from plugins.platforms.slack.adapter import SlackAdapter
 from tests.gateway.chat_install_harness import HTTPS, nonce_of
 from tests.gateway.chat_slack.fake_slack import BOT_TOKEN, REFRESH, FakeSlack
-from tests.tui_gateway.contracts.chat_provider_fakes import FIXED_NOW
+from tests.tui_gateway.contracts.chat_provider_fakes import FAKE_TOKEN, FIXED_NOW
 from tools import slack_tools
 from tui_gateway import chat_providers, server
 from tui_gateway.chat_install import REDIRECT_PATH
 from tui_gateway.contracts import chat_provider as wire
 
 BOT = "scout"
+SECOND_BOT = "atlas"
 TEAM = "T1"
 SLACK_ENV_KEYS = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS")
 GUIDED = {"icon_ok": False, "app_token_ok": False, "redirect_ok": False}
@@ -69,6 +71,7 @@ class Rig:
         for key in SLACK_ENV_KEYS:
             monkeypatch.delenv(key, raising=False)
         create_profile(BOT, no_alias=True, no_skills=True)
+        self.bot = BOT
         self.slack, self.gateway = slack, LiveGateway()
         monkeypatch.setattr(control_socket, "query_gateway_control", self.gateway.query)
         monkeypatch.setattr(messaging, "_restart_gateway_after", self.gateway.restart)
@@ -81,9 +84,25 @@ class Rig:
         self.config_item = self._secret("Slack configuration token", REFRESH)
         self._app_key_items: dict[str, str] = {}
 
+    @contextmanager
+    def acting_as(self, bot: str):
+        if not get_profile_dir(bot).exists():
+            create_profile(bot, no_alias=True, no_skills=True)
+        held = self.bot, self.vault, self.config_item
+        self.bot, self.vault = bot, VaultStore(get_profile_dir(bot) / "vault")
+        self.config_item = None
+        try:
+            yield self
+        finally:
+            self.bot, self.vault, self.config_item = held
+
+    def save_config_credential(self, refresh_token: str) -> str:
+        self.config_item = self._secret("Slack configuration token", refresh_token)
+        return self.config_item
+
     @property
     def app_id(self) -> str:
-        return self.records(BOT).app(BOT, "w1")["app_id"]
+        return self.records(self.bot).app(self.bot, "w1")["app_id"]
 
     @property
     def app_key_item(self) -> str:
@@ -100,7 +119,7 @@ class Rig:
 
     def rpc(self, method: str, **params) -> dict:
         return server.handle_request({"id": "1", "method": method, "params": {
-            "profile": BOT, "provider_id": "slack", "workspace": "w1", **params}})
+            "profile": self.bot, "provider_id": "slack", "workspace": "w1", **params}})
 
     def state(self, response: dict) -> wire.SetupState:
         assert "error" not in response, response["error"]
@@ -143,6 +162,9 @@ class Rig:
         lines = path.read_text().splitlines() if path.exists() else []
         return dict(line.split("=", 1) for line in lines if "=" in line)
 
+    def workspace_records(self) -> SlackRecords:
+        return SlackRecords(self.home / "chat_slack" / "workspaces.json")
+
     def records(self, profile: str) -> SlackRecords:
         return SlackRecords(get_profile_dir(profile) / "chat_slack" / "records.json")
 
@@ -162,7 +184,7 @@ def test_secondary_bot_install_reaches_ready_with_a_live_adapter_in_its_own_prof
     assert env["SLACK_BOT_TOKEN"] == BOT_TOKEN and env["SLACK_APP_TOKEN"].startswith("xapp-")
     assert env["SLACK_ALLOWED_USERS"] == "UOWNER"
     assert not any(key in r.env_of("default") for key in SLACK_ENV_KEYS)
-    assert r.records(BOT).app(BOT, "w1")["bot_token_item_id"] and not (r.home / "chat_slack").exists()
+    assert r.records(BOT).app(BOT, "w1")["bot_token_item_id"] and not (r.home / "chat_slack" / "records.json").exists()
 
 
 def test_slack_tools_of_a_secondary_bot_find_its_install_under_that_profile_scope(rig):
@@ -237,7 +259,7 @@ def test_redirect_completes_the_install_in_the_bots_profile(rig):
     assert page.status_code == 200 and "Done" in page.text
     assert r.status().step is wire.SetupStep.ready
     assert r.records(BOT).app(BOT, "w1")["team_id"] == TEAM
-    assert not (r.home / "chat_slack").exists()
+    assert not (r.home / "chat_slack" / "records.json").exists()
 
 
 def test_guided_steps_carry_the_slack_page_and_the_return_address(rig):
@@ -273,7 +295,7 @@ def test_probe_at_credential_time_makes_the_setup_automatic_when_the_workspace_a
     manifest = r.slack.apps[state.app_id]
     assert manifest["oauth_config"]["redirect_urls"] == [HTTPS + REDIRECT_PATH]
     assert r.records(BOT).app(BOT, "w1")["app_token_item_id"]
-    assert r.records(BOT).workspace("w1")["capabilities"]["set_icon"] == "automatic"
+    assert r.workspace_records().workspace("w1")["capabilities"]["set_icon"] == "automatic"
     assert r.slack.created == 2 and list(r.slack.apps) == [state.app_id]
 
 
@@ -295,7 +317,7 @@ def test_a_probe_that_cannot_finish_leaves_setup_guided_instead_of_failing(rig):
     r.slack.fail["apps.manifest.validate"] = "internal_error"
     state = r.to_manual_or_allow()
     assert state.step is wire.SetupStep.needs_manual_step
-    assert "set_icon" not in r.records(BOT).workspace("w1").get("capabilities", {})
+    assert "set_icon" not in r.workspace_records().workspace("w1").get("capabilities", {})
 
 
 def test_an_expired_config_credential_surfaces_at_credential_time(rig):
@@ -327,7 +349,7 @@ def test_reinstall_after_revoke_opens_a_fresh_app_not_the_deleted_one(rig):
     assert revoked.step is wire.SetupStep.revoked and revoked.app_id is None and revoked.installation_id is None
     assert r.slack.apps == {}
     assert not any(key in r.env_of(BOT) for key in SLACK_ENV_KEYS)
-    state = r.to_manual_or_allow()
+    state = r.state(r.rpc("chat.install.begin"))
     assert state.step is wire.SetupStep.needs_allow and state.app_id is not None
     link_app = parse_qs(urlsplit(state.next_action.link).query)["app"][0]
     assert link_app == state.app_id and link_app in r.slack.apps
@@ -335,6 +357,41 @@ def test_reinstall_after_revoke_opens_a_fresh_app_not_the_deleted_one(rig):
     again = r.status()
     assert again.step is wire.SetupStep.ready and again.installation_id == first.installation_id
     assert r.env_of(BOT)["SLACK_BOT_TOKEN"] == BOT_TOKEN
+
+
+def test_a_second_bot_in_the_same_workspace_never_asks_for_the_configuration_credential(rig):
+    r = rig()
+    first = r.install()
+    apps_after_first = r.slack.created
+    with r.acting_as(SECOND_BOT):
+        begun = r.state(r.rpc("chat.install.begin"))
+        assert begun.step is wire.SetupStep.needs_allow and begun.manual_steps_done == []
+        assert begun.app_id is not None and begun.app_id != first.app_id
+        assert r.allow(begun).status_code == 200
+        ready = r.status()
+        assert ready.step is wire.SetupStep.ready and ready.error is None
+        assert r.env_of(SECOND_BOT)["SLACK_BOT_TOKEN"] == BOT_TOKEN
+        assert r.records(SECOND_BOT).app(SECOND_BOT, "w1")["app_id"] == begun.app_id
+    assert r.slack.created == apps_after_first + 1 and len(r.slack.apps) == 2
+    assert r.status() == first
+
+
+def test_a_second_bot_asks_for_the_credential_when_slack_no_longer_accepts_the_stored_one(rig):
+    r = rig()
+    r.install()
+    r.slack.access, r.slack.refresh = set(), set()
+    with r.acting_as(SECOND_BOT):
+        failed = r.state(r.rpc("chat.install.begin"))
+        assert failed.step is wire.SetupStep.error and failed.error.code is wire.SetupErrorCode.credential_rejected
+        assert failed.error.fix is wire.FixAction.reenter_credential
+        asking = r.state(r.advance(failed, "retry"))
+        assert asking.step is wire.SetupStep.needs_credential
+        fresh = f"xoxe-1-fresh-{FAKE_TOKEN}"
+        r.slack.refresh = {fresh}
+        resumed = r.state(r.advance(asking, "credential_saved", vault_item_id=r.save_config_credential(fresh)))
+        assert resumed.step is wire.SetupStep.needs_allow
+        assert r.allow(resumed).status_code == 200
+        assert r.status().step is wire.SetupStep.ready
 
 
 def slack_adapter(team_bot_user: str = "UBOT") -> SlackAdapter:
