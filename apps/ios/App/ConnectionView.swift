@@ -10,7 +10,7 @@ struct ConnectionView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private var tone: SignInTone { colorScheme == .dark ? .dark : .light }
+    var tone: SignInTone { colorScheme == .dark ? .dark : .light }
 
     private var primaryOption: SignInOption? {
         model.passwordOption ?? model.browserOptions.first
@@ -61,6 +61,7 @@ struct ConnectionView: View {
             guard case .failed = phase, model.passwordOption != nil else { return }
             focus = .password
         }
+        .localEngineSetup(model)
     }
 
     private var heading: some View {
@@ -84,6 +85,7 @@ struct ConnectionView: View {
 
     private var actions: some View {
         VStack(spacing: 0) {
+            localEngineRunningCard
             card
             if let errorMessage {
                 Text(errorMessage)
@@ -102,13 +104,15 @@ struct ConnectionView: View {
                     .multilineTextAlignment(.center)
                     .padding(.top, SignInMetrics.cardToMessage)
             }
-            if !secondaryOptions.isEmpty {
+            if !secondaryOptions.isEmpty || showsLocalEngineSetup {
                 orDivider
                 VStack(spacing: SignInMetrics.secondarySpacing) {
                     ForEach(secondaryOptions) { option in
                         browserButton(option)
                     }
+                    localEngineSetupButton
                 }
+                localEngineHelper
             }
             if !isCompact {
                 Text("By continuing, you connect Pal to your own server and sign in with your account.")
@@ -300,7 +304,7 @@ extension ConnectionView {
         .accessibilityIdentifier("signInOption-\(option.id)")
     }
 
-    private func capsuleLabel<Leading: View>(_ title: String, leading: Leading) -> some View {
+    func capsuleLabel<Leading: View>(_ title: String, leading: Leading) -> some View {
         Text(title)
             .font(.system(size: SignInMetrics.buttonTextSize))
             .lineLimit(1)
@@ -314,7 +318,7 @@ extension ConnectionView {
             }
     }
 
-    private var orDivider: some View {
+    var orDivider: some View {
         HStack(spacing: SignInMetrics.rowSpacing) {
             Rectangle().fill(tone.buttonRim).frame(height: 1)
             Text("or")

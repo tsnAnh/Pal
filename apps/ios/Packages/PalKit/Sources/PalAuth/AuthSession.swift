@@ -5,6 +5,7 @@ import PalREST
 public struct RestoredIdentity: Sendable, Equatable {
     public let baseURL: GatewayBaseURL
     public let userID: String?
+    public let isLocalEngine: Bool
 }
 
 public actor AuthSession: AccessTokenProvider {
@@ -34,12 +35,30 @@ public actor AuthSession: AccessTokenProvider {
         self.now = now
         let loaded = try store.load()
         self.credentials = loaded
-        restoredIdentity = loaded.map { RestoredIdentity(baseURL: $0.baseURL, userID: $0.tokens.userID) }
+        restoredIdentity = loaded.map { RestoredIdentity(baseURL: $0.baseURL, userID: $0.tokens.userID, isLocalEngine: $0.isLocalEngine) }
+    }
+
+    public init(
+        signedOutWith transport: any HTTPTransport,
+        diagnostics: Diagnostics = .silent,
+        refreshLeeway: TimeInterval = 60,
+        deviceID: String? = nil,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
+        self.store = InMemoryCredentialStore()
+        self.transport = transport
+        self.diagnostics = diagnostics
+        self.refreshLeeway = refreshLeeway
+        self.deviceID = deviceID
+        self.now = now
+        self.credentials = nil
+        restoredIdentity = nil
     }
 
     public var baseURL: GatewayBaseURL? { credentials?.baseURL }
     public var isSignedIn: Bool { credentials != nil }
     public var userID: String? { credentials?.tokens.userID }
+    public var isLocalEngine: Bool { credentials?.isLocalEngine ?? false }
 
     public func adopt(_ newCredentials: StoredCredentials) throws {
         credentials = newCredentials
@@ -55,6 +74,7 @@ public actor AuthSession: AccessTokenProvider {
 
     public func accessToken() async throws -> String {
         guard let current = credentials else { throw SignInError.notSignedIn }
+        if let home = current.localHome { return try readLocalToken(home: home).reveal() }
         if current.tokens.isExpired(at: now(), leeway: refreshLeeway) {
             return try await refresh().accessToken
         }
@@ -63,8 +83,27 @@ public actor AuthSession: AccessTokenProvider {
 
     public func refreshAccessToken(rejecting rejected: String) async throws -> String {
         guard let current = credentials else { throw SignInError.notSignedIn }
+        if let home = current.localHome { return try rereadLocalToken(home: home, rejecting: rejected) }
         if current.tokens.accessToken != rejected { return current.tokens.accessToken }
         return try await refresh().accessToken
+    }
+
+    private func readLocalToken(home: String) throws -> LocalToken {
+        do {
+            return try LocalSessionTokenFile(home: URL(filePath: home, directoryHint: .isDirectory)).read()
+        } catch {
+            diagnostics.warning("auth", "local engine session token unreadable: \(error)")
+            throw SignInError.localTokenUnavailable
+        }
+    }
+
+    private func rereadLocalToken(home: String, rejecting rejected: String) throws -> String {
+        let fresh = try readLocalToken(home: home).reveal()
+        if fresh != rejected { return fresh }
+        diagnostics.warning("auth", "local engine rejected its session token; signing out")
+        credentials = nil
+        try? store.clear()
+        throw SignInError.sessionExpired
     }
 
     private func refresh() async throws -> TokenSet {

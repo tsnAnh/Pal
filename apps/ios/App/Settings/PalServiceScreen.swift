@@ -21,7 +21,7 @@ struct PalServiceScreen: View {
     var body: some View {
         SettingsPage(title: "Server", identifier: "hermesServiceScreen", back: back) {
             GroupedCard(accessibilityIdentifier: "hermesServiceStateCard") {
-                SettingsRow.value("Status", value: stateText, accessibilityIdentifier: "hermesServiceState")
+                SettingsRow.value("Status", value: model.stateText, accessibilityIdentifier: "hermesServiceState")
                 if let since = model.info?.startedAt {
                     SettingsRow.value(
                         "Running since", value: since.formatted(date: .abbreviated, time: .shortened),
@@ -39,7 +39,7 @@ struct PalServiceScreen: View {
                         .disabled(model.isBusy)
                 }
             }
-            CardFootnote(model.noticeText ?? footnote, accessibilityIdentifier: "hermesServiceFootnote")
+            CardFootnote(model.noticeText ?? model.footnote, accessibilityIdentifier: "hermesServiceFootnote")
             ServerHealthSection(host: host)
             ServerLogSection(host: host)
         }
@@ -59,7 +59,7 @@ struct PalServiceScreen: View {
             GroupedCard(accessibilityIdentifier: "hermesServiceActionCard") {
                 if info.canRestart {
                     SettingsRow(
-                        title: model.activity == .restarting ? restartingTitle : "Restart Pal",
+                        title: model.activity == .restarting ? model.restartingTitle : "Restart Pal",
                         subtitle: info.activeRuns > 0 ? "A chat is running. Restart once it finishes." : nil, trailing: .none,
                         accessibilityIdentifier: "hermesServiceRestartRow",
                         action: { Task { await model.restart() } }
@@ -78,15 +78,17 @@ struct PalServiceScreen: View {
             }
         }
     }
+}
 
-    private var restartingTitle: String {
-        guard let progress = model.progress else { return "Restarting…" }
+extension GatewayServiceModel {
+    var restartingTitle: String {
+        guard let progress else { return "Restarting…" }
         return "Restarting… waiting for Pal (\(progress.attempt) of \(progress.limit))"
     }
 
-    private var stateText: String {
-        if model.isUnreachable { return "Not responding" }
-        guard let info = model.info else { return model.loadFailed ? "Unavailable" : " " }
+    var stateText: String {
+        if isUnreachable { return "Not responding" }
+        guard let info else { return loadFailed ? "Unavailable" : " " }
         return switch info.state {
         case .running: "Running"
         case .stopped: "Stopped"
@@ -97,8 +99,8 @@ struct PalServiceScreen: View {
         }
     }
 
-    private var footnote: String {
-        if model.loadFailed { return "Couldn't reach Pal. Pull to refresh." }
-        return model.info?.reason ?? "The Pal service on the computer you're connected to."
+    var footnote: String {
+        if loadFailed { return "Couldn't reach Pal. Pull to refresh." }
+        return info?.reason ?? "The Pal service on the computer you're connected to."
     }
 }

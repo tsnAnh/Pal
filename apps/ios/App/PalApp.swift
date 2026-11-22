@@ -300,6 +300,7 @@ struct RootView: View {
             .macSheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {
                 CreateRoomSheet(rooms: rooms, roster: roster, router: router)
             }
+            .ownerIntro(hub: hub, connection: model)
             .onChange(of: roster.bots, initial: true) { _, _ in router.dropUnresolvedChat(in: roster) }
             .onChange(of: roster.bots.map(\.name)) { _, names in
                 guard model.isConnected else { return }

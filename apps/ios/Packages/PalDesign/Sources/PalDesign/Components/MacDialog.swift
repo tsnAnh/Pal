@@ -30,14 +30,30 @@ public struct MacDialogAction: Identifiable {
     }
 }
 
+@MainActor
+@Observable
+public final class MacDialogCheckbox {
+    public let title: String
+    public let identifier: String
+    public var isOn: Bool
+
+    public init(_ title: String, identifier: String, isOn: Bool = false) {
+        self.title = title
+        self.identifier = identifier
+        self.isOn = isOn
+    }
+}
+
 public struct MacDialogContent {
     public let title: String
     public let message: String?
+    public let checkbox: MacDialogCheckbox?
     public let actions: [MacDialogAction]
 
-    public init(_ title: String, message: String? = nil, actions: [MacDialogAction]) {
+    public init(_ title: String, message: String? = nil, checkbox: MacDialogCheckbox? = nil, actions: [MacDialogAction]) {
         self.title = title
         self.message = message
+        self.checkbox = checkbox
         self.actions = actions
     }
 

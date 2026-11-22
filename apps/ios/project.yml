@@ -30,6 +30,9 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - App
+      - path: ../../scripts/install.sh
+        buildPhase: resources
+        destinationFilters: [macOS]
     info:
       path: App/Info.plist
       properties:
@@ -110,6 +113,9 @@ targets:
         product: PalKanban
       - package: PalKit
         product: PalPush
+      - package: PalKit
+        product: PalLocalEngine
+        destinationFilters: [macOS]
       - package: PalDesign
         product: PalDesign
       - package: SwiftMath

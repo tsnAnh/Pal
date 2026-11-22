@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 import ImageIO
 import Testing
 @testable import PalDesign

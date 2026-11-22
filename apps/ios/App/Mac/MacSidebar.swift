@@ -284,6 +284,7 @@ struct MacAccountAvatar: View {
     var diameter: CGFloat = 33
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(SettingsHub.self) private var hub
 
     private var presenceLabel: LocalizedStringKey {
         switch roster.link {
@@ -302,11 +303,10 @@ struct MacAccountAvatar: View {
     }
 
     var body: some View {
-        Text(connection.userInitial)
-            .font(.system(size: diameter * 0.42, weight: .semibold))
-            .foregroundStyle(PalTokens.textPrimary)
+        face
             .frame(width: diameter, height: diameter)
             .background(PalTokens.control, in: Circle())
+            .clipShape(Circle())
             .overlay(alignment: .bottomTrailing) {
                 if let alertColor {
                     Circle()
@@ -317,6 +317,19 @@ struct MacAccountAvatar: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityValue(Text(presenceLabel))
+    }
+
+    @ViewBuilder
+    private var face: some View {
+        if let photo = hub.owner.photo {
+            Image(decorative: photo, scale: 1)
+                .resizable()
+                .scaledToFill()
+        } else {
+            Text(hub.owner.initial(fallback: connection.userInitial))
+                .font(.system(size: diameter * 0.42, weight: .semibold))
+                .foregroundStyle(PalTokens.textPrimary)
+        }
     }
 }
 

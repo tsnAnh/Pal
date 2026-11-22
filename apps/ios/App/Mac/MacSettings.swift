@@ -5,11 +5,8 @@ import PalSettings
 import SwiftUI
 
 enum MacSettingsSection: String, CaseIterable, Identifiable {
-    case general
-    case computer
-    case permissions
-    case vault
-    case publicAccess
+    case general, computer, permissions, vault
+    case publicAccess, server
     case providers
     case shortcuts
     case usage
@@ -25,6 +22,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .permissions: String(localized: "Permissions")
         case .vault: String(localized: "Vault")
         case .publicAccess: String(localized: "Public access")
+        case .server: String(localized: "Server")
         case .providers: String(localized: "Model providers")
         case .shortcuts: String(localized: "Keyboard Shortcuts")
         case .usage: String(localized: "Usage & Billing")
@@ -40,6 +38,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .permissions: "shield"
         case .vault: "circle.square"
         case .publicAccess: "network"
+        case .server: "server.rack"
         case .providers: "cpu"
         case .shortcuts: "keyboard"
         case .usage: "chart.bar"
@@ -65,6 +64,7 @@ struct MacSettingsModal: View {
                 case .permissions: MacPermissionsSection(hub: hub)
                 case .vault: MacVaultSection(hub: hub)
                 case .publicAccess: MacPublicAccessSection(hub: hub)
+                case .server: MacServerSection(hub: hub)
                 case .providers: MacModelProvidersSection(hub: hub)
                 case .shortcuts: MacShortcutSettingsSection()
                 case .usage: MacUsageSection(hub: hub)
@@ -195,8 +195,7 @@ private struct MacGeneralSection: View {
 
     private var zoneSelection: Binding<String> {
         Binding(
-            get: { hub.timeZoneDisplay },
-            set: { identifier in Task { await hub.setTimeZone(identifier) } }
+            get: { hub.timeZoneDisplay }, set: { identifier in Task { await hub.setTimeZone(identifier) } }
         )
     }
 
@@ -205,6 +204,7 @@ private struct MacGeneralSection: View {
     var body: some View {
         MacSectionPage(section: .general) {
             accountCard
+            MacAboutYouCard(hub: hub)
             appearanceCard
             systemCard
             botCard
@@ -235,7 +235,7 @@ private struct MacGeneralSection: View {
         MacGroup(title: "Account") {
             MacCard(identifier: "settingsAccountCard") {
                 HStack(spacing: 12) {
-                    InitialAvatar(initial: connection.userInitial, diameter: 40)
+                    InitialAvatar(initial: hub.owner.initial(fallback: connection.userInitial), diameter: 40, photo: hub.owner.photo)
                     HStack(spacing: 6) {
                         Text(accountName)
                             .font(.system(size: 12, weight: .medium))

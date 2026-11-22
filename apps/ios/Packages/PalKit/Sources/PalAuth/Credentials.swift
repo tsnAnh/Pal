@@ -52,10 +52,12 @@ public struct TokenSet: Codable, Sendable, Equatable {
 public struct StoredCredentials: Codable, Sendable, Equatable {
     public var baseURL: GatewayBaseURL
     public var tokens: TokenSet
+    public var localHome: String?
 
-    public init(baseURL: GatewayBaseURL, tokens: TokenSet) {
+    public init(baseURL: GatewayBaseURL, tokens: TokenSet, localHome: String? = nil) {
         self.baseURL = baseURL
         self.tokens = tokens
+        self.localHome = localHome
     }
 }
 

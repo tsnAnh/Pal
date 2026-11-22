@@ -8,6 +8,9 @@ import PalREST
 import PalRFB
 import PalTransport
 import Observation
+#if os(macOS)
+import PalLocalEngine
+#endif
 
 @MainActor
 @Observable
@@ -28,9 +31,14 @@ final class ConnectionModel {
     private(set) var client: PalClient?
     private(set) var userInitial = "H"
     private(set) var userName = ""
+    private(set) var isLocalEngine = false
+    private(set) var ownerIntroPending = false
     let localDeviceID: String?
     let cache: CacheStore
     @ObservationIgnored private(set) lazy var surfaces = SurfaceCache(store: cache) { [unowned self] in accountKey }
+    #if os(macOS)
+    @ObservationIgnored private(set) lazy var localEngine = LocalEngineModel(connection: self, diagnostics: diagnostics)
+    #endif
 
     private var auth: AuthSession
     private var keychainUnavailable: Bool
@@ -65,6 +73,7 @@ final class ConnectionModel {
         self.cache = cache ?? CacheStore.standard(diagnostics: diagnostics)
         if let identity = auth.restoredIdentity {
             baseURLText = identity.baseURL.displayString
+            isLocalEngine = identity.isLocalEngine
             adopt(userName: identity.userID)
             pendingRestore = true
             phase = .connecting
@@ -78,57 +87,12 @@ final class ConnectionModel {
         if let first = userID.first(where: \.isLetter) { userInitial = String(first).uppercased() }
     }
 
-    static func live() -> ConnectionModel {
-        let diagnostics = Diagnostics.osLog()
-        let store = KeychainCredentialStore()
-        if ProcessInfo.processInfo.arguments.contains("-hermes-reset-credentials") {
-            try? store.clear()
-        }
-        let transport = URLSessionHTTPTransport()
-        let identity = DeviceIdentity.resolve(
-            store: KeychainDeviceIDStore(),
-            formFactor: DeviceInfo.formFactor,
-            appVersion: DeviceIdentity.appVersion(of: .main),
-            model: DeviceInfo.hardwareIdentifier,
-            os: DeviceInfo.osDescription,
-            diagnostics: diagnostics
-        )
-        let auth: AuthSession
-        var keychainUnavailable = false
-        do {
-            auth = try AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
-        } catch KeychainError.corruptItem {
-            try? store.clear()
-            auth = Self.keychainSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
-        } catch {
-            diagnostics.info("auth", "credentials unavailable at launch: \(Diagnostics.describe(error))")
-            keychainUnavailable = true
-            auth = try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
-        }
-        return ConnectionModel(
-            auth: auth,
-            transport: transport,
-            diagnostics: diagnostics,
-            initialBaseURL: "",
-            presence: ReachPresence(identity: identity, diagnostics: diagnostics),
-            localDeviceID: identity.deviceID,
-            keychainUnavailable: keychainUnavailable
-        )
-    }
-
-    private static func keychainSession(
-        store: KeychainCredentialStore,
-        transport: any HTTPTransport,
-        diagnostics: Diagnostics,
-        deviceID: String
-    ) -> AuthSession {
-        (try? AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: deviceID))
-            ?? (try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: deviceID))
-    }
-
     private func reloadKeychainCredentialsIfNeeded() {
         guard keychainUnavailable else { return }
-        guard let reloaded = try? AuthSession(store: KeychainCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID) else { return }
+        let store = Self.credentialStore()
+        guard let reloaded = try? AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID) else {
+            return
+        }
         auth = reloaded
         keychainUnavailable = false
     }
@@ -214,6 +178,7 @@ final class ConnectionModel {
     }
 
     func signOut() async {
+        let leavesLocalEngine = isLocalEngine
         await presence.unregisterPush()
         await connection?.close()
         connection = nil
@@ -223,7 +188,23 @@ final class ConnectionModel {
         surfaces.forgetAll()
         userName = ""
         userInitial = "H"
+        isLocalEngine = false
+        ownerIntroPending = false
         phase = .signedOut
+        if leavesLocalEngine { clearAddress() }
+    }
+
+    private func clearAddress() {
+        methodProbe?.cancel()
+        methodProbe = nil
+        baseURLText = ""
+        username = ""
+        password = ""
+        discovery = .unknown
+    }
+
+    func ownerIntroHandled() {
+        ownerIntroPending = false
     }
 
     private func makeClient() -> PalClient {
@@ -236,6 +217,10 @@ final class ConnectionModel {
         self.client = client
         do {
             adopt(userName: await auth.userID)
+            isLocalEngine = await auth.isLocalEngine
+            #if os(macOS)
+            if isLocalEngine { await localEngine.startIfStopped() }
+            #endif
             await connection?.close()
             let connection = try await client.connect()
             self.connection = connection
@@ -255,24 +240,33 @@ final class ConnectionModel {
         }
     }
 
+    private static func addressMessage(for error: GatewayBaseURLError) -> String {
+        switch error {
+        case .insecureScheme: "Use an https address."
+        case .empty: "Enter your Pal address."
+        default: "That address is not valid."
+        }
+    }
+
+    private static func signInMessage(for error: SignInError) -> String {
+        switch error {
+        case .cancelled: "Sign-in was cancelled."
+        case .sessionExpired: "Your session expired. Sign in again."
+        case .localTokenUnavailable: "Pal couldn't read its sign-in on this Mac. Sign out, then set Pal up again."
+        case .authorizationDenied: "Sign-in was declined."
+        case .invalidCredentials: "Wrong username or password."
+        case .rateLimited: "Too many attempts. Try again in a moment."
+        case .serverUnavailable: "Pal is unavailable right now. Try again shortly."
+        default: "Sign-in could not be completed."
+        }
+    }
+
     private static func message(for error: any Error) -> String {
         switch error {
         case let error as GatewayBaseURLError:
-            switch error {
-            case .insecureScheme: "Use an https address."
-            case .empty: "Enter your Pal address."
-            default: "That address is not valid."
-            }
+            addressMessage(for: error)
         case let error as SignInError:
-            switch error {
-            case .cancelled: "Sign-in was cancelled."
-            case .sessionExpired: "Your session expired. Sign in again."
-            case .authorizationDenied: "Sign-in was declined."
-            case .invalidCredentials: "Wrong username or password."
-            case .rateLimited: "Too many attempts. Try again in a moment."
-            case .serverUnavailable: "Pal is unavailable right now. Try again shortly."
-            default: "Sign-in could not be completed."
-            }
+            signInMessage(for: error)
         case let error as GatewayTransportError:
             switch error {
             case .closed(.unauthorized), .handshakeRejected(401): "Your session expired. Sign in again."
@@ -371,3 +365,24 @@ extension ConnectionModel {
         await connect()
     }
 }
+
+#if os(macOS)
+extension ConnectionModel {
+    func signInToLocalEngine(_ session: EngineSession, announcingOwnerIntro: Bool) async -> Bool {
+        guard !isBusy else { return false }
+        phase = .signingIn
+        do {
+            let credentials = try LocalEngineCredential.credentials(port: session.port, home: session.home)
+            try await auth.adopt(credentials)
+            baseURLText = credentials.baseURL.displayString
+        } catch {
+            phase = .failed(Self.message(for: error))
+            return false
+        }
+        await connect()
+        guard isConnected else { return false }
+        if announcingOwnerIntro { ownerIntroPending = true }
+        return true
+    }
+}
+#endif
