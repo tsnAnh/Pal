@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import sqlite3
 from pathlib import Path
 from typing import Any, Optional
@@ -126,6 +128,10 @@ def write_artifact_with_rows(world: M.World, name: str) -> Path:
                                                                                      "outcome_json")}
                                         for row in desk_rows(world)]}
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
+    shared = os.environ.get("HERMES_E2E_ARTIFACTS")
+    if shared:
+        Path(shared).mkdir(parents=True, exist_ok=True)
+        return Path(shutil.copy(path, Path(shared) / name))
     return path
 
 

@@ -127,17 +127,15 @@ def test_approving_the_exact_call_sends_with_one_tap_and_raises_no_second_card(w
     assert not [r for r in D.desk_rows(world) if r["kind"] == "send" and r["payload"]["to"]["user_id"] == HANK]
 
 
-def test_a_tainted_wake_running_a_command_needs_the_owners_card_and_deny_leaves_it_unrun(world, tmp_path):
-    victim = tmp_path / "keep-me"
-    victim.mkdir()
-    (victim / "f.txt").write_text("x")
-    wake_after_reply(world, FRANK, "g1-term-deny", ToolCall("terminal", {"command": f"rm -rf {victim}"}),
+def test_a_tainted_wake_running_even_a_harmless_command_needs_the_owners_card_and_deny_leaves_it_unrun(world, tmp_path):
+    marker = tmp_path / "must-not-exist"
+    wake_after_reply(world, FRANK, "g1-term-deny", ToolCall("terminal", {"command": f"touch {marker}"}),
                      C.answer("A-g1-term-deny", "I did not run it."))
     _, deny = D.wait_exec_card(world)
-    assert victim.exists()
+    assert not marker.exists()
     D.tap_exec(world, deny)
     C.wait_reply(world, D.OWNER_DM, "A-g1-term-deny", "the wake finished after the denial")
-    assert victim.exists(), "a denied command must not run"
+    assert not marker.exists(), "a denied command must not run"
 
 
 def test_approving_a_tainted_command_runs_it_after_exactly_one_card(world, tmp_path):
