@@ -13,12 +13,18 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
     private var open: ((PushTarget) -> Void)?
     private var pendingTap: PushTarget?
     private var badgeClearing: Task<Void, Never>?
+    #if os(macOS)
+    var restartForUpdate: (@MainActor () -> Void)?
+    #endif
 
     init(center: UNUserNotificationCenter = .current(), diagnostics: Diagnostics = .osLog()) {
         self.center = center
         self.diagnostics = diagnostics
         super.init()
         center.delegate = self
+        #if os(macOS)
+        center.setNotificationCategories([UpdateNotification.category()])
+        #endif
         badgeClearing = Task { [center, diagnostics] in
             for await _ in NotificationCenter.default.notifications(named: PlatformApplication.didBecomeActive) {
                 do {
@@ -82,10 +88,12 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping @Sendable () -> Void
     ) {
+        let restartsForUpdate = response.actionIdentifier == UpdateNotification.restartActionID
         let target = response.actionIdentifier == UNNotificationDefaultActionIdentifier
             ? PushWire.target(fromUserInfo: response.notification.request.content.userInfo)
             : nil
         Task { @MainActor in
+            if restartsForUpdate { self.restartForUpdateIfAvailable() }
             if let target { self.route(to: target) }
             completionHandler()
         }
@@ -98,4 +106,50 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
         }
         open(target)
     }
+
+    private func restartForUpdateIfAvailable() {
+        #if os(macOS)
+        restartForUpdate?()
+        #endif
+    }
 }
+
+enum UpdateNotification {
+    static let categoryID = "pal.update"
+    static let restartActionID = "pal.update.restart"
+    static let requestID = "pal.update.ready"
+
+    static func category() -> UNNotificationCategory {
+        UNNotificationCategory(
+            identifier: categoryID,
+            actions: [UNNotificationAction(identifier: restartActionID, title: String(localized: "Restart"), options: [])],
+            intentIdentifiers: []
+        )
+    }
+}
+
+#if os(macOS)
+extension PushNotifications: UpdateNotices {
+    func announceUpdate(version: String) async {
+        let settings = await center.notificationSettings()
+        guard [.authorized, .provisional].contains(settings.authorizationStatus) else {
+            diagnostics.info("update", "update \(version) is ready; notifications are off, so only the menu offers the restart")
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = String(localized: "Pal \(version) is ready")
+        content.body = String(localized: "Restart Pal to finish updating.")
+        content.categoryIdentifier = UpdateNotification.categoryID
+        do {
+            try await center.add(UNNotificationRequest(identifier: UpdateNotification.requestID, content: content, trigger: nil))
+        } catch {
+            diagnostics.info("update", "update notice was not posted: \(Diagnostics.describe(error))")
+        }
+    }
+
+    func withdrawUpdate() {
+        center.removeDeliveredNotifications(withIdentifiers: [UpdateNotification.requestID])
+        center.removePendingNotificationRequests(withIdentifiers: [UpdateNotification.requestID])
+    }
+}
+#endif

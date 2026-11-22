@@ -122,7 +122,7 @@ struct PalApp: App {
         .defaultSize(width: MacLayoutMetrics.defaultWindowWidth, height: MacLayoutMetrics.defaultWindowHeight)
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
-        .commands { MacCommands(shell: shell, roster: roster, router: router, connection: model, shortcuts: shortcuts) }
+        .commands { MacCommands(shell: shell, roster: roster, router: router, connection: model, shortcuts: shortcuts, updater: appDelegate.updater) }
         #endif
     }
 }

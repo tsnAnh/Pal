@@ -14,8 +14,10 @@ settings:
     CODE_SIGN_STYLE: Automatic
     IPHONEOS_DEPLOYMENT_TARGET: "26.0"
     ENABLE_USER_SCRIPT_SANDBOXING: YES
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
+    PAL_UPDATE_FEED: ""
+    PAL_UPDATE_PUBLIC_KEY: 0VZX/1gQCTn6WEu4cTcE9pXnHiUGeq+BLaEni7/Ovsc=
 packages:
   PalKit:
     path: Packages/PalKit
@@ -24,6 +26,9 @@ packages:
   SwiftMath:
     url: https://github.com/mgriebling/SwiftMath
     exactVersion: 1.7.3
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 targets:
   HermesBots:
     type: application
@@ -37,6 +42,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: Pal
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleName: Pal
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
@@ -57,6 +64,11 @@ targets:
         NSAppleEventsUsageDescription: Pal sends a message through the Messages app when you approve a bot's request to.
         NSUserActivityTypes:
           - INSendMessageIntent
+        SUFeedURL: $(PAL_UPDATE_FEED)
+        SUPublicEDKey: $(PAL_UPDATE_PUBLIC_KEY)
+        SUEnableAutomaticChecks: true
+        SUAutomaticallyUpdate: true
+        SUScheduledCheckInterval: 14400
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
@@ -82,7 +94,11 @@ targets:
         CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: App/HermesBots-macOS.entitlements
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
+        LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]: "$(inherited) @executable_path/../Frameworks"
     dependencies:
+      - package: Sparkle
+        product: Sparkle
+        destinationFilters: [macOS]
       - package: PalKit
         product: PalProtocol
       - package: PalKit
@@ -130,6 +146,8 @@ targets:
       path: NotificationService/Info.plist
       properties:
         CFBundleDisplayName: Pal Notifications
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleName: Pal Notifications
         NSExtension:
           NSExtensionAttributes:
