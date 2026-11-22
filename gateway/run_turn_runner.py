@@ -810,6 +810,8 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
         from gateway.run_turn_runner_approval_text import approval_text_prompt
         ctx = self._ctx
         adapter = ctx._status_adapter
+        from gateway.desk.runtime import approval_destination
+        chat_id, thread_metadata = approval_destination(self, ctx)
         # Slack's assistant_threads_setStatus disables the compose box, so the user can't type
         # /approve while "is thinking..." shows. Pausing stops _keep_typing re-setting it; resumed
         # in approve/deny.
@@ -825,8 +827,8 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
             try:
                 fut = self._schedule(
                     adapter.send_exec_approval(
-                        chat_id=ctx._status_chat_id, command=cmd, session_key=ctx.session_key or "",
-                        description=desc, metadata=ctx._status_thread_metadata,
+                        chat_id=chat_id, command=cmd, session_key=ctx.session_key or "",
+                        description=desc, metadata=thread_metadata,
                         request_id=approval_data.get("request_id"), **flags,
                     ),
                     "send_exec_approval scheduling error",
@@ -839,7 +841,7 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
                     # REQUESTED one: an adapter's stale-thread fallback may land it elsewhere (logged there). Never the command text.
                     logger.info("Exec approval card delivered (message_id=%s, request_id=%s, session=%s, requested_chat=%s, requested_thread=%s)",
                                 getattr(fut.result(timeout=0), "message_id", None), approval_data.get("request_id"),
-                                ctx.session_key, ctx._status_chat_id, (ctx._status_thread_metadata or {}).get("thread_id"))
+                                ctx.session_key, chat_id, (thread_metadata or {}).get("thread_id"))
                     # Without this, a card whose timer runs out keeps live buttons and nobody
                     # learns the command did NOT run (only the TUI registered a settle hook).
                     register_timeout_notice(
@@ -891,14 +893,14 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
                 logger.warning("Button-based approval failed, falling back to text: %s", e)
         # Plain-text prompt with the adapter's typed prefix (e.g. `!approve`): typed "/" is blocked
         # in Slack threads and reserved by Matrix clients.
-        msg = approval_text_prompt(adapter, ctx._status_chat_id, ctx.session_key or "", approval_data.get("request_id"),
+        msg = approval_text_prompt(adapter, chat_id, ctx.session_key or "", approval_data.get("request_id"),
                                    cmd, desc, getattr(adapter, "typed_command_prefix", "/"), **flags)
         try:
             # Mark as approval prompt: WeCom routes it through the control lane and Telegram pushes it
             # in "important" mode (#132516). Never ``notify`` — A2A reads that as the turn-final reply.
-            metadata = {**(ctx._status_thread_metadata or {}), "is_approval_prompt": True}
+            metadata = {**(thread_metadata or {}), "is_approval_prompt": True}
             fut = self._schedule(
-                adapter.send(ctx._status_chat_id, msg, metadata=_interim_metadata(metadata)), "Approval text-send scheduling error",
+                adapter.send(chat_id, msg, metadata=_interim_metadata(metadata)), "Approval text-send scheduling error",
             )
             # A receipt that times out (or a lost ack) is AMBIGUOUS, not a failure: the prompt may be
             # on screen, so it stays armed for a typed /approve, exactly like the card path above.

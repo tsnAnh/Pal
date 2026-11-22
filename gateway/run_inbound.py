@@ -226,6 +226,10 @@ class GatewayInboundMixin(
             return None
         source = event.source
 
+        if event.desk_ask_id is not None:
+            from gateway.desk.runtime import handle_desk_reply
+            await handle_desk_reply(self, event)
+            return None
         if source.audience is Audience.MEMBER:
             return (event, source, False) if await self._admit_member_event(event, source) else None
         if not self._is_user_authorized_for_source(source):

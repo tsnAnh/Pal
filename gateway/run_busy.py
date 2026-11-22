@@ -954,6 +954,10 @@ class GatewayBusySessionMixin:
         from gateway.run import _AGENT_PENDING_SENTINEL
         # See #17775. A primary transport can route a turn into a secondary
         # profile, so authorize in the stamped transport scope.
+        if event.desk_ask_id is not None:
+            from gateway.desk.runtime import handle_desk_reply
+            await handle_desk_reply(self, event)
+            return True
         if event.source.audience is Audience.MEMBER:
             if not await self._admit_member_event(event, event.source):
                 return True

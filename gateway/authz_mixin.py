@@ -877,16 +877,20 @@ class GatewayAuthorizationMixin:
         # The guard judges the final verdict: a chat allowlist admits a bot before the ALLOW_BOTS block runs.
         return not self._bot_loop_guard_instance().blocked(self._bot_loop_guard_conversation(source))
 
-    def _admission_for_source(self, source: SessionSource, facts: Optional[SenderFacts]) -> Admission:
-        return self._under_authorization_profile(source, lambda: self._admission_verdict(source, facts))
+    def _admission_for_source(
+        self, source: SessionSource, facts: Optional[SenderFacts], message_id: Optional[str] = None) -> Admission:
+        return self._under_authorization_profile(source, lambda: self._admission_verdict(source, facts, message_id))
 
-    def _admission_verdict(self, source: SessionSource, facts: Optional[SenderFacts]) -> Admission:
+    def _admission_verdict(
+        self, source: SessionSource, facts: Optional[SenderFacts], message_id: Optional[str] = None) -> Admission:
+        owner = self._is_user_authorized(source)
         return decide_admission(
-            self._is_user_authorized(source), self._pending_ask_for_source(source),
+            owner, None if owner else self._pending_ask_for_source(source, message_id),
             self._audience_policy_for(source), facts)
 
-    def _pending_ask_for_source(self, source: SessionSource) -> Optional[str]:
-        return None
+    def _pending_ask_for_source(self, source: SessionSource, message_id: Optional[str] = None) -> Optional[str]:
+        from gateway.desk.runtime import pending_ask_id_for
+        return pending_ask_id_for(source, message_id)
 
     def _audience_policy_for(self, source: SessionSource) -> AudiencePolicy:
         from hermes_cli.config import read_raw_config_readonly

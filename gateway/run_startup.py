@@ -1620,7 +1620,11 @@ class GatewayStartupMixin:
     )
     _POST_RECONNECT_WATCHERS = (
         "_handoff_watcher", "_async_delegation_watcher", "_loop_wakeup_watcher", "_profile_reconcile_watcher",
-        "_delegation_auto_resume_watcher")
+        "_delegation_auto_resume_watcher", "_desk_watcher")
+
+    async def _desk_watcher(self) -> None:
+        from gateway.desk.ticker import run_ticker
+        await run_ticker(self)
 
     def _start_spawn_background_watchers(self) -> None:
         """Spawn the long-lived supervised background watchers."""

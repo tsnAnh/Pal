@@ -428,6 +428,8 @@ class GatewayAgentCacheMixin:
             if isinstance(store, dict):
                 store.pop(session_key, None)
         self._clear_session_boundary_security_state(session_key)
+        from gateway.desk.runtime import cancel_asks
+        cancel_asks(self, session_key)
         logger.debug("Cleared conversation scope for %s (%s)", session_key, reason)
 
     def _clear_session_boundary_security_state(self, session_key: str) -> None:
