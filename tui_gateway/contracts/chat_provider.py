@@ -195,7 +195,11 @@ class ChatInstallParams(ChatProviderParams):
     workspace: str = ""
 
 
-class ChatInstallAdvanceParams(ChatInstallParams):
+class ChatInstallBeginParams(ChatInstallParams):
+    app_scheme: str | None = None
+
+
+class ChatInstallAdvanceParams(ChatInstallBeginParams):
     event: SetupEventKind
     expected_revision: int = Field(ge=0)
     manual_step: ProviderCapability | None = None
@@ -422,13 +426,16 @@ method("chat.provider.list", params=ProfileParams, result=ChatProviderListResult
        doc="Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.")
 method("chat.install.status", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it.")
-method("chat.install.begin", params=ChatInstallParams, result=ChatInstallStatusResult,
-       doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL.")
+method("chat.install.begin", params=ChatInstallBeginParams, result=ChatInstallStatusResult,
+       doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. "
+           "app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; "
+           "only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first.")
 method("chat.install.advance", params=ChatInstallAdvanceParams, result=ChatInstallStatusResult,
        doc="Send one setup event with the revision the client last saw. stale_revision when another client moved first; "
            "invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. "
            "credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential "
-           "requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.")
+           "requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. "
+           "app_scheme is read as in chat.install.begin.")
 method("chat.spaces.list", params=ChatInstallParams, result=ChatSpacesListResult,
        doc="Channels the installed bot can see, with whether it has joined.")
 method("chat.space.join", params=ChatSpaceJoinParams, result=ChatSpaceJoinResult,

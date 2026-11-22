@@ -394,6 +394,7 @@ class OAuthClientConnectParams(OAuthClientSlugParams):
     client_redirect_uri: str | None = None
     account: str | None = None
     create: bool = False
+    app_scheme: str | None = None
 
 
 class OAuthClientSetupResult(Result):
@@ -436,7 +437,9 @@ method(
     result=OAuthClientConnectResult,
     doc="Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through "
         "mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the "
-        "gateway and the app polls connectors.catalog.",
+        "gateway and the app polls connectors.catalog. app_scheme is the URL scheme of the Pal build that asked, "
+        "so the page after sign-in returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are "
+        "used, anything else or absent means the first.",
 )
 
 method(

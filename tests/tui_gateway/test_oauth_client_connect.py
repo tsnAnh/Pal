@@ -146,6 +146,50 @@ def test_google_redirect_accepts_a_state_once_and_stores_the_token_in_the_vault(
         assert leaked not in first.text
 
 
+@pytest.mark.parametrize("sent,returned", [
+    ({"app_scheme": "dev.tsnanh.hermes.bot.dev"}, "dev.tsnanh.hermes.bot.dev"),
+    ({"app_scheme": "dev.tsnanh.hermes.bot"}, "dev.tsnanh.hermes.bot"),
+    ({}, "dev.tsnanh.hermes.bot"),
+    ({"app_scheme": "javascript:alert(1)"}, "dev.tsnanh.hermes.bot"),
+    ({"app_scheme": "https://evil.example"}, "dev.tsnanh.hermes.bot"),
+])
+def test_google_page_returns_to_the_pal_that_started_the_sign_in(root, public_url, exchange, web, sent, returned):
+    _save("google-workspace", GOOGLE_CLIENT_ID)
+    link = _ok("connectors.oauth_client.connect", slug="google-workspace", **sent)["auth_url"]
+    state = parse_qs(urlsplit(link).query)["state"][0]
+
+    page = _callback(web, code="fake-code-do-not-use", state=state)
+
+    assert page.status_code == 200
+    assert f'href="{returned}://chat/install-done"' in page.text
+    assert page.text.count("://") == 1
+
+
+def test_google_page_for_a_denied_sign_in_returns_to_the_dev_build(root, public_url, exchange, web):
+    _save("google-workspace", GOOGLE_CLIENT_ID)
+    link = _ok("connectors.oauth_client.connect", slug="google-workspace", app_scheme="dev.tsnanh.hermes.bot.dev")["auth_url"]
+    page = _callback(web, error="access_denied", state=parse_qs(urlsplit(link).query)["state"][0])
+    assert page.status_code == 200 and 'href="dev.tsnanh.hermes.bot.dev://chat/install-done"' in page.text
+
+
+def test_a_sign_in_saved_before_the_scheme_column_existed_returns_to_the_release_app(root, public_url):
+    import sqlite3
+
+    from gateway.device_registry import install_root
+    path = install_root(root) / setup_mod.DB_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    legacy = sqlite3.connect(path)
+    legacy.executescript(
+        "CREATE TABLE nonces (digest TEXT PRIMARY KEY, provider_id TEXT NOT NULL, profile_home TEXT NOT NULL,"
+        " verifier TEXT NOT NULL, redirect_uri TEXT NOT NULL, expires_at REAL NOT NULL);")
+    legacy.execute("INSERT INTO nonces VALUES (?, ?, ?, ?, ?, ?)",
+                   (setup_mod._digest("old-state"), "google-workspace", "/home", "v", "https://x.invalid/cb", 10**12))
+    legacy.commit()
+    legacy.close()
+    pending = setup_mod.build_store().consume_nonce("old-state")
+    assert pending is not None and pending.app_scheme.value == "dev.tsnanh.hermes.bot"
+
+
 def test_the_access_log_drops_the_google_callback_query():
     from gateway.chat_install_runtime import RedactInstallCallbackQuery
     record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s"', (
@@ -186,7 +230,7 @@ def test_figma_connects_through_the_mcp_path_with_the_owner_client(root, public_
         started.update(name=name, cfg=cfg)
         return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
-    def fake_gateway(home, name, cfg, redirect_uri):
+    def fake_gateway(home, name, cfg, redirect_uri, app_scheme):
         started.update(name=name, cfg=cfg, redirect_uri=redirect_uri)
         return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
@@ -280,7 +324,7 @@ def test_mcp_clients_redirect_to_the_gateway_callback_and_fall_back_to_loopback(
         started.update(via="loopback", redirect=cfg["oauth"].get("redirect_uri"))
         return {"session_id": "s1", "auth_url": "https://vendor.example/oauth", "flow": "pkce"}
 
-    def fake_gateway(home, name, cfg, redirect_uri):
+    def fake_gateway(home, name, cfg, redirect_uri, app_scheme):
         started.update(via="gateway", redirect=redirect_uri, configured=cfg["oauth"]["redirect_uri"])
         return {"session_id": "s1", "auth_url": "https://vendor.example/oauth", "flow": "pkce"}
 
