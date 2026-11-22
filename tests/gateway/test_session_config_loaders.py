@@ -36,7 +36,7 @@ def test_in_process_turn_routes_with_the_sessions_own_provider_routing(tmp_path,
         _resolve_turn_agent_config=lambda message, model, runtime, **kw: {'model': model, 'runtime': runtime})
     turn = TurnRunner.__new__(TurnRunner)
     turn._runner = runner
-    turn._ctx = SimpleNamespace(source=SimpleNamespace(platform=Platform.LOCAL, chat_id='c'), session_key='k',
+    turn._ctx = SimpleNamespace(posture=None, source=SimpleNamespace(platform=Platform.LOCAL, chat_id='c'), session_key='k',
                                 user_config={}, message='hi', inbound_message_id=None, enabled_toolsets=[])
     turn._combined_ephemeral_prompt = lambda: None
     turn._setup_stream_consumer = lambda platform_key: (None, None, None, False)
@@ -75,7 +75,7 @@ def test_a_local_turn_reloads_the_profiles_env_file_and_keeps_its_own_turn_budge
         _resolve_turn_agent_config=lambda message, model, runtime, **kw: {'model': model, 'runtime': runtime})
     turn = TurnRunner.__new__(TurnRunner)
     turn._runner = runner
-    turn._ctx = SimpleNamespace(source=SimpleNamespace(platform=Platform.LOCAL, chat_id='c'), session_key='k',
+    turn._ctx = SimpleNamespace(posture=None, source=SimpleNamespace(platform=Platform.LOCAL, chat_id='c'), session_key='k',
                                 user_config={}, message='hi', inbound_message_id=None, enabled_toolsets=[])
     turn._combined_ephemeral_prompt = lambda: None
     turn._setup_stream_consumer = lambda platform_key: (None, None, None, False)
@@ -130,7 +130,7 @@ def _in_process_prefill(authority, policy, monkeypatch, chat_id):
                                    _session_db=None, _refresh_fallback_model=lambda: None)
     source = SimpleNamespace(chat_id=chat_id, user_id='u', user_id_alt=None, user_name=None, chat_name=None,
                              chat_type='dm', thread_id=None)
-    turn._ctx = SimpleNamespace(source=source, user_config={}, enabled_toolsets=[], disabled_toolsets=None,
+    turn._ctx = SimpleNamespace(posture=None, source=source, user_config={}, enabled_toolsets=[], disabled_toolsets=None,
                                 session_id=chat_id, session_key='k', AIAgent=lambda **kw: built.update(kw))
     turn._build_fresh_agent({'model': 'm', 'runtime': {}}, 'local', None, 1, None, {}, False)
     return built['prefill_messages']

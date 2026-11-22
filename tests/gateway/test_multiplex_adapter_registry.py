@@ -221,6 +221,9 @@ class _SecondaryRecoveryAdapter:
     def set_authorization_check(self, handler):
         self.authorization_check = handler
 
+    def set_admission_check(self, handler):
+        self.admission_check = handler
+
     def set_platform_event_handler(self, handler):
         self.platform_event_handler = handler
 
