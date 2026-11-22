@@ -38,6 +38,7 @@ struct GoogleAdsFlowSheet: ViewModifier {
         content.macSheet(
             item: $model.googleAdsFlow,
             onDismiss: { Task { await model.reload() } },
+            size: .flow,
             content: { session in
                 StepFlowView(model: session.model, title: GoogleAdsConnector.name, close: { model.closeGoogleAdsFlow() }, accessory: { _ in EmptyView() })
             }

@@ -213,7 +213,7 @@ struct RootView: View {
             .environment(rooms)
             .task { await roster.runLive() }
             .task { await rooms.run() }
-            .macSheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {
+            .macSheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 }), size: .form) {
                 CreateRoomSheet(rooms: rooms, roster: roster, router: router)
             }
             .ownerIntro(hub: hub, connection: model)

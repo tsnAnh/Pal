@@ -22,7 +22,7 @@ struct BotKeysScreen: View {
         )
         .task { await model.load() }
         .refreshable { await model.load() }
-        .macSheet(item: Binding(get: { model.entry }, set: { if $0 == nil { model.cancel() } })) { row in
+        .macSheet(item: Binding(get: { model.entry }, set: { if $0 == nil { model.cancel() } }), size: .compact) { row in
             entrySheet(row)
         }
         .macConfirm(item: Binding(get: { model.pendingRemoval }, set: { model.pendingRemoval = $0 })) { row in

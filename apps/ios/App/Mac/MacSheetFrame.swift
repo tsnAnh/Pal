@@ -3,18 +3,18 @@ import PalDesign
 import SwiftUI
 
 struct MacSheetFrame: ViewModifier {
-    let readable: Bool
+    let size: MacModalSize
 
     @Environment(\.macWindowSize) private var windowSize
     @State private var dialogs = MacDialogCenter()
 
     func body(content: Content) -> some View {
-        let size = MacModalSizing.sheetSize(window: windowSize?.size ?? .zero)
+        let frame = size.frame(in: windowSize?.size ?? .zero)
         content
-            .frame(maxWidth: readable ? MacModalSizing.readableColumn : .infinity, maxHeight: .infinity)
-            .frame(width: size.width, height: size.height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .macModalFrame(frame)
             .environment(\.macDialogCenter, dialogs)
-            .overlay { MacDialogLayer(center: dialogs, window: size) }
+            .overlay { MacDialogLayer(center: dialogs, window: frame.size) }
     }
 }
 #endif

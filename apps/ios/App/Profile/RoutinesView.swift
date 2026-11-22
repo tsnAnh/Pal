@@ -44,7 +44,7 @@ struct RoutinesView: View {
         .task { await model.load() }
         .refreshable { await model.load() }
         .toast($model.toast)
-        .macSheet(item: $creation) { created in
+        .macSheet(item: $creation, size: .form) { created in
             NewRoutineSheet(model: created) { creation = nil }
         }
         .macConfirm(item: $model.pendingRemoval) { routine in

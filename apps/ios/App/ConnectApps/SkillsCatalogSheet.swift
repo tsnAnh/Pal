@@ -40,7 +40,7 @@ struct SkillsCatalogSheet: View {
     var body: some View {
         page
         .task { await model.start() }
-        .macSheet(item: $model.keyRequest) { request in
+        .macSheet(item: $model.keyRequest, size: .compact) { request in
             SkillKeyEntrySheet(model: model, request: request,
                                botName: botName)
                 .presentationDetents([.medium])

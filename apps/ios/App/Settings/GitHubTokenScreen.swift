@@ -59,7 +59,7 @@ struct GitHubTokenScreen: View {
         }
         .task { await model.refresh() }
         .refreshable { await model.refresh() }
-        .macSheet(isPresented: $showingSignIn, onDismiss: { Task { await model.closeSignIn() } }, content: {
+        .macSheet(isPresented: $showingSignIn, onDismiss: { Task { await model.closeSignIn() } }, size: .compact, content: {
             GitHubSignInCodeSheet(model: model) { showingSignIn = false }
         })
     }

@@ -529,7 +529,7 @@ private struct MacPermissionsSection: View {
             }
         }
         .task { await model.load(hub: hub) }
-        .macSheet(item: $addingTo) { list in
+        .macSheet(item: $addingTo, size: .compact) { list in
             AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
         }
         .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
@@ -689,10 +689,10 @@ private struct MacVaultSection: View {
             }
         )
         .task { await model.load(api: hub.api) }
-        .macSheet(isPresented: $adding) {
+        .macSheet(isPresented: $adding, size: .form) {
             AddVaultSheet(model: model, api: hub.api) { adding = false }
         }
-        .macSheet(item: $editing) { entry in
+        .macSheet(item: $editing, size: .form) { entry in
             VaultEditSheet(model: model, api: hub.api, entry: entry) { editing = nil }
         }
         .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {

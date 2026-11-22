@@ -14,7 +14,7 @@ import check_swift_modal_size as cms
 
 PANEL = (
     "struct MacModalPanel<Content: View>: View {\n"
-    "    var fit = MacModalFit.window\n"
+    "    let size: MacModalSize\n"
     "    let identifier: String\n"
     "    @ViewBuilder let content: Content\n"
     "}\n"
@@ -70,7 +70,7 @@ def test_a_container_sized_tree_passes(tmp_path):
 def test_a_fixed_panel_size_in_a_call_fails_and_names_the_container(tmp_path):
     host = HOST.replace("MacModalPanel(identifier", "MacModalPanel(width: 824, height: 478, identifier")
     found = cms.scan(_tree(tmp_path, {"App/Mac/MacModals.swift": host}))
-    assert len(found) == 1 and found[0].startswith("App/Mac/MacModals.swift:3: modal-panel-size") and "fit: .content" in found[0]
+    assert len(found) == 1 and found[0].startswith("App/Mac/MacModals.swift:3: modal-panel-size") and "MacModalSize class" in found[0]
 
 
 def test_a_frame_inside_the_panel_content_is_not_a_panel_size(tmp_path):

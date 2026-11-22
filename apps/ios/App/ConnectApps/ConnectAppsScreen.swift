@@ -114,19 +114,19 @@ private struct ConnectAppsPresentations: ViewModifier {
                     ]
                 )
             }
-            .macSheet(isPresented: $model.showsSkills) {
+            .macSheet(isPresented: $model.showsSkills, size: .flow) {
                 SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
             }
-            .macSheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, content: mcpSignInSheet)
-            .macSheet(isPresented: $model.showsSlackPicker) {
+            .macSheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, size: .flow, content: mcpSignInSheet)
+            .macSheet(isPresented: $model.showsSlackPicker, size: .compact) {
                 SlackBotChoice(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
             }
             .modifier(OwnerSetupSheet(model: model))
-            .macSheet(item: $model.keyRequest) { request in
+            .macSheet(item: $model.keyRequest, size: .compact) { request in
                 CapabilityKeyEntrySheet(model: model, request: request)
                     .presentationDetents([.medium])
             }
-            .macSheet(item: $model.credentialPrompt) { prompt in
+            .macSheet(item: $model.credentialPrompt, size: .compact) { prompt in
                 CredentialSheet(prompt: prompt, botName: model.botName) { values in
                     Task { await model.connect(prompt.app, credentials: values, account: prompt.account) }
                 }
@@ -141,7 +141,7 @@ private struct OwnerSetupSheet: ViewModifier {
         content.macSheet(
             item: $model.ownerSetup,
             onDismiss: { Task { await model.reload() } },
-            readable: true,
+            size: .flow,
             content: { setup in OwnerSetupView(model: setup) }
         )
     }

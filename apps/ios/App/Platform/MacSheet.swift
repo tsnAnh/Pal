@@ -1,3 +1,4 @@
+import PalDesign
 import SwiftUI
 
 #if os(macOS)
@@ -6,7 +7,7 @@ struct MacSheetRequest: Identifiable {
     let content: () -> AnyView
     let dismiss: () -> Void
     let onDismiss: (() -> Void)?
-    let readable: Bool
+    let size: MacModalSize
 }
 
 @MainActor
@@ -68,18 +69,18 @@ private func macSheetPresence<Item>(of item: Binding<Item?>) -> Binding<Bool> {
 
 extension View {
     func macSheet<Sheet: View>(
-        isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, readable: Bool = false, @ViewBuilder content: @escaping () -> Sheet
+        isPresented: Binding<Bool>, onDismiss: (() -> Void)? = nil, size: MacModalSize, @ViewBuilder content: @escaping () -> Sheet
     ) -> some View {
         modifier(MacSheetPresentation(
-            isPresented: isPresented, readable: readable, onDismiss: onDismiss, sheet: { isPresented.wrappedValue ? content() : nil }
+            isPresented: isPresented, size: size, onDismiss: onDismiss, sheet: { content() }
         ))
     }
 
     func macSheet<Item, Sheet: View>(
-        item: Binding<Item?>, onDismiss: (() -> Void)? = nil, readable: Bool = false, @ViewBuilder content: @escaping (Item) -> Sheet
+        item: Binding<Item?>, onDismiss: (() -> Void)? = nil, size: MacModalSize, @ViewBuilder content: @escaping (Item) -> Sheet
     ) -> some View {
         modifier(MacSheetPresentation(
-            isPresented: macSheetPresence(of: item), readable: readable, onDismiss: onDismiss, sheet: { item.wrappedValue.map(content) }
+            isPresented: macSheetPresence(of: item), size: size, onDismiss: onDismiss, sheet: { item.wrappedValue.map(content) }
         ))
     }
 
@@ -91,7 +92,7 @@ extension View {
 
 private struct MacSheetPresentation<Sheet: View>: ViewModifier {
     let isPresented: Binding<Bool>
-    let readable: Bool
+    let size: MacModalSize
     let onDismiss: (() -> Void)?
     let sheet: () -> Sheet?
 
@@ -112,7 +113,7 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
                             content: built,
                             dismiss: { flag.wrappedValue = false },
                             onDismiss: onDismiss,
-                            readable: readable
+                            size: size
                         ))
                     } else {
                         center.withdraw(token)
@@ -128,13 +129,13 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
     }
 
     private func built() -> AnyView {
-        guard let view = sheet() else { return AnyView(EmptyView()) }
+        guard isPresented.wrappedValue, let view = sheet() else { return AnyView(EmptyView()) }
         return AnyView(view)
     }
 
     private func system(_ content: Content) -> some View {
         content.sheet(isPresented: isPresented, onDismiss: onDismiss) {
-            built().environment(\.sheetClose, nil).macSheetFrame(readable: readable)
+            built().environment(\.sheetClose, nil).macSheetFrame(size: size)
         }
     }
 }

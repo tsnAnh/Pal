@@ -89,7 +89,6 @@ struct MacPalette: View {
                 results(sections, rows: rows)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
         .background {
             Button("") { router.closeSearch() }
@@ -160,9 +159,9 @@ struct MacPalette: View {
                     }
                 }
                 .padding(.horizontal, 10)
+                .padding(.bottom, 10)
             }
             .scrollIndicators(.never)
-            .frame(maxHeight: .infinity)
             .onChange(of: selection) { _, index in
                 if rows.indices.contains(index) { proxy.scrollTo(rows[index].id) }
             }

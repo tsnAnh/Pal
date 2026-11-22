@@ -35,6 +35,7 @@ struct DiscordFlowSheet: ViewModifier {
         content.macSheet(
             item: $model.discordFlow,
             onDismiss: { Task { await model.reload() } },
+            size: .flow,
             content: { session in
                 StepFlowView(
                     model: session.model, title: "Discord",

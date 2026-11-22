@@ -24,10 +24,10 @@ private struct MacSheetPanel: View {
     var body: some View {
         MacModalScrim {}
         MacModalPanel(
-            identifier: "macSheet", closeIdentifier: "macSheetClose", close: request.dismiss,
+            size: request.size, identifier: "macSheet", closeIdentifier: "macSheetClose", close: request.dismiss,
             content: {
                 request.content()
-                    .frame(maxWidth: request.readable ? MacModalSizing.readableColumn : .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.sheetClose, request.dismiss)
                     .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
                     .onPreferenceChange(MacSheetDismissLockKey.self) { dismissLocked = $0 }

@@ -192,6 +192,7 @@ targets:
           - ComputerE2ETests.swift
           - MacShellE2ETests.swift
           - MacModalsE2ETests.swift
+          - MacModalVisibleE2ETests.swift
           - MacChatDetailsE2ETests.swift
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift
@@ -212,6 +213,7 @@ targets:
           - ComputerE2ETests.swift
           - MacShellE2ETests.swift
           - MacModalsE2ETests.swift
+          - MacModalVisibleE2ETests.swift
           - MacChatDetailsE2ETests.swift
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift

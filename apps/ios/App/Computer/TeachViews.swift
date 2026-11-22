@@ -263,7 +263,7 @@ private struct TeachPresentation: ViewModifier {
                 await model.observe()
             }
             .toast(Binding(get: { active ? model.toast : nil }, set: { if active { model.toast = $0 } }), accessibilityIdentifier: "teachToast")
-            .macSheet(isPresented: Binding(get: { active && model.showsReview }, set: { if !$0 { model.showsReview = false } })) {
+            .macSheet(isPresented: Binding(get: { active && model.showsReview }, set: { if !$0 { model.showsReview = false } }), size: .flow) {
                 TeachReviewSheet(model: model)
             }
             .macConfirm(isPresented: Binding(get: { active && model.confirmation != nil }, set: { if !$0 { model.confirmation = nil } })) {

@@ -31,7 +31,7 @@ private struct OwnerIntroPresenter: ViewModifier {
     func body(content: Content) -> some View {
         content
             .task(id: trigger) { await settle() }
-            .macSheet(isPresented: Binding(get: { intro != nil }, set: { if !$0 { intro?.escape() } })) {
+            .macSheet(isPresented: Binding(get: { intro != nil }, set: { if !$0 { intro?.escape() } }), size: .full) {
                 if let intro { OwnerIntroSheet(model: intro) }
             }
     }
