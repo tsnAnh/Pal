@@ -426,13 +426,13 @@ publish_feed() {
     || gh release create "$FEED_TAG" --repo "$REPO" --prerelease --latest=false \
          --title "Pal for Mac update feed" --notes "Sparkle feed. Do not delete."
   gh release upload "$FEED_TAG" "$stage/appcast.xml" --repo "$REPO" --clobber
-  for _ in $(seq 1 10); do
+  for _ in $(seq 1 60); do
     if curl -fsSL "$FEED_URL" | grep -q "$build_number"; then
       return
     fi
-    sleep 3
+    sleep 5
   done
-  die "live feed does not list build $build_number after 30s"
+  die "live feed does not list build $build_number after 5 minutes"
 }
 
 short_version=""
