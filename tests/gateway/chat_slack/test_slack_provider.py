@@ -433,6 +433,15 @@ def test_update_identity_resends_name_and_picture_when_the_icon_is_automatic(tmp
     assert kit.slack.calls[-1] == "apps.icon.set"
 
 
+def test_an_install_under_the_empty_workspace_key_uses_the_capabilities_its_probe_recorded(tmp_path):
+    kit = Kit(tmp_path)
+    kit.provider.records.update_workspace("", capabilities={"set_icon": "automatic"})
+    kit.provider.begin_install(ci.initial_state("pal", "slack", "", FIXED_NOW), kit.config_item)
+    assert "apps.icon.set" in kit.slack.calls
+    assert _modes(kit.provider.capabilities(""))[CAP.set_icon] is wire.CapabilityMode.automatic
+    assert _modes(kit.provider.capabilities())[CAP.set_icon] is wire.CapabilityMode.guided
+
+
 def test_update_identity_returns_the_guided_avatar_step_when_the_icon_is_manual(tmp_path):
     kit = Kit(tmp_path)
     installation = kit.install()[1]
