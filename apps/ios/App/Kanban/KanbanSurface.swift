@@ -26,7 +26,7 @@ extension RosterModel {
 }
 
 struct KanbanSurface: View {
-    @State private var store: KanbanStore
+    @LazyState private var store: KanbanStore
     @State private var path: [KanbanRoute] = []
     @State private var selected: String?
     let roster: RosterModel
@@ -35,7 +35,7 @@ struct KanbanSurface: View {
     @Environment(\.scenePhase) private var scenePhase
 
     init(connection: ConnectionModel, roster: RosterModel, close: (() -> Void)?) {
-        _store = State(initialValue: KanbanStore.live(connection: connection))
+        _store = LazyState { KanbanStore.live(connection: connection) }
         self.roster = roster
         self.close = close
     }

@@ -77,7 +77,7 @@ struct LibraryView: View {
         if showsChrome {
             ForEach(model.sections) { section in standardSection(section) }
         } else {
-            ForEach(MacLibraryGroup.groups(model.entries)) { group in macSection(group) }
+            ForEach(model.macItems) { item in macItem(item) }
         }
     }
 
@@ -146,41 +146,23 @@ extension LibraryView {
         }
     }
 
-    fileprivate func macSection(_ group: MacLibraryGroup) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(group.title)
+    @ViewBuilder
+    fileprivate func macItem(_ item: MacLibraryItem) -> some View {
+        switch item {
+        case .header(let header):
+            Text(header.title)
                 .font(.system(size: 12))
                 .foregroundStyle(PalTokens.textSecondary)
                 .padding(.horizontal, 11)
+                .padding(.top, 24)
+                .padding(.bottom, 9)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("librarySection-\(group.id)")
-            VStack(spacing: 0) {
-                ForEach(group.entries) { entry in
-                    MacLibraryRow(entry: entry, model: model)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("libraryCard-\(group.id)")
+                .accessibilityIdentifier("librarySection-\(header.id)")
+        case .row(let row):
+            MacLibraryRow(item: row, isPreparing: model.preparingEntryID == row.entry.id, model: model)
+                .equatable()
         }
-        .padding(.top, 24)
-    }
-}
-
-struct MacLibraryGroup
-: Identifiable {
-    let id: String
-    let title: String
-    let entries: [LibraryEntry]
-
-    static func groups(_ entries: [LibraryEntry], now: Date = Date(), calendar: Calendar = .current) -> [MacLibraryGroup] {
-        let today = entries.filter { calendar.isDate($0.occurredAt, inSameDayAs: now) }
-        let older = entries.filter { !calendar.isDate($0.occurredAt, inSameDayAs: now) }
-        return [
-            today.isEmpty ? nil : MacLibraryGroup(id: "today", title: String(localized: "Today"), entries: today),
-            older.isEmpty ? nil : MacLibraryGroup(id: "older", title: String(localized: "Older"), entries: older),
-        ].compactMap { $0 }
     }
 }
 
@@ -211,44 +193,6 @@ private struct MacLibraryChips: View {
         .padding(.top, 14)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("libraryFilter")
-    }
-}
-
-private struct MacLibraryRow: View {
-    let entry: LibraryEntry
-    let model: LibraryModel
-
-    var body: some View {
-        if entry.isOpenable {
-            Button { model.open(entry) } label: { rowContent }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("libraryRow-\(entry.id)")
-                .accessibilityValue(Text(entry.kind.rawValue))
-        } else {
-            rowContent
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("libraryRow-\(entry.id)")
-                .accessibilityValue(Text(entry.kind.rawValue))
-        }
-    }
-
-    private var rowContent: some View {
-        HStack(spacing: 8) {
-            LibraryIcon(entry: entry, model: model, size: 20, glyph: 12)
-                .frame(width: 20, height: 20)
-            Text(entry.title)
-                .font(.system(size: 12))
-                .foregroundStyle(PalTokens.textPrimary)
-                .lineLimit(1)
-            Spacer(minLength: 0)
-            if model.preparingEntryID == entry.id {
-                ProgressView().controlSize(.small)
-            }
-        }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 33)
-        .contentShape(Rectangle())
-        .help(entry.subtitle())
     }
 }
 
@@ -299,7 +243,7 @@ private struct LibraryRow: View {
     }
 }
 
-private struct LibraryIcon: View {
+struct LibraryIcon: View {
     let entry: LibraryEntry
     let model: LibraryModel
     var size = LibraryMetrics.iconSize

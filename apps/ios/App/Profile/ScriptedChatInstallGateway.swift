@@ -24,7 +24,9 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
     private init() {
         let defaults = UserDefaults.standard
         if ProcessInfo.processInfo.arguments.contains(Self.resetArgument) { defaults.removeObject(forKey: Self.defaultsKey) }
-        snapshot = defaults.data(forKey: Self.defaultsKey).flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) } ?? Snapshot()
+        snapshot = defaults.data(forKey: Self.defaultsKey)
+            .flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) } // perf-lint: ok UI-test-only actor, never on the main actor
+            ?? Snapshot()
     }
 
     nonisolated var source: ChatInstallSource {
@@ -41,7 +43,7 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
         snapshot.step = step
         snapshot.revision += 1
         if let done { snapshot.done.append(done) }
-        UserDefaults.standard.set(try? JSONEncoder().encode(snapshot), forKey: Self.defaultsKey)
+        UserDefaults.standard.set(try? JSONEncoder().encode(snapshot), forKey: Self.defaultsKey) // perf-lint: ok UI-test-only actor, never on the main actor
         guard let payload = try? decode(ChatInstallChangedPayload.self, ["state": stateJSON()]) else { return }
         for listener in listeners { listener.yield(payload) }
     }
@@ -71,7 +73,7 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, _ object: Any) throws -> T {
-        try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object))
+        try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object)) // perf-lint: ok UI-test-only actor, never on the main actor
     }
 
     static let refusal = GatewayFault(code: 4403, reason: "owner_only", trace: TraceID("7f3k2m9a")!, method: "chat.provider.list",

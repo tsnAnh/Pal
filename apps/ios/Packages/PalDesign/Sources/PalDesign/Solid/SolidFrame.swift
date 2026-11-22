@@ -18,7 +18,7 @@ struct SolidRotation {
     }
 }
 
-struct SolidFrame {
+struct SolidFrame: Sendable {
     let silhouette: Path
     let eyes: [Path]
     let eyeOpacity: Double
@@ -60,7 +60,7 @@ struct SolidFrame {
         silhouette = Path(path)
         visibleTriangles = visible
         self.corners = corners
-        let pair = SolidEyes.pair(pose, surface: geometry.surface, rotation: rotation)
+        let pair = SolidEyes.pair(pose, geometry: geometry, rotation: rotation)
         eyes = pair.outlines.map { Self.rounded($0.map(projection.point)) }
         eyeOpacity = pair.opacity
         eyesNearEdge = pair.nearEdge

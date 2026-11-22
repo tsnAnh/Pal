@@ -11,7 +11,7 @@ struct RichBlockView: View {
             CodeBlockView(text: source)
         } else {
             switch RichRendering.kind(of: block) {
-            case .code(let language): CodeCardView(source: source, language: language)
+            case .code(let language): CodeCardView(source: source, language: language, growing: isStreaming)
             case .diff: DiffBlockView(source: source)
             case .terminal: TerminalBlockView(source: source)
             case .json: JSONBlockView(source: source)

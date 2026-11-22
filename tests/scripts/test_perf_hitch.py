@@ -24,9 +24,9 @@ perf_hitch = _load("perf_hitch")
 
 def report(**overrides):
     base = {
-        "schema": 1, "platform": "macOS", "startedAt": "2026-11-18T09:30:00Z", "durationSeconds": 30.0,
-        "frames": 1800, "hitches": 15, "severeHitches": 3, "worstFrameMs": 52.4, "hitchMs": 90.0,
-        "thresholdsMs": {"hitch": 16.7, "severe": 33.0},
+        "schema": 2, "platform": "macOS", "startedAt": "2026-11-18T09:30:00Z", "durationSeconds": 30.0,
+        "frames": 1800, "hitches": 15, "severeHitches": 3, "worstFrameMs": 52.4, "hitchMs": 90.0, "budgetMs": 16.7,
+        "thresholdsMs": {"hitch": 25.05, "severe": 33.0},
     }
     return {**base, **overrides}
 
@@ -138,6 +138,15 @@ def test_compare_marks_a_regression_from_zero_instead_of_hiding_it():
     assert row_cells(perf_hitch.compare(clean, clean), "hitches_per_min")[2] == "+0.0%"
 
 
+def test_compare_warns_when_frame_budgets_differ():
+    assert "frame budgets differ" in perf_hitch.compare(report(), report(budgetMs=8.33))
+    assert "frame budgets differ" not in perf_hitch.compare(report(), report())
+
+
+def test_summary_text_names_the_frame_budget():
+    assert "frame budget 8.33 ms" in perf_hitch.render_summary(report(budgetMs=8.33))
+
+
 def test_compare_warns_when_platforms_differ():
     assert "platforms differ" in perf_hitch.compare(report(), report(platform="iOS"))
     assert "platforms differ" not in perf_hitch.compare(report(), report())
@@ -146,7 +155,11 @@ def test_compare_warns_when_platforms_differ():
 @pytest.mark.parametrize(
     ("bad", "fragment"),
     [
-        (report(schema=2), "schema"),
+        (report(schema=1), "schema"),
+        (report(schema=3), "schema"),
+        (without("budgetMs"), "budgetMs"),
+        (report(budgetMs=0), "budgetMs"),
+        (report(budgetMs=-8.3), "budgetMs"),
         (without("schema"), "schema"),
         (report(schema=True), "schema"),
         (report(platform="tvOS"), "platform"),
@@ -155,7 +168,7 @@ def test_compare_warns_when_platforms_differ():
         (without("frames"), "frames"),
         (without("hitchMs"), "hitchMs"),
         (without("thresholdsMs"), "thresholdsMs"),
-        (report(thresholdsMs={"hitch": 16.7}), "severe"),
+        (report(thresholdsMs={"hitch": 25.05}), "severe"),
         (report(hitches=-1), "hitches"),
         (report(worstFrameMs=-0.5), "worstFrameMs"),
         (report(hitchMs=-3.0), "hitchMs"),

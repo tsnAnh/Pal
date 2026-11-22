@@ -125,7 +125,7 @@ struct ComputerHelpSheet: View {
             onLeading: onClose
         ) {
             ScrollView {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(Array(ComputerHelpSection.all.enumerated()), id: \.element.id) { index, section in
                         SectionCaption(section.caption, accessibilityIdentifier: "computerHelpCaption-\(section.id)")
                             .padding(.top, index == 0 ? 0 : PalMetrics.cardGap)

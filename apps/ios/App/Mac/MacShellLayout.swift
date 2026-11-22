@@ -1,22 +1,23 @@
 #if os(macOS)
 import PalDesign
+import PalDiagnostics
 import SwiftUI
 
 struct MacShellLayout: Layout {
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let minimumHeight = subviews.map { $0.sizeThatFits(.zero).height }.max() ?? 0
-        let idealHeight = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+        PalPerf.event("shell.layout.size")
         return CGSize(
             width: max(proposal.width ?? MacLayoutMetrics.windowMin, MacLayoutMetrics.windowMin),
-            height: max(proposal.height ?? idealHeight, minimumHeight, MacLayoutMetrics.windowMinHeight)
+            height: max(proposal.height ?? MacLayoutMetrics.windowMinHeight, MacLayoutMetrics.windowMinHeight)
         )
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         guard subviews.count >= 2 else { return }
+        PalPerf.event("shell.layout.place")
         let allocation = MacLayoutMetrics.allocate(
             window: bounds.width,
-            sidebar: subviews[0].sizeThatFits(.unspecified).width,
+            sidebar: subviews[0].sizeThatFits(ProposedViewSize(width: nil, height: bounds.height)).width,
             inspectorRequested: subviews.count > 2
         )
         subviews[0].place(

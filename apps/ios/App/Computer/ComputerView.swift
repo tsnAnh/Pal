@@ -23,7 +23,7 @@ struct ComputerView: View {
                 .accessibilityIdentifier("computerScreen")
             if model.phase == .live {
                 ComputerSurface(
-                    image: model.frame,
+                    frames: model.frames,
                     remoteSize: model.remoteSize,
                     canControl: model.hasControl,
                     trackpad: model.trackpad,

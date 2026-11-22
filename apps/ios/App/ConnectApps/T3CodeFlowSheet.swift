@@ -7,13 +7,15 @@ struct T3CodeFlowSheet: View {
 
     var body: some View {
         StepFlowView(model: flow.model, title: T3CodeConnector.name, close: close, accessory: { _ in EmptyView() })
-            .task(id: flow.model.engine.current.id) { prefillAddress() }
+            .task(id: flow.model.engine.current.id) { await prefillAddress() }
     }
 
-    private func prefillAddress() {
+    private func prefillAddress() async {
         let engine = flow.model.engine
         guard engine.current.id == "address", engine.value(for: "address").isEmpty,
-              let suggestion = T3AddressSuggestion.current() else { return }
+              let suggestion = await T3AddressSuggestion.current(),
+              !Task.isCancelled, engine.current.id == "address", engine.value(for: "address").isEmpty
+        else { return }
         flow.model.setValue(suggestion, for: "address")
     }
 }

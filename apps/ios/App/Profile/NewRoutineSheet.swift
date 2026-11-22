@@ -94,7 +94,7 @@ struct NewRoutineSheet: View {
                     .foregroundStyle(Color(theme.palette.textPrimary))
                     .accessibilityIdentifier("newRoutineAcceptedAs")
                 if let next = preview.nextRun {
-                    Text("Next run \(next.formatted(date: .abbreviated, time: .shortened))")
+                    Text("Next run \(FormattedLabel.nextRun(next))")
                         .hermesText(.rowSubtitle)
                         .foregroundStyle(Color(theme.palette.textSecondary))
                 }

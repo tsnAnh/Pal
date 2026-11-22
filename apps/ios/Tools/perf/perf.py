@@ -19,6 +19,8 @@ import perf_host
 import perf_ios
 import perf_report
 import perf_signpost
+import perf_sample
+import perf_tour
 from perf_common import IOS_DIR, PROFILE_SIZES, REPO
 
 SCRIPTS = REPO / ".claude" / "skills" / "verify-ios" / "scripts"
@@ -217,6 +219,13 @@ def main():
     signposts = commands.add_parser("signposts", help="list the Connect Apps signposts from xctrace exports (the os-signpost-interval and os-signpost tables): n, p50, p95, max, total, whole run and the Connect Apps step window")
     signposts.add_argument("exports", nargs="+", help="xctrace export XML files (one per table)")
     signposts.add_argument("--offset", type=float, default=0.0, help="seconds between the recording start and step 1 (default %(default)s)")
+    tour = commands.add_parser("tour", help="print the per-surface frame-pacing table of a perf-mac-tour directory (a run-N directory or the directory holding several), or the before/after comparison of two")
+    tour.add_argument("dir")
+    tour.add_argument("after", nargs="?")
+    samples = commands.add_parser("samples", help="main-thread hot paths per tour surface from a run recorded with perf-mac-tour --trace sample")
+    samples.add_argument("run_dir")
+    samples.add_argument("--surface", action="append", help="limit to this surface (repeatable)")
+    samples.add_argument("--top", type=int, default=12)
     arguments = sys.argv[1:]
     if not arguments or arguments[0].startswith("-"):
         arguments = ["run", *arguments]
@@ -228,6 +237,20 @@ def main():
         try:
             print(perf_hitch.render(args.report, args.after), end="")
         except perf_hitch.HitchReportError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "tour":
+        try:
+            print(perf_tour.render(args.dir, args.after), end="")
+        except perf_tour.TourError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "samples":
+        try:
+            print(perf_sample.render(args.run_dir, args.surface, args.top), end="")
+        except (perf_sample.SampleError, perf_tour.TourError) as error:
             print(f"error: {error}", file=sys.stderr)
             return 2
         return 0

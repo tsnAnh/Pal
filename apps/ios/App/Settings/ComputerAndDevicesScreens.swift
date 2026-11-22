@@ -51,13 +51,13 @@ struct BotComputerScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: BotComputerSettingsModel
+    @LazyState private var model: BotComputerSettingsModel
     @State private var confirming = false
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
-        _model = State(initialValue: BotComputerSettingsModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { BotComputerSettingsModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {
@@ -151,14 +151,14 @@ struct DevicesScreen: View {
     let connection: ConnectionModel
     let back: () -> Void
 
-    @State private var model: DevicesModel
+    @LazyState private var model: DevicesModel
     @State private var selected: DeviceEntry?
 
     init(hub: SettingsHub, connection: ConnectionModel, back: @escaping () -> Void) {
         self.hub = hub
         self.connection = connection
         self.back = back
-        _model = State(initialValue: DevicesModel(surfaces: connection.surfaces))
+        _model = LazyState { DevicesModel(surfaces: connection.surfaces) }
     }
 
     var body: some View {

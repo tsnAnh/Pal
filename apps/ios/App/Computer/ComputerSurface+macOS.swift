@@ -4,7 +4,7 @@ import PalRFB
 import SwiftUI
 
 struct ComputerSurface: NSViewRepresentable {
-    let image: CGImage?
+    let frames: ComputerFrameSink
     let remoteSize: RFBSize?
     let canControl: Bool
     let trackpad: Bool
@@ -23,7 +23,8 @@ struct ComputerSurface: NSViewRepresentable {
 
     func updateNSView(_ view: ScreenSurfaceView, context: Context) {
         view.model = model
-        view.apply(image: image, remoteSize: remoteSize)
+        view.imageView.bind(frames)
+        view.apply(remoteSize: remoteSize)
         view.canControl = canControl
     }
 }
@@ -44,7 +45,7 @@ final class ScreenSurfaceView: NSView {
         }
     }
 
-    private var image: CGImage?
+    let imageView = FrameImageView(frame: .zero)
     private var viewport = RFBViewport(container: .zero, remote: RFBSize(width: 1, height: 1))
     private var buttonMask: UInt8 = 0
     private var lastSentPoint: CGPoint?
@@ -62,24 +63,27 @@ final class ScreenSurfaceView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
-        layerContentsRedrawPolicy = .onSetNeedsDisplay
+        layer?.masksToBounds = true
+        addSubview(imageView)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    func apply(image newImage: CGImage?, remoteSize: RFBSize?) {
-        if let remoteSize, remoteSize != viewport.remote {
-            viewport.update(container: bounds.size, remote: remoteSize)
-        }
-        if let newImage { image = newImage }
-        needsDisplay = true
+    func apply(remoteSize: RFBSize?) {
+        guard let remoteSize, remoteSize != viewport.remote else { return }
+        viewport.update(container: bounds.size, remote: remoteSize)
+        layoutViewport()
+    }
+
+    private func layoutViewport() {
+        imageView.frame = viewport.displayedFrame
     }
 
     override func layout() {
         super.layout()
         viewport.update(container: bounds.size, remote: viewport.remote)
-        needsDisplay = true
+        layoutViewport()
     }
 
     override func updateTrackingAreas() {
@@ -98,19 +102,6 @@ final class ScreenSurfaceView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if canControl { window?.makeFirstResponder(self) }
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.black.setFill()
-        dirtyRect.fill()
-        guard let image, let context = NSGraphicsContext.current?.cgContext else { return }
-        let frame = viewport.displayedFrame
-        context.saveGState()
-        context.interpolationQuality = .high
-        context.translateBy(x: frame.minX, y: frame.maxY)
-        context.scaleBy(x: 1, y: -1)
-        context.draw(image, in: CGRect(x: 0, y: 0, width: frame.width, height: frame.height))
-        context.restoreGState()
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -202,17 +193,17 @@ final class ScreenSurfaceView: NSView {
 
     override func magnify(with event: NSEvent) {
         viewport.pinch(by: 1 + event.magnification, around: viewPoint(of: event))
-        needsDisplay = true
+        layoutViewport()
     }
 
     private func zoom(byPoints points: CGFloat, around focal: CGPoint) {
         viewport.pinch(by: pow(2, points / Self.zoomPointsPerDoubling), around: focal)
-        needsDisplay = true
+        layoutViewport()
     }
 
     private func panViewport(by delta: CGPoint) {
         viewport.pan(by: delta)
-        needsDisplay = true
+        layoutViewport()
     }
 
     private static let specialKeys: [UInt16: UInt32] = [

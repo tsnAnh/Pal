@@ -222,6 +222,7 @@ private struct ViewerDocumentPage: View {
             LazyVStack(alignment: .leading, spacing: 8) {
                 ForEach(items) { item in
                     MarkdownItemView(item: item)
+                        .equatable()
                 }
                 if let note = document.note { ViewerDocumentNote(text: note) }
             }

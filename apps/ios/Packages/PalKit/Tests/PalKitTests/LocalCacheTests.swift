@@ -28,6 +28,17 @@ struct LocalCacheTests {
         #expect(store.load(Payload.self, name: "roster", account: "a|other") == nil)
     }
 
+    @Test func readsSeeEveryEarlierQueuedWrite() {
+        let store = makeStore()
+        for index in 0..<50 { store.save(Payload(text: "v\(index)"), name: "roster", account: "acct") }
+        #expect(store.load(Payload.self, name: "roster", account: "acct") == Payload(text: "v49"))
+        store.remove(name: "roster", account: "acct")
+        #expect(store.load(Payload.self, name: "roster", account: "acct") == nil)
+        store.save(Payload(text: "again"), name: "roster", account: "acct")
+        store.removeAll()
+        #expect(store.load(Payload.self, name: "roster", account: "acct") == nil)
+    }
+
     @Test func corruptFileIsDiscarded() throws {
         let store = makeStore()
         store.save(Payload(text: "x"), name: "roster", account: "acct")

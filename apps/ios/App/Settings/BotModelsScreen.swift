@@ -6,14 +6,14 @@ struct BotModelsScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: BotModelsOverviewModel
+    @LazyState private var model: BotModelsOverviewModel
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: gateway), surfaces: connection.surfaces))
+        _model = LazyState { BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: gateway), surfaces: connection.surfaces) }
     }
 
     var body: some View {

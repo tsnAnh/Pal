@@ -1,4 +1,5 @@
 import CoreGraphics
+import Synchronization
 import SwiftUI
 
 enum SolidTuning {
@@ -13,9 +14,34 @@ enum SolidTuning {
     static let edgeClip = 0.5
 }
 
+final class SolidGeometryVariants: Sendable {
+    let standard: SolidGeometry
+    private let rig: AvatarRig
+    private let signature: SolidGeometry.Signature
+    private let fine = Mutex<SolidGeometry?>(nil)
+
+    init(_ rig: AvatarRig) {
+        signature = SolidGeometry.Signature(rig)
+        standard = SolidGeometry.shared(for: rig, signature: signature)
+        self.rig = rig
+    }
+
+    func geometry(_ detail: SolidGeometry.Detail) -> SolidGeometry {
+        switch detail {
+        case .standard: return standard
+        case .fine:
+            if let known = fine.withLock({ $0 }) { return known }
+            let built = SolidGeometry.shared(for: rig, signature: signature, detail: .fine)
+            fine.withLock { $0 = built }
+            return built
+        }
+    }
+}
+
 struct AvatarSolid {
     let geometry: SolidGeometry
     let rig: AvatarRig
+    private let variants: SolidGeometryVariants
 
     static let eyeInk = AvatarColor(css: "#000000") ?? .primary
     static let blackEyesFromContrast = 3.0
@@ -26,18 +52,20 @@ struct AvatarSolid {
         if let body = rig.bodyColor {
             rig.eyes.fill = body.contrastWithBlack < Self.blackEyesFromContrast ? AvatarColor(css: AvatarColor.lightEyeFillCSS) ?? .primary : Self.eyeInk
         }
-        self.init(geometry: SolidGeometry.shared(for: rig), rig: rig)
+        let variants = SolidGeometryVariants(rig)
+        self.init(geometry: variants.standard, rig: rig, variants: variants)
     }
 
-    private init(geometry: SolidGeometry, rig: AvatarRig) {
+    private init(geometry: SolidGeometry, rig: AvatarRig, variants: SolidGeometryVariants) {
         self.geometry = geometry
         self.rig = rig
+        self.variants = variants
     }
 
     func detailed(for size: CGFloat) -> AvatarSolid {
         let detail = SolidGeometry.Detail(size: size)
         guard detail != .standard else { return self }
-        return AvatarSolid(geometry: SolidGeometry.shared(for: rig, detail: detail), rig: rig)
+        return AvatarSolid(geometry: variants.geometry(detail), rig: rig, variants: variants)
     }
 
     var bodyFill: AvatarColor? { rig.bodyColor }
@@ -58,13 +86,13 @@ struct AvatarSolid {
         var rig = rig
         rig.body = rig.body.map(grayed)
         rig.dots = rig.dots.map(grayed)
-        return AvatarSolid(geometry: geometry, rig: rig)
+        return AvatarSolid(geometry: geometry, rig: rig, variants: variants)
     }
 
     func eyeInked(_ ink: AvatarColor) -> AvatarSolid {
         var rig = rig
         rig.eyes.fill = ink
-        return AvatarSolid(geometry: geometry, rig: rig)
+        return AvatarSolid(geometry: geometry, rig: rig, variants: variants)
     }
 
     func placement(size: CGFloat, inset: CGFloat) -> CGAffineTransform {

@@ -5,17 +5,19 @@ struct VoiceModeView: View {
     let model: ChatModel
     let dismiss: () -> Void
 
-    @State private var conversation: VoiceConversation
+    @LazyState private var conversation: VoiceConversation
     @Environment(\.hermesTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(model: ChatModel, dismiss: @escaping () -> Void) {
         self.model = model
         self.dismiss = dismiss
-        _conversation = State(initialValue: VoiceConversation(
-            currentTurn: { model.voiceTurn },
-            submit: { await model.submitVoice($0) }
-        ))
+        _conversation = LazyState {
+            VoiceConversation(
+                currentTurn: { model.voiceTurn },
+                submit: { await model.submitVoice($0) }
+            )
+        }
     }
 
     private var accent: Color { model.chatAccent?.accent ?? Color(theme.palette.chipSelectedFill) }

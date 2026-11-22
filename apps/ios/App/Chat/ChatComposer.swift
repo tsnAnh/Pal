@@ -138,10 +138,10 @@ struct ChatComposer: View {
         .padding(.horizontal, ChatMetrics.edgeMargin)
         .padding(.top, 8)
         .padding(.bottom, bottomMargin)
+        .reportsComposerDraft(draft)
         .onChange(of: draft) { _, text in
-            if SlashCatalog.query(in: text) != nil { loadSlashItems() }
-            fileRefIndex = 0
-            if SlashCatalog.query(in: text) == nil, let trigger = FileRefCatalog.trigger(in: text) { loadFileRefs(trigger.word) }
+            if fileRefIndex != 0 { fileRefIndex = 0 }
+            if SlashCatalog.query(in: text) != nil { loadSlashItems() } else if let trigger = FileRefCatalog.trigger(in: text) { loadFileRefs(trigger.word) }
         }
         .onChange(of: focused.wrappedValue) { _, isFocused in
             ComposerDragForwarding.update(isFocused: isFocused)

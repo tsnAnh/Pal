@@ -62,14 +62,16 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
             }
             self.handle(connection)
         }
-        let boundPort: UInt16 = try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
             let resumed = Flag()
             listener.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .ready:
                     if resumed.claim() {
-                        if let port = self?.listener.port?.rawValue {
-                            continuation.resume(returning: port)
+                        if let self, let boundPort = self.listener.port?.rawValue {
+                            self.port = boundPort
+                            self.armTimeout(timeout)
+                            continuation.resume()
                         } else {
                             continuation.resume(throwing: SignInError.listenerFailed)
                         }
@@ -86,12 +88,12 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
             }
             listener.start(queue: queue)
         }
-        queue.sync {
-            port = boundPort
-            let nanoseconds = timeout.components.seconds * 1_000_000_000 + timeout.components.attoseconds / 1_000_000_000
-            queue.asyncAfter(deadline: .now() + .nanoseconds(Int(nanoseconds))) { [weak self] in
-                self?.finishOnQueue(.failure(.listenerTimedOut))
-            }
+    }
+
+    private func armTimeout(_ timeout: Duration) {
+        let nanoseconds = timeout.components.seconds * 1_000_000_000 + timeout.components.attoseconds / 1_000_000_000
+        queue.asyncAfter(deadline: .now() + .nanoseconds(Int(nanoseconds))) { [weak self] in
+            self?.finishOnQueue(.failure(.listenerTimedOut))
         }
     }
 

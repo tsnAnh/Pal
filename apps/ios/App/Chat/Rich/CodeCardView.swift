@@ -70,6 +70,7 @@ extension RichCardFrame where Accessory == EmptyView {
 struct CodeCardView: View {
     let source: String
     let language: String?
+    var growing = false
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -78,14 +79,26 @@ struct CodeCardView: View {
         return language
     }
 
+    private var wholeText: some View {
+        Text(RichRendering.code(source, language: language, scheme: colorScheme))
+            .hermesText(.chatCode)
+            .font(RichCode.font)
+            .foregroundStyle(PalTokens.textPrimary)
+            .textSelection(.enabled)
+    }
+
     var body: some View {
         RichCardFrame(title: title, copyText: source, identifier: "codeCard") {
             ExpandableBlock(lineCount: RichCode.lineCount(source)) {
-                Text(RichRendering.code(source, language: language, scheme: colorScheme))
-                    .hermesText(.chatCode)
-                    .font(RichCode.font)
-                    .foregroundStyle(PalTokens.textPrimary)
-                    .textSelection(.enabled)
+                #if os(macOS)
+                if growing {
+                    StreamingCodeView(source: source, language: language)
+                } else {
+                    wholeText
+                }
+                #else
+                wholeText
+                #endif
             }
         }
     }

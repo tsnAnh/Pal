@@ -68,11 +68,12 @@ class E2ETestCase: XCTestCase {
         env = try E2EEnvironment.load()
     }
 
-    func launch(resetCredentials: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
+    func launch(resetCredentials: Bool = false, extraArguments: [String] = [], environment: [String: String] = [:]) -> XCUIApplication {
         let app = XCUIApplication()
         let reset = resetCredentials || !Self.credentialsResetThisRun
         Self.credentialsResetThisRun = true
         app.launchArguments = (reset ? ["-hermes-reset-credentials"] : []) + extraArguments
+        app.launchEnvironment = environment
         app.launch()
         #if os(macOS)
         presentMainWindow(app)
@@ -81,9 +82,11 @@ class E2ETestCase: XCTestCase {
     }
 
     #if os(macOS)
+    private static let macAppBundleID = "dev.tsnanh.hermes.bot.development"
+
     private func presentMainWindow(_ app: XCUIApplication) {
         guard !app.windows.firstMatch.waitForExistence(timeout: 3) else { return }
-        guard let url = NSRunningApplication.runningApplications(withBundleIdentifier: "dev.tsnanh.hermes.bot").first?.bundleURL else { return }
+        guard let url = NSRunningApplication.runningApplications(withBundleIdentifier: Self.macAppBundleID).first?.bundleURL else { return }
         let reopened = expectation(description: "app reopened")
         NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, _ in reopened.fulfill() }
         wait(for: [reopened], timeout: 10)

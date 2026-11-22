@@ -1,5 +1,6 @@
 import PalChat
 import PalDesign
+import PalProtocol
 import QuickLook
 import SwiftUI
 
@@ -20,6 +21,7 @@ struct FilePreviewSheet: View {
     @State private var attempt = 0
     @State private var folder: URL?
     @State private var notice: String?
+    @State private var isSaving = false
 
     var body: some View {
         NavigationStack {
@@ -81,7 +83,12 @@ struct FilePreviewSheet: View {
     private func saveAction(_ url: URL) -> some View {
         #if os(macOS)
         Button {
-            notice = (try? FileSaver.save(Data(contentsOf: url), name: file.name)) ?? String(localized: "The file could not be saved.")
+            guard !isSaving else { return }
+            isSaving = true
+            Task {
+                notice = await Self.save(url, name: file.name)
+                isSaving = false
+            }
         } label: {
             Label("Save as…", palIcon: "square.and.arrow.down")
         }
@@ -119,6 +126,14 @@ struct FilePreviewSheet: View {
         try? FileManager.default.removeItem(at: folder)
         self.folder = nil
     }
+
+    #if os(macOS)
+    private static func save(_ url: URL, name: String) async -> String {
+        let failure = String(localized: "The file could not be saved.")
+        guard let data = try? await DiskRead.data(contentsOf: url) else { return failure }
+        return (try? FileSaver.save(data, name: name)) ?? failure
+    }
+    #endif
 
     private static func write(_ data: Data, name: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appending(path: "chat-preview-\(UUID().uuidString)", directoryHint: .isDirectory)

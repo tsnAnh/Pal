@@ -71,7 +71,7 @@ struct VaultScreen: View {
     let profile: String?
     let back: () -> Void
 
-    @State private var model: VaultModel
+    @LazyState private var model: VaultModel
     @State private var adding = false
     @State private var editing: VaultEntry?
     @State private var selected: VaultEntry?
@@ -81,7 +81,7 @@ struct VaultScreen: View {
         self.hub = hub
         self.profile = profile
         self.back = back
-        _model = State(initialValue: VaultModel(surfaces: hub.connection.surfaces, profile: profile))
+        _model = LazyState { VaultModel(surfaces: hub.connection.surfaces, profile: profile) }
     }
 
     private var api: SettingsAPI { hub.api(for: profile) }

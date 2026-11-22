@@ -185,7 +185,7 @@ struct MacAccountMenu: View {
         .background(PalTokens.elevated.opacity(0.82), in: shape)
         .palGlass(shape, interactive: false)
         .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
+        .shadow(color: .black.opacity(0.3), radius: 23, y: 10)
         .background {
             Button("") { shell.showsAccountMenu = false }
                 .keyboardShortcut(.cancelAction)

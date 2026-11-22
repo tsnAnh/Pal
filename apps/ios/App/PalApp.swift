@@ -24,6 +24,10 @@ struct PalApp: App {
     @State private var signIn: ServiceSignInCenter
     @State private var autoApprove: ActionAutoApprove
     @State private var links: BotLinks
+    @State private var bots: BotsKit
+    @State private var templateImport: TemplateImportModel
+    @State private var rooms: RoomsModel
+    @State private var hub: SettingsHub
     @State private var directory = BotDirectory()
     #if os(macOS)
     @State private var shell = MacShell()
@@ -64,6 +68,11 @@ struct PalApp: App {
         })
         let links = BotLinks(connection: model)
         _links = State(initialValue: links)
+        let kit = BotsKit(connection: model)
+        _bots = State(initialValue: kit)
+        _templateImport = State(initialValue: TemplateImportModel(client: kit.services.templateImport))
+        _rooms = State(initialValue: RoomsModel(services: kit.services, roster: roster))
+        _hub = State(initialValue: SettingsHub(connection: model, roster: roster))
         let environment = IntentEnvironment(connection: model, roster: roster, router: router, links: links)
         AppDependencyManager.shared.add(dependency: environment)
         LaunchClock.mark("app initialised", on: .osLog())
@@ -71,7 +80,10 @@ struct PalApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(model: model, roster: roster, router: router, hostPool: hostPool, links: links)
+            RootView(
+                model: model, roster: roster, router: router, hostPool: hostPool, links: links,
+                bots: bots, templateImport: templateImport, rooms: rooms, hub: hub
+            )
                 .overlay { ReachOfferOverlay(model: offers) }
                 .overlay(alignment: .topLeading) { ExternalLinkProbe() }
                 .devicePermissionAlert(consent)
@@ -97,29 +109,16 @@ struct PalApp: App {
                         router.openChat(from: target, in: roster)
                     }
                 }
-                .onChange(of: model.isConnected, initial: true) { _, connected in
-                    if connected { Task { await appDelegate.push.ensureRegistered() } }
-                }
-                .onChange(of: roster.bots) { _, bots in
-                    PushAvatarSync.shared.sync(bots)
-                    Task { await directory.publish(bots) }
-                }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { Task { await model.restore() } }
-                }
-                .onChange(of: model.phase) { _, phase in
-                    guard phase == .signedOut else { return }
-                    autoApprove.forget()
-                    roster.reset()
-                    router.popToRoot()
-                    Task { await hostPool.reset() }
-                }
-                .onChange(of: scenePhase, initial: true) { _, phase in
-                    model.report(attention: ReachAttention(sceneIsActive: phase == .active))
-                }
+                .modifier(
+                    AppObservers(
+                        model: model, roster: roster, router: router, hostPool: hostPool, autoApprove: autoApprove,
+                        directory: directory, push: appDelegate.push, scenePhase: scenePhase
+                    )
+                )
         }
         #if os(macOS)
         .defaultSize(width: MacLayoutMetrics.defaultWindowWidth, height: MacLayoutMetrics.defaultWindowHeight)
+        .defaultLaunchBehavior(TestHostMode.isActive ? .suppressed : .automatic)
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
         .commands { MacCommands(shell: shell, roster: roster, router: router, connection: model, shortcuts: shortcuts, updater: appDelegate.updater) }
@@ -133,28 +132,30 @@ struct RootView: View {
     @Bindable var router: AppRouter
     let hostPool: DeviceHostPool
     let links: BotLinks
+    let bots: BotsKit
+    let rooms: RoomsModel
+    let hub: SettingsHub
     @State private var createBot = CreateBotModel()
     @State private var templateImport: TemplateImportModel
-    @State private var bots: BotsKit
-    @State private var rooms: RoomsModel
-    @State private var hub: SettingsHub
     #if os(iOS)
     @SceneStorage("pal.openChat") private var restoredChat = ""
     @State private var didRestoreChat = false
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
 
-    init(model: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, links: BotLinks) {
+    init(
+        model: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, links: BotLinks,
+        bots: BotsKit, templateImport: TemplateImportModel, rooms: RoomsModel, hub: SettingsHub
+    ) {
         self.model = model
         self.roster = roster
         self.router = router
         self.hostPool = hostPool
         self.links = links
-        let kit = BotsKit(connection: model)
-        _bots = State(initialValue: kit)
-        _templateImport = State(initialValue: TemplateImportModel(client: kit.services.templateImport))
-        _rooms = State(initialValue: RoomsModel(services: kit.services, roster: roster))
-        _hub = State(initialValue: SettingsHub(connection: model, roster: roster))
+        self.bots = bots
+        self.rooms = rooms
+        self.hub = hub
+        _templateImport = State(initialValue: templateImport)
     }
 
     private func resetCreateBot() {
@@ -192,91 +193,6 @@ struct RootView: View {
             destination(route)
         }
         #endif
-    }
-
-    @ViewBuilder
-    private func destination(_ route: AppRoute) -> some View {
-        switch route {
-        case .chat(let name):
-            if let bot = roster.bot(named: name) {
-                ChatView(
-                    model: ChatModel(bot: bot, links: links, roster: roster),
-                    teach: bots.teach(for: name, displayName: bot.displayName),
-                    router: router
-                )
-            }
-        case .room(let roomID):
-            if let room = rooms.room(id: roomID), let service = rooms.service {
-                RoomView(model: RoomModel(room: room, service: service, rooms: rooms), roster: roster, router: router)
-            }
-        case .botProfile(let name):
-            BotProfileView(
-                model: BotProfileModel(botName: name, services: bots.services, roster: roster, sharer: bots.sharer),
-                suggestions: ConnectedServicesModel(botName: name, services: bots.services),
-                router: router
-            )
-        case .botThread(let thread):
-            BotThreadView(model: BotThreadModel(route: thread, connection: model, roster: roster))
-        case .library(let name):
-            LibraryView(model: LibraryModel(botName: name, services: bots.services))
-        case .routines(let name):
-            RoutinesView(model: RoutinesModel(botName: name, services: bots.services))
-        case .computer(let name):
-            let bot = roster.bot(named: name)
-            ComputerView(
-                model: ComputerModel(
-                    botName: name,
-                    service: bots.services.computer,
-                    openStream: bots.services.openDisplayStream
-                ),
-                teach: bots.teach(for: name, displayName: bot?.displayName ?? name),
-                title: bot?.displayName ?? name,
-                spec: bot?.spec
-            )
-        default:
-            channelDestination(route)
-        }
-    }
-
-    @ViewBuilder
-    private func channelDestination(_ route: AppRoute) -> some View {
-        switch route {
-        case .slack(let name):
-            SlackEntryView(
-                botName: name,
-                displayName: roster.bot(named: name)?.displayName ?? name,
-                spec: roster.bot(named: name)?.spec,
-                services: bots.services,
-                source: ChatInstallSource.make(botName: name, connection: model)
-            )
-        case .telegram(let name):
-            TelegramView(model: TelegramModel(
-                botName: name,
-                displayName: roster.bot(named: name)?.displayName ?? name,
-                services: bots.services
-            ))
-        case .botModel(let name):
-            BotModelView(
-                model: BotModelsModel(client: bots.services.models(name), profile: name, surfaces: bots.services.surfaces),
-                displayName: roster.bot(named: name)?.displayName ?? name
-            )
-        case .botKeys(let name):
-            let displayName = roster.bot(named: name)?.displayName ?? name
-            BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)
-        case .botVault(let name):
-            VaultScreen(hub: hub, profile: name, back: router.pop)
-                .environment(\.sheetChromeHostedInNavigation, true)
-        case .messagingSettings(let name):
-            MessagingSettingsView(model: MessagingSettingsModel(
-                botName: name,
-                displayName: roster.bot(named: name)?.displayName ?? name,
-                services: bots.services
-            ))
-        case .kanban:
-            KanbanPushedSurface(connection: model, roster: roster, back: router.pop)
-        default:
-            EmptyView()
-        }
     }
 
     var body: some View {
@@ -331,8 +247,8 @@ struct RootView: View {
                     case .createBot:
                         CreateBotSheet(model: createBot, importer: templateImport, roster: roster, router: router)
                     case .connectApps:
-                        ConnectAppsScreen(
-                            model: ConnectAppsModel(
+                        ModelHost {
+                            ConnectAppsModel(
                                 connection: model,
                                 pool: hostPool,
                                 profile: router.connectAppsProfile,
@@ -341,7 +257,9 @@ struct RootView: View {
                                 bots: roster.customConnectorBots,
                                 currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
                             )
-                        ) { router.dismissSheet() }
+                        } content: {
+                            ConnectAppsScreen(model: $0) { router.dismissSheet() }
+                        }
                     case .kanban:
                         EmptyView()
                     }

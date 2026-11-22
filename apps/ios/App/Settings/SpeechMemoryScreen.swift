@@ -8,7 +8,7 @@ struct SpeechMemoryScreen: View {
     let back: () -> Void
 
     @Environment(\.hermesTheme) private var theme
-    @State private var model: SpeechMemoryModel
+    @LazyState private var model: SpeechMemoryModel
     private let botName: String
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
@@ -18,7 +18,8 @@ struct SpeechMemoryScreen: View {
         let profile = hub.roster.bots.first(where: \.isDefault)?.name ?? ""
         botName = profile
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: SpeechMemoryModel(client: SpeechMemoryClient(gateway: gateway, profile: profile), profile: profile, surfaces: connection.surfaces))
+        let client = SpeechMemoryClient(gateway: gateway, profile: profile)
+        _model = LazyState { SpeechMemoryModel(client: client, profile: profile, surfaces: connection.surfaces) }
     }
 
     var body: some View {

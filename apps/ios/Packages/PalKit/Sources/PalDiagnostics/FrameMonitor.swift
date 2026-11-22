@@ -17,7 +17,7 @@ public final class FrameMonitor: NSObject {
 
     public static func startIfRequested() {
         guard running == nil, PalPerf.isRequested() else { return }
-        let monitor = FrameMonitor(reportURL: reportLocation())
+        let monitor = FrameMonitor(directory: outputDirectory())
         guard monitor.start() else { return }
         running = monitor
     }
@@ -25,6 +25,8 @@ public final class FrameMonitor: NSObject {
     private let diagnostics = Diagnostics.osLog()
     private let startedAt = Date()
     private let reportURL: URL
+    private let frameLog: FrameLog
+    private var pendingFrames: [FrameSample] = []
     private var platform = ""
     private var counter = HitchCounter()
     private var link: CADisplayLink?
@@ -32,14 +34,14 @@ public final class FrameMonitor: NSObject {
     private var lastTimestamp: CFTimeInterval?
     private var lastFlush: CFTimeInterval = 0
 
-    private static func reportLocation() -> URL {
-        let directory = ProcessInfo.processInfo.environment[PalPerf.directoryKey].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    private static func outputDirectory() -> URL {
+        ProcessInfo.processInfo.environment[PalPerf.directoryKey].map { URL(fileURLWithPath: $0, isDirectory: true) }
             ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-        return directory.appending(path: reportFileName)
     }
 
-    private init(reportURL: URL) {
-        self.reportURL = reportURL
+    private init(directory: URL) {
+        reportURL = directory.appending(path: Self.reportFileName)
+        frameLog = FrameLog(url: directory.appending(path: FrameLog.fileName), diagnostics: diagnostics)
         super.init()
     }
 
@@ -81,11 +83,14 @@ public final class FrameMonitor: NSObject {
         let now = link.timestamp
         defer { lastTimestamp = now }
         guard let last = lastTimestamp else {
-            firstTimestamp = now
+            firstTimestamp = firstTimestamp ?? now
             return
         }
         let frameMs = (now - last) * 1000
-        switch counter.record(frameMs: frameMs, atSeconds: now - (firstTimestamp ?? now)) {
+        let budgetMs = (link.targetTimestamp - now) * 1000
+        pendingFrames.append(FrameSample(
+            epochSeconds: Date().timeIntervalSince1970 - (CACurrentMediaTime() - now), intervalMs: frameMs, budgetMs: budgetMs))
+        switch counter.record(frameMs: frameMs, budgetMs: budgetMs, atSeconds: now - (firstTimestamp ?? now)) {
         case .smooth: break
         case .hitch: PalPerf.event("hitch")
         case .severe: PalPerf.event("hitch.severe")
@@ -108,6 +113,8 @@ public final class FrameMonitor: NSObject {
     }
 
     private func flush(synchronously: Bool) {
+        frameLog.append(pendingFrames, synchronously: synchronously)
+        pendingFrames.removeAll(keepingCapacity: true)
         let duration = (lastTimestamp ?? 0) - (firstTimestamp ?? 0)
         let report = counter.report(platform: platform, startedAt: startedAt, durationSeconds: max(duration, 0))
         guard let data = try? report.jsonData() else { return }

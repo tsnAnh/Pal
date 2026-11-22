@@ -1,30 +1,63 @@
 import PalChat
 import PalDesign
+import PalDiagnostics
 import SwiftUI
 
-extension ChatView {
-    var sink: AttachmentSink {
+extension ChatModel {
+    var attachmentSink: AttachmentSink {
         AttachmentSink(
-            photo: { model.attachPhoto($0) },
-            file: { model.attachFile($0, mime: $1) },
-            fail: { model.reportAttachmentFailureBriefly($0) }
+            photo: { self.attachPhoto($0) },
+            file: { self.attachFile($0, mime: $1) },
+            fail: { self.reportAttachmentFailureBriefly($0) }
         )
     }
 
-    var attach: IntakeHandler {
-        { batch in Task { await AttachmentStager.stage(batch, into: sink) } }
+    var attachIntake: IntakeHandler {
+        let sink = attachmentSink
+        return { batch in Task { await AttachmentStager.stage(batch, into: sink) } }
     }
 
     var attachActions: ComposerAttachActions {
-        ComposerAttachActions(
+        let sink = attachmentSink
+        return ComposerAttachActions(
             photos: { items in Task { await AttachmentStager.stage(photos: items, into: sink) } },
             capture: { image in Task { await AttachmentStager.stage(image: image, into: sink) } },
-            intake: attach
+            intake: attachIntake
         )
+    }
+}
+
+struct ChatBottomBar: View {
+    let model: ChatModel
+    let router: AppRouter
+    let scroll: ChatScrollController
+    let dictation: DictationController
+    @Binding var draft: String
+    var focused: FocusState<Bool>.Binding
+    @Binding var isVoiceModePresented: Bool
+
+    @Environment(SettingsHub.self) private var hub
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(macOS)
+    @Environment(MacShell.self) private var shell
+    #endif
+
+    var body: some View {
+        let _ = PalPerf.event("chat.bottom.body") // swiftlint:disable:this redundant_discardable_let
+        content
+            .onChange(of: model.pendingDraft, initial: true) { _, pending in
+                guard let pending else { return }
+                draft = pending
+                model.clearPendingDraft()
+                focused.wrappedValue = true
+            }
+            .onChange(of: model.replyTarget) { _, target in
+                if target != nil { focused.wrappedValue = true }
+            }
     }
 
     @ViewBuilder
-    func bottomBar() -> some View {
+    private var content: some View {
         if model.isFinding {
             FindBar(model: model)
         } else {
@@ -54,7 +87,7 @@ extension ChatView {
         }
     }
 
-    func reviewUsage() {
+    private func reviewUsage() {
         #if os(macOS)
         shell.settingsSection = .usage
         router.present(.settings)
@@ -63,7 +96,7 @@ extension ChatView {
         #endif
     }
 
-    var composer: some View {
+    private var composer: some View {
         ChatComposer(
             botName: model.bot.displayName,
             accent: model.chatAccent,
@@ -78,7 +111,7 @@ extension ChatView {
             canSend: model.canSendAttachments,
             dictation: dictation,
             draft: $draft,
-            focused: $composerFocused,
+            focused: focused,
             send: {
                 dictation.stop()
                 model.dismissError()
@@ -88,42 +121,13 @@ extension ChatView {
             },
             openVoiceMode: {
                 dictation.stop()
-                composerFocused = false
+                focused.wrappedValue = false
                 isVoiceModePresented = true
             },
             removeAttachment: { model.removeAttachment($0) },
-            attachPhotos: { items in Task { await AttachmentStager.stage(photos: items, into: sink) } },
-            attachCapture: { image in Task { await AttachmentStager.stage(image: image, into: sink) } },
-            attach: attach
+            attachPhotos: { items in Task { await AttachmentStager.stage(photos: items, into: model.attachmentSink) } },
+            attachCapture: { image in Task { await AttachmentStager.stage(image: image, into: model.attachmentSink) } },
+            attach: model.attachIntake
         )
-    }
-
-    var menu: some View {
-        Menu {
-            if router.supports(.viewProfile) {
-                Button { router.perform(.viewProfile, botName: model.bot.name) } label: {
-                    Label("View Profile", palIcon: "person.crop.circle")
-                }
-                .accessibilityIdentifier("chatMenuViewProfile")
-            }
-            Button {
-                composerFocused = false
-                model.beginFinding()
-            } label: {
-                Label("Find in Chat", palIcon: "magnifyingglass")
-            }
-            .accessibilityIdentifier("chatMenuFind")
-            if router.supports(.shareAsTemplate) {
-                Button { router.perform(.shareAsTemplate, botName: model.bot.name) } label: {
-                    Label("Share as Template…", palIcon: "square.and.arrow.up")
-                }
-                .accessibilityIdentifier("chatMenuShareTemplate")
-            }
-        } label: {
-            PalIcon("ellipsis")
-                .accessibilityLabel(Text("Chat options"))
-        }
-        .tint(Color(theme.palette.textPrimary))
-        .accessibilityIdentifier("chatMenuButton")
     }
 }

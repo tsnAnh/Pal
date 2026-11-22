@@ -18,10 +18,7 @@ struct ParticipantAvatars {
     }
 
     private static func uiMeta(of participant: BotThreadParticipant) -> [String: Any]? {
-        guard let meta = participant.avatar.uiMeta,
-              let data = try? JSONEncoder().encode(meta),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
+        guard let object = participant.avatar.uiMeta?.objectValue?.mapValues(\.foundationObject) else { return nil }
         return [BotAvatarMeta.uiMetaKey: object]
     }
 }

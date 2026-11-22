@@ -33,7 +33,8 @@ enum AttachmentPreparer {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let values = try? url.resourceValues(forKeys: [.fileSizeKey, .contentTypeKey])
         if let size = values?.fileSize, size > maximumBytes { throw AttachmentError.tooLarge }
-        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { throw AttachmentError.unreadable }
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) // perf-lint: ok only called from Task.detached
+        else { throw AttachmentError.unreadable }
         guard data.count <= maximumBytes else { throw AttachmentError.tooLarge }
         let type = values?.contentType ?? UTType(filenameExtension: url.pathExtension)
         if let type, type.conforms(to: .image) {

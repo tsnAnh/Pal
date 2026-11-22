@@ -1,4 +1,5 @@
 import Foundation
+import PalDiagnostics
 import simd
 
 struct SolidEyePair {
@@ -44,7 +45,32 @@ enum SolidEyes {
         }
     }
 
-    static func pair(_ pose: SolidPose, surface: SolidSurface, rotation: simd_double3x3) -> SolidEyePair {
+    static let cache = SolidCache<SolidEyeKey, SolidEyeSurface>(capacity: 32)
+
+    static func pair(_ pose: SolidPose, geometry: SolidGeometry, rotation: simd_double3x3) -> SolidEyePair {
+        let key = SolidEyeKey(geometry: geometry, pose: pose)
+        let placed = cache.value(for: key) {
+            PalPerf.event("avatar.solid.eyes.build")
+            return place(pose, surface: geometry.surface)
+        }
+        let facingRow = SIMD3(rotation[0][2], rotation[1][2], rotation[2][2])
+        var leastFacing = 1.0
+        for normals in placed.normals {
+            for normal in normals { leastFacing = min(leastFacing, (facingRow * normal).sum()) }
+        }
+        let outlines = placed.points.map { points in
+            points.map { point -> SIMD2<Double> in
+                let turned = rotation * point
+                return SIMD2(turned.x, turned.y)
+            }
+        }
+        let fade = min(1, max(0, leastFacing / SolidTuning.nearLimb))
+        let opacity = fade * fade * (3 - 2 * fade)
+        guard opacity > 0 else { return .hidden }
+        return SolidEyePair(outlines: outlines, opacity: opacity, nearEdge: leastFacing < SolidTuning.edgeClip)
+    }
+
+    private static func place(_ pose: SolidPose, surface: SolidSurface) -> SolidEyeSurface {
         let happy = pose.eyeHappy
         let bend = happy * 5
         let turnAngle = happy * Double.pi / 2
@@ -55,11 +81,13 @@ enum SolidEyes {
         let sr = sin(rollAngle)
         let widthScale = pose.eyeScale * (1 - 0.2 * happy)
         let heightScale = pose.eyeScale * max(0.06, pose.eyeOpen) * (1 - 0.45 * happy)
-        let facingRow = SIMD3(rotation[0][2], rotation[1][2], rotation[2][2])
-        var leastFacing = 1.0
-        let outlines = centres(pose).map { centre in
-            var projected: [SIMD2<Double>] = []
-            projected.reserveCapacity(segments)
+        var points: [[SIMD3<Double>]] = []
+        var normals: [[SIMD3<Double>]] = []
+        for centre in centres(pose) {
+            var ring: [SIMD3<Double>] = []
+            var facing: [SIMD3<Double>] = []
+            ring.reserveCapacity(segments)
+            facing.reserveCapacity(segments)
             for vertex in template {
                 let u = vertex.outline.x + (vertex.circle.x - vertex.outline.x) * pose.eyeDot
                 let v = vertex.outline.y + (vertex.circle.y - vertex.outline.y) * pose.eyeDot
@@ -73,16 +101,39 @@ enum SolidEyes {
                     (ex, ey) = ((radius + ey) * sin(phi), (radius + ey) * cos(phi) - radius + happy * 0.05)
                 }
                 let spot = surface.place(from: centre, offset: SIMD2(ex * cr - ey * sr, ex * sr + ey * cr))
-                let lifted = SIMD3(spot.x, spot.y, surface.height(spot.x, spot.y) + SolidTuning.eyeLift)
-                let turned = rotation * lifted
-                projected.append(SIMD2(turned.x, turned.y))
-                leastFacing = min(leastFacing, (facingRow * surface.normal(spot.x, spot.y)).sum())
+                ring.append(SIMD3(spot.x, spot.y, surface.height(spot.x, spot.y) + SolidTuning.eyeLift))
+                facing.append(surface.normal(spot.x, spot.y))
             }
-            return projected
+            points.append(ring)
+            normals.append(facing)
         }
-        let fade = min(1, max(0, leastFacing / SolidTuning.nearLimb))
-        let opacity = fade * fade * (3 - 2 * fade)
-        guard opacity > 0 else { return .hidden }
-        return SolidEyePair(outlines: outlines, opacity: opacity, nearEdge: leastFacing < SolidTuning.edgeClip)
+        return SolidEyeSurface(points: points, normals: normals)
+    }
+}
+
+struct SolidEyeSurface: Sendable {
+    let points: [[SIMD3<Double>]]
+    let normals: [[SIMD3<Double>]]
+}
+
+struct SolidEyeKey: Hashable, Sendable {
+    let geometry: UInt64
+    let eyeRoll: Double
+    let pairSpin: Double
+    let eyeScale: Double
+    let eyeSpread: Double
+    let eyeDot: Double
+    let eyeHappy: Double
+    let eyeOpen: Double
+
+    init(geometry: SolidGeometry, pose: SolidPose) {
+        self.geometry = geometry.identity
+        eyeRoll = pose.eyeRoll
+        pairSpin = pose.pairSpin
+        eyeScale = pose.eyeScale
+        eyeSpread = pose.eyeSpread
+        eyeDot = pose.eyeDot
+        eyeHappy = pose.eyeHappy
+        eyeOpen = pose.eyeOpen
     }
 }

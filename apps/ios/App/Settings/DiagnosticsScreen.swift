@@ -104,6 +104,8 @@ struct FaultDetails: View {
     @State private var sharing = false
     @Environment(\.hermesTheme) private var theme
 
+    private static let atStyle = Date.FormatStyle(date: .abbreviated, time: .standard)
+
     var body: some View {
         DisclosureGroup(String(localized: "Details"), isExpanded: $expanded) {
             HStack(alignment: .top, spacing: 12) {
@@ -113,7 +115,7 @@ struct FaultDetails: View {
                     detail("source \(record.source)")
                     detail("gateway \(record.gatewayVersion ?? "-")")
                     detail("app \(DiagnosticsCopy.appBuild)")
-                    detail(record.at.formatted(date: .abbreviated, time: .standard))
+                    detail(Self.atStyle.format(record.at))
                 }
                 .textSelection(.enabled)
                 Spacer(minLength: 0)

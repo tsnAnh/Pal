@@ -172,14 +172,14 @@ private struct MacGeneralSection: View {
     @Environment(AppearanceStore.self) private var appearance
     @Environment(\.openURL) private var openURL
     @State private var notifications = SystemNotifications()
-    @State private var sharing: DataSharingModel
+    @LazyState private var sharing: DataSharingModel
     @State private var confirmingSignOut = false
     @State private var confirmingAdd = false
 
     init(hub: SettingsHub, connection: ConnectionModel) {
         self.hub = hub
         self.connection = connection
-        _sharing = State(initialValue: DataSharingModel(surfaces: connection.surfaces))
+        _sharing = LazyState { DataSharingModel(surfaces: connection.surfaces) }
     }
 
     private static let themes: [AppearanceMode] = [.followSystem, .light, .dark, .black]
@@ -383,16 +383,16 @@ private struct MacComputerSection: View {
     let hub: SettingsHub
     let connection: ConnectionModel
 
-    @State private var computer: BotComputerSettingsModel
-    @State private var devices: DevicesModel
+    @LazyState private var computer: BotComputerSettingsModel
+    @LazyState private var devices: DevicesModel
     @State private var confirmingReset = false
     @State private var removing: DeviceEntry?
 
     init(hub: SettingsHub, connection: ConnectionModel) {
         self.hub = hub
         self.connection = connection
-        _computer = State(initialValue: BotComputerSettingsModel(surfaces: connection.surfaces))
-        _devices = State(initialValue: DevicesModel(surfaces: connection.surfaces))
+        _computer = LazyState { BotComputerSettingsModel(surfaces: connection.surfaces) }
+        _devices = LazyState { DevicesModel(surfaces: connection.surfaces) }
     }
 
     var body: some View {
@@ -511,13 +511,13 @@ private struct MacComputerSection: View {
 private struct MacPermissionsSection: View {
     let hub: SettingsHub
 
-    @State private var model: PermissionsModel
+    @LazyState private var model: PermissionsModel
     @State private var addingTo: PermissionList?
     @State private var removing: PermissionRuleEntry?
 
     init(hub: SettingsHub) {
         self.hub = hub
-        _model = State(initialValue: PermissionsModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { PermissionsModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {
@@ -634,11 +634,11 @@ private enum MacVaultFilter: String, CaseIterable, Identifiable {
 }
 
 private struct MacPublicAccessSection: View {
-    @State private var model: WebhookRoutesModel
+    @LazyState private var model: WebhookRoutesModel
     @State private var adding = false
 
     init(hub: SettingsHub) {
-        _model = State(initialValue: WebhookRoutesModel.make(hub: hub))
+        _model = LazyState { WebhookRoutesModel.make(hub: hub) }
     }
 
     var body: some View {
@@ -660,7 +660,7 @@ private struct MacPublicAccessSection: View {
 private struct MacVaultSection: View {
     let hub: SettingsHub
 
-    @State private var model: VaultModel
+    @LazyState private var model: VaultModel
     @State private var filter = MacVaultFilter.all
     @State private var query = ""
     @State private var adding = false
@@ -669,7 +669,7 @@ private struct MacVaultSection: View {
 
     init(hub: SettingsHub) {
         self.hub = hub
-        _model = State(initialValue: VaultModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { VaultModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {
@@ -803,11 +803,11 @@ private struct MacVaultSection: View {
 private struct MacUsageSection: View {
     let hub: SettingsHub
 
-    @State private var model: UsageModel
+    @LazyState private var model: UsageModel
 
     init(hub: SettingsHub) {
         self.hub = hub
-        _model = State(initialValue: UsageModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { UsageModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {

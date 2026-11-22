@@ -20,10 +20,11 @@ struct SlackEntryView: View {
             case .some(true):
                 legacy
             case .some(false):
-                SlackSetupScreen(
-                    model: SlackSetupModel(botName: botName, displayName: displayName, client: source.client), spec: spec,
-                    events: source.events, close: { dismiss() }, advanced: { legacy }
-                )
+                ModelHost {
+                    SlackSetupModel(botName: botName, displayName: displayName, client: source.client)
+                } content: {
+                    SlackSetupScreen(model: $0, spec: spec, events: source.events, close: { dismiss() }, advanced: { legacy })
+                }
             }
         }
         .environment(\.sheetChromeHostedInNavigation, true)
@@ -35,6 +36,10 @@ struct SlackEntryView: View {
     }
 
     private var legacy: some View {
-        SlackTokensView(model: SlackModel(botName: botName, displayName: displayName, services: services))
+        ModelHost {
+            SlackModel(botName: botName, displayName: displayName, services: services)
+        } content: {
+            SlackTokensView(model: $0)
+        }
     }
 }

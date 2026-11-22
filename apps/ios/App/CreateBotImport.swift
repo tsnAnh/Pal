@@ -13,7 +13,8 @@ enum TemplateFileReader {
             defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
             if size > TemplateImportClient.maximumBytes { return .failure(.tooLarge) }
-            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe), !data.isEmpty else { return .failure(.unreadable) }
+            guard let data = try? Data(contentsOf: url, options: .mappedIfSafe), !data.isEmpty // perf-lint: ok inside Task.detached
+            else { return .failure(.unreadable) }
             return .success(data)
         }.value
     }

@@ -9,75 +9,89 @@ struct MacInspector: View {
     let roster: RosterModel
     let router: AppRouter
 
-    @State private var profile: BotProfileModel
-    @State private var routines: RoutinesModel
-    @State private var library: LibraryModel
-    @State private var suggestions: ConnectedServicesModel
-    @State private var tab = InspectorTab.activity
+    @LazyState private var profile: BotProfileModel
+    @LazyState private var routines: RoutinesModel
+    @LazyState private var library: LibraryModel
+    @LazyState private var suggestions: ConnectedServicesModel
     @State private var creation: NewRoutineModel?
-    @AppStorage("mac.inspector.suggestionsHidden") private var suggestionsHidden = false
-
-    @Environment(MacShell.self) private var shell
-    @Environment(ActionAutoApprove.self) private var autoApprove
 
     init(botName: String, roster: RosterModel, router: AppRouter, bots: BotsKit) {
         self.botName = botName
         self.roster = roster
         self.router = router
-        _profile = State(initialValue: BotProfileModel(botName: botName, services: bots.services, roster: roster, sharer: bots.sharer))
-        _routines = State(initialValue: RoutinesModel(botName: botName, services: bots.services))
-        _library = State(initialValue: LibraryModel(botName: botName, services: bots.services))
-        _suggestions = State(initialValue: ConnectedServicesModel(botName: botName, services: bots.services))
+        _profile = LazyState { BotProfileModel(botName: botName, services: bots.services, roster: roster, sharer: bots.sharer) }
+        _routines = LazyState { RoutinesModel(botName: botName, services: bots.services) }
+        _library = LazyState { LibraryModel(botName: botName, services: bots.services) }
+        _suggestions = LazyState { ConnectedServicesModel(botName: botName, services: bots.services) }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            hero
-            tabs.padding(.top, 18).padding(.bottom, 8)
-            switch tab {
-            case .activity:
-                ScrollView {
-                    activity
-                        .padding(.leading, 12)
-                        .padding(.trailing, 15)
-                        .padding(.bottom, 24)
-                }
-                .scrollIndicators(.never)
-            case .library:
-                LibraryView(model: library, showsChrome: false, filters: [.all, .media, .files])
-            }
+            InspectorHero(profile: profile)
+            InspectorTabs(
+                botName: botName,
+                router: router,
+                profile: profile,
+                routines: routines,
+                library: library,
+                suggestions: suggestions,
+                creation: $creation
+            )
         }
-        .overlay(alignment: .topTrailing) { closeButton }
+        .overlay(alignment: .topTrailing) {
+            InspectorCloseButton(profile: profile, routines: routines, suggestions: suggestions, creation: $creation)
+        }
         .background(PalTokens.content)
         .overlay(alignment: .leading) { PalHairline(axis: .vertical) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("botProfileScreen")
-        .task { await profile.load() }
         .task { await routines.load() }
         .task { await suggestions.load() }
-        .task(id: sessionID) { await autoApprove.load(sessionID: sessionID) }
-        .toast($profile.toast)
-        .macSheet(item: $creation) { created in
-            NewRoutineSheet(model: created) { creation = nil }
-        }
-        .macSheet(item: Binding(get: { profile.editing }, set: { if $0 == nil { profile.endEditing() } })) { editing in
-            EditBotSheet(model: editing) { profile.endEditing() }
-        }
-        .macConfirm(isPresented: $profile.confirmsReplacePrimary) {
-            MacDialogContent(
-                String(localized: "Replace Primary Bot?"),
-                message: String(localized: "\(profile.displayName) becomes your primary bot. Nothing is copied or deleted."),
-                actions: [
-                    MacDialogAction("Replace", identifier: "replacePrimaryConfirm") { Task { await profile.replacePrimary() } },
-                    MacDialogAction("Cancel", role: .cancel)
-                ]
-            )
-        }
+        .modifier(InspectorPresentations(profile: profile, routines: routines, creation: $creation))
     }
+}
 
-    private var sessionID: String? { profile.row?.conversationID }
+private struct InspectorPresentations: ViewModifier {
+    let profile: BotProfileModel
+    let routines: RoutinesModel
+    @Binding var creation: NewRoutineModel?
 
-    private var closeButton: some View {
+    @Environment(ActionAutoApprove.self) private var autoApprove
+
+    func body(content: Content) -> some View {
+        content
+            .task { await profile.load() }
+            .task(id: profile.row?.conversationID) { await autoApprove.load(sessionID: profile.row?.conversationID) }
+            .toast(Bindable(profile).toast)
+            .macSheet(item: $creation) { created in
+                NewRoutineSheet(model: created) { creation = nil }
+            }
+            .macSheet(item: Binding(get: { profile.editing }, set: { if $0 == nil { profile.endEditing() } })) { editing in
+                EditBotSheet(model: editing) { profile.endEditing() }
+            }
+            .macConfirm(isPresented: Bindable(profile).confirmsReplacePrimary) {
+                MacDialogContent(
+                    String(localized: "Replace Primary Bot?"),
+                    message: String(localized: "\(profile.displayName) becomes your primary bot. Nothing is copied or deleted."),
+                    actions: [
+                        MacDialogAction("Replace", identifier: "replacePrimaryConfirm") { Task { await profile.replacePrimary() } },
+                        MacDialogAction("Cancel", role: .cancel)
+                    ]
+                )
+            }
+    }
+}
+
+private struct InspectorCloseButton: View {
+    let profile: BotProfileModel
+    let routines: RoutinesModel
+    let suggestions: ConnectedServicesModel
+    @Binding var creation: NewRoutineModel?
+
+    @AppStorage("mac.inspector.suggestionsHidden") private var suggestionsHidden = false
+    @Environment(MacShell.self) private var shell
+
+    var body: some View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 8) {
                 Menu {
@@ -120,8 +134,12 @@ struct MacInspector: View {
             .palGlass(Circle())
             .contentShape(Circle())
     }
+}
 
-    private var hero: some View {
+private struct InspectorHero: View {
+    let profile: BotProfileModel
+
+    var body: some View {
         VStack(spacing: 0) {
             AvatarBadge(diameter: 55, showsPrimaryBadge: profile.isPrimary, accessibilityIdentifier: "profileAvatarArtwork") {
                 if let spec = profile.spec {
@@ -146,8 +164,45 @@ struct MacInspector: View {
         }
         .frame(maxWidth: .infinity)
     }
+}
 
-    private var tabs: some View {
+private struct InspectorTabs: View {
+    let botName: String
+    let router: AppRouter
+    let profile: BotProfileModel
+    let routines: RoutinesModel
+    let library: LibraryModel
+    let suggestions: ConnectedServicesModel
+    @Binding var creation: NewRoutineModel?
+
+    @State private var tab = InspectorTab.activity
+
+    var body: some View {
+        VStack(spacing: 0) {
+            tabBar.padding(.top, 18).padding(.bottom, 8)
+            switch tab {
+            case .activity:
+                ScrollView {
+                    InspectorActivity(
+                        botName: botName,
+                        router: router,
+                        profile: profile,
+                        routines: routines,
+                        suggestions: suggestions,
+                        creation: $creation
+                    )
+                    .padding(.leading, 12)
+                    .padding(.trailing, 15)
+                    .padding(.bottom, 24)
+                }
+                .scrollIndicators(.never)
+            case .library:
+                LibraryView(model: library, showsChrome: false, filters: [.all, .media, .files])
+            }
+        }
+    }
+
+    private var tabBar: some View {
         HStack(spacing: 4) {
             ForEach(InspectorTab.allCases) { item in
                 Button { withAnimation(.snappy(duration: 0.18)) { tab = item } } label: {
@@ -164,215 +219,6 @@ struct MacInspector: View {
                 .accessibilityIdentifier("inspectorTab-\(item.rawValue)")
             }
         }
-    }
-}
-
-extension MacInspector {
-    private var activity: some View {
-        VStack(spacing: 0) {
-            InspectorSection(title: String(localized: "Upcoming"), identifier: "inspectorRoutines", first: true) {
-                EmptyView()
-            } content: {
-                routinesList
-            }
-            if !suggestionsHidden, !suggestions.visibleSuggestions.isEmpty {
-                InspectorSection(title: String(localized: "Suggested"), identifier: "inspectorSuggested") {
-                    Button("Hide") { withAnimation(.snappy(duration: 0.18)) { suggestionsHidden = true } }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(PalTokens.textSecondary)
-                        .accessibilityIdentifier("inspectorHideSuggested")
-                } content: {
-                    ForEach(suggestions.visibleSuggestions, id: \.self) { suggestion in
-                        switch suggestion {
-                        case .addToSlack:
-                            InspectorRow(identifier: "profileSlackRow", action: { router.push(.slack(botName: botName)) }) {
-                                SlackMark().frame(width: 14, height: 14)
-                                Text("Add to Slack").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                                Spacer(minLength: 0)
-                                PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                            }
-                        }
-                    }
-                }
-            }
-            InspectorSection(title: String(localized: "Computer"), identifier: "inspectorComputer") {
-                EmptyView()
-            } content: {
-                InspectorRow(identifier: "profileComputerRow", action: { router.push(.computer(botName: botName)) }) {
-                    PalIcon("display", ink: .secondary).font(.system(size: 13)).frame(width: 18)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Bot's computer").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                        Text(profile.computer?.text ?? " ").font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary)
-                    }
-                    Spacer(minLength: 0)
-                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                }
-            }
-            InspectorSection(title: String(localized: "Model"), identifier: "inspectorModel") {
-                EmptyView()
-            } content: {
-                InspectorRow(identifier: "profileModelRow", action: { router.push(.botModel(botName: botName)) }) {
-                    PalIcon("cpu", ink: .secondary).font(.system(size: 13)).frame(width: 18)
-                    Text("Model, effort and backups").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                    Spacer(minLength: 0)
-                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                }
-            }
-            InspectorSection(title: String(localized: "Messaging"), identifier: "inspectorMessaging") {
-                EmptyView()
-            } content: {
-                InspectorRow(identifier: "profileMessagingRow", action: { router.push(.messagingSettings(botName: botName)) }) {
-                    PalIcon("bubble.left.and.bubble.right", ink: .secondary).font(.system(size: 13)).frame(width: 18)
-                    Text("Messaging settings").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                    Spacer(minLength: 0)
-                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                }
-                InspectorRow(identifier: "profileKeysRow", action: { router.push(.botKeys(botName: botName)) }) {
-                    PalIcon("key", ink: .secondary).font(.system(size: 13)).frame(width: 18)
-                    Text("Keys").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                    Spacer(minLength: 0)
-                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                }
-                InspectorRow(identifier: "profileVaultRow", action: { router.push(.botVault(botName: botName)) }) {
-                    PalIcon("lock", ink: .secondary).font(.system(size: 13)).frame(width: 18)
-                    Text("Vault").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                    Spacer(minLength: 0)
-                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                }
-                InspectorRow(identifier: "profileTelegramRow", action: { router.push(.telegram(botName: botName)) }) {
-                    PalIcon("paperplane.fill", ink: .secondary).font(.system(size: 13)).frame(width: 18)
-                    Text("Connect Telegram").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                    Spacer(minLength: 0)
-                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                }
-            }
-            InspectorSection(title: String(localized: "Notifications"), identifier: "inspectorNotifications") {
-                EmptyView()
-            } content: {
-                InspectorRow(identifier: "profileNotificationsRow", action: nil) {
-                    Text("Notify me when this Bot is done").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                    Spacer(minLength: 8)
-                    Toggle("Notifications", isOn: Binding(get: { profile.notificationsOn }, set: { profile.setNotifications($0) }))
-                        .labelsHidden()
-                        .palSwitch()
-                        .accessibilityIdentifier("profileNotificationsToggle")
-                }
-            }
-            if autoApprove.showsSwitch(sessionID: sessionID, upworkConnected: suggestions.services.isConnected(.upwork)) {
-                InspectorSection(title: String(localized: "Upwork"), identifier: "inspectorUpwork") {
-                    EmptyView()
-                } content: {
-                    InspectorRow(identifier: "autoApproveRow", action: nil) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("Approve Upwork actions automatically in this chat").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                            Text(autoApprove.didFail(sessionID) ? String(localized: "Couldn't change this. Try again.") : String(localized: "Off by default. Applies to this chat only."))
-                                .font(.system(size: 11))
-                                .foregroundStyle(PalTokens.textSecondary)
-                        }
-                        Spacer(minLength: 8)
-                        Toggle("Approve Upwork actions automatically in this chat", isOn: Binding(
-                            get: { autoApprove.entry(sessionID)?.enabled ?? false },
-                            set: { value in Task { await autoApprove.setEnabled(value, sessionID: sessionID) } }
-                        ))
-                        .labelsHidden()
-                        .palSwitch()
-                        .disabled(autoApprove.isPending(sessionID))
-                        .accessibilityIdentifier("autoApproveToggle")
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var routinesList: some View {
-        switch routines.phase {
-        case .loading:
-            DelayedProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 14)
-        case .failed:
-            InspectorRow(identifier: "routinesFailed", action: { Task { await routines.load() } }) {
-                Text("Couldn't load routines. Try again.").font(.system(size: 12)).foregroundStyle(PalTokens.textSecondary)
-                Spacer(minLength: 0)
-            }
-        case .ready where routines.routines.isEmpty:
-            InspectorRow(identifier: "routinesEmpty", action: { creation = routines.creationModel() }) {
-                Text("No routines yet. Add one").font(.system(size: 12)).foregroundStyle(PalTokens.textSecondary)
-                Spacer(minLength: 0)
-            }
-        case .ready:
-            VStack(spacing: 0) {
-                ForEach(routines.routines) { routine in
-                    InspectorRow(identifier: "routine-\(routine.id)", action: nil) {
-                        PalIcon("clock", ink: .tertiary).font(.system(size: 13)).frame(width: 18)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(routine.title).font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary).lineLimit(1)
-                            Text(routine.caption()).font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary).lineLimit(1)
-                        }
-                        Spacer(minLength: 6)
-                        Toggle(routine.title, isOn: Binding(
-                            get: { routines.routines.first { $0.id == routine.id }?.isEnabled ?? false },
-                            set: { enabled in Task { await routines.setEnabled(enabled, for: routine) } }
-                        ))
-                        .labelsHidden()
-                        .palSwitch()
-                        .accessibilityLabel(Text(routine.title))
-                        .accessibilityIdentifier("routineToggle-\(routine.id)")
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct InspectorSection<Accessory: View, Content: View>: View {
-    let title: String
-    let identifier: String
-    var first = false
-    @ViewBuilder let accessory: Accessory
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12))
-                    .foregroundStyle(PalTokens.textSecondary)
-                Spacer()
-                accessory
-            }
-            .padding(.horizontal, 11)
-            VStack(spacing: 0) { content }
-                .frame(maxWidth: .infinity)
-                .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .padding(.top, first ? 11 : 24)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(identifier)
-    }
-}
-
-private struct InspectorRow<Content: View>: View {
-    let identifier: String
-    let action: (() -> Void)?
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        if let action {
-            Button(action: action) { row }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(identifier)
-        } else {
-            row.accessibilityElement(children: .contain).accessibilityIdentifier(identifier)
-        }
-    }
-
-    private var row: some View {
-        HStack(spacing: 8) { content }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 8)
-            .frame(minHeight: 42)
-            .contentShape(Rectangle())
     }
 }
 #endif

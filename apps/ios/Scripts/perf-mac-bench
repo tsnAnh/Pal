@@ -1,0 +1,334 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DERIVED="${HERMES_MAC_BENCH_DERIVED:-$IOS_DIR/build/DerivedDataBench}"
+
+usage() {
+  cat <<USAGE
+usage: perf-mac-bench [--runs N] [--id NAME] [--skip-build] [--timeout SEC]
+       perf-mac-bench --compare BEFORE.json AFTER.json
+       perf-mac-bench --report ID
+Times the main-thread cost of the real Mac chat views (transcript list, rows, markdown, composer)
+with fixture models: no gateway, no network, no XCUITest. One unit-test host process per scenario;
+it never takes focus (the host app runs with activation policy prohibited and no scene window, the
+views sit in a borderless, fully transparent window that cannot become key). During every run the
+frontmost app is sampled every 0.25 s and the run is flagged if it ever is the bench host.
+
+Scenarios: chat-open-cold, composer-typing, streaming, history-scroll, window-resize.
+Per scenario: steps, p50, p95, max (main-thread CPU ms per step), steps over 8.33 ms and 16.7 ms,
+total ms. A step is one mutation plus one 120 Hz frame of the main run loop; the metric is the CPU
+time the main thread spent, so idle waiting and other processes do not count.
+A scenario can hang in a SwiftUI scroll-position feedback loop (a few percent of launches); a 20 s
+watchdog in the host aborts it and the script reruns that scenario in a fresh process, up to 5 times.
+run-<k>/attempts.txt lists every retry and watchdog-sample-*.txt holds the stack of each hang.
+spread% is (max - min) / median of the per-run p50 and total across --runs; p95 sprd is the same for
+p95, which is noisier. Under load (other builds running) numbers inflate, so the script prints the
+load average per run; compare runs taken at similar load.
+
+options:
+  --runs N         runs to take, default 1; bench.json holds the median per metric and the spread
+  --id NAME        artifact folder name, default a timestamp
+  --skip-build     reuse the build in build/DerivedDataBench (it must already exist)
+  --timeout SEC    kill a run that takes longer than SEC seconds, default 900
+  --compare B A    print per-scenario deltas between two bench.json files; no build, no run
+  --report ID      rebuild bench.json and the table from the run-*/bench-run.json files of an earlier run
+  -h, --help
+
+output: Artifacts/perf-mac-bench/<id>/ with bench.json, run-<k>/bench-run.json, chat-open.png
+        (one frame of the real views, proof they render), frontmost.log, xcodebuild logs.
+        The artifact path is printed last. HERMES_MAC_BENCH_DERIVED overrides the DerivedData path.
+exit:   0 ok, 2 bad usage, 3 the bench host became the frontmost app, 4 a build or test run failed or timed out.
+
+examples:
+  Scripts/perf-mac-bench
+  Scripts/perf-mac-bench --runs 3 --id before-fix
+  Scripts/perf-mac-bench --runs 3 --id after-fix --skip-build
+  Scripts/perf-mac-bench --report before-fix
+  Scripts/perf-mac-bench --compare Artifacts/perf-mac-bench/before-fix/bench.json Artifacts/perf-mac-bench/after-fix/bench.json
+USAGE
+}
+
+die() {
+  echo "perf-mac-bench: $1" >&2
+  exit "${2:-2}"
+}
+
+RUNS=1
+ID=""
+SKIP_BUILD=0
+TIMEOUT=900
+COMPARE=()
+REPORT_ID=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --runs) [ "$#" -ge 2 ] || die "--runs needs a number"; RUNS="$2"; shift 2 ;;
+    --runs=*) RUNS="${1#--runs=}"; shift ;;
+    --id) [ "$#" -ge 2 ] || die "--id needs a name"; ID="$2"; shift 2 ;;
+    --id=*) ID="${1#--id=}"; shift ;;
+    --skip-build) SKIP_BUILD=1; shift ;;
+    --timeout) [ "$#" -ge 2 ] || die "--timeout needs seconds"; TIMEOUT="$2"; shift 2 ;;
+    --timeout=*) TIMEOUT="${1#--timeout=}"; shift ;;
+    --compare) [ "$#" -ge 3 ] || die "--compare needs BEFORE.json and AFTER.json"; COMPARE=("$2" "$3"); shift 3 ;;
+    --report) [ "$#" -ge 2 ] || die "--report needs an id"; REPORT_ID="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; die "unknown argument: $1" ;;
+  esac
+done
+case "$RUNS" in ''|*[!0-9]*|0) die "--runs must be a positive integer, got: $RUNS" ;; esac
+case "$TIMEOUT" in ''|*[!0-9]*|0) die "--timeout must be a positive integer, got: $TIMEOUT" ;; esac
+
+report() {
+  python3 -I - "$@" <<'PY'
+import json, statistics, sys
+
+METRICS = ("p50", "p95", "max", "over8", "over16", "total")
+HEADS = ("steps", "p50", "p95", "max", ">8.33", ">16.7", "total", "spread%", "p95 sprd")
+
+
+def load(path):
+    with open(path) as handle:
+        return json.load(handle)
+
+
+def aggregate(runs):
+    names = [s["name"] for s in runs[0]["scenarios"]]
+    merged = []
+    for name in names:
+        rows = [next(s for s in run["scenarios"] if s["name"] == name) for run in runs]
+        entry = {"name": name, "steps": rows[0]["steps"]}
+        for metric in METRICS:
+            values = [row[metric] for row in rows]
+            entry[metric] = statistics.median(values)
+        spreads = {}
+        for metric in ("p50", "p95", "total"):
+            values = [row[metric] for row in rows]
+            mid = statistics.median(values)
+            spreads[metric] = round((max(values) - min(values)) / mid * 100, 1) if mid else 0.0
+        entry["spread_pct"] = spreads
+        merged.append(entry)
+    return merged
+
+
+def table(scenarios, label=""):
+    print(label)
+    print(f"{'scenario':<18}" + "".join(f"{h:>9}" for h in HEADS))
+    for s in scenarios:
+        spreads = s.get("spread_pct", {"p50": 0, "total": 0, "p95": 0})
+        headline = max(spreads["p50"], spreads["total"])
+        cells = [str(s["steps"])] + [f"{s[m]:.2f}" if m in ("p50", "p95", "max", "total") else f"{s[m]:g}" for m in METRICS]
+        cells += [f"{headline:.1f}", f"{spreads['p95']:.1f}"]
+        print(f"{s['name']:<18}" + "".join(f"{c:>9}" for c in cells))
+
+
+def aggregate_command(out, run_files):
+    runs = [load(path) for path in run_files]
+    merged = aggregate(runs)
+    document = {
+        "schema": 1,
+        "runs": len(runs),
+        "generated": runs[0]["generated"],
+        "paneWidth": runs[0]["paneWidth"],
+        "paneHeight": runs[0]["paneHeight"],
+        "transcriptMessages": runs[0]["transcriptMessages"],
+        "os": runs[0]["os"],
+        "unsettledOpens": sum(1 for run in runs for frames in run["openFrames"] if frames >= 120),
+        "openRetries": sum(run["openRetries"] for run in runs),
+        "scenarios": merged,
+        "runFiles": run_files,
+    }
+    with open(out, "w") as handle:
+        json.dump(document, handle, indent=2, sort_keys=True)
+    table(merged, f"median of {len(runs)} run(s), main-thread CPU ms per step")
+    print(f"cold opens that never settled at the newest row within 120 frames: {document['unsettledOpens']} of {sum(len(run['openFrames']) for run in runs)}; scenario sessions reopened because of it: {document['openRetries']}")
+
+
+def delta(before, after):
+    if not before:
+        return "n/a"
+    return f"{(after - before) / before * 100:+.1f}%"
+
+
+def compare_command(before_path, after_path):
+    before, after = load(before_path), load(after_path)
+    print(f"{'scenario':<18}{'metric':<8}{'before':>10}{'after':>10}{'delta':>9}")
+    after_by_name = {s["name"]: s for s in after["scenarios"]}
+    for old in before["scenarios"]:
+        new = after_by_name.get(old["name"])
+        if new is None:
+            print(f"{old['name']:<18}missing in after")
+            continue
+        for metric in ("p50", "p95", "max", "over8", "over16", "total"):
+            print(f"{old['name']:<18}{metric:<8}{old[metric]:>10.2f}{new[metric]:>10.2f}{delta(old[metric], new[metric]):>9}")
+    noisy = [
+        (s["name"], max(s["spread_pct"]["p50"], s["spread_pct"]["total"]))
+        for s in before["scenarios"] + after["scenarios"]
+        if "spread_pct" in s and max(s["spread_pct"]["p50"], s["spread_pct"]["total"]) > 15
+    ]
+    for name, spread in noisy:
+        print(f"note: {name} run-to-run spread {spread:.1f}% exceeds 15%; deltas inside that are noise")
+
+
+def merge_command(out, scenario_prefixes):
+    pieces = []
+    for prefix in scenario_prefixes:
+        path = prefix if prefix.endswith(".json") else prefix + ".json"
+        pieces.append(load(path))
+    merged = dict(pieces[0])
+    merged["scenarios"] = [piece["scenarios"][0] for piece in pieces]
+    merged["openFrames"] = next((p["openFrames"] for p in pieces if p["openFrames"]), [])
+    merged["openRetries"] = sum(p["openRetries"] for p in pieces)
+    with open(out, "w") as handle:
+        json.dump(merged, handle, indent=2, sort_keys=True)
+
+
+command = sys.argv[1]
+if command == "merge":
+    merge_command(sys.argv[2], sys.argv[3:])
+elif command == "aggregate":
+    aggregate_command(sys.argv[2], sys.argv[3:])
+elif command == "compare":
+    compare_command(sys.argv[2], sys.argv[3])
+PY
+}
+
+if [ "${#COMPARE[@]}" -eq 2 ]; then
+  for file in "${COMPARE[@]}"; do [ -f "$file" ] || die "no such file: $file"; done
+  report compare "${COMPARE[0]}" "${COMPARE[1]}"
+  exit 0
+fi
+
+if [ -n "$REPORT_ID" ]; then
+  dir="$IOS_DIR/Artifacts/perf-mac-bench/$REPORT_ID"
+  runs=("$dir"/run-*/bench-run.json)
+  [ -f "${runs[0]}" ] || die "no run-*/bench-run.json under $dir"
+  report aggregate "$dir/bench.json" "${runs[@]}"
+  exit 0
+fi
+
+ID="${ID:-$(date +%Y%m%d-%H%M%S)}"
+ART="$IOS_DIR/Artifacts/perf-mac-bench/$ID"
+mkdir -p "$ART"
+
+HOST_BINARY="$DERIVED/Build/Products/Debug/Pal.app/Contents/MacOS/Pal"
+
+frontmost() {
+  lsappinfo info -only name "$(lsappinfo front)" 2>/dev/null | head -1 | sed 's/ (in front) *$//'
+}
+
+host_pids() {
+  ps -axo pid=,command= | awk -v p="$HOST_BINARY" 'index($0, p) { print $1 }'
+}
+
+front_is_host() {
+  local pid
+  pid="$(lsappinfo info -only pid "$(lsappinfo front)" 2>/dev/null | sed -n 's/.*"pid"=\([0-9]*\).*/\1/p' | head -1)"
+  [ -n "$pid" ] && host_pids | grep -qx "$pid"
+}
+
+if [ "$SKIP_BUILD" = 1 ]; then
+  [ -d "$DERIVED/Build/Products/Debug/Pal.app" ] || die "--skip-build needs an existing build in $DERIVED; run once without it" 4
+else
+  echo "== xcodegen + build (macOS, -O whole module, testability on)"
+  ( cd "$IOS_DIR" && xcodegen generate >/dev/null )
+  if ! ( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+      -destination 'platform=macOS,arch=arm64' -derivedDataPath "$DERIVED" -allowProvisioningUpdates \
+      SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule GCC_OPTIMIZATION_LEVEL=s ENABLE_DEBUG_DYLIB=NO ENABLE_TESTABILITY=YES \
+      -only-testing:HermesBotsTests build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1; then
+    grep -E "error:" "$ART/xcodebuild-build.log" | sort -u | head -10 | cut -c1-300 >&2
+    die "build failed; full log: $ART/xcodebuild-build.log" 4
+  fi
+fi
+
+watch_run() {
+  local started="$SECONDS" last="" now i
+  for i in $(seq 1 $((TIMEOUT * 4))); do
+    [ -f "$ART/.watching" ] || return 0
+    now="$(lsappinfo front)"
+    if [ "$now" != "$last" ]; then
+      last="$now"
+      if front_is_host; then echo "VIOLATION: the bench host became the frontmost app ($(frontmost))" >>"$ART/frontmost.log"; fi
+    fi
+    sleep 0.25
+  done
+  echo "TIMEOUT: run exceeded ${TIMEOUT}s after $((SECONDS - started))s, stopping the host" >>"$ART/frontmost.log"
+  touch "$ART/.timedout"
+  host_pids | while read -r pid; do kill "$pid" 2>/dev/null || true; done
+}
+
+SCENARIOS=(chat-open-cold composer-typing streaming history-scroll window-resize)
+selector_for() {
+  case "$1" in
+    chat-open-cold) echo chatOpenCold ;;
+    composer-typing) echo composerTyping ;;
+    streaming) echo streaming ;;
+    history-scroll) echo historyScroll ;;
+    window-resize) echo windowResize ;;
+    render) echo rendersTheRealViews ;;
+  esac
+}
+
+run_tests() {
+  local label="$1" only="HermesBotsTests/MacChatBenchTests"
+  only="$only/$(selector_for "$label")()"
+  rm -rf "$RUN_DIR/$label.xcresult"
+  set +e
+  ( cd "$IOS_DIR" && TEST_RUNNER_HERMES_MAC_BENCH_OUT="$RUN_DIR" \
+      xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+        -destination 'platform=macOS,arch=arm64' -derivedDataPath "$DERIVED" \
+        "-only-testing:$only" -parallel-testing-enabled NO \
+        -resultBundlePath "$RUN_DIR/$label.xcresult" test-without-building ) >"$RUN_DIR/xcodebuild-$label.log" 2>&1
+  local status=$?
+  set -e
+  return "$status"
+}
+
+missing_scenarios() {
+  local name
+  for name in "${SCENARIOS[@]}"; do [ -f "$RUN_DIR/scenario-$name.json" ] || echo "$name"; done
+}
+
+RUN_FILES=()
+CHANGED=0
+for k in $(seq 1 "$RUNS"); do
+  RUN_DIR="$ART/run-$k"
+  rm -rf "$RUN_DIR"
+  mkdir -p "$RUN_DIR"
+  BEFORE="$(frontmost)"
+  echo "run $k/$RUNS: frontmost before: $BEFORE; load average $(sysctl -n vm.loadavg | tr -d '{}' | awk '{print $1}') on $(sysctl -n hw.ncpu) cores" | tee -a "$ART/frontmost.log"
+  touch "$ART/.watching"
+  watch_run &
+  WATCH_PID=$!
+  rm -f "$ART/.timedout"
+  for name in "${SCENARIOS[@]}"; do
+    [ ! -f "$ART/.timedout" ] || break
+    for attempt in 1 2 3 4 5 6; do
+      [ "$attempt" = 1 ] || echo "run $k/$RUNS: $name did not finish; retry $((attempt - 1))/5 in a fresh process" | tee -a "$RUN_DIR/attempts.txt"
+      run_tests "$name" || true
+      [ -f "$RUN_DIR/scenario-$name.json" ] || [ -f "$ART/.timedout" ] && break
+      mv -f "$RUN_DIR/watchdog-sample.txt" "$RUN_DIR/watchdog-sample-$name-$attempt.txt" 2>/dev/null || true
+    done
+  done
+  [ -f "$RUN_DIR/chat-open.png" ] || run_tests render || true
+  rm -f "$ART/.watching"
+  wait "$WATCH_PID" 2>/dev/null || true
+  AFTER="$(frontmost)"
+  echo "run $k/$RUNS: frontmost after: $AFTER" | tee -a "$ART/frontmost.log"
+  if grep -q '^VIOLATION:' "$ART/frontmost.log"; then CHANGED=1; fi
+  if [ -n "$(missing_scenarios)" ] || [ ! -f "$RUN_DIR/chat-open.png" ]; then
+    grep -E '^(TIMEOUT|VIOLATION)' "$ART/frontmost.log" >&2 || true
+    die "run $k incomplete, missing: $(missing_scenarios | tr '\n' ' ')$([ -f "$RUN_DIR/chat-open.png" ] || echo render-check); logs in $RUN_DIR (xcodebuild-*.log, watchdog-sample-*.txt)" 4
+  fi
+  report merge "$RUN_DIR/bench-run.json" "${SCENARIOS[@]/#/$RUN_DIR/scenario-}"
+  RUN_FILES+=("$RUN_DIR/bench-run.json")
+done
+
+cp "$ART/run-1/chat-open.png" "$ART/chat-open.png" 2>/dev/null || true
+report aggregate "$ART/bench.json" "${RUN_FILES[@]}"
+if [ "$CHANGED" = 1 ]; then
+  echo "WARNING: the bench host became the frontmost app; see $ART/frontmost.log" >&2
+else
+  echo "the bench host was never the frontmost app across $RUNS run(s)"
+fi
+echo "$ART"
+[ "$CHANGED" = 0 ] || exit 3

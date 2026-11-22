@@ -4,12 +4,12 @@
 The chat list scrolls vertically only. Two things keep it there:
 
 * on iPhone and iPad the scrolled content is pinned to the viewport width with ``containerRelativeFrame(.horizontal)``
-  in ``App/ChatView.swift`` (inside ``#if os(iOS)``), so a wide row (table, code, image) can never widen the list;
+  in ``App/Chat/ChatTranscriptList.swift`` (inside ``#if os(iOS)``), so a wide row (table, code, image) can never widen the list;
   wide content scrolls inside its own horizontal ScrollView;
 * on Mac that modifier is forbidden: it resolves against the window, not the pane ``MacShellLayout`` proposes, so the
   chat content is as wide as the window and overflows it by the sidebar width. The Mac list is bounded by
   ``.chatColumn()`` alone;
-* every programmatic scroll of the list (``ChatView.swift``, ``ChatScrollController.swift``) sets only the vertical axis: ``scrollTo(edge: .top)``,
+* every programmatic scroll of the list (``ChatTranscriptList.swift``, ``ChatScrollController.swift``) sets only the vertical axis: ``scrollTo(edge: .top)``,
   ``scrollTo(edge: .bottom)``, ``scrollTo(y:)`` or ``scrollTo(id:, anchor: ChatScrollController.revealAnchor)``
   (an anchor with ``x: 0``). ``scrollTo(x:)``, ``scrollTo(point:)``, a leading or trailing edge and a centred
   anchor carry an x and move the list sideways. A justified exception carries ``chat-scroll: ok`` on the line.
@@ -24,14 +24,15 @@ import sys
 from pathlib import Path
 
 OPT_OUT = "chat-scroll: ok"
-LIST_FILES = ("App/ChatView.swift", "App/Chat/ChatScrollController.swift")
+LIST_VIEW = "App/Chat/ChatTranscriptList.swift"
+LIST_FILES = (LIST_VIEW, "App/Chat/ChatScrollController.swift")
 SCROLL_CALL = re.compile(r"\.scrollTo\(")
 VERTICAL_ONLY = re.compile(
     r"\.scrollTo\((?:edge: \.(?:top|bottom)\)|y:|id: [^,()]+, anchor: (?:ChatScrollController\.|Self\.)?revealAnchor\))"
 )
 WIDTH_PIN = "containerRelativeFrame(.horizontal"
 FIX = ("Scroll the chat list on the vertical axis only: scrollTo(edge: .top), scrollTo(y:) or scrollTo(id:, anchor: "
-       "ChatScrollController.revealAnchor), and keep containerRelativeFrame(.horizontal) on the list content in ChatView.swift "
+       "ChatScrollController.revealAnchor), and keep containerRelativeFrame(.horizontal) on the list content in ChatTranscriptList.swift "
        "inside #if os(iOS) only.")
 MAC_PIN = ("containerRelativeFrame(.horizontal) in the macOS build of the chat list: on Mac it resolves against the window, "
            "not the pane MacShellLayout proposes, so the content is as wide as the whole window and overflows the pane by the "
@@ -120,14 +121,14 @@ def scan(root: Path) -> list[str]:
                 continue
             if not VERTICAL_ONLY.search(line):
                 found.append(f"{rel}:{i + 1}: programmatic scroll that can set an x; use a vertical-only target")
-    view = root / "App" / "ChatView.swift"
+    view = root / LIST_VIEW
     if view.is_file():
         text = view.read_text(encoding="utf-8-sig")
         for number, line in active_lines(text, "macOS"):
             if WIDTH_PIN in line and OPT_OUT not in line:
-                found.append(f"App/ChatView.swift:{number}: {MAC_PIN}")
+                found.append(f"{LIST_VIEW}:{number}: {MAC_PIN}")
         if not any(WIDTH_PIN in line for _, line in active_lines(text, "iOS")):
-            found.append(f"App/ChatView.swift:1: {IOS_PIN}")
+            found.append(f"{LIST_VIEW}:1: {IOS_PIN}")
     return found
 
 

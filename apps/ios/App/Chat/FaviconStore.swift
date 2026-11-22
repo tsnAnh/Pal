@@ -129,7 +129,7 @@ actor FaviconFetcher {
               let modified = attributes[.modificationDate] as? Date,
               Date().timeIntervalSince(modified) < Self.diskTimeToLive
         else { return nil }
-        return try? Data(contentsOf: url)
+        return try? Data(contentsOf: url) // perf-lint: ok actor-isolated, runs off the main actor
     }
 
     private func writeDisk(_ host: String, _ data: Data) {

@@ -43,7 +43,7 @@ struct SolidPainter {
         context.translateBy(x: pivot.x + pose.bodyX * travel, y: pivot.y + pose.bodyY * travel)
         context.scaleBy(x: pose.bodyScaleX, y: pose.bodyScaleY)
         context.translateBy(x: -pivot.x, y: -pivot.y)
-        let frame = SolidFrame(solid: solid, pose: pose, projection: solid.projection(size: size, inset: inset))
+        let frame = SolidFrame.make(solid: solid, pose: pose, projection: solid.projection(size: size, inset: inset))
         if pose.opacity < 1 {
             context.opacity = pose.opacity
             context.drawLayer { layer in paintFigure(frame, pose, placement, in: &layer) }

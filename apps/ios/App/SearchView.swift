@@ -3,12 +3,12 @@ import PalRoster
 import SwiftUI
 
 struct SearchHost: View {
-    @State private var model: SearchModel
+    @LazyState private var model: SearchModel
     let roster: RosterModel
     let router: AppRouter
 
     init(roster: RosterModel, router: AppRouter) {
-        _model = State(initialValue: SearchModel(roster: roster, supported: router.searchScopes))
+        _model = LazyState { SearchModel(roster: roster, supported: router.searchScopes) }
         self.roster = roster
         self.router = router
     }

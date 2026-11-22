@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-SCHEMA = 1
+SCHEMA = 2
 PLATFORMS = ("macOS", "iOS")
 THRESHOLD_KEYS = ("hitch", "severe")
 COUNT_FIELDS = ("frames", "hitches", "severeHitches")
@@ -61,6 +61,8 @@ def validate(report):
         require_number(report, field, integer=True)
     for field in MILLISECOND_FIELDS:
         require_number(report, field)
+    if require_number(report, "budgetMs") <= 0:
+        raise HitchReportError("field 'budgetMs' must be greater than zero")
     if report["severeHitches"] > report["hitches"]:
         raise HitchReportError("severeHitches exceeds hitches; hitches must include the severe ones")
     if report["hitches"] > report["frames"]:
@@ -141,6 +143,7 @@ def summary(report):
     return {
         "durationSeconds": duration,
         "frames": report["frames"],
+        "budgetMs": report["budgetMs"],
         "hitchesPerMinute": report["hitches"] / duration * 60,
         "severePerMinute": report["severeHitches"] / duration * 60,
         "hitchMsPerSecond": report["hitchMs"] / (duration * 1000) * 1000,
@@ -155,7 +158,7 @@ def render_summary(report):
     thresholds = report["thresholdsMs"]
     lines = [
         f"{report['platform']} run started {report['startedAt']}, {stats['durationSeconds']:.1f} s, {report['frames']} frames "
-        f"(hitch > {thresholds['hitch']:g} ms, severe > {thresholds['severe']:g} ms)",
+        f"(frame budget {report['budgetMs']:.2f} ms, hitch > {thresholds['hitch']:.2f} ms, severe > {thresholds['severe']:g} ms)",
         f"  hitches: {report['hitches']} ({stats['hitchesPerMinute']:.2f}/min), severe: {report['severeHitches']} ({stats['severePerMinute']:.2f}/min)",
         f"  hitch time: {stats['hitchMsPerSecond']:.2f} ms per second",
         f"  worst frame: {stats['worstFrameMs']:.1f} ms",
@@ -179,6 +182,8 @@ def compare(before_report, after_report):
         lines.append(f"{label:<20} {template.format(before[key]):>12} {template.format(after[key]):>12} {change_cell(before[key], after[key]):>9}")
     if before_report["platform"] != after_report["platform"]:
         lines.append(f"note: platforms differ ({before_report['platform']} vs {after_report['platform']}); the numbers are not comparable")
+    if abs(before["budgetMs"] - after["budgetMs"]) > 0.5:
+        lines.append(f"note: frame budgets differ ({before['budgetMs']:.2f} ms vs {after['budgetMs']:.2f} ms); the displays ran at different refresh rates")
     return "\n".join(lines) + "\n"
 
 

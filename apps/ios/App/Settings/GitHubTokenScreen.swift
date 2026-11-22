@@ -14,7 +14,7 @@ struct GitHubTokenScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: GitHubTokenModel
+    @LazyState private var model: GitHubTokenModel
     @State private var showingSignIn = false
     @State private var clientID = ""
 
@@ -23,7 +23,7 @@ struct GitHubTokenScreen: View {
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: GitHubTokenModel(client: GitHubTokenClient(gateway: gateway), surfaces: connection.surfaces))
+        _model = LazyState { GitHubTokenModel(client: GitHubTokenClient(gateway: gateway), surfaces: connection.surfaces) }
     }
 
     var body: some View {

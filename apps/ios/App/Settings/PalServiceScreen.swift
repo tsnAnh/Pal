@@ -6,16 +6,18 @@ struct PalServiceScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: GatewayServiceModel
-    @State private var host: HostServerModel
+    @LazyState private var model: GatewayServiceModel
+    @LazyState private var host: HostServerModel
+
+    private static let sinceStyle = Date.FormatStyle(date: .abbreviated, time: .shortened)
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: GatewayServiceModel(client: GatewayServiceClient(gateway: gateway), surfaces: connection.surfaces))
-        _host = State(initialValue: HostServerModel(client: HostServerClient(gateway: gateway), surfaces: connection.surfaces))
+        _model = LazyState { GatewayServiceModel(client: GatewayServiceClient(gateway: gateway), surfaces: connection.surfaces) }
+        _host = LazyState { HostServerModel(client: HostServerClient(gateway: gateway), surfaces: connection.surfaces) }
     }
 
     var body: some View {
@@ -24,7 +26,7 @@ struct PalServiceScreen: View {
                 SettingsRow.value("Status", value: model.stateText, accessibilityIdentifier: "hermesServiceState")
                 if let since = model.info?.startedAt {
                     SettingsRow.value(
-                        "Running since", value: since.formatted(date: .abbreviated, time: .shortened),
+                        "Running since", value: Self.sinceStyle.format(since),
                         accessibilityIdentifier: "hermesServiceSince")
                 }
             }

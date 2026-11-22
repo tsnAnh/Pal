@@ -64,21 +64,52 @@ private struct MacMessageChrome: View {
     let carrier: MessageCarrier
     let actions: MessageActions
 
+    @Environment(MacShell.self) private var shell
+    @Environment(\.rowHover) private var rowHover
+    @FocusState private var focus: MessageBarControl?
+
+    private var isShown: Bool {
+        rowHover?.isHovering == true || focus != nil || shell.messageMenu?.actions.rowID == actions.rowID
+    }
+
     var body: some View {
-        GeometryReader { proxy in
-            MessageChromeLayout(
-                bubble: proxy[carrier.bubble],
-                region: CGRect(origin: .zero, size: proxy.size),
-                slot: carrier.slot,
-                hasReaction: actions.reaction != nil
-            ) {
-                MacMessageHoverBar(actions: actions)
-                if let reaction = actions.reaction {
-                    MessageReactionBadge(emoji: reaction)
+        let shown = isShown
+        let barBuilt = shown || AssistiveAccess.shared.isActive
+        let layout = MessageBarLayout(isOwnFailed: actions.isOwnFailed, canReact: !shown || actions.canReact())
+        Group {
+            if barBuilt || actions.reaction != nil {
+                GeometryReader { proxy in
+                    MessageChromeLayout(
+                        bubble: proxy[carrier.bubble],
+                        region: CGRect(origin: .zero, size: proxy.size),
+                        slot: carrier.slot,
+                        hasReaction: actions.reaction != nil,
+                        barSize: layout.size
+                    ) {
+                        if barBuilt {
+                            MacMessageHoverBar(actions: actions, layout: layout, visible: shown, focus: $focus)
+                                .layoutValue(key: ChromeRoleKey.self, value: .bar)
+                                .transition(.opacity)
+                        }
+                        if let reaction = actions.reaction {
+                            MessageReactionBadge(emoji: reaction)
+                                .layoutValue(key: ChromeRoleKey.self, value: .badge)
+                        }
+                    }
                 }
             }
         }
+        .animation(.easeOut(duration: 0.12), value: barBuilt)
     }
+}
+
+private enum ChromeRole {
+    case bar
+    case badge
+}
+
+private struct ChromeRoleKey: LayoutValueKey {
+    static let defaultValue = ChromeRole.bar
 }
 
 private struct MessageChromeLayout: Layout {
@@ -86,20 +117,24 @@ private struct MessageChromeLayout: Layout {
     let region: CGRect
     let slot: MessageChromePlacement.Slot
     let hasReaction: Bool
+    let barSize: CGSize
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions(by: region.size)
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard let bar = subviews.first else { return }
-        let barSize = bar.sizeThatFits(.unspecified)
         let resolved = MessageChromePlacement.place(
             bubble: bubble, region: region, slot: slot, bar: barSize, hasReaction: hasReaction
         )
-        bar.place(at: bounds.origin.offset(by: resolved.frames.bar.origin), proposal: ProposedViewSize(barSize))
-        if hasReaction, subviews.count > 1, let badge = resolved.frames.badge {
-            subviews[1].place(at: bounds.origin.offset(by: badge.origin), proposal: ProposedViewSize(badge.size))
+        for subview in subviews {
+            switch subview[ChromeRoleKey.self] {
+            case .bar:
+                subview.place(at: bounds.origin.offset(by: resolved.frames.bar.origin), proposal: ProposedViewSize(barSize))
+            case .badge:
+                guard let badge = resolved.frames.badge else { continue }
+                subview.place(at: bounds.origin.offset(by: badge.origin), proposal: ProposedViewSize(badge.size))
+            }
         }
     }
 }
@@ -155,7 +190,7 @@ private struct MacRowTracker: NSViewRepresentable {
 
         override func updateTrackingAreas() {
             super.updateTrackingAreas()
-            trackingAreas.forEach(removeTrackingArea)
+            guard trackingAreas.isEmpty else { return }
             addTrackingArea(NSTrackingArea(
                 rect: .zero,
                 options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
@@ -217,120 +252,6 @@ private final class MessageMenuMonitor {
         guard entries.isEmpty, let monitor else { return }
         NSEvent.removeMonitor(monitor)
         self.monitor = nil
-    }
-}
-
-private struct BarAccessibilityActions: ViewModifier {
-    let react: (() -> Void)?
-    let reply: (() -> Void)?
-    let more: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .accessibilityAction(named: Text("More"), more)
-            .modifier(OptionalAccessibilityAction(name: "React", action: react))
-            .modifier(OptionalAccessibilityAction(name: "Reply", action: reply))
-    }
-}
-
-private struct OptionalAccessibilityAction: ViewModifier {
-    let name: LocalizedStringKey
-    let action: (() -> Void)?
-
-    func body(content: Content) -> some View {
-        if let action {
-            content.accessibilityAction(named: Text(name), action)
-        } else {
-            content
-        }
-    }
-}
-
-private struct MacMessageHoverBar: View {
-    let actions: MessageActions
-
-    private static let pitch: CGFloat = 25
-
-    private enum Control: Hashable {
-        case react
-        case reply
-        case more
-    }
-
-    @Environment(MacShell.self) private var shell
-    @Environment(\.rowHover) private var rowHover
-    @FocusState private var focus: Control?
-    @State private var reactFrame = CGRect.zero
-    @State private var moreFrame = CGRect.zero
-
-    private var isShown: Bool {
-        rowHover?.isHovering == true || focus != nil || shell.messageMenu?.actions.rowID == actions.rowID
-    }
-
-    var body: some View {
-        let visible = isShown
-        let showsReact = !actions.isOwnFailed && (!visible || actions.canReact())
-        GlassEffectContainer(spacing: 6) {
-            HStack(spacing: 0) {
-                if showsReact {
-                    Button { openMenu(from: reactFrame) } label: { glyph("face.smiling") }
-                        .buttonStyle(.plain)
-                        .focused($focus, equals: .react)
-                        .background { measure(visible, into: $reactFrame) }
-                        .help(String(localized: "React"))
-                        .accessibilityLabel(Text("React"))
-                        .accessibilityIdentifier("messageReact")
-                }
-                if !actions.isOwnFailed {
-                    Button { actions.reply() } label: { glyph("arrow.uturn.left") }
-                        .buttonStyle(.plain)
-                        .focused($focus, equals: .reply)
-                        .help(String(localized: "Reply"))
-                        .accessibilityLabel(Text("Reply"))
-                        .accessibilityIdentifier("messageReply")
-                }
-                Button { openMenu(from: moreFrame) } label: { glyph("ellipsis") }
-                    .buttonStyle(.plain)
-                    .focused($focus, equals: .more)
-                    .background { measure(visible, into: $moreFrame) }
-                    .help(String(localized: "More"))
-                    .accessibilityLabel(Text("More"))
-                    .accessibilityIdentifier("messageMore")
-            }
-            .palGlass(Capsule())
-        }
-        .opacity(visible ? 1 : 0)
-        .animation(.easeOut(duration: 0.12), value: visible)
-        .allowsHitTesting(visible)
-        .onHover { inside in
-            if inside { rowHover?.enter(.bar) } else { rowHover?.exit(.bar) }
-        }
-        .onDisappear { rowHover?.exit(.bar) }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("messageActionBar")
-        .modifier(BarAccessibilityActions(
-            react: showsReact ? { openMenu(from: reactFrame) } : nil,
-            reply: actions.isOwnFailed ? nil : { actions.reply() },
-            more: { openMenu(from: moreFrame) }
-        ))
-    }
-
-    @ViewBuilder
-    private func measure(_ visible: Bool, into frame: Binding<CGRect>) -> some View {
-        if visible {
-            Color.clear.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.wrappedValue = $0 }
-        }
-    }
-
-    private func openMenu(from frame: CGRect) {
-        shell.messageMenu = MacMessageMenuRequest(anchor: CGPoint(x: frame.minX, y: frame.maxY + 6), actions: actions)
-    }
-
-    private func glyph(_ name: String) -> some View {
-        PalIcon(name, ink: .primary)
-            .font(.system(size: 13, weight: .regular))
-            .frame(width: Self.pitch, height: 26)
-            .contentShape(Rectangle())
     }
 }
 #endif

@@ -49,16 +49,14 @@ extension View {
     }
 
     func macChatChrome(
-        bot: BotRow,
-        activity: BotActivity,
-        mood: AvatarMood,
+        model: ChatModel,
         router: AppRouter,
         find: @escaping () -> Void,
         focusComposer: @escaping () -> Void
     ) -> some View {
         #if os(macOS)
         safeAreaBar(edge: .top) {
-            MacChatHeader(bot: bot, activity: activity, mood: mood)
+            ChatMacHeaderHost(model: model)
         }
         .modifier(MacChatActions(find: find, focusComposer: focusComposer))
         #else
