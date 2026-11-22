@@ -130,7 +130,7 @@ TOOLSETS = {
                  [t for t in _HERMES_CORE_TOOLS if t.startswith("slack_")]),
     "member": _ts(
         "Member lane: what a workspace member's conversation with the bot may use",
-        [*UNTRUSTED_SENDER_SAFE_TOOLS, "slack_read_thread", "slack_read_channel"],
+        [*UNTRUSTED_SENDER_SAFE_TOOLS, "slack_read_thread", "slack_read_channel", "request_owner_action"],
         posture=True,
     ),
     "connections": _ts("Remote connector discovery, execution, and account authorization", ["manage_connections"]),

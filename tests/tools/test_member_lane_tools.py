@@ -108,7 +108,7 @@ def test_untrusted_sender_safe_tools_feed_the_webhook_and_member_toolsets():
     assert {"web_search", "web_extract", "vision_analyze", "clarify"} == safe
     assert set(toolsets.TOOLSETS["hermes-webhook"]["tools"]) == safe
     member = set(toolsets.resolve_toolset("member"))
-    assert member == safe | {"slack_read_thread", "slack_read_channel"}
+    assert member == safe | {"slack_read_thread", "slack_read_channel", "request_owner_action"}
     assert member.isdisjoint({"terminal", "write_file", "patch", "execute_code", "memory", "session_search",
                               "delegate_task", "cronjob_manage", "slack_post_message", "slack_send_dm"})
     assert not any("member" in spec.get("includes", ()) for spec in toolsets.TOOLSETS.values())

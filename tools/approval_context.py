@@ -158,6 +158,14 @@ def get_current_turn_id() -> str:
     return _approval_turn_id.get()
 
 
+def get_current_tool_call_id() -> str:
+    return _approval_tool_call_id.get()
+
+
+def get_current_approval_session_id() -> str:
+    return _approval_session_id.get()
+
+
 def get_current_session_key(default: str = "default") -> str:
     """Return the active session key: approval contextvar → session_context → os.environ."""
     if session_key := _approval_session_key.get():
