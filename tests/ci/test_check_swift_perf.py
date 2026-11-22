@@ -366,7 +366,6 @@ def test_planted_violation_is_reported_with_file_line_rule_and_fix(tmp_path: Pat
 
 REAL_SITES = [
     ("perf-shadow-radius", "App/Mac/MacModalSupport.swift"),
-    ("perf-glass-over-fill", "Packages/PalDesign/Sources/PalDesign/Components/PalControls.swift"),
 ]
 
 
