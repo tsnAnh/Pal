@@ -174,6 +174,6 @@ struct RosterModelTests {
             return
         }
         #expect(blob.kind == .heart)
-        #expect(blob.headFillCSS == "#93dcf7")
+        #expect(blob.headFillCSS == "#e05cac")
     }
 }

@@ -4,10 +4,10 @@ import SwiftUI
 import Testing
 @testable import PalDesign
 
-@Suite("The primary bot is the 🩵 heart", .serialized)
+@Suite("The primary bot is the 🩷 heart", .serialized)
 @MainActor
 struct PrimaryHeartTests {
-    private static let emoji = (red: 0x93, green: 0xDC, blue: 0xF7)
+    private static let emoji = (red: 0xE0, green: 0x5C, blue: 0xAC)
 
     @Test("every spelling of the primary name resolves to the heart in the emoji colour with black eyes", arguments: ["default", "Default", " DEFAULT "])
     func resolves(name: String) throws {
@@ -16,7 +16,7 @@ struct PrimaryHeartTests {
             return
         }
         #expect(blob.kind == .heart)
-        #expect(blob.headFillCSS == "#93dcf7")
+        #expect(blob.headFillCSS == "#e05cac")
         let rig = AvatarContent.rig(.blob(blob))
         #expect(AvatarSolid(rig).eyeFill.css == "#000000")
     }
