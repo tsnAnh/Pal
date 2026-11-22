@@ -9,10 +9,14 @@ struct SlackSettingsView: View {
     let close: () -> Void
 
     @State private var confirmsDisconnect = false
-    @State private var editsChannels = false
+    @State private var confirmsReinstall = false
+    @State private var showsChannels = false
 
     private var chat: ChatInstallModel { model.chat }
+    private var members: ChatMembersModel { model.members }
     private var name: String { model.displayName }
+    private var needsReinstall: Bool { chat.snapshot?.installation?.status == .needsReauth }
+    private var workspaceName: String { chat.snapshot?.installation?.workspaceName ?? String(localized: "your workspace") }
 
     private var page: some View {
         VStack(spacing: 0) {
@@ -28,7 +32,8 @@ struct SlackSettingsView: View {
                         PalHairline()
                         channels
                     }
-                    if editsChannels { SlackChannelsView(chat: chat, name: name) }
+                    if needsReinstall { reinstallBanner }
+                    preferences
                     notice
                     SlackCard { disconnect }
                 }
@@ -43,6 +48,20 @@ struct SlackSettingsView: View {
 
     var body: some View {
         SetupChrome(title: String(localized: "\(name) in Slack"), accessibilityIdentifier: "slackSettings", close: close) { page }
+            .task { await model.loadMembers() }
+            .slackChannelsPresentation(isPresented: $showsChannels) { SlackChannelsScreen(model: model) { showsChannels = false } }
+            .macConfirm(isPresented: $confirmsReinstall) {
+                MacDialogContent(
+                    String(localized: "Reinstall \(name) in Slack?"),
+                    message: String(localized: "Pal removes \(name) from Slack first, then walks you through adding it again."),
+                    actions: [
+                        MacDialogAction(String(localized: "Reinstall"), role: .destructive, identifier: "slackReinstallConfirm") {
+                            Task { await model.disconnect() }
+                        },
+                        MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                    ]
+                )
+            }
             .macConfirm(isPresented: $confirmsDisconnect) {
                 MacDialogContent(
                     String(localized: "Disconnect \(name) from Slack?"),
@@ -79,7 +98,91 @@ struct SlackSettingsView: View {
             String(localized: "Channels"), live.isEmpty ? String(localized: "No channels yet") : live.joined(separator: ", "),
             identifier: "slackSettingsChannels"
         ) {
-            SetupQuietButton(title: String(localized: "Change ›"), identifier: "slackChannelsChange") { editsChannels.toggle() }
+            SetupQuietButton(title: String(localized: "Change ›"), identifier: "slackChannelsChange") { showsChannels = true }
+        }
+    }
+
+    private var reinstallBanner: some View {
+        SlackCard {
+            HStack(alignment: .top, spacing: 12) {
+                PalIcon("exclamationmark.triangle", ink: .secondary).foregroundStyle(Color.orange).padding(.top, 2).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(name) lost access to \(workspaceName)").hermesText(.rowTitle).fontWeight(.semibold)
+                        .foregroundStyle(PalTokens.textPrimary)
+                    Text("Someone removed \(name) from the workspace, or its access changed. Reinstall to bring it back.")
+                        .hermesText(.rowSubtitle)
+                        .foregroundStyle(PalTokens.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    SetupButton(title: String(localized: "Reinstall in Slack"), kind: .primary, symbol: "arrow.up.right", identifier: "slackReinstall") {
+                        confirmsReinstall = true
+                    }
+                    .padding(.top, 8)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(PalMetrics.screenMargin)
+        }
+        .accessibilityIdentifier("slackReinstallBanner")
+    }
+
+    @ViewBuilder
+    private var preferences: some View {
+        switch members.phase {
+        case .loading:
+            ProgressView().frame(maxWidth: .infinity, minHeight: 160).accessibilityIdentifier("slackPreferencesLoading")
+        case .failed:
+            VStack(spacing: 10) {
+                Text("Couldn't load these choices").hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary)
+                Text("Check your connection and try again.").hermesText(.rowSubtitle).foregroundStyle(PalTokens.textTertiary)
+                Button { Task { await members.reload() } } label: { Label("Try again", palIcon: "arrow.clockwise") }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("slackPreferencesRetry")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+            .accessibilityIdentifier("slackPreferencesFailed")
+        case .ready:
+            VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
+                SlackAudienceSection(members: members, name: name, workspace: workspaceName)
+                SlackReportSection(members: members, chat: chat, name: name)
+                approvals
+            }
+            .opacity(needsReinstall ? 0.45 : 1)
+            .disabled(needsReinstall)
+            memberNotice
+        }
+    }
+
+    private var approvals: some View {
+        SlackGroup(
+            caption: String(localized: "Approvals"),
+            footer: String(localized: "\(name) asks before it does anything someone else requested. Answer in whichever you see first."),
+            identifier: "slackApprovals"
+        ) {
+            HStack(spacing: 12) {
+                PalIcon("hand.raised", ink: .secondary).frame(width: 20).accessibilityHidden(true)
+                Text("Requests from others").hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary)
+                Spacer(minLength: 8)
+                Text("Ask me in Slack and here").hermesText(.rowValue).foregroundStyle(PalTokens.textSecondary).multilineTextAlignment(.trailing)
+            }
+            .padding(PalMetrics.screenMargin)
+            .frame(minHeight: PalMetrics.rowMinimumHeight)
+        }
+    }
+
+    @ViewBuilder
+    private var memberNotice: some View {
+        if let notice = members.notice {
+            SlackNotice(text: Self.copy(for: notice), identifier: "slackMemberNotice")
+        }
+    }
+
+    private static func copy(for notice: ChatMembersModel.Notice) -> String {
+        switch notice {
+        case .changedElsewhere: String(localized: "This changed on another device, so Pal reloaded it. Check the choice and try again.")
+        case .offline: String(localized: "Couldn't reach Pal. Check your connection and try again.")
+        case .notJoined: String(localized: "That channel isn't one it's in anymore. Pick another.")
+        case .notSaved: String(localized: "That didn't go through. Try again.")
         }
     }
 
@@ -136,5 +239,18 @@ struct SlackSettingsView: View {
         .frame(minHeight: PalMetrics.rowMinimumHeight)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func slackChannelsPresentation<Destination: View>(
+        isPresented: Binding<Bool>, @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        #if os(macOS)
+        macSheet(isPresented: isPresented, size: .full, content: destination)
+        #else
+        navigationDestination(isPresented: isPresented, destination: destination)
+        #endif
     }
 }

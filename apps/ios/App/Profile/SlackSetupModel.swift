@@ -45,6 +45,7 @@ final class SlackSetupModel {
     }
 
     let chat: ChatInstallModel
+    let members: ChatMembersModel
     let flow: StepFlowModel
     let displayName: String
     private let iconPusher: ChatIconPusher
@@ -53,11 +54,12 @@ final class SlackSetupModel {
     private(set) var loaded = false
     @ObservationIgnored private var gatewayFailureShown = false
 
-    init(botName: String, displayName: String, spec: BotAvatarSpec?, client: any ChatInstallClient) {
+    init(botName: String, displayName: String, spec: BotAvatarSpec?, client: any ChatInstallClient, members: any ChatMemberClient) {
         self.displayName = displayName
         self.spec = spec
         iconPusher = ChatIconPusher(client: client)
         chat = ChatInstallModel(botName: botName, preferredProvider: "slack", client: client)
+        self.members = ChatMembersModel(client: members)
         let plan = SlackSetupPlan(displayName: displayName, provider: nil, state: nil)
         guard let engine = StepFlowEngine(flowID: SlackSetupPlan.flowID, steps: plan.steps) else {
             preconditionFailure("The Slack steps are always a valid flow")
@@ -100,6 +102,15 @@ final class SlackSetupModel {
     func receive(_ payload: ChatInstallChangedPayload) async {
         await chat.receive(payload)
         syncAndResume()
+    }
+
+    func loadMembers() async {
+        guard let provider = chat.provider, let state = chat.state else { return }
+        await members.load(scope: ChatInstallScope(provider: provider.providerId, workspace: state.workspace))
+    }
+
+    func leave(_ spaceId: String) async {
+        if await members.leave(spaceId) { await chat.refreshSpaces() }
     }
 
     func completeFlow() {

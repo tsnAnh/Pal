@@ -21,7 +21,7 @@ struct SlackEntryView: View {
                 legacy
             case .some(false):
                 ModelHost {
-                    SlackSetupModel(botName: botName, displayName: displayName, spec: spec, client: source.client)
+                    SlackSetupModel(botName: botName, displayName: displayName, spec: spec, client: source.client, members: source.members)
                 } content: {
                     SlackSetupScreen(model: $0, spec: spec, events: source.events, close: { dismiss() }, advanced: { legacy })
                 }
