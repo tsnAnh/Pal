@@ -38,6 +38,7 @@ from tui_gateway.contracts.chat_provider import (
     Installation,
     NextAction,
     NextActionKind,
+    ProviderCapability,
     ReportDestination,
     ReportDestinationKind,
     SetupErrorCode,
@@ -116,8 +117,16 @@ class ChatInstallService:
     def _apply(self, provider: ChatProvider, state: SetupState, event: SetupEvent) -> SetupState:
         new = pure_advance(state, event, provider.capabilities(state.workspace), self.clock())
         if new is not state:
+            new = self._with_manual_action(provider, new)
             self.store.save(new, state.revision)
         return new
+
+    @staticmethod
+    def _with_manual_action(provider: ChatProvider, state: SetupState) -> SetupState:
+        if state.step is not SetupStep.needs_manual_step:
+            return state
+        step = ProviderCapability(state.next_action.action_id)
+        return state.model_copy(update={"next_action": provider.manual_step_action(state, step)})
 
     def _fail(self, provider: ChatProvider, state: SetupState, code: SetupErrorCode) -> SetupState:
         return self._apply(provider, state, SetupEvent(kind=SetupEventKind.failed, error=code))
@@ -170,8 +179,8 @@ class ChatInstallService:
         return [self._provider(provider_id).capabilities() for provider_id in registered_provider_ids()]
 
     def status(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation | None]:
-        self._provider(provider_id)
-        state = self._current(bot, provider_id, workspace)
+        provider = self._provider(provider_id)
+        state = self._with_manual_action(provider, self._current(bot, provider_id, workspace))
         return state, self._installation_of(state)
 
     def _installation_of(self, state: SetupState) -> Installation | None:
@@ -224,7 +233,6 @@ class ChatInstallService:
 
     def _client_event(self, provider, state, event, manual_step, vault_item_id, refresh_vault_item_id) -> SetupState:
         if event is SetupEventKind.manual_step_done and manual_step is None and state.step is SetupStep.needs_manual_step:
-            from tui_gateway.contracts.chat_provider import ProviderCapability
             manual_step = ProviderCapability(state.next_action.action_id)
         if event is SetupEventKind.manual_step_done and manual_step in CREDENTIAL_STEPS:
             return self._credential_step(provider, state, manual_step, vault_item_id)

@@ -240,6 +240,22 @@ def test_redirect_completes_the_install_in_the_bots_profile(rig):
     assert not (r.home / "chat_slack").exists()
 
 
+def test_guided_steps_carry_the_slack_page_and_the_return_address(rig):
+    r = rig(**GUIDED)
+    state = r.to_manual_or_allow()
+    seen = {}
+    while state.step is wire.SetupStep.needs_manual_step:
+        seen[state.next_action.action_id] = state.next_action
+        assert r.status().next_action == state.next_action
+        extra = {"vault_item_id": r.app_key_item} if state.next_action.action_id == CAP.app_level_credential.value else {}
+        state = r.state(r.advance(state, "manual_step_done", **extra))
+    apps = f"https://api.slack.com/apps/{state.app_id}"
+    redirect = seen[CAP.gateway_redirect.value]
+    assert redirect.copy_text == HTTPS + REDIRECT_PATH and redirect.link == f"{apps}/oauth"
+    assert seen[CAP.app_level_credential.value].link == f"{apps}/general"
+    assert seen[CAP.app_level_credential.value].copy_text is None
+
+
 def test_a_failed_exchange_after_the_link_is_used_is_not_reported_as_done(rig):
     r = rig()
     state = r.to_allow()

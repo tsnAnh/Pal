@@ -69,6 +69,7 @@ PROBED = (ProviderCapability.set_icon, ProviderCapability.app_level_credential,
           ProviderCapability.gateway_redirect, ProviderCapability.unattended_refresh)
 LEFT_ALREADY_ERRORS = {"not_in_channel", "channel_not_found", "is_archived"}
 _NO_ACTION = NextAction(kind=NextActionKind.none, action_id="none")
+SLACK_APPS_URL = "https://api.slack.com/apps"
 
 
 @dataclass(frozen=True)
@@ -174,6 +175,12 @@ class SlackProvider(ChatProvider):
         self.records.update_app(bot, workspace, invite_handle=projection.display_name)
         self._finish_app(bot, workspace, token, app_id, source)
         return AppCreated(app_id=app_id, authorize_link=self._with_redirect(self.records.app(bot, workspace)["authorize_link"]))
+
+    def manual_step_action(self, state: SetupState, step: ProviderCapability) -> NextAction:
+        page = "oauth" if step is ProviderCapability.gateway_redirect else "general"
+        link = f"{SLACK_APPS_URL}/{state.app_id}/{page}" if state.app_id else None
+        copy = self.redirect_url if step is ProviderCapability.gateway_redirect else None
+        return NextAction(kind=NextActionKind.button, action_id=step.value, link=link, copy_text=copy)
 
     def _with_redirect(self, link: str) -> str:
         if not self.redirect_url:

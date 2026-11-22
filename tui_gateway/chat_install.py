@@ -123,6 +123,9 @@ class ChatProvider(abc.ABC):
     def accept_app_level_credential(self, state: SetupState, vault_item_id: str) -> None:
         raise self._missing("accept_app_level_credential")
 
+    def manual_step_action(self, state: SetupState, step: ProviderCapability) -> NextAction:
+        return NextAction(kind=NextActionKind.button, action_id=step.value)
+
     def parse_owner_identity(self, raw: str) -> str | None:
         return raw.strip() or None
 
