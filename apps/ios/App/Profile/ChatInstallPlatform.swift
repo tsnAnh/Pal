@@ -11,7 +11,7 @@ enum ChatAvatarExport {
 
     @MainActor
     static func render(spec: BotAvatarSpec, background: Color) -> CGImage? {
-        let content = BotAvatarView(spec: spec, size: pixels * 0.8, animated: false)
+        let content = BotAvatarView(spec: spec, size: pixels, animated: false)
             .frame(width: pixels, height: pixels)
             .background(background)
         let renderer = ImageRenderer(content: content)
