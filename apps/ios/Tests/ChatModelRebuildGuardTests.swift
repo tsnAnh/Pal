@@ -9,7 +9,7 @@ import PalRoster
 import Synchronization
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 @testable import PalChat
 
 @MainActor

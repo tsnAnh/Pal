@@ -4,7 +4,7 @@ import XCTest
 @available(iOS 27.0, *)
 @MainActor
 final class SiriIntentsE2ETests: E2ETestCase {
-    private let definitions = IntentDefinitions(bundleIdentifier: "dev.tsnanh.hermes.bot")
+    private let definitions = IntentDefinitions(bundleIdentifier: "dev.tsnanh.pal")
 
     private func unique(_ text: String) -> String {
         "\(text) \(UUID().uuidString.prefix(6))"

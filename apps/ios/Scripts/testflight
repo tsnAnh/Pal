@@ -5,7 +5,7 @@ usage() {
   cat <<'USAGE'
 Usage: Scripts/testflight [--export-only] [--build-number N]
 
-Archives HermesBots for App Store distribution and uploads it to App Store Connect
+Archives Pal for App Store distribution and uploads it to App Store Connect
 for TestFlight, signing with the Xcode account for team G94PJ7VQBJ.
 
   --export-only      write the signed .ipa to build/testflight/export instead of uploading
@@ -26,7 +26,7 @@ done
 
 ios_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out="$ios_dir/build/testflight"
-archive="$out/HermesBots-$build_number.xcarchive"
+archive="$out/Pal-$build_number.xcarchive"
 options="$out/ExportOptions.plist"
 mkdir -p "$out"
 
@@ -34,8 +34,8 @@ command -v xcodegen >/dev/null || { echo "xcodegen is required (brew install xco
 (cd "$ios_dir" && xcodegen generate --quiet)
 
 xcodebuild archive \
-  -project "$ios_dir/HermesBots.xcodeproj" \
-  -scheme HermesBots \
+  -project "$ios_dir/Pal.xcodeproj" \
+  -scheme Pal \
   -configuration Release \
   -destination generic/platform=iOS \
   -archivePath "$archive" \

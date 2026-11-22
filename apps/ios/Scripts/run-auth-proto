@@ -24,8 +24,8 @@ cleanup() {
   set +e
   [ -n "$RECORD_PID" ] && kill -INT "$RECORD_PID" 2>/dev/null && wait "$RECORD_PID" 2>/dev/null
   if [ -n "$UDID" ]; then
-    xcrun simctl uninstall "$UDID" dev.tsnanh.hermes.bot 2>/dev/null
-    xcrun simctl uninstall "$UDID" dev.tsnanh.hermes.bot.uitests.xctrunner 2>/dev/null
+    xcrun simctl uninstall "$UDID" dev.tsnanh.pal 2>/dev/null
+    xcrun simctl uninstall "$UDID" dev.tsnanh.pal.uitests.xctrunner 2>/dev/null
     [ "$BOOTED_BY_US" = 1 ] && bash "$LEDGER" cleanup --owner "$OWNER"
   fi
   if [ -n "$GATEWAY_PID" ]; then
@@ -74,7 +74,7 @@ echo "== xcodegen + build"
 ( cd "$IOS_DIR" && xcodegen generate >/dev/null )
 UDID="$(xcrun simctl list devices | awk -v n="$DEVICE_NAME" '$0 ~ n" \\(" {gsub(/[()]/,"",$(NF-1)); print $(NF-1); exit}')"
 [ -n "$UDID" ] || { echo "no simulator named $DEVICE_NAME"; exit 1; }
-( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+( cd "$IOS_DIR" && xcodebuild -project Pal.xcodeproj -scheme Pal \
   -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
   build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
 
@@ -92,7 +92,7 @@ sleep 2
 set +e
 ( cd "$IOS_DIR" &&
   TEST_RUNNER_HERMES_UITEST_BASE_URL="$BASE_URL" TEST_RUNNER_HERMES_UITEST_USERNAME="$USERNAME" TEST_RUNNER_HERMES_UITEST_PASSWORD="$PASSWORD" \
-  xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  xcodebuild -project Pal.xcodeproj -scheme Pal \
     -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
     -resultBundlePath "$ART/uitest.xcresult" -parallel-testing-enabled NO \
     test-without-building ) >"$ART/xcodebuild-test.log" 2>&1

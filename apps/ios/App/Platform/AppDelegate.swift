@@ -49,7 +49,7 @@ enum TestHostMode {
     static let isActive: Bool = {
         let environment = ProcessInfo.processInfo.environment
         return environment["XCTestConfigurationFilePath"] != nil
-            && environment["XCTestBundlePath"].map { URL(filePath: $0).lastPathComponent == "HermesBotsTests.xctest" } == true
+            && environment["XCTestBundlePath"].map { URL(filePath: $0).lastPathComponent == "PalTests.xctest" } == true
     }()
 }
 

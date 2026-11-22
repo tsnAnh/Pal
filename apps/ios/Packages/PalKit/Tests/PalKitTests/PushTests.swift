@@ -11,8 +11,14 @@ import Testing
 private let tokenBytes = Data((0..<32).map { UInt8($0 * 7 % 256) })
 private let tokenHex = "00070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9"
 
+private struct PushCall: Sendable {
+    let method: String
+    let params: JSONValue?
+    let connection: Int
+}
+
 private final class PushGateway: Sendable {
-    private let log = Mutex<[(method: String, params: JSONValue?, connection: Int)]>([])
+    private let log = Mutex<[PushCall]>([])
     private let helloRecorded: Bool
     private let registerReply: Mutex<FakeGateway.Reply?>
 
@@ -22,7 +28,7 @@ private final class PushGateway: Sendable {
     }
 
     func handle(_ method: String, _ params: JSONValue?, _ connection: Int) -> FakeGateway.Reply {
-        log.withLock { $0.append((method, params, connection)) }
+        log.withLock { $0.append(PushCall(method: method, params: params, connection: connection)) }
         switch method {
         case "runtime.describe":
             return .result(["instance_id": "i1", "profile_id": "p1", "authority_epoch": 1, "capabilities": ["reach-v1"]])
@@ -39,7 +45,7 @@ private final class PushGateway: Sendable {
         }
     }
 
-    func calls(_ method: String) -> [(method: String, params: JSONValue?, connection: Int)] {
+    func calls(_ method: String) -> [PushCall] {
         log.withLock { $0.filter { $0.method == method } }
     }
 
@@ -56,7 +62,7 @@ private struct StubTickets: HTTPTransport {
 private let deviceID = "0B7F3F2E-5A4B-4E5E-9D1C-1F2E3D4C5B6A"
 
 private func registration(environment: PushEnvironment = .sandbox) -> PushRegistration {
-    PushRegistration(token: PushToken(deviceToken: tokenBytes)!, environment: environment, bundleID: "dev.tsnanh.hermes.bot")!
+    PushRegistration(token: PushToken(deviceToken: tokenBytes)!, environment: environment, bundleID: "dev.tsnanh.pal")!
 }
 
 private func connect(
@@ -103,13 +109,16 @@ struct PushTokenTests {
     @Test("register params match the canonical contract exactly")
     func registerParams() {
         #expect(PushWire.registerParams(deviceID: deviceID, registration: registration()) == [
-            "device_id": .string(deviceID), "apns_token": .string(tokenHex), "environment": "sandbox", "bundle_id": "dev.tsnanh.hermes.bot",
+            "device_id": .string(deviceID), "apns_token": .string(tokenHex), "environment": "sandbox", "bundle_id": "dev.tsnanh.pal",
         ])
         #expect(PushWire.registerParams(deviceID: deviceID, registration: registration(environment: .production))["environment"] == "production")
         #expect(PushWire.unregisterParams(deviceID: deviceID) == ["device_id": .string(deviceID)])
     }
 
-    @Test("a bundle id outside the contract pattern is not registrable", arguments: ["", "ab", "has space", "emoji\u{1F600}.app", String(repeating: "a", count: 156)])
+    @Test(
+        "a bundle id outside the contract pattern is not registrable",
+        arguments: ["", "ab", "has space", "emoji\u{1F600}.app", String(repeating: "a", count: 156)]
+    )
     func badBundle(id: String) {
         #expect(PushRegistration(token: PushToken(deviceToken: tokenBytes)!, environment: .sandbox, bundleID: id) == nil)
     }

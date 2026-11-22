@@ -34,7 +34,7 @@ ARGS=()
 while IFS= read -r name; do ARGS+=(-u "$name"); done < <(strip_env_names)
 env ${ARGS[@]+"${ARGS[@]}"} \
   HERMES_IOS_PYTHON="$PYTHON" HERMES_IOS_SIM_UDID="$UDID" HERMES_UI_E2E_OWNER="$OWNER" \
-  HERMES_UI_E2E_ARTIFACTS="$DIR" HERMES_UI_E2E_ONLY="HermesBotsUITests/$TEST" HERMES_UI_E2E_SEED="${VERIFY_IOS_SEED:-}" \
+  HERMES_UI_E2E_ARTIFACTS="$DIR" HERMES_UI_E2E_ONLY="PalUITests/$TEST" HERMES_UI_E2E_SEED="${VERIFY_IOS_SEED:-}" \
   "$IOS_DIR/Scripts/run-ui-e2e" 2>&1 | tee "$DIR/run-ui-e2e.out"
 STATUS="${PIPESTATUS[0]}"
 

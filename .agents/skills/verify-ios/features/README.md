@@ -1,6 +1,6 @@
 # Pal iOS verification map
 
-This directory is the maintained source for verifying user-facing behavior of the Pal iOS app (`apps/ios`, bundle `dev.tsnanh.hermes.bot`). Read the index, then drive the matching feature file.
+This directory is the maintained source for verifying user-facing behavior of the Pal iOS app (`apps/ios`, bundle `dev.tsnanh.pal`). Read the index, then drive the matching feature file.
 
 ## Baseline preconditions
 

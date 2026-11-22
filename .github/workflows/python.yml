@@ -251,12 +251,12 @@ jobs:
         if: matrix.kind == 'app'
         run: |
           xcodegen generate
-          grep -q NotificationService HermesBots.xcodeproj/project.pbxproj
+          grep -q NotificationService Pal.xcodeproj/project.pbxproj
 
       - name: Build for testing
         if: matrix.kind == 'app'
         run: >-
-          xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
+          xcodebuild build-for-testing -project Pal.xcodeproj -scheme Pal
           -derivedDataPath build/DerivedData -destination '${{ matrix.destination }}'
           -skipPackagePluginValidation -skipMacroValidation
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO

@@ -10,7 +10,7 @@ import PalRoster
 import Synchronization
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 private struct UnreachableTransport: HTTPTransport {
     func send(_ request: URLRequest) async throws -> HTTPResult { throw URLError(.cannotConnectToHost) }

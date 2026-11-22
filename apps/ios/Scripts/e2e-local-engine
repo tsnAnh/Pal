@@ -74,7 +74,7 @@ cleanup() {
   if [ -n "${JOB_LABEL:-}" ] && [ "$JOB_LABEL" != "ai.hermes.gateway" ]; then
     launchctl bootout "gui/$(id -u)/$JOB_LABEL" >/dev/null 2>&1 || true
   fi
-  for service in "dev.tsnanh.hermes.bot.credentials.$NAMESPACE" "dev.tsnanh.hermes.bot.device.$NAMESPACE"; do
+  for service in "dev.tsnanh.pal.credentials.$NAMESPACE" "dev.tsnanh.pal.device.$NAMESPACE"; do
     security delete-generic-password -s "$service" >/dev/null 2>&1 || true
   done
   [ -n "${PAL_E2E_KEEP:-}" ] || rm -rf "$ROOT"
@@ -85,7 +85,7 @@ trap cleanup EXIT
 app_pid() {
   local asn info real
   real="$(cd "$APP" && pwd -P)"
-  for asn in $(lsappinfo find bundleid=dev.tsnanh.hermes.bot | grep -o '0x[0-9a-f]*-0x[0-9a-f]*' | sort -u); do
+  for asn in $(lsappinfo find bundleid=dev.tsnanh.pal | grep -o '0x[0-9a-f]*-0x[0-9a-f]*' | sort -u); do
     info="$(lsappinfo info -only bundlepath -only pid "ASN:$asn")"
     if printf '%s' "$info" | grep -q "\"$real\""; then
       printf '%s' "$info" | sed -n 's/.*pid = \([0-9]*\).*/\1/p'

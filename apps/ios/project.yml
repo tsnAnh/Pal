@@ -1,6 +1,6 @@
-name: HermesBots
+name: Pal
 options:
-  bundleIdPrefix: dev.tsnanh.hermes
+  bundleIdPrefix: dev.tsnanh.pal
   deploymentTarget:
     iOS: "26.0"
     macOS: "26.0"
@@ -30,7 +30,7 @@ packages:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.10.1
 targets:
-  HermesBots:
+  Pal:
     type: application
     supportedDestinations: [iOS, macOS]
     sources:
@@ -82,23 +82,23 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.pal
         PAL_DISPLAY_NAME: Pal
         PRODUCT_NAME: Pal
-        PRODUCT_MODULE_NAME: HermesBots
+        PRODUCT_MODULE_NAME: Pal
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         SUPPORTS_MACCATALYST: NO
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
-        CODE_SIGN_ENTITLEMENTS: App/HermesBots.entitlements
-        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: App/HermesBots-macOS.entitlements
+        CODE_SIGN_ENTITLEMENTS: App/Pal.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: App/Pal-macOS.entitlements
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]: "$(inherited) @executable_path/../Frameworks"
       configs:
         Debug:
-          PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]: dev.tsnanh.hermes.bot.development
+          PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]: dev.tsnanh.pal.development
           PAL_DISPLAY_NAME[sdk=macosx*]: Pal Dev
           ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
     dependencies:
@@ -163,7 +163,7 @@ targets:
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.notification-service
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.pal.notification-service
         PRODUCT_NAME: PalNotificationService
         PRODUCT_MODULE_NAME: NotificationService
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -173,12 +173,12 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
       configs:
         Debug:
-          PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]: dev.tsnanh.hermes.bot.development.notification-service
+          PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]: dev.tsnanh.pal.development.notification-service
           ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
     dependencies:
       - package: PalKit
         product: PalPush
-  HermesBotsUITests:
+  PalUITests:
     type: bundle.ui-testing
     supportedDestinations: [iOS, macOS]
     sources:
@@ -225,29 +225,29 @@ targets:
         destinationFilters: [iOS]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.uitests
-        TEST_TARGET_NAME: HermesBots
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.pal.uitests
+        TEST_TARGET_NAME: Pal
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
-      - target: HermesBots
+      - target: Pal
       - package: PalDesign
         product: PalDesign
       - sdk: AppIntentsTesting.framework
         destinationFilters: [iOS]
-  HermesBotsTests:
+  PalTests:
     type: bundle.unit-test
     supportedDestinations: [iOS, macOS]
     sources:
       - Tests
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.tests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.pal.tests
         GENERATE_INFOPLIST_FILE: YES
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Pal.app/Pal
         TEST_HOST[sdk=macosx*]: $(BUILT_PRODUCTS_DIR)/Pal.app/Contents/MacOS/Pal
         BUNDLE_LOADER: $(TEST_HOST)
     dependencies:
-      - target: HermesBots
+      - target: Pal
       - package: PalKit
         product: PalProtocol
       - package: PalKit
@@ -269,11 +269,11 @@ targets:
       - package: PalDesign
         product: PalDesign
 schemes:
-  HermesBots:
+  Pal:
     build:
       targets:
-        HermesBots: all
+        Pal: all
     test:
       targets:
-        - HermesBotsTests
-        - HermesBotsUITests
+        - PalTests
+        - PalUITests

@@ -4,7 +4,7 @@ import XCTest
 @available(iOS 27.0, *)
 @MainActor
 class SiriE2ETestCase: E2ETestCase {
-    let definitions = IntentDefinitions(bundleIdentifier: "dev.tsnanh.hermes.bot")
+    let definitions = IntentDefinitions(bundleIdentifier: "dev.tsnanh.pal")
 
     func unique(_ text: String) -> String {
         "\(text) \(UUID().uuidString.prefix(6))"
@@ -70,7 +70,10 @@ class SiriE2ETestCase: E2ETestCase {
         }
     }
 
-    func waitForStubRequest(after seen: Int = 0, timeout: TimeInterval = 60, _ message: String, where matches: @escaping ([String: Any]) -> Bool) async throws -> [String: Any] {
+    func waitForStubRequest(
+        after seen: Int = 0, timeout: TimeInterval = 60, _ message: String,
+        where matches: @escaping ([String: Any]) -> Bool
+    ) async throws -> [String: Any] {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if let found = try stubRequests().dropFirst(seen).first(where: matches) { return found }

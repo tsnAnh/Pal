@@ -2,7 +2,7 @@
 import AppKit
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 @MainActor
 @Suite("Passive text view scrolling")

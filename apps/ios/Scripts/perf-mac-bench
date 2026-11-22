@@ -231,10 +231,10 @@ if [ "$SKIP_BUILD" = 1 ]; then
 else
   echo "== xcodegen + build (macOS, -O whole module, testability on)"
   ( cd "$IOS_DIR" && xcodegen generate >/dev/null )
-  if ! ( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  if ! ( cd "$IOS_DIR" && xcodebuild -project Pal.xcodeproj -scheme Pal \
       -destination 'platform=macOS,arch=arm64' -derivedDataPath "$DERIVED" -allowProvisioningUpdates \
       SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule GCC_OPTIMIZATION_LEVEL=s ENABLE_DEBUG_DYLIB=NO ENABLE_TESTABILITY=YES \
-      -only-testing:HermesBotsTests build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1; then
+      -only-testing:PalTests build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1; then
     grep -E "error:" "$ART/xcodebuild-build.log" | sort -u | head -10 | cut -c1-300 >&2
     die "build failed; full log: $ART/xcodebuild-build.log" 4
   fi
@@ -269,12 +269,12 @@ selector_for() {
 }
 
 run_tests() {
-  local label="$1" only="HermesBotsTests/MacChatBenchTests"
+  local label="$1" only="PalTests/MacChatBenchTests"
   only="$only/$(selector_for "$label")()"
   rm -rf "$RUN_DIR/$label.xcresult"
   set +e
   ( cd "$IOS_DIR" && TEST_RUNNER_HERMES_MAC_BENCH_OUT="$RUN_DIR" \
-      xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+      xcodebuild -project Pal.xcodeproj -scheme Pal \
         -destination 'platform=macOS,arch=arm64' -derivedDataPath "$DERIVED" \
         "-only-testing:$only" -parallel-testing-enabled NO \
         -resultBundlePath "$RUN_DIR/$label.xcresult" test-without-building ) >"$RUN_DIR/xcodebuild-$label.log" 2>&1

@@ -4,7 +4,7 @@ import PalChat
 import SwiftUI
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 @MainActor
 @Suite("Selectable text sizing")

@@ -2,7 +2,7 @@
 import Foundation
 import PalChat
 
-@testable import HermesBots
+@testable import Pal
 
 enum MacChatBenchFixture {
     static let messageCount = 200

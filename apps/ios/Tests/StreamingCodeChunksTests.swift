@@ -2,7 +2,7 @@
 import PalChat
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 @Suite("Streaming code chunks")
 struct StreamingCodeChunksTests {

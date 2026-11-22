@@ -94,8 +94,8 @@ archive_and_export() {
   (cd "$ios_dir" && xcodegen generate --quiet)
 
   xcodebuild archive \
-    -project "$ios_dir/HermesBots.xcodeproj" \
-    -scheme HermesBots \
+    -project "$ios_dir/Pal.xcodeproj" \
+    -scheme Pal \
     -configuration Release \
     -destination generic/platform=macOS \
     -derivedDataPath "$out/DerivedData" \
