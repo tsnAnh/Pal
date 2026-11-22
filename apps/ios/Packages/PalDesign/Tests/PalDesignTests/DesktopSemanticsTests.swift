@@ -155,7 +155,7 @@ struct SpecParsingTests {
                     continue
                 }
                 #expect(blob.kind == .heart)
-                #expect(blob.headFillCSS == "#93dcf7")
+                #expect(blob.headFillCSS == "#e05cac")
             }
         }
         let stringFlag: [String: Any] = ["hermes-bots": ["custom": "true", "shape": "circle"]]

@@ -3101,14 +3101,14 @@
    "render": true,
    "resolved": {
     "shape": "blobatar:default:heart",
-    "appearanceColor": "#93dcf7",
-    "color": "#93dcf7",
+    "appearanceColor": "#e05cac",
+    "color": "#e05cac",
     "hasImage": false,
     "kind": "blob",
     "seed": "default",
     "pinnedKind": "heart",
     "customBody": true,
-    "headFill": "#93dcf7",
+    "headFill": "#e05cac",
     "eyeFill": "#1b1b1b"
    },
    "png": "default-bot-plain.png"
@@ -3122,14 +3122,14 @@
    "render": true,
    "resolved": {
     "shape": "blobatar:default:heart",
-    "appearanceColor": "#93dcf7",
-    "color": "#93dcf7",
+    "appearanceColor": "#e05cac",
+    "color": "#e05cac",
     "hasImage": false,
     "kind": "blob",
     "seed": "default",
     "pinnedKind": "heart",
     "customBody": true,
-    "headFill": "#93dcf7",
+    "headFill": "#e05cac",
     "eyeFill": "#1b1b1b"
    },
    "png": "default-bot-capitalised.png"
@@ -3143,14 +3143,14 @@
    "render": true,
    "resolved": {
     "shape": "blobatar:default:heart",
-    "appearanceColor": "#93dcf7",
-    "color": "#93dcf7",
+    "appearanceColor": "#e05cac",
+    "color": "#e05cac",
     "hasImage": false,
     "kind": "blob",
     "seed": "default",
     "pinnedKind": "heart",
     "customBody": true,
-    "headFill": "#93dcf7",
+    "headFill": "#e05cac",
     "eyeFill": "#1b1b1b"
    },
    "png": "default-bot-padded-upper.png"
@@ -3166,14 +3166,14 @@
    "render": true,
    "resolved": {
     "shape": "blobatar:default:heart",
-    "appearanceColor": "#93dcf7",
-    "color": "#93dcf7",
+    "appearanceColor": "#e05cac",
+    "color": "#e05cac",
     "hasImage": false,
     "kind": "blob",
     "seed": "default",
     "pinnedKind": "heart",
     "customBody": true,
-    "headFill": "#93dcf7",
+    "headFill": "#e05cac",
     "eyeFill": "#1b1b1b"
    },
    "png": "default-bot-with-blob-shape.png"
@@ -4719,8 +4719,8 @@
   {
    "name": "default",
    "meta": {},
-   "resolved": "#93dcf7",
-   "accent": "#93dcf7",
+   "resolved": "#e05cac",
+   "accent": "#e05cac",
    "foreground": "#161616"
   },
   {
