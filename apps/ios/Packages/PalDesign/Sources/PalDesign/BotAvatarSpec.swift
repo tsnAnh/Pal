@@ -93,6 +93,14 @@ public enum ShapeAvatar: Equatable, Sendable {
     case blob(BlobAvatar)
     case classic(ClassicAvatar)
     case sigil(SigilAvatar)
+
+    public var bodyColor: AvatarColor {
+        switch self {
+        case .blob(let blob): AvatarColor(css: blob.headFillCSS) ?? .primary
+        case .classic(let classic): classic.color
+        case .sigil(let sigil): sigil.color
+        }
+    }
 }
 
 public struct PhotoAvatar: Equatable, Sendable {
@@ -107,6 +115,13 @@ public enum BotAvatarSpec: Equatable, Sendable {
     public var isPhoto: Bool {
         if case .photo = self { return true }
         return false
+    }
+
+    public var bodyColor: AvatarColor {
+        switch self {
+        case .photo(let photo): photo.fallback.bodyColor
+        case .shape(let shape): shape.bodyColor
+        }
     }
 }
 

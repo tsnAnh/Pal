@@ -185,7 +185,7 @@ struct SlackAvatarExport: View {
             VStack(alignment: .leading, spacing: 8) {
                 SetupButton(title: ChatAvatarExport.actionTitle, identifier: "slackSaveAvatar") {
                     Task {
-                        guard let image = ChatAvatarExport.render(spec: spec, background: PalTokens.content) else { return }
+                        guard let image = ChatAvatarExport.render(spec: spec) else { return }
                         saved = await ChatAvatarExport.deliver(image, name: name)
                     }
                 }

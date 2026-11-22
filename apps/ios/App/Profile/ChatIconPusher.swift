@@ -21,7 +21,7 @@ struct ChatIconPusher: Sendable {
             if onlyWhenInstalled {
                 guard try await client.status(scope).state.step == .ready else { return }
             }
-            guard let image = ChatAvatarExport.render(spec: spec, background: PalTokens.content),
+            guard let image = ChatAvatarExport.render(spec: spec),
                   let png = await Self.pngData(image) else {
                 diagnostics.warning("chat-icon", "render failed")
                 return
