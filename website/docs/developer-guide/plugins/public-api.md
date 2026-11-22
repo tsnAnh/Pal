@@ -136,6 +136,7 @@ with a name allows that one name only.
 | `gateway.audience` | `AdmissionKind` | platform plugins that admit non-owner senders: the admission verdict and the sender facts an adapter proves |
 | `gateway.audience` | `Audience` | platform plugins that admit non-owner senders: the admission verdict and the sender facts an adapter proves |
 | `gateway.audience` | `SenderFacts` | platform plugins that admit non-owner senders: the admission verdict and the sender facts an adapter proves |
+| `gateway.platforms.owner_desk` | `DeskSendError` | platform plugins that show the owner a card and send for the owner: the error a desk send raises when the platform refused it |
 | `agent.redact` | `redact_sensitive_text` | plugin-llm-access.md § From the plugin's frontend: a plugin RPC method (`force=True` where secrets must never leave) |
 | `hermes_cli.plugin_session` | `session_client` | user-guide/features/plugins.md § Plugin code inside the gateway: which client created the session |
 | `agent.file_safety` | `get_read_block_error` | plugins/index.md § Check file paths and read YAML with Hermes's own helpers |

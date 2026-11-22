@@ -87,16 +87,18 @@ async def admit_sender(
     adapter: Any, event: dict, *, user_id: str, channel_id: str, team_id: str, is_dm: bool,
     thread_id: Optional[str], is_bot: bool,
 ) -> Admission:
+    message_id = event.get("ts")
     if getattr(adapter, "_admission_check", None) is None:
         rejected = legacy_rejects(adapter, user_id, channel_id, is_dm, thread_id=thread_id, is_bot=is_bot)
         return Admission(AdmissionKind.REFUSED if rejected else AdmissionKind.OWNER)
     chat_type = "dm" if is_dm else "group"
-    admission = adapter._sender_admission(user_id, chat_type, channel_id, is_bot=is_bot, thread_id=thread_id)
+    admission = adapter._sender_admission(
+        user_id, chat_type, channel_id, is_bot=is_bot, thread_id=thread_id, message_id=message_id)
     if admission.needs_facts:
         facts = await resolve_facts(
             adapter, event, user_id=user_id, channel_id=channel_id, team_id=team_id, declared_bot=is_bot)
         admission = adapter._sender_admission(
-            user_id, chat_type, channel_id, is_bot=is_bot, thread_id=thread_id, facts=facts)
+            user_id, chat_type, channel_id, is_bot=is_bot, thread_id=thread_id, facts=facts, message_id=message_id)
     if admission.kind is AdmissionKind.REFUSED:
         logger.warning("[Slack] Early reject of unauthorized user %s in channel %s", user_id, channel_id)
     return admission
@@ -129,3 +131,17 @@ def thread_context_header(parts: list[str]) -> str:
 
 def carries_member_content(channel_context: Optional[str]) -> bool:
     return bool(channel_context and _NON_OWNER_LINE.search(channel_context))
+
+
+_MENTION = re.compile(r"<@([UW][A-Z0-9]+)(?:\|[^>]*)?>")
+_CHANNEL_MENTION = re.compile(r"<#([CGD][A-Z0-9]+)(?:\|[^>]*)?>")
+
+
+def event_audience_fields(admission: Admission, text: str, channel_context: Optional[str]) -> dict[str, Any]:
+    owner = admission.kind is AdmissionKind.OWNER
+    return {
+        "carries_member_content": admission.kind is AdmissionKind.MEMBER or carries_member_content(channel_context),
+        "named_user_ids": tuple(dict.fromkeys(_MENTION.findall(text))) if owner else (),
+        "named_conversation_ids": tuple(dict.fromkeys(_CHANNEL_MENTION.findall(text))) if owner else (),
+        "desk_ask_id": admission.ask_id if admission.kind is AdmissionKind.REPLY else None,
+    }

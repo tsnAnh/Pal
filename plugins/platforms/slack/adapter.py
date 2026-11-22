@@ -51,6 +51,7 @@ from gateway.platforms._shared import (
 from gateway.platforms.base_log_safety import safe_url_for_log
 from gateway.platforms.helpers import MessageDeduplicator, clarify_text_with_choices, inline_document_text
 from plugins.platforms.slack.adapter_install_events import event_handlers as install_event_handlers, schedule_install_welcomes
+from plugins.platforms.slack.owner_cards import SlackOwnerDeskMixin
 from plugins.platforms.slack.adapter_config_readers import (
     _extra_or_env_channel_set_getter, _extra_or_env_flag_getter)
 from gateway.platforms.base import (
@@ -71,7 +72,7 @@ try:  # sibling modules; support both package and flat plugin-dir import
     from .adapter_vault_code import SlackVaultCodeMixin
     from .adapter_image_batch import collect_image_uploads
     from .adapter_audience import (
-        admit_sender, carries_member_content, context_trust_tag, legacy_rejects, runner_auth_fn,
+        admit_sender, context_trust_tag, event_audience_fields, legacy_rejects, runner_auth_fn,
         thread_context_header)
     from .adapter_forwarded import (
         append_forwards, files_with_forwarded, is_forward, own_bot_ids, shared_message_sections,
@@ -88,7 +89,7 @@ except ImportError:  # pragma: no cover - plugin loaded outside package context
     from adapter_vault_code import SlackVaultCodeMixin  # type: ignore
     from adapter_image_batch import collect_image_uploads  # type: ignore
     from adapter_audience import (  # type: ignore
-        admit_sender, carries_member_content, context_trust_tag, legacy_rejects, runner_auth_fn,
+        admit_sender, context_trust_tag, event_audience_fields, legacy_rejects, runner_auth_fn,
         thread_context_header)
 
 
@@ -999,7 +1000,7 @@ def _is_transient_transport_error(e: BaseException) -> bool:
         and not is_permanent_tls_error)
 
 
-class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformAdapter):
+class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDeskMixin, BasePlatformAdapter):
     """Slack bot adapter (Socket Mode).
     Needs SLACK_BOT_TOKEN (xoxb-, API calls) and SLACK_APP_TOKEN (xapp-, Socket Mode). DMs +
     mention-gated channels, threads, attachments, slash commands, status text."""
@@ -1678,6 +1679,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformA
         for _action_id in _MODEL_PICKER_ACTION_IDS:
             self._app.action(_action_id)(self._handle_model_picker_action)
         self._register_vault_code_handlers(self._app)
+        self._register_desk_actions()
         self._register_plugin_action_handlers()
         # ctx.register_platform_handler("slack", ...) factories get the full
         # AsyncApp surface (event/action/command), wired before Socket Mode starts.
@@ -1824,6 +1826,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformA
             logger.info("[Slack] Socket Mode connected (%d workspace(s))", len(self._team_clients))
             self._hint_allow_bots()
             schedule_install_welcomes(self)
+            self.schedule_desk_recovery()
             return True
         except Exception as e:  # pragma: no cover - defensive logging
             proxy_error = describe_proxy_error(e, proxy_url)
@@ -1844,28 +1847,6 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformA
             f"{env_name} not configured. Use `hermes gateway setup` "
             "or add it to your active profile's ~/.hermes/.env file, then restart the gateway.",
             retryable=False)
-
-    def _hint_allow_bots(self) -> None:
-        """INFO hint: bot events can be swallowed upstream of allow_bots (manifest, allowlist)."""
-        # Bot-event interop diagnostic. When the user has opted into bot messages via ``slack.allow_bots`` /
-        # ``SLACK_ALLOW_BOTS``, surface the additional plumbing they almost certainly also need so
-        # bot-to-bot interop doesn't silently fail. See #30091: a user reported that with ``allow_bots:
-        # all`` configured, bot messages in shared threads were still dropped. Two things upstream of this
-        # code can swallow them: 1. The Slack app's event subscriptions in the manifest — Socket Mode does
-        # not deliver events the app hasn't subscribed to (``message.channels`` for public channels,
-        # ``message.groups`` for private channels, ``message.im`` for DMs). 2. The SLACK_ALLOWED_USERS /
-        # GATEWAY_ALLOWED_USERS per-user allowlists — the other bot's user id must be present (or
-        # GATEWAY_ALLOW_ALL_USERS=true). Logging once at INFO keeps the startup line discoverable without
-        # requiring DEBUG to enable.
-        _allow_bots_cfg = self._slack_allow_bots()
-        if _allow_bots_cfg != "none":
-            logger.info(
-                "[Slack] allow_bots=%s — for bot-to-bot interop also ensure: (a) the Slack "
-                "app manifest subscribes to message.channels / message.groups / message.im as "
-                "appropriate (run 'hermes slack manifest' if unsure), and (b) the other bot's "
-                "Slack user id is in SLACK_ALLOWED_USERS or GATEWAY_ALLOW_ALL_USERS=true. "
-                "Without these, bot events are silently dropped upstream of the allow_bots "
-                "gate.", _allow_bots_cfg)
 
     async def create_handoff_thread(self, parent_chat_id: str, name: str) -> Optional[str]:
         """Post a seed message and return its ``ts`` as the handoff ``thread_id``. Slack threads
@@ -4730,7 +4711,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformA
         is_thread_reply = bool(event_thread_ts and event_thread_ts != ts)
         # Internal triggers (reactions) skip the mention requirement but NOT
         # allowed_channels or user authorization.
-        force_process = bool(event.get("_hermes_force_process"))
+        force_process = bool(event.get("_hermes_force_process")) or admission.kind is AdmissionKind.REPLY
         if await self._peer_bot_drop(event, user_id, bot_uid, channel_id, team_id, is_mentioned):
             return
         if (
@@ -4823,6 +4804,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformA
         from gateway.platforms.base import resolve_channel_skills
         # Remaining ``<@UID>`` are OTHER participants (own mention stripped
         # above); render as ``@DisplayName`` so the agent knows who is addressed.
+        audience_fields = event_audience_fields(admission, text, channel_context)
         text = await self._humanize_user_mentions(text, chat_id=channel_id, team_id=team_id)
         return MessageEvent(
             text=(command_probe_text if is_command_text else text),
@@ -4836,7 +4818,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, BasePlatformA
             reply_to_message_id=thread_ts if thread_ts != ts else None,
             channel_prompt=self._channel_prompt_with_identity(channel_id, team_id),
             channel_context=channel_context,
-            carries_member_content=admission.kind is AdmissionKind.MEMBER or carries_member_content(channel_context),
+            **audience_fields,
             reply_expected=reply_expected,
             # thread_ts is the thread root, not an explicit reply (root is in channel_context).
             reply_to_text=None,
