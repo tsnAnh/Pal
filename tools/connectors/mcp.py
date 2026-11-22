@@ -134,7 +134,7 @@ class _CatalogBackend:
         fresh = not is_installed(name)
 
         def commit() -> None:
-            _save_env(env)
+            _save_env(name, env)
             if fresh:
                 record_mcp_install("catalog", name, "success")
 
@@ -186,7 +186,7 @@ class _CatalogBackend:
             rejected = RuntimeError(f"'{name}' was rejected: suspicious command/args configuration")
             rejected.failure_class = "config_rejected"  # type: ignore[attr-defined]
             raise rejected
-        _save_env({k: v for k, v in env.items() if k in secret_names})
+        _save_env(name, {k: v for k, v in env.items() if k in secret_names})
         return tools
 
     def enable(self, name: str) -> None:
@@ -194,10 +194,11 @@ class _CatalogBackend:
         (``PUT /api/mcp/servers/{name}/enabled``): the two read-modify-write paths run in one
         process, so an unserialised write here drops whichever landed first."""
         from hermes_cli.config import load_config, save_config
+        from hermes_cli.shared_catalog_connectors import owner_write_scope
         from hermes_cli.web_routers._common import config_write_scope
         from tools.mcp_tool_common import write_mcp_server_enabled
 
-        with config_write_scope(None):
+        with config_write_scope(None), owner_write_scope(name):
             config = load_config()
             servers = config.get("mcp_servers")
             if not isinstance(servers, dict) or not isinstance(servers.get(name), dict):
@@ -220,12 +221,14 @@ def _check_declared(name: str, entry: Any, env: dict[str, str]) -> None:
         validate_env_var_name_for_write(key)
 
 
-def _save_env(env: dict[str, str]) -> None:
+def _save_env(name: str, env: dict[str, str]) -> None:
     from hermes_cli.config import save_env_value
+    from hermes_cli.shared_catalog_connectors import owner_write_scope
 
-    for key, value in env.items():
-        if value:
-            save_env_value(key, value)
+    with owner_write_scope(name):
+        for key, value in env.items():
+            if value:
+                save_env_value(key, value)
 
 
 def _default_backend() -> Any:

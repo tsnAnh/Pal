@@ -89,8 +89,10 @@ def saved_toolset_resolver(config: dict) -> Callable[[str], bool]:
 
     from toolsets import validate_toolset
 
+    from hermes_cli.shared_catalog import with_root_connectors
+
     mcp_servers = config.get("mcp_servers")
-    servers = {str(name) for name in mcp_servers} if isinstance(mcp_servers, dict) else set()
+    servers = {str(name) for name in with_root_connectors(mcp_servers)} if isinstance(mcp_servers, dict) else set()
     known = servers | {f"mcp-{name}" for name in servers} | {"no_mcp"}
 
     @cache

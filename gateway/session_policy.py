@@ -683,7 +683,8 @@ def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, b
         # connect, so an offline server is inactive, not a typo (#138748, #139154). A bypass launch never
         # reads the profile, so it takes the in-process registry alone.
         known = validate_toolset if bypass else saved_toolset_resolver(config)
-        configured = config.get('mcp_servers') if isinstance(config.get('mcp_servers'), dict) else {}
+        from hermes_cli.shared_catalog import with_root_connectors
+        configured = with_root_connectors(config.get('mcp_servers') if isinstance(config.get('mcp_servers'), dict) else {})
         enabled_servers = enabled_mcp_server_names(config) if configured else set()
         for name in explicit:
             if not isinstance(name, str) or not known(name):
@@ -746,8 +747,9 @@ def _unnamed_extension_toolsets(explicit, requested, config):
     if {'all', '*'} & set(explicit):
         return set()
     from hermes_cli.tools_config import _get_plugin_toolset_keys, enabled_mcp_server_names
+    from hermes_cli.shared_catalog import with_root_connectors
     from toolsets import TOOLSETS, resolve_toolset
-    configured = config.get('mcp_servers') if isinstance(config.get('mcp_servers'), dict) else {}
+    configured = with_root_connectors(config.get('mcp_servers') if isinstance(config.get('mcp_servers'), dict) else {})
     named = set(explicit) | {n[4:] for n in explicit if n.startswith('mcp-') and n not in configured}
     plugin_keys = _get_plugin_toolset_keys()
     # A plugin key may share a built-in name (``coding``); a composite pick like ``hermes-cli`` covers it only

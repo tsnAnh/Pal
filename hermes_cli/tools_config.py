@@ -407,7 +407,9 @@ def enabled_mcp_server_names(config: dict) -> set[str]:
     the opt-in."""
     from tools.mcp_tool_common import mcp_server_enabled
 
-    mcp_servers = (config or {}).get("mcp_servers") or {}
+    from hermes_cli.shared_catalog import with_root_connectors
+
+    mcp_servers = with_root_connectors((config or {}).get("mcp_servers") or {})
     names = {
         str(name) for name, server_cfg in mcp_servers.items()
         if isinstance(server_cfg, dict) and mcp_server_enabled(server_cfg)
@@ -740,8 +742,10 @@ def _merge_mcp_servers(
 ) -> set[str]:
     """Explicit passthrough entries plus this platform's MCP servers: listed names form an allowlist, else every
     globally enabled server (when ``include_default_mcp_servers``); the ``no_mcp`` sentinel disables all."""
+    from hermes_cli.shared_catalog import with_root_connectors
+
     enabled_mcp_servers = enabled_mcp_server_names(config)
-    configured = config.get("mcp_servers") if isinstance(config.get("mcp_servers"), dict) else {}
+    configured = with_root_connectors(config.get("mcp_servers") if isinstance(config.get("mcp_servers"), dict) else {})
     known = enabled_mcp_servers | {str(name) for name in configured}
     # ``mcp-<server>`` names the same server as its bare alias: either spelling selects only that server
     # (unless a server is literally named ``mcp-<server>``).

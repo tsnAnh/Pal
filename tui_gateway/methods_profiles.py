@@ -761,9 +761,12 @@ def _save_mcp_toggles(cfg, enabled, launch_mcp, save_config) -> None:
     coding_context, oneshot); the legacy ``disabled`` key is dropped so old configs migrate."""
     shared = _lazy("hermes_cli.shared_catalog", "shared_mcp_names")()
     from tools.mcp_tool_common import write_mcp_server_enabled
+    owned = set()
+    if not _lazy("hermes_cli.shared_catalog", "home_is_root")():
+        owned = set(_lazy("hermes_cli.shared_catalog", "root_entries")())
     wanted = _clean_names(enabled)
     mcp_cfg = cfg.get("mcp_servers") if isinstance(cfg.get("mcp_servers"), dict) else {}
-    for srv in wanted:
+    for srv in wanted - owned:
         if isinstance(mcp_cfg.get(srv), dict):
             continue
         if srv in shared:
@@ -772,7 +775,7 @@ def _save_mcp_toggles(cfg, enabled, launch_mcp, save_config) -> None:
             mcp_cfg[srv] = dict(launch_mcp[srv])
     mcp_cfg = _lazy("hermes_cli.shared_catalog", "prune_stale_bot_entries")(mcp_cfg)
     for srv, entry in mcp_cfg.items():
-        if isinstance(entry, dict):
+        if isinstance(entry, dict) and srv not in owned:
             write_mcp_server_enabled(entry, srv in wanted)
     if mcp_cfg:
         cfg["mcp_servers"] = mcp_cfg

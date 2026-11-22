@@ -456,7 +456,8 @@ def _merge_mcp_into_per_job_toolsets(per_job: list[str], cfg: dict) -> list[str]
     # A server that is CONFIGURED but disabled still counts as named: it is the user's selection, it
     # stays off, and it must not fall through to every enabled server either - the same rule the
     # interactive resolver follows (hermes_cli.tools_config._merge_mcp_servers).
-    configured = cfg.get("mcp_servers") if isinstance(cfg.get("mcp_servers"), dict) else {}
+    from hermes_cli.shared_catalog import with_root_connectors
+    configured = with_root_connectors(cfg.get("mcp_servers") if isinstance(cfg.get("mcp_servers"), dict) else {})
     known = enabled_mcp | {str(name) for name in configured}
     if set(result) & (known | {f"mcp-{name}" for name in known}):
         return result

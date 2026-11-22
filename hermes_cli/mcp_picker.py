@@ -14,6 +14,7 @@ from hermes_cli.mcp_catalog import (
     list_catalog, installed_servers, remove_server, server_enabled, uninstall_entry, _say,
 )
 from hermes_cli.config import load_config, save_config
+from hermes_cli.shared_catalog_connectors import owner_write
 
 _STATUS_NOT_INSTALLED = "available"
 _STATUS_DISABLED = "installed (disabled)"
@@ -66,6 +67,7 @@ def _format_row(row: _Row) -> str:
 
 
 
+@owner_write()
 def _enable_disable(name: str, *, enable: bool) -> None:
     cfg = load_config()
     servers = cfg.get("mcp_servers") or {}
@@ -83,6 +85,7 @@ def _enable_disable(name: str, *, enable: bool) -> None:
     )
 
 
+@owner_write()
 def _configure_tools(name: str) -> None:
     """Open the tool selection checklist for an already-installed MCP."""
     from argparse import Namespace

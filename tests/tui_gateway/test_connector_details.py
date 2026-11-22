@@ -393,23 +393,36 @@ def test_installed_skills_that_name_the_connector_are_listed_with_humanized_titl
         {"name": "linear_triage", "title": "Linear triage", "description": "Does linear_triage."}]
 
 
-def test_a_secondary_profile_reads_and_writes_only_its_own_config(tmp_path, monkeypatch):
+def _two_homes(tmp_path, monkeypatch, slug, tools):
     root = tmp_path / "root"
     work = root / "profiles" / "work"
     work.mkdir(parents=True)
     monkeypatch.setenv("HERMES_HOME", str(root))
-    write_config({"upwork": upwork_template()}, home=root)
-    write_config({"upwork": upwork_template(connector_policy={"read": "ask"})}, home=work)
-
     for home in (root, work):
         cache = home / "cache"
         cache.mkdir()
         cache.joinpath("mcp_schema_cache.json").write_text(json.dumps(
-            {"upwork": {"fingerprint": "x", "tools": [{"name": "search_jobs", "description": "Search."},
-                                                      {"name": "send_message", "description": "Send."}]}}))
+            {slug: {"fingerprint": "x", "tools": [{"name": name, "description": name} for name in tools]}}))
+    return root, work
 
-    assert details(profile="work")["policy"]["read"] == "ask" and details()["policy"]["read"] == "auto"
-    ok(set_mode("read", "auto", profile="work"))
-    assert "connector_policy" not in stored(home=work) and "connector_policy" not in stored(home=root)
+
+def test_a_root_owned_connector_reads_and_writes_the_root_config_from_any_profile(tmp_path, monkeypatch):
+    root, work = _two_homes(tmp_path, monkeypatch, "upwork", ("search_jobs", "send_message"))
+    write_config({"upwork": upwork_template()}, home=root)
+    write_config({"upwork": upwork_template(connector_policy={"read": "ask"})}, home=work)
+
+    assert details(profile="work")["policy"]["read"] == "auto" and details()["policy"]["read"] == "auto"
     ok(set_mode("write", "off", profile="work"))
-    assert stored(home=work)["connector_policy"]["write"] == "off" and "connector_policy" not in stored(home=root)
+    assert stored(home=root)["connector_policy"]["write"] == "off"
+    assert stored(home=work)["connector_policy"] == {"read": "ask"}
+
+
+def test_a_bot_only_connector_reads_and_writes_only_its_own_config(tmp_path, monkeypatch):
+    root, work = _two_homes(tmp_path, monkeypatch, "upwork", ("search_jobs", "send_message"))
+    write_config({"linear": linear_template()}, home=root)
+    write_config({"upwork": upwork_template(connector_policy={"read": "ask"})}, home=work)
+
+    assert details(profile="work")["policy"]["read"] == "ask"
+    ok(set_mode("write", "off", profile="work"))
+    assert stored(home=work)["connector_policy"]["read"] == "ask" and stored(home=work)["connector_policy"]["write"] == "off"
+    assert "upwork" not in yaml.safe_load(root.joinpath("config.yaml").read_text())["mcp_servers"]

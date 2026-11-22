@@ -176,23 +176,47 @@ async def test_a_refresh_token_is_never_sent_to_an_issuer_that_did_not_grant_it(
 
 
 @pytest.mark.asyncio
-async def test_a_profiles_tokens_are_never_used_by_another_profile(tmp_path, home):
+async def test_a_root_owned_servers_tokens_are_shared_with_every_profile(tmp_path, home):
     other = tmp_path / "profile-b"
     other.mkdir()
     assert await imp.import_owner_tokens(home, "upwork", _tokens()) is None
     assert HermesTokenStorage(CONNECTION, hermes_home=home).has_cached_tokens()
-    assert not HermesTokenStorage(CONNECTION, hermes_home=other).has_cached_tokens()
+    assert HermesTokenStorage(CONNECTION, hermes_home=other).has_cached_tokens()
     scope = set_hermes_home_override(other)
     try:
-        assert not _oauth_tokens_present(CONNECTION) and "upwork" not in _get_mcp_servers()
+        assert _oauth_tokens_present(CONNECTION) and "upwork" in _get_mcp_servers()
+    finally:
+        reset_hermes_home_override(scope)
+    assert (await HermesTokenStorage(CONNECTION, hermes_home=other).get_tokens()).access_token == ACCESS
+
+
+@pytest.mark.asyncio
+async def test_a_bot_only_servers_tokens_are_never_used_by_another_profile(home):
+    import hermes_yaml as yaml
+    from hermes_cli.mcp_catalog import _build_server_config, get_entry
+
+    bot_only, connection = "todoist", "todoist@default"
+    owner, other = home / "profiles" / "profile-a", home / "profiles" / "profile-b"
+    owner.mkdir(parents=True)
+    other.mkdir(parents=True)
+    (owner / "config.yaml").write_text(
+        yaml.safe_dump({"mcp_servers": {bot_only: _build_server_config(get_entry(bot_only), None)}}))
+    assert await imp.import_owner_tokens(owner, bot_only, _tokens()) is None
+    assert HermesTokenStorage(connection, hermes_home=owner).has_cached_tokens()
+    assert not HermesTokenStorage(connection, hermes_home=other).has_cached_tokens()
+    assert not HermesTokenStorage(connection, hermes_home=home).has_cached_tokens()
+    scope = set_hermes_home_override(other)
+    try:
+        assert not _oauth_tokens_present(connection) and bot_only not in _get_mcp_servers()
         from tools.mcp_oauth import OAuthNonInteractiveError
         from tools.mcp_oauth_manager import get_manager
         with pytest.raises(OAuthNonInteractiveError):
-            get_manager().get_or_build_provider(CONNECTION, URL, {})
+            get_manager().get_or_build_provider(connection, "https://ai.todoist.net/mcp", {})
     finally:
         reset_hermes_home_override(scope)
-    assert await imp.import_owner_tokens(other, "upwork", _tokens(access_token="b-access-token-1", refresh_token="b-refresh-1")) is None
-    assert (await HermesTokenStorage(CONNECTION, hermes_home=home).get_tokens()).access_token == ACCESS
+    assert await imp.import_owner_tokens(other, bot_only, _tokens(access_token="b-access-token-1", refresh_token="b-refresh-1")) is None
+    assert (await HermesTokenStorage(connection, hermes_home=home).get_tokens()).access_token == "b-access-token-1"
+    assert (await HermesTokenStorage(connection, hermes_home=other).get_tokens()).access_token == "b-access-token-1"
 
 
 @pytest.mark.asyncio

@@ -561,8 +561,10 @@ def capability_fingerprint(home: str | os.PathLike | None = None) -> str:
         agent_cfg = cfg.get("agent") if isinstance(cfg.get("agent"), dict) else {}
         surface["platform_toolsets"] = json.dumps(cfg.get("platform_toolsets") or {}, sort_keys=True, default=str)
         surface["disabled_toolsets"] = sorted(parse_config_string_list(agent_cfg.get("disabled_toolsets")))
-        mcp = cfg.get("mcp_servers")
-        surface["mcp"] = json.dumps(mcp, sort_keys=True, default=str) if isinstance(mcp, dict) else ""
+        from hermes_cli.shared_catalog import with_root_connectors
+        own_mcp = cfg.get("mcp_servers")
+        mcp = with_root_connectors(own_mcp if isinstance(own_mcp, dict) else {}, home=resolved)
+        surface["mcp"] = json.dumps(mcp, sort_keys=True, default=str) if isinstance(own_mcp, dict) or mcp else ""
     except Exception:
         pass
 
