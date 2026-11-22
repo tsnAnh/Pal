@@ -5,15 +5,15 @@ import SwiftUI
 
 struct BotProfileView: View {
     @State private var model: BotProfileModel
-    @State private var suggestions: ConnectedServicesModel
+    @State private var services: ConnectedServicesModel
     let router: AppRouter
 
     @Environment(\.hermesTheme) private var theme
     @Environment(ActionAutoApprove.self) private var autoApprove
 
-    init(model: BotProfileModel, suggestions: ConnectedServicesModel, router: AppRouter) {
+    init(model: BotProfileModel, services: ConnectedServicesModel, router: AppRouter) {
         _model = State(initialValue: model)
-        _suggestions = State(initialValue: suggestions)
+        _services = State(initialValue: services)
         self.router = router
     }
 
@@ -32,7 +32,9 @@ struct BotProfileView: View {
         .toolbar { toolbar }
         .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
-        .task { await suggestions.load() }
+        .task { await model.loadSlack() }
+        .onAppear { Task { await model.refreshSlack() } }
+        .task { await services.load() }
         .task(id: model.row?.conversationID) { await autoApprove.load(sessionID: model.row?.conversationID) }
         .toast($model.toast)
         .macSheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } }), size: .form) { editing in
@@ -128,16 +130,12 @@ struct BotProfileView: View {
                 .padding(.top, ProfileMetrics.cardToCaption)
                 .padding(.bottom, ProfileMetrics.captionToCard)
             GroupedCard(accessibilityIdentifier: "profileConfigureCard") {
-                ForEach(suggestions.visibleSuggestions, id: \.self) { suggestion in
-                    switch suggestion {
-                    case .addToSlack:
-                        SettingsRow.navigate(
-                            String(localized: "Add to Slack"),
-                            icon: .custom(SlackMark(style: .mono(Color(theme.palette.textSecondary))).frame(width: 18, height: 18)),
-                            accessibilityIdentifier: "profileSlackRow"
-                        ) { router.push(.slack(botName: model.botName)) }
-                    }
-                }
+                SettingsRow.navigate(
+                    model.slack.title,
+                    valueView: AnyView(ProfileSlackValue(status: model.slack)),
+                    icon: .custom(SlackMark(style: .mono(Color(theme.palette.textSecondary))).frame(width: 18, height: 18)),
+                    accessibilityIdentifier: "profileSlackRow"
+                ) { router.push(.slack(botName: model.botName)) }
                 SettingsRow.navigate(
                     String(localized: "Model"),
                     icon: .symbol("cpu"),
@@ -186,7 +184,7 @@ struct BotProfileView: View {
                 .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
                 .padding(.top, ProfileMetrics.toggleToFooter)
                 .accessibilityIdentifier("profileNotificationsFooter")
-            AutoApproveCard(sessionID: model.row?.conversationID, upworkConnected: suggestions.services.isConnected(.upwork))
+            AutoApproveCard(sessionID: model.row?.conversationID, upworkConnected: services.services.isConnected(.upwork))
         }
     }
 }

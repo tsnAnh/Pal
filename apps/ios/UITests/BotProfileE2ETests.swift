@@ -176,11 +176,11 @@ final class BotProfileE2ETests: BotProfileTestCase {
         shot(app, "library-media-preview")
     }
 
-    func test9aSlackSuggestionIsHiddenWhenSlackIsNotConnected() throws {
+    func test9aSlackRowShowsOnEveryBotWithoutAConnectedService() throws {
         let app = signedInApp()
         openProfile(app, Self.primarySlug)
         waitFor(element(app, "profileComputerRow"), timeout: 20, "profile rows")
-        XCTAssertFalse(element(app, "profileSlackRow").waitForExistence(timeout: 3), "no Add to Slack while Slack is not connected")
+        waitFor(element(app, "profileSlackRow"), timeout: 10, "Slack row shows for a bot with no Slack and no connected service")
     }
 
     func test9SlackScreenTokenEntryRequiresWellFormedTokens() throws {

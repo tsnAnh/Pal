@@ -12,6 +12,7 @@ final class BotProfileModel {
     private(set) var computer: ComputerStatus?
     private(set) var notificationsOn = true
     private(set) var lookOverride: BotAvatarSpec?
+    private(set) var slack = ProfileSlackStatus.loading
     var toast: String?
     var confirmsReplacePrimary = false
     private(set) var editing: EditBotModel?
@@ -65,6 +66,23 @@ final class BotProfileModel {
             services.surfaces.remember(computer, computerKey)
         }
         persistSnapshot()
+    }
+
+    func loadSlack() async {
+        let source = ChatInstallSource.make(botName: botName, connection: roster.connection)
+        do {
+            slack = ProfileSlackStatus(try await source.client.status(ChatInstallScope(provider: "slack", workspace: "")))
+        } catch is CancellationError {
+        } catch ChatInstallClientError.unsupported {
+            slack = (try? await services.slack.status(profile: botName)).map { ProfileSlackStatus($0.connection) } ?? .unavailable
+        } catch {
+            slack = .unavailable
+        }
+    }
+
+    func refreshSlack() async {
+        guard slack != .loading else { return }
+        await loadSlack()
     }
 
     private func showCached() async {
