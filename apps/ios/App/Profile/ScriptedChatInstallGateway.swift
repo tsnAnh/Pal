@@ -180,6 +180,8 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
         ])
     }
 
+    func setIcon(_ scope: ChatInstallScope, png: Data) async throws {}
+
     func storeSecret(label: String, value: String) async throws -> String {
         "vault-scripted-\(snapshot.revision)"
     }

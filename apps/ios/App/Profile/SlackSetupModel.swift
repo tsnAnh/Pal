@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PalBotProfile
 import PalConnect
+import PalDesign
 import PalProtocol
 
 struct SlackSetupError: Error, Sendable {
@@ -46,12 +47,16 @@ final class SlackSetupModel {
     let chat: ChatInstallModel
     let flow: StepFlowModel
     let displayName: String
+    private let iconPusher: ChatIconPusher
+    private let spec: BotAvatarSpec?
     private(set) var finished = false
     private(set) var loaded = false
     @ObservationIgnored private var gatewayFailureShown = false
 
-    init(botName: String, displayName: String, client: any ChatInstallClient) {
+    init(botName: String, displayName: String, spec: BotAvatarSpec?, client: any ChatInstallClient) {
         self.displayName = displayName
+        self.spec = spec
+        iconPusher = ChatIconPusher(client: client)
         chat = ChatInstallModel(botName: botName, preferredProvider: "slack", client: client)
         let plan = SlackSetupPlan(displayName: displayName, provider: nil, state: nil)
         guard let engine = StepFlowEngine(flowID: SlackSetupPlan.flowID, steps: plan.steps) else {
@@ -149,6 +154,7 @@ final class SlackSetupModel {
         func value(_ id: String) -> String { (values[id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
         switch step.id {
         case SlackSetupPlan.introID:
+            if let spec { await iconPusher.push(spec, onlyWhenInstalled: false) }
             await chat.begin()
         case SlackSetupPlan.credentialID:
             let refresh = value(SlackSetupPlan.refreshField)

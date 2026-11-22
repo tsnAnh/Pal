@@ -134,6 +134,7 @@ final class BotProfileModel {
     func saved(look spec: BotAvatarSpec?, photo: Data?, photoChanged: Bool) async {
         if let spec { lookOverride = spec }
         if photoChanged { roster.avatarChanged(botName, photo: photo) }
+        roster.pushChatIcon(for: botName, spec: spec ?? self.spec)
         await reloadProfile()
         roster.nudge()
     }

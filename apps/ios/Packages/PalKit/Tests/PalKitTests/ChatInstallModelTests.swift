@@ -101,6 +101,7 @@ actor FakeChatInstallClient: ChatInstallClient {
     }
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire] { calls.append("bindings"); return bound }
     func revoke(_ scope: ChatInstallScope) async throws { calls.append("revoke") }
+    func setIcon(_ scope: ChatInstallScope, png: Data) async throws {}
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
         calls.append("updateIdentity")
         if let identityError { throw identityError }

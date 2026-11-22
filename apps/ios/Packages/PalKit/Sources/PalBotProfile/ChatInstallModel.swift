@@ -43,6 +43,7 @@ public protocol ChatInstallClient: Sendable {
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire]
     func revoke(_ scope: ChatInstallScope) async throws
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult
+    func setIcon(_ scope: ChatInstallScope, png: Data) async throws
     func storeSecret(label: String, value: String) async throws -> String
 }
 

@@ -113,6 +113,10 @@ struct GatewayChatInstallClient: ChatInstallClient {
         try decode(ChatIdentityUpdateResult.self, await perform("chat.install.update_identity", scope), "chat.install.update_identity")
     }
 
+    func setIcon(_ scope: ChatInstallScope, png: Data) async throws {
+        _ = try await perform("chat.install.set_icon", scope, ["data": .string("data:image/png;base64," + png.base64EncodedString())])
+    }
+
     func storeSecret(label: String, value: String) async throws -> String {
         do {
             return try await vault.addVaultAPIKey(VaultAPIKeyDraft(label: label, apiKey: value))

@@ -6,7 +6,6 @@ import SwiftUI
 
 struct SlackSettingsView: View {
     let model: SlackSetupModel
-    let spec: BotAvatarSpec?
     let close: () -> Void
 
     @State private var confirmsDisconnect = false
@@ -28,11 +27,8 @@ struct SlackSettingsView: View {
                         workspace
                         PalHairline()
                         channels
-                        PalHairline()
-                        identity
                     }
                     if editsChannels { SlackChannelsView(chat: chat, name: name) }
-                    identityResult
                     notice
                     SlackCard { disconnect }
                 }
@@ -84,36 +80,6 @@ struct SlackSettingsView: View {
             identifier: "slackSettingsChannels"
         ) {
             SetupQuietButton(title: String(localized: "Change ›"), identifier: "slackChannelsChange") { editsChannels.toggle() }
-        }
-    }
-
-    private var identity: some View {
-        let updated = chat.identityUpdate.map { $0.outcome != .needsManualAvatar } ?? false
-        return row(
-            String(localized: "Name and picture"),
-            updated ? String(localized: "Up to date in Slack") : String(localized: "\(name)'s name and picture in Slack"),
-            identifier: "slackSettingsIdentity"
-        ) {
-            SetupButton(title: String(localized: "Update"), isBusy: chat.isWorking, identifier: "slackUpdateIdentity") {
-                Task { await chat.updateIdentity() }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var identityResult: some View {
-        if let update = chat.identityUpdate, update.outcome == .needsManualAvatar {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Add \(name)'s picture").hermesText(.rowTitle).fontWeight(.semibold).foregroundStyle(PalTokens.textPrimary)
-                Text("Slack doesn't let apps set their own picture. Save it, open the Slack page, and upload it under Display Information.")
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(PalTokens.textSecondary)
-                if let link = update.nextAction.link.flatMap(URL.init(string:)) {
-                    SetupButton(title: String(localized: "Open the Slack page"), identifier: "slackIdentityOpenPage") { ExternalLink.open(link) }
-                }
-                SlackAvatarExport(spec: spec, name: name)
-            }
-            .accessibilityIdentifier("slackIdentityAvatar")
         }
     }
 

@@ -53,7 +53,7 @@ struct SlackSetupScreen<Advanced: View>: View {
                 savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."), close: close
             ) { step in accessory(step) }
         case .settings:
-            SlackSettingsView(model: model, spec: spec, close: close)
+            SlackSettingsView(model: model, close: close)
         case .status(let status):
             statusScreen(status)
         }

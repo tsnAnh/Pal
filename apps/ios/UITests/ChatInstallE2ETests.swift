@@ -107,7 +107,6 @@ final class ChatInstallE2ETests: BotProfileTestCase {
     private func finishAndDisconnect(_ app: XCUIApplication) {
         waitFor(element(app, "slackSettings"), timeout: 20, "settings page")
         XCTAssertTrue(element(app, "slackSettingsWorkspace").exists)
-        XCTAssertTrue(element(app, "slackUpdateIdentity").exists)
         assertOneWayOut(app, "settings")
         shot(app, "slack-setup-settings")
 
