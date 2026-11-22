@@ -23,7 +23,8 @@ _MCP_REPLACE_BINDING = _GrantBinding(
     "mcp_replace_shared", positional=True, value_options=_MCP_VALUE_OPTIONS, open_ended_options=_MCP_OPEN_ENDED_OPTIONS)
 _MCP_REMOVE_BINDING = _GrantBinding("mcp_remove_everywhere", positional=True)
 GRANT_BINDINGS: dict[tuple[str, str], _GrantBinding] = {
-    ("bot", "create"): _GrantBinding("create", positional=True, value_options=frozenset({"--display-name", "--description"})),
+    ("bot", "create"): _GrantBinding(
+        "create", positional=True, value_options=frozenset({"--display-name", "--description", "--soul-file"})),
     ("profile", "create"): _GrantBinding(
         "create", positional=True, value_options=frozenset({"--clone-from", "--description"}),
         exact_switches=frozenset({"--clone"})),
