@@ -11,6 +11,9 @@ from pathlib import Path
 
 PERF_DIR = Path(__file__).resolve().parent
 IOS_DIR = PERF_DIR.parents[1]
+sys.path.insert(0, str(PERF_DIR))
+
+import perf_mac_tour
 
 FIXTURE_BOTS = 20
 MIN_FIXTURE_BOTS = 9
@@ -211,10 +214,11 @@ def default_time_limit():
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Mac performance scenario for Pal: a seeded fixture gateway, the exact manual steps, the xctrace commands, and (via perf.py hitch) the hitch report reader. "
-                    "There is no UI scripting here and no Mac in this repo's CI: a person runs the printed steps on a Mac, this tool only prepares the fixture and prints what to run and how to read it.",
-        epilog="Typical run: perf-mac fixture (leave running); in another terminal perf-mac steps and perf-mac xtrace; then perf.py hitch BEFORE/pal-hitch.json AFTER/pal-hitch.json.")
-    commands = parser.add_subparsers(dest="command", required=True, metavar="{fixture,steps,xtrace}")
+        description="Mac performance scenario for Pal: a seeded fixture gateway, the exact manual steps, the xctrace commands, the hitch report reader (perf.py hitch) and the scripted tour of every surface. "
+                    "There is no Mac in this repo's CI: tour drives the app with XCUITest on this Mac, the other commands prepare the fixture and print what a person runs and how to read it.",
+        epilog="Manual run: perf-mac fixture (leave running); in another terminal perf-mac steps and perf-mac xtrace; then perf.py hitch BEFORE/pal-hitch.json AFTER/pal-hitch.json. "
+               "Scripted run: perf-mac-tour --runs 3; compare two with perf.py tour BEFORE_DIR AFTER_DIR.")
+    commands = parser.add_subparsers(dest="command", required=True, metavar="{fixture,steps,xtrace,tour}")
     fixture = commands.add_parser("fixture", help=f"start the seeded fixture gateway ({FIXTURE_BOTS} bots, one streams long markdown) and print its URL, credentials and trigger text")
     fixture.add_argument("--bots", type=int, default=FIXTURE_BOTS, help=f"roster size, at least {MIN_FIXTURE_BOTS} (default %(default)s)")
     fixture.add_argument("--announce", action="store_true", help=argparse.SUPPRESS)
@@ -223,11 +227,15 @@ def build_parser():
     xtrace.add_argument("--app", default=DEFAULT_APP, help="app bundle to launch (default %(default)s)")
     xtrace.add_argument("--dir", default=str(DEFAULT_OUT), help="output directory (default %(default)s)")
     xtrace.add_argument("--time-limit", type=int, default=default_time_limit(), help="seconds per recording (default %(default)s: the steps plus slack)")
+    tour = commands.add_parser("tour", help="run the scripted XCUITest tour of every Mac surface and print per-surface frame pacing (see Scripts/perf-mac-tour)")
+    perf_mac_tour.add_arguments(tour)
     return parser
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.command == "tour":
+        return perf_mac_tour.tour(args)
     if args.command == "steps":
         print(steps_text(), end="")
         return 0

@@ -11,7 +11,12 @@ Runs the UI tests against a sandbox gateway (stub LLM, temp HERMES_HOME).
   ios    (default) the iOS Simulator; artifacts in Artifacts/ui-e2e
   macos  the native Mac app on this Mac: SignInFlowTests, BotChatE2ETests, ComputerE2ETests, MacShellE2ETests, MacModalsE2ETests, MacChatDetailsE2ETests, MacPinnedHeroE2ETests, MacBotManagementE2ETests, MacRoomSheetE2ETests, KanbanE2ETests, KanbanCardDetailE2ETests against the
          sandbox gateway and an rfb-test-server on bot-alpha; artifacts in Artifacts/mac-e2e/<timestamp>
+         (HERMES_UI_E2E_ARTIFACTS overrides it). MacPerfTourTests runs only when selected with HERMES_UI_E2E_ONLY; its phases.jsonl
+         and the app's pal-frames.csv land in <artifacts>/perf. HERMES_UI_E2E_MAC_DERIVED overrides the Mac DerivedData path.
+         HERMES_UI_E2E_MAC_OPTIMIZED=1 builds the Debug app with Release code generation (-O, whole module, no debug dylib) for perf runs.
 HERMES_UI_E2E_SEED (parity or perf) starts the gateway with that e2e-gateway seed and hands HERMES_UITEST_SEED to the tests.
+HERMES_UI_E2E_BOTS (with the parity seed) grows the roster to that many bots.
+HERMES_UI_E2E_TOUR_PHASES (comma list of surface names) narrows MacPerfTourTests to those phases.
 HERMES_UI_E2E_ONLY narrows the run to one -only-testing selector. The artifact path is printed last.
 USAGE
 }
@@ -30,7 +35,7 @@ done
 case "$PLATFORM" in ios|macos) ;; *) echo "unknown platform: $PLATFORM (ios or macos)" >&2; exit 2 ;; esac
 
 if [ "$INNER" != 1 ]; then
-  exec "$IOS_DIR/Scripts/e2e-gateway" ${HERMES_UI_E2E_SEED:+--seed "$HERMES_UI_E2E_SEED"} -- "$IOS_DIR/Scripts/run-ui-e2e" --inner --platform "$PLATFORM"
+  exec "$IOS_DIR/Scripts/e2e-gateway" ${HERMES_UI_E2E_SEED:+--seed "$HERMES_UI_E2E_SEED"} ${HERMES_UI_E2E_BOTS:+--bots "$HERMES_UI_E2E_BOTS"} -- "$IOS_DIR/Scripts/run-ui-e2e" --inner --platform "$PLATFORM"
 fi
 
 if [ "$PLATFORM" = macos ]; then
@@ -48,8 +53,11 @@ BASE_URL="$HERMES_IOS_TEST_BASE_URL"
 PORT="${BASE_URL##*:}"
 RUNNER_CONTAINER_TMP="$HOME/Library/Containers/$RUNNER_ID/Data/tmp"
 if [ "$PLATFORM" = macos ]; then
-  mkdir -p "$RUNNER_CONTAINER_TMP"
-  CTL_DIR="$(mktemp -d "$RUNNER_CONTAINER_TMP/hermes-ui-e2e-ctl.XXXXXX")"
+  mkdir -p "$RUNNER_CONTAINER_TMP" 2>/dev/null || true
+  CTL_DIR="$(mktemp -d "$RUNNER_CONTAINER_TMP/hermes-ui-e2e-ctl.XXXXXX" 2>/dev/null)" || {
+    echo "the runner container is not writable from this launcher (macOS App Data protection); tests that use the control channel or shots will not work" >&2
+    CTL_DIR="$(mktemp -d /tmp/hermes-ui-e2e-ctl.XXXXXX)"
+  }
 else
   CTL_DIR="$(mktemp -d /tmp/hermes-ui-e2e-ctl.XXXXXX)"
 fi
@@ -57,7 +65,7 @@ PROBE_TEXT="OFFLINE-PING-7731"
 RECORD_PID=""
 WATCHER_PID=""
 BOOTED_BY_US=0
-MAC_DERIVED="$IOS_DIR/build/DerivedDataMac"
+MAC_DERIVED="${HERMES_UI_E2E_MAC_DERIVED:-$IOS_DIR/build/DerivedDataMac}"
 MAC_APP_BINARY="$MAC_DERIVED/Build/Products/Debug/Pal.app/Contents/MacOS/Pal"
 RFB_STATE="$CTL_DIR/rfb"
 MAC_TESTS=(SignInFlowTests BotChatE2ETests ComputerE2ETests MacShellE2ETests MacModalsE2ETests MacChatDetailsE2ETests MacPinnedHeroE2ETests MacBotManagementE2ETests MacRoomSheetE2ETests KanbanE2ETests KanbanCardDetailE2ETests ConnectAppsE2ETests ConnectorDetailsE2ETests)
@@ -177,7 +185,7 @@ control_loop() {
 
 terminate_mac_app() {
   local pid
-  for pid in $(pgrep -x HermesBots 2>/dev/null); do
+  for pid in $(pgrep -x Pal 2>/dev/null); do
     [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = "$MAC_APP_BINARY" ] && stop_pid "$pid"
   done
   return 0
@@ -213,15 +221,34 @@ trap cleanup EXIT
 mkdir -p "$ART"
 rm -rf "$ART/ui-e2e.xcresult" "$ART/ui-e2e.mov" "$ART"/*.png "$ART"/*.txt "$ART"/*.log
 
+export_attachment() {
+  local name="$1" destination="$2" exported="$CTL_DIR/attachments"
+  rm -rf "$exported"
+  xcrun xcresulttool export attachments --path "$ART/ui-e2e.xcresult" --output-path "$exported" >/dev/null 2>&1 || return 0
+  "$PYTHON" -I - "$exported" "$name" "$destination" <<'PY'
+import json, shutil, sys
+from pathlib import Path
+directory, name, destination = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+for test in json.loads((directory / "manifest.json").read_text()):
+    for attachment in test.get("attachments", []):
+        if attachment.get("suggestedHumanReadableName", "").startswith(name):
+            shutil.copyfile(directory / attachment["exportedFileName"], destination)
+PY
+}
+
 run_macos() {
   echo "== xcodegen + build (macOS)"
   ( cd "$IOS_DIR" && xcodegen generate >/dev/null )
+  local optimization=()
+  if [ "${HERMES_UI_E2E_MAC_OPTIMIZED:-0}" = 1 ]; then
+    optimization=(SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule GCC_OPTIMIZATION_LEVEL=s ENABLE_DEBUG_DYLIB=NO)
+  fi
   ( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
-    -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
-    build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
+    -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" -allowProvisioningUpdates \
+    ${optimization[@]+"${optimization[@]}"} build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
 
   terminate_mac_app
-  mkdir -p "$ART/shots" "$CTL_DIR/shots"
+  mkdir -p "$ART/shots" "$CTL_DIR/shots" "$ART/perf"
   "$IOS_DIR/Scripts/rfb-test-server" start "$HERMES_IOS_E2E_HOME/profiles/bot-alpha" "$RFB_STATE" | tee "$ART/rfb-server.txt"
 
   local only=()
@@ -231,6 +258,11 @@ run_macos() {
     local suite
     for suite in "${MAC_TESTS[@]}"; do only+=("-only-testing:HermesBotsUITests/$suite"); done
   fi
+
+  local kanban_seeded=0
+  case "${HERMES_UI_E2E_ONLY:-}" in
+    *MacPerfTourTests*) kanban_board seed && kanban_seeded=1 ;;
+  esac
 
   control_loop &
   WATCHER_PID=$!
@@ -245,6 +277,9 @@ run_macos() {
     TEST_RUNNER_HERMES_UITEST_SHOTS="$CTL_DIR/shots" \
     TEST_RUNNER_HERMES_UITEST_SEED="${HERMES_UI_E2E_SEED:-}" \
     TEST_RUNNER_HERMES_UITEST_PERF_MANIFEST="${HERMES_IOS_E2E_PERF_MANIFEST:-}" \
+    TEST_RUNNER_HERMES_UITEST_PERF_APP_DIR="$ART/perf" \
+    TEST_RUNNER_HERMES_UITEST_KANBAN_SEEDED="$kanban_seeded" \
+    TEST_RUNNER_HERMES_UITEST_TOUR_PHASES="${HERMES_UI_E2E_TOUR_PHASES:-}" \
     TEST_RUNNER_HERMES_UITEST_COMPUTER_SLUG=bot-alpha \
     TEST_RUNNER_HERMES_UITEST_RFB_LOG="$RFB_STATE/input.log" \
     xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
@@ -257,6 +292,7 @@ run_macos() {
   terminate_mac_app
 
   cp "$CTL_DIR/shots/"* "$ART/shots/" 2>/dev/null || true
+  export_attachment perf-phases "$ART/perf/phases.jsonl"
   cp "$RFB_STATE/input.log" "$ART/rfb-input.log" 2>/dev/null || true
   cp "$HERMES_IOS_E2E_GATEWAY_LOG" "$ART/gateway.log" 2>/dev/null || true
   cp "$HERMES_IOS_E2E_STUB_LOG" "$ART/fake-llm-requests.jsonl" 2>/dev/null || true

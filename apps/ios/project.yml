@@ -41,10 +41,10 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Pal
+        CFBundleDisplayName: $(PAL_DISPLAY_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
-        CFBundleName: Pal
+        CFBundleName: $(PAL_DISPLAY_NAME)
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
           - CFBundleURLName: dev.tsnanh.hermes.bot
@@ -83,6 +83,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot
+        PAL_DISPLAY_NAME: Pal
         PRODUCT_NAME: Pal
         PRODUCT_MODULE_NAME: HermesBots
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -95,6 +96,11 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
         LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]: "$(inherited) @executable_path/../Frameworks"
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]: dev.tsnanh.hermes.bot.development
+          PAL_DISPLAY_NAME[sdk=macosx*]: Pal Dev
+          ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
     dependencies:
       - package: Sparkle
         product: Sparkle
@@ -165,6 +171,10 @@ targets:
         CODE_SIGN_ENTITLEMENTS: NotificationService/NotificationService.entitlements
         CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: NotificationService/NotificationService-macOS.entitlements
         ENABLE_HARDENED_RUNTIME: YES
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]: dev.tsnanh.hermes.bot.development.notification-service
+          ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
     dependencies:
       - package: PalKit
         product: PalPush
@@ -188,6 +198,10 @@ targets:
           - MacRoomSheetE2ETests.swift
           - ConnectAppsE2ETests.swift
           - ConnectorDetailsE2ETests.swift
+          - MacPerfTourSupport.swift
+          - MacPerfTourTests.swift
+          - MacPerfTourSurfaces.swift
+          - MacPerfTourSettings.swift
       - path: UITests
         excludes:
           - E2ESupport.swift
@@ -204,6 +218,10 @@ targets:
           - MacRoomSheetE2ETests.swift
           - ConnectAppsE2ETests.swift
           - ConnectorDetailsE2ETests.swift
+          - MacPerfTourSupport.swift
+          - MacPerfTourTests.swift
+          - MacPerfTourSurfaces.swift
+          - MacPerfTourSettings.swift
         destinationFilters: [iOS]
     settings:
       base:
