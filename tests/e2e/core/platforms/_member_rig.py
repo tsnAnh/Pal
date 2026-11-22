@@ -7,7 +7,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import pytest
 
@@ -30,7 +30,8 @@ OWNER_ONLY_TOOLS = {"terminal", "process_manage", "read_file", "write_file", "pa
                     "execute_code", "memory", "session_search", "delegate_task", "cronjob_manage",
                     "slack_post_message", "slack_send_dm", "slack_list_users", "slack_list_channels"}
 BRIDGE_TOOLS = {"tool_search", "tool_describe", "tool_call"}
-MEMBER_TOOLS = {"web_search", "web_extract", "vision_analyze", "clarify", "slack_read_thread", "slack_read_channel"}
+MEMBER_TOOLS = {"web_search", "web_extract", "vision_analyze", "clarify", "slack_read_thread", "slack_read_channel",
+               "request_owner_action"}
 MEMBER_SURFACE = MEMBER_TOOLS | BRIDGE_TOOLS
 
 
@@ -112,7 +113,8 @@ def surface_fingerprint(body: dict[str, Any]) -> dict[str, str]:
 
 
 def make_world(factory: pytest.TempPathFactory, label: str, *, audience: Optional[dict[str, Any]],
-               free_channels: tuple[str, ...] = (), extra_cfg: Optional[dict[str, Any]] = None) -> World:
+               free_channels: tuple[str, ...] = (), extra_cfg: Optional[dict[str, Any]] = None,
+               prepare: Optional[Callable[[GatewayUnderTest, MemberDriver], None]] = None) -> World:
     drv = MemberDriver(audience, free_channels)
     drv.start()
     director = Director()
@@ -135,6 +137,8 @@ def make_world(factory: pytest.TempPathFactory, label: str, *, audience: Optiona
                  match=lambda params: params.get("user") == BLIND)
     world = World(gw=gw, drv=drv, director=director, llm=llm, root=root)
     try:
+        if prepare is not None:
+            prepare(gw, drv)
         gw.start()
     except BaseException:
         teardown(world)

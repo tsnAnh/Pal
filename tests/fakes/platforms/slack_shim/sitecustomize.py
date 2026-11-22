@@ -1,4 +1,4 @@
-"""Point slack_sdk (and raw ``https://slack.com/api/`` aiohttp posts) at a local Slack stand-in.
+"""Point slack_sdk (and raw ``https://slack.com/api/`` aiohttp and httpx calls) at a local Slack stand-in.
 
 slack_sdk has no base-URL environment variable, so this module is put on ``PYTHONPATH`` of the child
 ``hermes gateway run`` process by the contract harness. Python imports ``sitecustomize`` at startup;
@@ -64,8 +64,28 @@ def _install_aiohttp() -> None:
     aiohttp.ClientSession._request = _request
 
 
+def _install_httpx() -> None:
+    """The bot's own Slack tools call ``https://slack.com/api/`` through an ``httpx.Client``."""
+    try:
+        import httpx
+    except Exception:
+        return
+    original = httpx.Client.__init__
+    if getattr(original, "_standin_wrapped", False):
+        return
+
+    def __init__(self, *args, **kwargs):
+        if str(kwargs.get("base_url", "")).rstrip("/") == _REAL_API.rstrip("/"):
+            kwargs["base_url"] = _API
+        original(self, *args, **kwargs)
+
+    __init__._standin_wrapped = True  # type: ignore[attr-defined]
+    httpx.Client.__init__ = __init__
+
+
 if _API:
     if not _API.endswith("/"):
         _API += "/"
     _install_sdk()
     _install_aiohttp()
+    _install_httpx()
