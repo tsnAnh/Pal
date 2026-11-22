@@ -201,6 +201,9 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional
     if kind == REFUSED:
         return tool_error(policy.refused_message, code=ACTION_REFUSED), None
     from tools.approval_context import get_current_session_key
+    from tools.tainted_turn_gate import spend_call_grant
+    if spend_call_grant("mcp_", prefix=True):
+        return None, ActionGrant(call_digest(server_name, tool_name, dict(args or {})))
     if not approver_present():
         return tool_error(f"'{tool_name}' changes things on {display_name(server_name)}, so it needs the owner's approval in "
                           f"their app, and nobody can approve in this chat. It was NOT run.",

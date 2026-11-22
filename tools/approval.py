@@ -1552,6 +1552,10 @@ def check_all_command_guards(command: str, env_type: str,
     if blocked is not None:
         return blocked
 
+    from tools.tainted_turn_gate import spend_call_grant
+    if spend_call_grant("terminal"):
+        return _approved()
+
     from agent.terminal_approval_batch import consume_prepared_guard
     prepared = consume_prepared_guard(command, env_type, has_host_access)
     if prepared is not None:

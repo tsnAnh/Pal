@@ -712,6 +712,14 @@ def _dispatch_authorized_once(
         state.args = ref.args
     block_body = None if block_message is None else {"error": block_message}
 
+    from tools.tainted_turn_gate import admit_tainted_call, bound_call_grant
+    call_grant = None
+    if block_body is None:
+        gate_error, call_grant = admit_tainted_call(ref.name, ref.args)
+        if gate_error is not None:
+            block_body = json.loads(gate_error)
+            block_error_type = block_body.get("code") or "owner_gate"
+
     # Checked once, after plugin modify hooks (which may replace arguments) and
     # before guardrails or real dispatch: a copied compression marker in an
     # effect-capable argument must never reach the tool.
@@ -751,7 +759,7 @@ def _dispatch_authorized_once(
     from tools.connectors.data_use import collect_data_use
     from tools.mcp_elicitation_form import bound_form_asker  # MCP elicitation asks on this turn's clarify surface
     with bound_tool_progress(agent.tool_progress_callback, ref.name, ref.call_id), collect_data_use() as data_use, \
-            bound_form_asker(getattr(agent, "clarify_callback", None)):
+            bound_form_asker(getattr(agent, "clarify_callback", None)), bound_call_grant(call_grant):
         try:
             return _run_with_activity_heartbeat(agent, ref.name, lambda: execute(ref.args))
         finally:
