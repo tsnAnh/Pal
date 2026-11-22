@@ -110,7 +110,7 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
                         let flag = isPresented
                         center.present(MacSheetRequest(
                             id: token,
-                            content: built,
+                            content: { isPresented.wrappedValue ? built() : AnyView(EmptyView()) },
                             dismiss: { flag.wrappedValue = false },
                             onDismiss: onDismiss,
                             size: size
@@ -129,13 +129,16 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
     }
 
     private func built() -> AnyView {
-        guard isPresented.wrappedValue, let view = sheet() else { return AnyView(EmptyView()) }
+        guard let view = sheet() else { return AnyView(EmptyView()) }
         return AnyView(view)
     }
 
     private func system(_ content: Content) -> some View {
         content.sheet(isPresented: isPresented, onDismiss: onDismiss) {
-            built().environment(\.sheetClose, nil).macSheetFrame(size: size)
+            built()
+                .environment(\.sheetClose, nil)
+                .environment(\.sheetChromeHostedInNavigation, false)
+                .macSheetFrame(size: size)
         }
     }
 }
