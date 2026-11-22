@@ -106,7 +106,10 @@ public actor BotProvisioner {
             greetsUnprompted: listing.capabilities.botBirthNotice
         )
         pending[identity.slug] = entry
-        _ = try await gateway.call("profiles.create", Self.createParams(identity, cloneFrom: cloneFrom))
+        _ = try await gateway.call(
+            "profiles.create",
+            Self.createParams(identity, cloneFrom: cloneFrom, scriptedOpening: listing.capabilities.botOpening)
+        )
         entry.created = true
         pending[identity.slug] = entry
         return entry
@@ -124,13 +127,14 @@ public actor BotProvisioner {
         }
     }
 
-    static func createParams(_ identity: BotIdentity, cloneFrom: String? = "default") -> JSONValue {
+    static func createParams(_ identity: BotIdentity, cloneFrom: String? = "default", scriptedOpening: Bool = false) -> JSONValue {
         var params: [String: JSONValue] = [
             "name": .string(identity.slug),
             "share_auth": true,
             "soul": .string(soul(for: identity)),
         ]
         if let cloneFrom { params["clone_from"] = .string(cloneFrom) }
+        if scriptedOpening { params["onboarding"] = true }
         if identity.displayName != identity.slug {
             params["display_name"] = .string(String(identity.displayName.prefix(BotIdentity.maximumDisplayNameLength)))
         }

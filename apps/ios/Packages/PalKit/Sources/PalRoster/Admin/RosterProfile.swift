@@ -100,16 +100,19 @@ public struct RosterProfile: Sendable, Equatable {
 public struct RosterCapabilities: Sendable, Equatable {
     public var botBirthNotice: Bool
     public var botOnboarding: Bool
+    public var botOpening: Bool
 
-    public init(botBirthNotice: Bool = false, botOnboarding: Bool = false) {
+    public init(botBirthNotice: Bool = false, botOnboarding: Bool = false, botOpening: Bool = false) {
         self.botBirthNotice = botBirthNotice
         self.botOnboarding = botOnboarding
+        self.botOpening = botOpening
     }
 
     public init(listResult: JSONValue) {
         self.init(
             botBirthNotice: listResult["bot_birth_notice"]?.boolValue ?? false,
-            botOnboarding: listResult["bot_onboarding"]?.boolValue ?? false
+            botOnboarding: listResult["bot_onboarding"]?.boolValue ?? false,
+            botOpening: listResult["bot_opening"]?.boolValue ?? false
         )
     }
 }

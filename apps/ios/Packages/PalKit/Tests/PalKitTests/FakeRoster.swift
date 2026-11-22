@@ -20,6 +20,7 @@ final class FakeRoster: Sendable {
         var failCreate = 0
         var denyPrimary = false
         var birthNotice = true
+        var scriptedOpening = false
         var configureCount = 0
         var omitRevisions = false
     }
@@ -80,7 +81,10 @@ final class FakeRoster: Sendable {
             }
             return .object(row)
         }
-        return .result(["profiles": .array(rows), "bot_birth_notice": .bool(state.birthNotice), "bot_onboarding": true])
+        return .result([
+            "profiles": .array(rows), "bot_birth_notice": .bool(state.birthNotice), "bot_onboarding": true,
+            "bot_opening": .bool(state.scriptedOpening),
+        ])
     }
 
     private func configure(_ state: inout State, _ params: JSONValue?) -> FakeGateway.Reply {
