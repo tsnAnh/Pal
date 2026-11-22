@@ -2,16 +2,6 @@ import Foundation
 import PalConnect
 import Observation
 
-enum ProfileSuggestion: CaseIterable, ServiceSuggestion {
-    case addToSlack
-
-    var requiredService: ServiceKind? {
-        switch self {
-        case .addToSlack: .slack
-        }
-    }
-}
-
 @MainActor
 @Observable
 final class ConnectedServicesModel {
@@ -23,10 +13,6 @@ final class ConnectedServicesModel {
     init(botName: String, services: BotsServices) {
         self.botName = botName
         loadCatalog = services.connectCatalog
-    }
-
-    var visibleSuggestions: [ProfileSuggestion] {
-        services.visible(ProfileSuggestion.allCases)
     }
 
     static let assumedConnectedArgument = "-hermes-test-connected-services"

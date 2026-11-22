@@ -49,7 +49,25 @@ public struct SlackSetupPlan: Sendable, Equatable {
 
         let target = Self.target(state: state, guided: guided)
         currentID = steps.contains { $0.id == target } ? target : Self.introID
-        failure = state?.step == .error ? state?.error.map { Self.status(for: $0.code, displayName: name) } : nil
+        failure = state?.step == .error
+            ? state?.error.map { Self.failure($0.code, displayName: name, state: state, guided: guided) }
+            : nil
+    }
+
+    private static func failure(
+        _ code: ChatSetupErrorCode, displayName name: String, state: ChatSetupStateWire?, guided: [ChatProviderCapability]
+    ) -> SetupStatus {
+        guard code == .credentialRejected, rejectedAppKey(state, guided: guided) else { return status(for: code, displayName: name) }
+        var status = SetupStatus(code: code.rawValue, subject: "Slack", valueName: "app key")
+        let source = String(localized: "The app key has to come from \(name)'s own Slack app.")
+        let steps = String(localized: "Open its Slack page, go to Basic Information, then App-Level Tokens, and copy a key.")
+        status.reason = "\(source) \(steps)"
+        return status
+    }
+
+    private static func rejectedAppKey(_ state: ChatSetupStateWire?, guided: [ChatProviderCapability]) -> Bool {
+        state?.resumeStep == .needsManualStep && guided.contains(.appLevelCredential)
+            && !(state?.manualStepsDone.contains(.appLevelCredential) ?? false)
     }
 
     public static func status(for code: ChatSetupErrorCode, displayName: String) -> SetupStatus {
@@ -91,7 +109,7 @@ public struct SlackSetupPlan: Sendable, Equatable {
         case .installing: return installingID
         case .needsOwner: return ownerID
         case .ready: return channelsID
-        case .error: return errorTarget(state)
+        case .error: return errorTarget(state, guided: guided)
         }
     }
 
@@ -100,8 +118,9 @@ public struct SlackSetupPlan: Sendable, Equatable {
         return guided.first { !state.manualStepsDone.contains($0) }
     }
 
-    private static func errorTarget(_ state: ChatSetupStateWire) -> String {
+    private static func errorTarget(_ state: ChatSetupStateWire, guided: [ChatProviderCapability]) -> String {
         switch state.error?.code {
+        case .credentialRejected where rejectedAppKey(state, guided: guided): manualID(.appLevelCredential)
         case .credentialRejected, .credentialExpired: credentialID
         case .appCreateFailed: creatingID
         case .allowDenied, .installFailed: allowID

@@ -479,6 +479,8 @@ def _(rid, params: dict) -> dict:
         write_meta = _lazy("hermes_cli.profiles", "write_profile_meta")
         applied["description"] = _best_effort(lambda: write_meta(
             profile_dir, description=params["description"].strip(), description_auto=False))
+    if applied.get("ui_meta"):
+        _lazy("gateway.chat_identity_sync", "schedule_identity_sync")(_name, profile_dir)
     confirm_message = _configure_model(profile_dir, params, applied)
     if isinstance(params.get("fallback_providers"), list):
         _configure_fallbacks(profile_dir, params["fallback_providers"], applied)
@@ -549,7 +551,9 @@ def _(rid, params: dict) -> dict:
         return err
     assets_dir = profile_dir / "assets"
     if is_truthy_value(params.get("clear", False)):
-        return _ok(rid, {"ok": True, "asset": asset, "size": 0, "removed": _unlink_asset_files(assets_dir, asset)})
+        removed = _unlink_asset_files(assets_dir, asset)
+        _lazy("gateway.chat_identity_sync", "schedule_identity_sync")(_name, profile_dir)
+        return _ok(rid, {"ok": True, "asset": asset, "size": 0, "removed": removed})
     data = str(params.get("data") or "")
     if not data:
         return _err(rid, 4067, "data required (data URL or base64)")
@@ -563,6 +567,7 @@ def _(rid, params: dict) -> dict:
     tmp = assets_dir / f"{asset}.{ext}.tmp"
     tmp.write_bytes(blob)
     tmp.replace(assets_dir / f"{asset}.{ext}")
+    _lazy("gateway.chat_identity_sync", "schedule_identity_sync")(_name, profile_dir)
     return _ok(rid, {"ok": True, "asset": asset, "size": len(blob)})
 
 

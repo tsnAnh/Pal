@@ -16,7 +16,7 @@ struct InspectorActivity: View {
     var body: some View {
         VStack(spacing: 0) {
             InspectorRoutinesSection(routines: routines, creation: $creation)
-            InspectorSuggestedSection(botName: botName, router: router, suggestions: suggestions)
+            InspectorSlackSection(botName: botName, router: router, profile: profile)
             InspectorComputerSection(botName: botName, router: router, profile: profile)
             InspectorSection(title: String(localized: "Model"), identifier: "inspectorModel") {
                 InspectorLinkRow(identifier: "profileModelRow", router: router, route: .botModel(botName: botName)) {
@@ -58,34 +58,24 @@ struct InspectorActivity: View {
     }
 }
 
-private struct InspectorSuggestedSection: View {
+private struct InspectorSlackSection: View {
     let botName: String
     let router: AppRouter
-    let suggestions: ConnectedServicesModel
-    @AppStorage("mac.inspector.suggestionsHidden") private var suggestionsHidden = false
+    let profile: BotProfileModel
 
     var body: some View {
-        if !suggestionsHidden, !suggestions.visibleSuggestions.isEmpty {
-            InspectorSection(title: String(localized: "Suggested"), identifier: "inspectorSuggested", accessory: {
-                Button("Hide") { withAnimation(.snappy(duration: 0.18)) { suggestionsHidden = true } }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .accessibilityIdentifier("inspectorHideSuggested")
-            }, content: {
-                ForEach(suggestions.visibleSuggestions, id: \.self) { suggestion in
-                    switch suggestion {
-                    case .addToSlack:
-                        InspectorLinkRow(identifier: "profileSlackRow", router: router, route: .slack(botName: botName)) {
-                            SlackMark().frame(width: 14, height: 14)
-                            Text("Add to Slack").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                            Spacer(minLength: 0)
-                            PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
-                        }
-                    }
+        InspectorSection(title: String(localized: "Slack"), identifier: "inspectorSlack") {
+            InspectorLinkRow(identifier: "profileSlackRow", router: router, route: .slack(botName: botName)) {
+                SlackMark().frame(width: 14, height: 14)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(profile.slack.title).font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                    ProfileSlackValue(status: profile.slack).font(.system(size: 11))
                 }
-            })
+                Spacer(minLength: 0)
+                PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
+            }
         }
+        .onAppear { Task { await profile.refreshSlack() } }
     }
 }
 

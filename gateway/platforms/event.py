@@ -138,6 +138,10 @@ class MessageEvent:
     # display data only, never a path. Appended for positional compat.
     media_filenames: list[str] = field(default_factory=list)
     typed_text: Optional[str] = field(default=None, repr=False, compare=False)
+    carries_member_content: bool = False
+    named_user_ids: tuple[str, ...] = ()
+    named_conversation_ids: tuple[str, ...] = ()
+    desk_ask_id: Optional[str] = field(default=None, repr=False, compare=False)
 
     # Process-local admission receipt, never routing metadata or execution acknowledgement.
     _gateway_accepted: bool = field(default=False, init=False, repr=False, compare=False)
@@ -175,6 +179,9 @@ class MessageEvent:
         actor: ``user_id`` "" exports none, so a narrowed approval binds to approvers and admins only
         instead of to the first sender while it carries the second sender's text."""
         self.absorb_reply_expected(other)
+        self.carries_member_content = self.carries_member_content or other.carries_member_content
+        self.named_user_ids = tuple(dict.fromkeys((*self.named_user_ids, *other.named_user_ids)))
+        self.named_conversation_ids = tuple(dict.fromkeys((*self.named_conversation_ids, *other.named_conversation_ids)))
         if self.sender_id() != other.sender_id():
             self.user_id = self.user_name = ""
 

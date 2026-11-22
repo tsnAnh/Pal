@@ -53,7 +53,7 @@ struct SlackSetupScreen<Advanced: View>: View {
                 savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."), close: close
             ) { step in accessory(step) }
         case .settings:
-            SlackSettingsView(model: model, spec: spec, close: close)
+            SlackSettingsView(model: model, close: close)
         case .status(let status):
             statusScreen(status)
         }
@@ -185,7 +185,7 @@ struct SlackAvatarExport: View {
             VStack(alignment: .leading, spacing: 8) {
                 SetupButton(title: ChatAvatarExport.actionTitle, identifier: "slackSaveAvatar") {
                     Task {
-                        guard let image = ChatAvatarExport.render(spec: spec, background: PalTokens.content) else { return }
+                        guard let image = ChatAvatarExport.render(spec: spec) else { return }
                         saved = await ChatAvatarExport.deliver(image, name: name)
                     }
                 }

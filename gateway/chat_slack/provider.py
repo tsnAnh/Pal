@@ -8,18 +8,21 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from PIL import Image
 
-from agent.vault_store import VaultStore, get_vault_store
+from agent.vault_store import VaultError, VaultStore, get_vault_store
 from hermes_cli.slack_cli import _build_full_manifest
 from tui_gateway.chat_install import (
     SLACK_CAPABILITIES,
     SLACK_IDENTITY_POLICY,
     AppCreated,
+    OWNER_DM_HOME_NAME,
     BotIdentitySource,
     ChatProvider,
     IdentityUpdate,
+    PeoplePage,
     SpaceJoin,
 )
 from tui_gateway.contracts.chat_provider import (
@@ -37,11 +40,14 @@ from tui_gateway.contracts.chat_provider import (
     SetupState,
     SpaceJoinOutcome,
     SpaceKind,
+    SpaceLeaveOutcome,
     SpaceRef,
 )
 
 from .api import SlackApi, SlackSetupError
 from .avatar import prepare_avatar
+from .icon import icon_path, store_icon
+from .people import list_people, names_for
 from .records import SlackRecords
 from .token_store import REFRESH_TOKEN_PREFIX, ConfigTokenStore
 
@@ -54,11 +60,16 @@ NEEDS_INVITE_ERRORS = {"method_not_supported_for_channel_type", "channel_not_fou
 GONE_ERRORS = {"app_not_found", "token_revoked", "invalid_auth"}
 REFRESH_LIFETIME_UNKNOWN = "unknown"
 BOT_TOKEN_PREFIX = "xoxb-"
+APP_TOKEN_PREFIX = "xapp-"
+APP_TOKEN_APP_ID = re.compile(r"xapp-\d+-([A-Z0-9]+)-\d+-\S+")
+PROBE_ABORTING = (SetupErrorCode.credential_rejected, SetupErrorCode.credential_expired)
 MEMBER_ID = re.compile(r"[UW][A-Z0-9]{6,20}")
 AVATAR_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 PROBED = (ProviderCapability.set_icon, ProviderCapability.app_level_credential,
           ProviderCapability.gateway_redirect, ProviderCapability.unattended_refresh)
+LEFT_ALREADY_ERRORS = {"not_in_channel", "channel_not_found", "is_archived"}
 _NO_ACTION = NextAction(kind=NextActionKind.none, action_id="none")
+SLACK_APPS_URL = "https://api.slack.com/apps"
 
 
 @dataclass(frozen=True)
@@ -72,8 +83,15 @@ def profile_identity(bot: str) -> BotIdentitySource:
     from hermes_cli.profiles import get_profile_dir, read_profile_meta
     home = get_profile_dir(bot)
     avatar = next((path for ext in AVATAR_EXTENSIONS if (path := home / "assets" / f"avatar.{ext}").is_file()), None)
+    if avatar is None and (icon := icon_path(bot)).is_file():
+        avatar = icon
     return BotIdentitySource(bot=bot, display_name=read_profile_meta(home).get("display_name") or bot,
                              avatar_path=str(avatar) if avatar else None)
+
+
+def _app_token_app_id(key: str) -> str | None:
+    match = APP_TOKEN_APP_ID.fullmatch(key)
+    return match.group(1) if match else None
 
 
 def _username(name: str) -> str:
@@ -87,9 +105,18 @@ def _probe_icon() -> bytes:
     return out.getvalue()
 
 
+def _pal_slash(entry: dict[str, Any]) -> dict[str, Any]:
+    reworded = {key: value.replace("Hermes", "Pal") if isinstance(value, str) and key != "url" else value
+                for key, value in entry.items()}
+    if reworded.get("command") == "/hermes":
+        reworded["command"] = "/pal"
+    return reworded
+
+
 def bot_manifest(projection: IdentityProjection, redirect_url: str | None, description: str) -> dict[str, Any]:
-    manifest = _build_full_manifest(projection.app_name, description)
+    manifest = _build_full_manifest(projection.app_name, description, messaging_experience="none")
     manifest["features"]["bot_user"]["display_name"] = projection.display_name
+    manifest["features"]["slash_commands"] = [_pal_slash(entry) for entry in manifest["features"].get("slash_commands", [])]
     scopes = manifest["oauth_config"]["scopes"]
     scopes["bot"] = sorted({*scopes["bot"], *EXTRA_BOT_SCOPES})
     if redirect_url:
@@ -113,7 +140,7 @@ class SlackProvider(ChatProvider):
         self._identity, self._clock = identity, clock
 
     def capabilities(self, workspace: str | None = None) -> Capabilities:
-        stored = self.records.workspace(workspace).get("capabilities", {}) if workspace else {}
+        stored = self.records.workspace(workspace).get("capabilities", {}) if workspace is not None else {}
         entries = [CapabilityEntry(capability=e.capability, mode=CapabilityMode(stored.get(e.capability.value, e.mode.value)))
                    for e in SLACK_CAPABILITIES.capabilities]
         return SLACK_CAPABILITIES.model_copy(update={"capabilities": entries})
@@ -147,7 +174,20 @@ class SlackProvider(ChatProvider):
             app_id = self._create(bot, workspace, token, manifest)
         self.records.update_app(bot, workspace, invite_handle=projection.display_name)
         self._finish_app(bot, workspace, token, app_id, source)
-        return AppCreated(app_id=app_id, authorize_link=self.records.app(bot, workspace)["authorize_link"])
+        return AppCreated(app_id=app_id, authorize_link=self._with_redirect(self.records.app(bot, workspace)["authorize_link"]))
+
+    def manual_step_action(self, state: SetupState, step: ProviderCapability) -> NextAction:
+        page = "oauth" if step is ProviderCapability.gateway_redirect else "general"
+        link = f"{SLACK_APPS_URL}/{state.app_id}/{page}" if state.app_id else None
+        copy = self.redirect_url if step is ProviderCapability.gateway_redirect else None
+        return NextAction(kind=NextActionKind.button, action_id=step.value, link=link, copy_text=copy)
+
+    def _with_redirect(self, link: str) -> str:
+        if not self.redirect_url:
+            return link
+        parts = urlsplit(link)
+        query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "redirect_uri"]
+        return urlunsplit(parts._replace(query=urlencode([*query, ("redirect_uri", self.redirect_url)])))
 
     def _manifest(self, workspace: str, source: BotIdentitySource) -> tuple[IdentityProjection, str]:
         projection = self.identity_projection(source)
@@ -210,9 +250,32 @@ class SlackProvider(ChatProvider):
         self.records.update_workspace(workspace, capabilities=stored)
         if refresh_vault_item_id:
             self.vault.remove_item(refresh_vault_item_id)
+        if renewable:
+            self._probe_after_credential(workspace)
 
-    def accept_app_level_credential(self, bot: str, workspace: str, vault_item_id: str) -> None:
+    def _probe_after_credential(self, workspace: str) -> None:
+        try:
+            self.probe_workspace(workspace)
+        except SlackSetupError as exc:
+            if exc.code in PROBE_ABORTING:
+                raise
+            logger.warning("slack workspace probe skipped, setup stays guided: %s", exc.code.value)
+
+    def accept_app_level_credential(self, state: SetupState, vault_item_id: str) -> None:
+        bot, workspace = state.bot, state.workspace
+        try:
+            key = self._secret(vault_item_id)
+        except VaultError:
+            raise SlackSetupError(SetupErrorCode.credential_rejected) from None
+        if not key.startswith(APP_TOKEN_PREFIX):
+            raise SlackSetupError(SetupErrorCode.credential_rejected)
+        record = self.records.app(bot, workspace)
+        if record.get("app_id") and _app_token_app_id(key) != record["app_id"]:
+            raise SlackSetupError(SetupErrorCode.credential_rejected)
+        previous = record.get("app_token_item_id")
         self.records.update_app(bot, workspace, app_token_item_id=vault_item_id)
+        if previous and previous != vault_item_id:
+            self.vault.remove_item(previous)
 
     def complete_install(self, state: SetupState, authorization_code: str) -> Installation:
         bot, workspace = state.bot, state.workspace
@@ -280,6 +343,42 @@ class SlackProvider(ChatProvider):
         if source.avatar_path:
             self._set_icon(bot, workspace, token, record["app_id"], source.avatar_path)
         return IdentityUpdate(IdentityUpdateOutcome.updated, projection, _NO_ACTION)
+
+    def store_icon(self, bot: str, png: bytes) -> None:
+        store_icon(bot, png)
+
+    def new_install_config(self, installation: Installation, owner: str) -> dict[str, Any]:
+        from gateway.config import HomeChannel, Platform
+        home = HomeChannel(platform=Platform.SLACK, chat_id=self.open_owner_dm(installation, owner),
+                           name=OWNER_DM_HOME_NAME, user_id=owner, scope_id=installation.workspace_id)
+        return {"platforms": {self.provider_id: {"audience": {"policy": "workspace"}, "home_channel": home.to_dict()}},
+                "slack": {"thread_followup_silence": True}}
+
+    def open_owner_dm(self, installation: Installation, owner: str) -> str:
+        token = self._secret(self._record_for(installation)[1]["bot_token_item_id"])
+        body = self.api.call("conversations.open", token=token, data={"users": owner})
+        return str((body.get("channel") or {})["id"])
+
+    def is_direct_space(self, space_id: str) -> bool:
+        return space_id.startswith("D")
+
+    def list_people(self, installation: Installation, query: str, cursor: str) -> PeoplePage:
+        record = self._record_for(installation)[1]
+        return list_people(self.api, self._secret(record["bot_token_item_id"]), record["team_id"], query, cursor)
+
+    def people_names(self, installation: Installation, member_ids: list[str]) -> dict[str, str]:
+        record = self._record_for(installation)[1]
+        return names_for(self.api, self._secret(record["bot_token_item_id"]), record["team_id"], member_ids)
+
+    def leave_space(self, installation: Installation, space_id: str) -> SpaceLeaveOutcome:
+        token = self._secret(self._record_for(installation)[1]["bot_token_item_id"])
+        try:
+            body = self.api.call("conversations.leave", token=token, data={"channel": space_id})
+        except SlackSetupError as exc:
+            if exc.slack_error in LEFT_ALREADY_ERRORS:
+                return SpaceLeaveOutcome.not_member
+            raise
+        return SpaceLeaveOutcome.not_member if body.get("not_in_channel") else SpaceLeaveOutcome.left
 
     def _installation(self, bot: str, record: dict[str, Any]) -> Installation:
         items = [record[k] for k in ("bot_token_item_id", "app_token_item_id", "credentials_item_id") if record.get(k)]

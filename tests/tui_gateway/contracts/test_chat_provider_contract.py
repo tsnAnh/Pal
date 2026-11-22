@@ -96,13 +96,15 @@ def test_replay_restart_and_second_client_never_duplicate(gateway):
     assert final.installation_id in restarted.provider.installs
 
 
-def test_revoke_then_reinstall_reuses_app_id():
+def test_revoke_forgets_the_app_so_reinstall_creates_a_fresh_one():
     gw = Gateway(CredentialAppFake(), MemorySetupStore())
     first = gw.run()
-    gw.send("pal", "w1", wire.SetupEventKind.revoked)
+    revoked = gw.send("pal", "w1", wire.SetupEventKind.revoked)
+    assert revoked.step is wire.SetupStep.revoked
+    assert revoked.app_id is None and revoked.installation_id is None and revoked.manual_steps_done == []
     second = gw.run()
-    assert second.step is wire.SetupStep.ready and second.app_id == first.app_id
-    assert gw.provider.apps_created == [first.app_id]
+    assert second.step is wire.SetupStep.ready and second.app_id != first.app_id
+    assert gw.provider.apps_created == [first.app_id, second.app_id]
 
 
 def test_paste_fallback_offered_only_while_waiting_for_allow(gateway):
@@ -189,9 +191,16 @@ def test_abstract_provider_raises_typed_not_implemented():
         "adapter_env": lambda: bare.adapter_env(install),
         "adopt_token": lambda: bare.adopt_token(state, "vault-item"),
         "update_identity": lambda: bare.update_identity(install),
+        "accept_app_level_credential": lambda: bare.accept_app_level_credential(state, "vault-item"),
+        "store_icon": lambda: bare.store_icon("pal", b""),
+        "open_owner_dm": lambda: bare.open_owner_dm(install, "U1"),
+        "list_people": lambda: bare.list_people(install, "", ""),
+        "people_names": lambda: bare.people_names(install, []),
+        "leave_space": lambda: bare.leave_space(install, "s"),
     }
     assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity",
-                                                                                  "accept_config_credential", "parse_owner_identity"}
+                                                                                  "accept_config_credential", "parse_owner_identity",
+                                                                                  "new_install_config", "is_direct_space", "manual_step_action"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()

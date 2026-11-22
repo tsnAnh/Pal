@@ -32,7 +32,7 @@ def _turn(runner, chat_id, built):
     turn._runner = runner
     source = SimpleNamespace(platform=Platform.LOCAL, chat_id=chat_id, user_id='u', user_id_alt=None,
                              user_name=None, chat_name=None, chat_type='dm', thread_id=None)
-    turn._ctx = SimpleNamespace(source=source, session_key=chat_id, session_id=chat_id, user_config={},
+    turn._ctx = SimpleNamespace(posture=None, source=source, session_key=chat_id, session_id=chat_id, user_config={},
                                 message='hi', inbound_message_id=None, enabled_toolsets=[], disabled_toolsets=None,
                                 AIAgent=lambda **kw: built.update({chat_id: kw}) or SimpleNamespace(),
                                 progress_callback=None, _voice_ack_guild=[None], _native_slack_task_cards=False,

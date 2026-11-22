@@ -23,9 +23,12 @@ func chatProvider(guided: [String] = ["set_icon", "app_level_credential"], crede
 
 func chatState(
     _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal",
-    fallback: [String: Any]? = nil
+    fallback: [String: Any]? = nil, resume: String? = nil
 ) throws -> ChatSetupStateWire {
-    try decode(ChatSetupStateWire.self, stateJSON(step, revision, action: action, done: done, error: error, bot: bot, fallback: fallback))
+    try decode(
+        ChatSetupStateWire.self,
+        stateJSON(step, revision, action: action, done: done, error: error, bot: bot, fallback: fallback, resume: resume)
+    )
 }
 
 private func changed(
@@ -36,7 +39,7 @@ private func changed(
 
 private func stateJSON(
     _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal",
-    fallback: [String: Any]? = nil
+    fallback: [String: Any]? = nil, resume: String? = nil
 ) -> [String: Any] {
     let next: [String: Any] = [
         "kind": action["kind"] as? String ?? "none", "action_id": action["action_id"] as? String ?? "none",
@@ -44,7 +47,7 @@ private func stateJSON(
     ]
     return [
         "bot": bot, "provider_id": "slack", "workspace": "T1", "step": step, "revision": revision,
-        "app_id": NSNull(), "installation_id": NSNull(), "manual_steps_done": done, "resume_step": NSNull(),
+        "app_id": NSNull(), "installation_id": NSNull(), "manual_steps_done": done, "resume_step": resume ?? NSNull(),
         "next_action": next, "fallback_action": fallback ?? NSNull(), "error": error ?? NSNull(), "updated_at": 1_700_000_000.0,
     ]
 }
@@ -101,6 +104,7 @@ actor FakeChatInstallClient: ChatInstallClient {
     }
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire] { calls.append("bindings"); return bound }
     func revoke(_ scope: ChatInstallScope) async throws { calls.append("revoke") }
+    func setIcon(_ scope: ChatInstallScope, png: Data) async throws {}
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
         calls.append("updateIdentity")
         if let identityError { throw identityError }

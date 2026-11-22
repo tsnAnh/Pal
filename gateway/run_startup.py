@@ -603,7 +603,9 @@ class GatewayStartupMixin:
         allowlist existed (or whose owner was since removed) must not silently receive a full agent
         response just because it carries a resume marker."""
         try:
-            if self._is_user_authorized_for_source(source):
+            from gateway.audience.model import Audience
+            if (self._member_resume_authorized(source) if source.audience is Audience.MEMBER
+                    else self._is_user_authorized_for_source(source)):
                 return True
             logger.warning(
                 "Skipping auto-resume for %s: session owner is no "
@@ -641,6 +643,8 @@ class GatewayStartupMixin:
             if self._is_session_running(entry.session_key):
                 continue
             source = self._restored_source(entry)
+            if source is None:
+                continue
             adapter = self._delivery_adapter_for(source)
             if adapter is None:
                 logger.debug(
@@ -1616,7 +1620,11 @@ class GatewayStartupMixin:
     )
     _POST_RECONNECT_WATCHERS = (
         "_handoff_watcher", "_async_delegation_watcher", "_loop_wakeup_watcher", "_profile_reconcile_watcher",
-        "_delegation_auto_resume_watcher")
+        "_delegation_auto_resume_watcher", "_desk_watcher")
+
+    async def _desk_watcher(self) -> None:
+        from gateway.desk.ticker import run_ticker
+        await run_ticker(self)
 
     def _start_spawn_background_watchers(self) -> None:
         """Spawn the long-lived supervised background watchers."""

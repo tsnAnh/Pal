@@ -203,4 +203,18 @@ struct SlackSetupPlanTests {
         #expect(flow.current.id == SlackSetupPlan.credentialID)
         #expect(flow.phase == .ready)
     }
+
+    @Test func aRejectedAppKeyReturnsToItsOwnStepAndNamesTheBotsApp() throws {
+        let rejected = try chatState(
+            "error", 9, done: ["set_icon"], error: ["code": "credential_rejected", "fix": "reenter_credential"], resume: "needs_manual_step"
+        )
+        let plan = try plan(rejected, guided: ["set_icon", "app_level_credential"])
+        #expect(plan.currentID == SlackSetupPlan.manualID(.appLevelCredential))
+        let reason = try #require(plan.failure?.reason)
+        #expect(reason.contains("Pal's own Slack app") && reason.contains("Basic Information") && reason.contains("App-Level Tokens"))
+        let config = try chatState("error", 9, error: ["code": "credential_rejected", "fix": "reenter_credential"], resume: "needs_credential")
+        let other = try self.plan(config, guided: ["set_icon", "app_level_credential"])
+        #expect(other.currentID == SlackSetupPlan.credentialID)
+        #expect(other.failure?.reason.contains("App-Level Tokens") == false)
+    }
 }

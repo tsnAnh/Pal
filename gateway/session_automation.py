@@ -578,7 +578,8 @@ def snapshot_automation(authority, adapter, event, identity):
     # in the identity/fingerprint of the same immutable completion.
     envelope = {'source': source, 'route': entry.session_key,
         'timestamp': datetime.fromtimestamp(0, UTC).isoformat(),
-        'event': {'message_id': identity}, 'provenance': provenance,
+        'event': {'message_id': identity, **({'carries_member_content': True} if event.carries_member_content else {})},
+        'provenance': provenance,
         'automation': {'identity': identity, 'owner': owner}}
     envelope['automation'].update(notification)
     if getattr(event, '_heartbeat_session_id', None):
@@ -920,7 +921,8 @@ async def reset_and_rehome_messages(runner, session_key, old_session_id):
     return entry, release
 
 
-async def admit_route_wake(runner, adapter, source, text, producer, metadata=None):
+async def admit_route_wake(runner, adapter, source, text, producer, metadata=None, *, identity_seed=None,
+                           tainted=False):
     """Commit a producer wake (Kanban push wake, /loop tick) for ``source``'s route into the
     authority FIFO, like heartbeats and process completions, instead of a classic turn that
     interrupts or races the admitted one. ``False`` when no authority serves the scope or the
@@ -936,7 +938,7 @@ async def admit_route_wake(runner, adapter, source, text, producer, metadata=Non
     if authority is None or entry is None:
         return False
     import uuid
-    identity = json.dumps([producer, key, uuid.uuid4().hex], separators=(',', ':'))
+    identity = json.dumps([producer, key, identity_seed or uuid.uuid4().hex], separators=(',', ':'))
     if source.platform == Platform.LOCAL or detached_route_of(source):
         # A local route (or a conversation its chat moved past, answered by its app viewers) has no
         # messaging provenance to borrow: its wake rides local_automation_v1 on the live session's own
@@ -946,9 +948,9 @@ async def admit_route_wake(runner, adapter, source, text, producer, metadata=Non
         if live is None or live.route != key:
             return False
         event = MessageEvent(text=text, message_type=MessageType.TEXT, source=live.source, internal=True,
-                             message_id=identity, metadata={'gateway_session_key': key,
-                                                            'gateway_session_id': entry.session_id,
-                                                            **(metadata or {})})
+                             message_id=identity, carries_member_content=tainted,
+                             metadata={'gateway_session_key': key, 'gateway_session_id': entry.session_id,
+                                       **(metadata or {})})
         await authority.admit_automation(adapter, event, identity)
         return True
     from gateway.session_envelope import restore_native
@@ -959,8 +961,8 @@ async def admit_route_wake(runner, adapter, source, text, producer, metadata=Non
     restored = restore_native({'text': text, 'native_text_v1': {
         k: v for k, v in envelope.items() if k != 'media'}}, runner)
     event = MessageEvent(text=text, message_type=MessageType.TEXT, source=restored.source, internal=True,
-                         message_id=identity, metadata={'gateway_session_key': key,
-                                                        'gateway_session_id': entry.session_id,
-                                                        **(metadata or {})})
+                         message_id=identity, carries_member_content=tainted,
+                         metadata={'gateway_session_key': key, 'gateway_session_id': entry.session_id,
+                                   **(metadata or {})})
     await authority.admit_automation(adapter, event, identity)
     return True

@@ -62,7 +62,7 @@ class _FakeBase(ChatProvider):
             raise ValueError("provider secret text")
         self.config_credentials.append((vault_item_id, refresh_vault_item_id))
 
-    def capabilities(self) -> Capabilities:
+    def capabilities(self, workspace: str | None = None) -> Capabilities:
         return self.caps
 
     def begin_install(self, state: SetupState, config_vault_item_id: str | None) -> AppCreated:

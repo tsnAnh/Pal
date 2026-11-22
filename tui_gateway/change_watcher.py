@@ -569,6 +569,23 @@ def _broadcast_chat_install_changes() -> None:
         _broadcast_profile_event("chat.install.changed", {"state": state.model_dump(mode="json")}, state.bot)
 
 
+_desk_feed = None
+
+
+def _broadcast_desk_changes() -> None:
+    """One ``chat.desk.changed`` per desk item that moved since the last pass: the gateway process that holds the
+    desk writes it, so the item rows are the signal. A burst between two passes reaches clients as its latest revision."""
+    global _desk_feed
+    from hermes_constants import profile_name_for_home
+    from tui_gateway.desk_feed import DeskFeed
+    from tui_gateway.desk_wire import item_wire
+    if _desk_feed is None:
+        _desk_feed = DeskFeed()
+    for home, item in _desk_feed.changes(_watched_homes()):
+        _broadcast_profile_event("chat.desk.changed", {"item": item_wire(item).model_dump(mode="json")},
+                                 profile_name_for_home(home) or "default")
+
+
 _skin_watcher_started = False
 
 
@@ -588,6 +605,8 @@ def _ensure_skin_watcher() -> None:
             _broadcast_watched_changes()
             with contextlib.suppress(Exception):
                 _broadcast_chat_install_changes()
+            with contextlib.suppress(Exception):
+                _broadcast_desk_changes()
             # A failed wake must never end this thread: every push (skin, sessions, groups...) runs on it.
             with contextlib.suppress(Exception):  # health: allow BLE001 -- the driver's own idle poll still runs
                 _wake_room_drivers()

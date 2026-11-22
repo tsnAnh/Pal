@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from tui_gateway.contracts.chat_provider import (
     Capabilities,
@@ -15,6 +15,7 @@ from tui_gateway.contracts.chat_provider import (
     Installation,
     NextAction,
     NextActionKind,
+    Person,
     ProviderCapability,
     SetupError,
     SetupErrorCode,
@@ -22,6 +23,7 @@ from tui_gateway.contracts.chat_provider import (
     SetupState,
     SetupStep,
     SpaceJoinOutcome,
+    SpaceLeaveOutcome,
     SpaceRef,
 )
 
@@ -67,7 +69,14 @@ class SpaceJoin:
     next_action: NextAction
 
 
+@dataclass(frozen=True)
+class PeoplePage:
+    people: list[Person]
+    next_cursor: str | None
+
+
 REDIRECT_PATH = "/webapp/chat-install/callback"
+OWNER_DM_HOME_NAME = "Direct messages"
 OWNER_FIELD_ID = "owner_member_id"
 
 
@@ -78,7 +87,7 @@ class ChatProvider(abc.ABC):
     def _missing(self, operation: str) -> ProviderNotImplemented:
         return ProviderNotImplemented(self.provider_id, operation)
 
-    def capabilities(self) -> Capabilities:
+    def capabilities(self, workspace: str | None = None) -> Capabilities:
         raise self._missing("capabilities")
 
     def begin_install(self, state: SetupState, config_vault_item_id: str | None) -> AppCreated:
@@ -111,11 +120,38 @@ class ChatProvider(abc.ABC):
     def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> None:
         return None
 
+    def accept_app_level_credential(self, state: SetupState, vault_item_id: str) -> None:
+        raise self._missing("accept_app_level_credential")
+
+    def manual_step_action(self, state: SetupState, step: ProviderCapability) -> NextAction:
+        return NextAction(kind=NextActionKind.button, action_id=step.value)
+
     def parse_owner_identity(self, raw: str) -> str | None:
         return raw.strip() or None
 
     def update_identity(self, installation: Installation) -> IdentityUpdate:
         raise self._missing("update_identity")
+
+    def store_icon(self, bot: str, png: bytes) -> None:
+        raise self._missing("store_icon")
+
+    def new_install_config(self, installation: Installation, owner: str) -> dict[str, Any]:
+        return {}
+
+    def open_owner_dm(self, installation: Installation, owner: str) -> str:
+        raise self._missing("open_owner_dm")
+
+    def is_direct_space(self, space_id: str) -> bool:
+        return False
+
+    def list_people(self, installation: Installation, query: str, cursor: str) -> PeoplePage:
+        raise self._missing("list_people")
+
+    def people_names(self, installation: Installation, member_ids: list[str]) -> dict[str, str]:
+        raise self._missing("people_names")
+
+    def leave_space(self, installation: Installation, space_id: str) -> SpaceLeaveOutcome:
+        raise self._missing("leave_space")
 
 
 SETUP_CAPABILITIES = (
@@ -123,6 +159,8 @@ SETUP_CAPABILITIES = (
     ProviderCapability.app_level_credential,
     ProviderCapability.gateway_redirect,
 )
+
+CREDENTIAL_STEPS = frozenset({ProviderCapability.app_level_credential})
 
 FIX_FOR_ERROR: dict[SetupErrorCode, FixAction] = {
     SetupErrorCode.credential_rejected: FixAction.reenter_credential,
@@ -201,12 +239,15 @@ def _after_app(caps: Capabilities, done: list[ProviderCapability]) -> SetupStep:
 def _target(state: SetupState, event: SetupEvent, caps: Capabilities) -> tuple[SetupStep, dict] | None:
     step, kind = state.step, event.kind
     if kind is SetupEventKind.revoked:
-        return SetupStep.revoked, {}
+        return SetupStep.revoked, {
+            "app_id": None, "installation_id": None, "manual_steps_done": [], "resume_step": None, "error": None}
     if kind is SetupEventKind.failed and event.error is not None and step not in (SetupStep.ready, SetupStep.revoked):
         return SetupStep.error, {"resume_step": step, "error": SetupError(code=event.error, fix=FIX_FOR_ERROR[event.error])}
     if kind is SetupEventKind.retry and step is SetupStep.error:
         resume = state.resume_step or SetupStep.not_started
-        if state.error and state.error.fix is FixAction.reenter_credential and caps.requires_config_credential:
+        config_credential_failed = state.error and state.error.fix is FixAction.reenter_credential \
+            and state.resume_step is not SetupStep.needs_manual_step
+        if config_credential_failed and caps.requires_config_credential:
             resume = SetupStep.needs_credential
         return resume, {"resume_step": None, "error": None}
     if kind is SetupEventKind.begin and step in (SetupStep.not_started, SetupStep.revoked):

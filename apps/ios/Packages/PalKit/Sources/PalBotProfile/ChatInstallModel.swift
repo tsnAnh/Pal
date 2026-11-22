@@ -43,6 +43,7 @@ public protocol ChatInstallClient: Sendable {
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire]
     func revoke(_ scope: ChatInstallScope) async throws
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult
+    func setIcon(_ scope: ChatInstallScope, png: Data) async throws
     func storeSecret(label: String, value: String) async throws -> String
 }
 
@@ -96,6 +97,10 @@ public enum ChatSpaceStatus: Hashable, Sendable {
     case available, needsInvite, joining, live
 }
 
+public enum ChatSpacesPhase: Hashable, Sendable {
+    case loading, loaded, failed
+}
+
 public struct ChatSpaceRow: Hashable, Sendable, Identifiable {
     public var space: ChatSpaceRefWire
     public var status: ChatSpaceStatus
@@ -113,6 +118,7 @@ public final class ChatInstallModel {
     public private(set) var provider: ChatCapabilitiesWire?
     public private(set) var snapshot: ChatInstallStatusResult?
     public private(set) var spaces: [ChatSpaceRow] = []
+    public private(set) var spacesPhase = ChatSpacesPhase.loading
     public private(set) var isWorking = false
     public private(set) var notice: ChatInstallNotice?
     public private(set) var noticeError: ChatInstallClientError?
@@ -302,6 +308,7 @@ public final class ChatInstallModel {
         await mutate { try await self.client.revoke(scope) }
         identityUpdate = nil
         spaces = []
+        spacesPhase = .loading
         invites = [:]
     }
 
@@ -321,6 +328,7 @@ public final class ChatInstallModel {
 
     public func refreshSpaces() async {
         guard let scope, state?.step == .ready else { return }
+        if spaces.isEmpty { spacesPhase = .loading }
         do {
             async let listed = client.spaces(scope)
             async let bound = client.bindings(scope)
@@ -337,8 +345,10 @@ public final class ChatInstallModel {
                 }
                 return ChatSpaceRow(space: space, status: status, invite: status == .live ? nil : invites[space.id])
             }
+            spacesPhase = .loaded
         } catch is CancellationError {
         } catch {
+            spacesPhase = spaces.isEmpty ? .failed : .loaded
             setNotice(error, as: .offline)
         }
     }

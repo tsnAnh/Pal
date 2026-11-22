@@ -30,7 +30,7 @@ extension RootView {
                 ModelHost {
                     ConnectedServicesModel(botName: name, services: bots.services)
                 } content: {
-                    BotProfileView(model: profile, suggestions: $0, router: router)
+                    BotProfileView(model: profile, services: $0, router: router)
                 }
             }
         case .botThread(let thread):

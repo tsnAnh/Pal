@@ -39,7 +39,23 @@ def test_apply_writes_to_the_named_bot_and_clear_removes_it(bots):
 
 def test_reload_uses_the_slack_reload_with_the_bot_name(monkeypatch):
     seen = []
-    monkeypatch.setattr("tui_gateway.methods_messaging_slack._slack_reload", seen.append)
+
+    def slack_reload(profile):
+        seen.append(profile)
+        return {"hot_served": True, "restart_started": False}
+
+    monkeypatch.setattr("tui_gateway.methods_messaging_slack._slack_reload", slack_reload)
     runtime.MessagingAdapterControl().reload("scout")
     runtime.MessagingAdapterControl().reload("default")
     assert seen == ["scout", None]
+
+
+@pytest.mark.parametrize("answer, expected", [
+    ({"hot_served": True, "restart_started": False}, runtime.ReloadOutcome.live),
+    ({"hot_served": False, "restart_started": True}, runtime.ReloadOutcome.restarting),
+    ({"hot_served": False, "restart_started": False, "restart_busy": True}, runtime.ReloadOutcome.not_started),
+    ({"hot_served": False, "restart_started": False, "restart_error": "spawn failed"}, runtime.ReloadOutcome.not_started),
+])
+def test_reload_reports_whether_the_adapter_came_up(monkeypatch, answer, expected):
+    monkeypatch.setattr("tui_gateway.methods_messaging_slack._slack_reload", lambda profile: answer)
+    assert runtime.MessagingAdapterControl().reload("scout") is expected

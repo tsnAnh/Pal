@@ -19,6 +19,7 @@ import weakref as _weakref
 from agent.async_utils import consume_detached_task_result
 from contextvars import Context
 from datetime import datetime, timedelta, timezone, UTC
+from gateway.audience.model import Admission, AdmissionKind
 from gateway.config import (
     ON_ALL_ADAPTERS_DOWN_POLICIES,
     SHARED_LISTENER_MIRROR_PLATFORMS,
@@ -1383,7 +1384,7 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
 
     def _wire_adapter_handlers(
         self, adapter: BasePlatformAdapter, *, message_handler=None, fatal_error_handler=None,
-        busy_session_handler=None, authorization_check=None, platform_event_handler=None,
+        busy_session_handler=None, authorization_check=None, admission_check=None, platform_event_handler=None,
         busy_text_mode: Optional[str] = None, busy_text_timing: Optional[tuple[float, float]] = None,
         human_delay: Optional[tuple[int, int]] | object = _UNSET,
     ) -> None:
@@ -1403,6 +1404,7 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
         adapter.set_authorization_check(
             authorization_check or self._make_adapter_auth_check(adapter.platform)
         )
+        adapter.set_admission_check(admission_check or self._make_adapter_admission_check(adapter.platform))
         adapter.set_platform_event_handler(platform_event_handler or self._primary_platform_event_handler())
         adapter._busy_text_mode = (self._busy_text_mode if busy_text_mode is None else busy_text_mode)
         timing = busy_text_timing or getattr(self, "_busy_text_timing", None)
@@ -1433,6 +1435,7 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
             fatal_error_handler=self._make_profile_fatal_error_handler(profile_name, platform),
             busy_session_handler=self._make_profile_busy_session_handler(profile_name),
             authorization_check=self._make_adapter_auth_check(platform, profile_name=profile_name),
+            admission_check=self._make_adapter_admission_check(platform, profile_name=profile_name),
             platform_event_handler=self._make_profile_platform_event_handler(profile_name),
             busy_text_mode=(
                 text_modes.get(profile_name, self._busy_text_mode)
@@ -1807,8 +1810,18 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
     def _make_adapter_auth_check(
         self, platform: Platform, profile_name: Optional[str] = None
     ) -> Callable[[str, Optional[str], Optional[str]], bool]:
-        """Platform-bound auth callback for adapters (prompt-injection mitigation for fetched
-        context); delegates to :meth:`_is_user_authorized`. ``profile_name`` binds a secondary to
+        return self._adapter_callback(
+            platform, profile_name, self._is_user_authorized, self._is_user_authorized_for_source, False)
+
+    def _make_adapter_admission_check(self, platform: Platform, profile_name: Optional[str] = None):
+        return self._adapter_callback(
+            platform, profile_name, self._admission_verdict, self._admission_for_source,
+            Admission(AdmissionKind.REFUSED))
+
+    def _adapter_callback(self, platform: Platform, profile_name: Optional[str], bound, for_source, denied):
+        """Platform-bound callback for adapters (prompt-injection mitigation for fetched
+        context); delegates to ``bound`` (:meth:`_is_user_authorized` / :meth:`_admission_verdict`) under the
+        profile binding below, or to ``for_source`` when it binds itself. ``profile_name`` binds a secondary to
         its scope; for the shared primary (None) the routed profile is stamped so its pairing store
         is consulted while allowlist reads stay under the transport home.
 
@@ -1827,10 +1840,10 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
 
         def check(
             user_id: str, chat_type: Optional[str] = None, chat_id: Optional[str] = None, *,
-            is_bot: bool = False, thread_id: Optional[str] = None,
-        ) -> bool:
+            is_bot: bool = False, thread_id: Optional[str] = None, **verdict_kwargs,
+        ):
             if not user_id:
-                return False
+                return denied
             source = SessionSource(
                 platform=platform, chat_id=chat_id or "", chat_type=chat_type or "group",
                 user_id=user_id, thread_id=thread_id, is_bot=bool(is_bot), profile=profile_name,
@@ -1850,10 +1863,10 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
                 from gateway.run import _profile_runtime_scope
                 with self._scope_or_null(
                         functools.partial(_profile_runtime_scope, hydrate_secrets=False), profile_home):
-                    return self._is_user_authorized(source)
+                    return bound(source, **verdict_kwargs)
             # Canonicalize FIRST (callback sources never went through ``build_source``): the routed
             # profile's pairing store is consulted, allowlists read under the transport home.
             if self._canonicalize(source, primary_home=transport_home) is None:
-                return False  # fail-closed, like the ``_handle_message`` ingress gate
-            return self._is_user_authorized_for_source(source)
+                return denied  # fail-closed, like the ``_handle_message`` ingress gate
+            return for_source(source, **verdict_kwargs)
         return check

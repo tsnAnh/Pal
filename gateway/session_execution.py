@@ -44,6 +44,8 @@ class GatewaySessionAgentMixin:
         filesystem-heavy context-file discovery (SOUL.md, AGENTS.md, .cursorrules)."""
         from gateway.session_policy import policy_for_source
         policy = policy_for_source(self._runner, self._ctx.source)
+        if self._ctx.posture is not None:
+            return self._ctx.posture.skip_context_files
         if policy:
             return policy.ignore_rules
         platforms_cfg = (self._ctx.user_config.get("gateway") or {}).get("platforms") or {}
@@ -186,7 +188,8 @@ class GatewaySessionAgentMixin:
             skip_context_files=skip_context_files,
             # Keep the persona even with minimal context: soul identity is one small file.
             load_soul_identity=not bool(policy and policy.ignore_rules),
-            skip_memory=bool(policy and policy.ignore_rules),
+            skip_memory=bool(policy and policy.ignore_rules) or (ctx.posture is not None and ctx.posture.skip_memory),
+            skip_background_review=ctx.posture is not None and ctx.posture.skip_background_review,
             pass_session_id=bool(policy and policy.pass_session_id),
             # A local session's frozen budget (`--run-budget` / its profile's agent.run_budget_seconds);
             # None leaves the agent reading the owner's config, as before.

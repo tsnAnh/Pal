@@ -17,6 +17,7 @@ import socket
 import asyncio
 import re
 from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any, Optional
 from urllib.parse import quote, unquote, urljoin, urlparse, urlsplit, urlunsplit
 
@@ -123,6 +124,16 @@ _FAKE_IP_UNDECLARABLE_NETWORKS = tuple(ipaddress.ip_network(n) for n in (
 # Global toggle cache (process lifetime; see _global_allow_private_urls).
 _allow_private_resolved, _cached_allow_private = False, False
 _fake_ip_resolved, _cached_fake_ip_ranges = False, ()
+_private_urls_forbidden: ContextVar[bool] = ContextVar("hermes_private_urls_forbidden", default=False)
+
+
+@contextmanager
+def forbid_private_urls():
+    token = _private_urls_forbidden.set(True)
+    try:
+        yield
+    finally:
+        _private_urls_forbidden.reset(token)
 
 
 def _global_allow_private_urls() -> bool:
@@ -131,6 +142,8 @@ def _global_allow_private_urls() -> bool:
     (``get_hermes_home_override()`` set) bypass the process-global cache — a multiplex gateway serves
     several profiles in one process; the first profile's opt-out must not disable blocking for later ones."""
     global _allow_private_resolved, _cached_allow_private
+    if _private_urls_forbidden.get():
+        return False
     if get_hermes_home_override() is not None:
         return _resolve_allow_private_urls()
     if not _allow_private_resolved:

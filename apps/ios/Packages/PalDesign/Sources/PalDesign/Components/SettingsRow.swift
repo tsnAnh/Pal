@@ -34,6 +34,7 @@ public struct SettingsRow: View {
     public let title: String
     public let subtitle: String?
     public let value: String?
+    public let valueView: AnyView?
     public let trailing: Trailing
     public let role: Role
     public let icon: RowIcon?
@@ -47,6 +48,7 @@ public struct SettingsRow: View {
         title: String,
         subtitle: String? = nil,
         value: String? = nil,
+        valueView: AnyView? = nil,
         trailing: Trailing = .none,
         role: Role = .standard,
         icon: RowIcon? = nil,
@@ -57,6 +59,7 @@ public struct SettingsRow: View {
         self.title = title
         self.subtitle = subtitle
         self.value = value
+        self.valueView = valueView
         self.trailing = trailing
         self.role = role
         self.icon = icon
@@ -69,11 +72,15 @@ public struct SettingsRow: View {
         _ title: String,
         subtitle: String? = nil,
         value: String? = nil,
+        valueView: AnyView? = nil,
         icon: RowIcon? = nil,
         accessibilityIdentifier: String,
         action: @escaping () -> Void
     ) -> SettingsRow {
-        SettingsRow(title: title, subtitle: subtitle, value: value, trailing: .chevron, icon: icon, accessibilityIdentifier: accessibilityIdentifier, action: action)
+        SettingsRow(
+            title: title, subtitle: subtitle, value: value, valueView: valueView, trailing: .chevron, icon: icon,
+            accessibilityIdentifier: accessibilityIdentifier, action: action
+        )
     }
 
     public static func value(
@@ -160,7 +167,9 @@ public struct SettingsRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityHidden(isToggle)
-            if let value {
+            if let valueView {
+                valueView.hermesText(.rowValue).lineLimit(1)
+            } else if let value {
                 Text(value)
                     .hermesText(.rowValue)
                     .foregroundStyle(Color(theme.palette.textSecondary))

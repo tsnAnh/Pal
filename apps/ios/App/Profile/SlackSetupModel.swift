@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PalBotProfile
 import PalConnect
+import PalDesign
 import PalProtocol
 
 struct SlackSetupError: Error, Sendable {
@@ -44,15 +45,21 @@ final class SlackSetupModel {
     }
 
     let chat: ChatInstallModel
+    let members: ChatMembersModel
     let flow: StepFlowModel
     let displayName: String
+    private let iconPusher: ChatIconPusher
+    private let spec: BotAvatarSpec?
     private(set) var finished = false
     private(set) var loaded = false
     @ObservationIgnored private var gatewayFailureShown = false
 
-    init(botName: String, displayName: String, client: any ChatInstallClient) {
+    init(botName: String, displayName: String, spec: BotAvatarSpec?, client: any ChatInstallClient, members: any ChatMemberClient) {
         self.displayName = displayName
+        self.spec = spec
+        iconPusher = ChatIconPusher(client: client)
         chat = ChatInstallModel(botName: botName, preferredProvider: "slack", client: client)
+        self.members = ChatMembersModel(client: members)
         let plan = SlackSetupPlan(displayName: displayName, provider: nil, state: nil)
         guard let engine = StepFlowEngine(flowID: SlackSetupPlan.flowID, steps: plan.steps) else {
             preconditionFailure("The Slack steps are always a valid flow")
@@ -95,6 +102,15 @@ final class SlackSetupModel {
     func receive(_ payload: ChatInstallChangedPayload) async {
         await chat.receive(payload)
         syncAndResume()
+    }
+
+    func loadMembers() async {
+        guard let provider = chat.provider, let state = chat.state else { return }
+        await members.load(scope: ChatInstallScope(provider: provider.providerId, workspace: state.workspace))
+    }
+
+    func leave(_ spaceId: String) async {
+        if await members.leave(spaceId) { await chat.refreshSpaces() }
     }
 
     func completeFlow() {
@@ -149,6 +165,7 @@ final class SlackSetupModel {
         func value(_ id: String) -> String { (values[id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
         switch step.id {
         case SlackSetupPlan.introID:
+            if let spec { await iconPusher.push(spec, onlyWhenInstalled: false) }
             await chat.begin()
         case SlackSetupPlan.credentialID:
             let refresh = value(SlackSetupPlan.refreshField)

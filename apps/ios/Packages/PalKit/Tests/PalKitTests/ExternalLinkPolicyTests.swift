@@ -43,13 +43,4 @@ struct ExternalLinkPolicyTests {
             #expect(!text.contains("SFSafariViewController"), "\(path)")
         }
     }
-
-    @Test func suggestionViewsGoThroughTheSharedGate() throws {
-        let sources = try swiftSources()
-        for path in ["Mac/MacInspector.swift", "Profile/BotProfileView.swift"] {
-            let text = try #require(sources.first { $0.path == path }?.text)
-            #expect(text.contains("ProfileSuggestion"), "\(path) must build suggestions through ProfileSuggestion")
-            #expect(!text.contains("\"Add to Slack\"") || text.contains("visibleSuggestions"), "\(path)")
-        }
-    }
 }

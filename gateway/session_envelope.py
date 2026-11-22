@@ -6,12 +6,13 @@ Relay snapshots bind the authenticated connector and exact source; replay rechec
 """
 import asyncio
 from copy import copy, deepcopy
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import datetime
 import json
 import logging
 import os
 
+from gateway.audience.model import Audience, SenderFacts
 from gateway.platforms.event import MessageEvent, MessageType
 from gateway.session import SessionSource
 from gateway.session_ingress_media import capture_native_media, restore_native_media
@@ -162,7 +163,9 @@ def _validate_native(runner, event, provenance=None, fresh_roles=False):
         # re-check denied what the inbound filter had just accepted (#139199).
         delegated = runner._adapter_flag(
             source.platform, "authorization_is_upstream", runner._adapter_profile_for_source(source))
-    if not runner._is_user_authorized_for_source(source, allow_adapter_delegation=delegated):
+    authorized = (runner._member_policy_admits(source) if source.audience is Audience.MEMBER
+                  else runner._is_user_authorized_for_source(source, allow_adapter_delegation=delegated))
+    if not authorized:
         _refuse(event, 'permission_denied', 'user_not_authorized')
     for name in ('channel_prompt', 'channel_context', 'reply_anchor_override'):
         if getattr(event, name) is not None and not isinstance(getattr(event, name), str):
@@ -248,6 +251,8 @@ def _snapshot_native(runner, event, provenance, fresh_roles=False, encoded_sourc
         envelope['webhook_route'] = route_digest(adapter, event.source.chat_id)
     if event.source.role_authorized:
         envelope['reauthorize'] = 'roles'
+    if event.source.audience is Audience.MEMBER:
+        envelope['member_facts'] = asdict(event.source._sender_facts)
     if provenance is not None:
         envelope['provenance'] = provenance
     # Omit new defaults so an identical retry of an older text admission retains
@@ -256,6 +261,11 @@ def _snapshot_native(runner, event, provenance, fresh_roles=False, encoded_sourc
                               if getattr(event, name) is not None})
     if event.inherit_channel_pin is True:  # synthetic goal/resume turn reuses the session's pins (#126109)
         envelope['event']['inherit_channel_pin'] = True
+    if event.carries_member_content is True:
+        envelope['event']['carries_member_content'] = True
+    for named in ('named_user_ids', 'named_conversation_ids'):
+        if getattr(event, named):
+            envelope['event'][named] = list(getattr(event, named))
     if metadata := _native_metadata(event):
         envelope['event']['metadata'] = metadata
     # COMMAND that passed admission is path text (``/Users/x is broken``): replay it as text.
@@ -294,6 +304,8 @@ def restore_native_source(payload, runner=None):
     source.is_bot = envelope['source']['is_bot']
     # Private descriptor requests a fresh check, never supplies the verdict.
     source.role_authorized = envelope.get('reauthorize') == 'roles'
+    if 'member_facts' in envelope:
+        source._sender_facts = SenderFacts(**envelope['member_facts'])
     if 'provenance' in envelope:
         from gateway.session_ingress_context import callback_runner, restore_provenance
         runner = runner or callback_runner()

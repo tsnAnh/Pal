@@ -61,6 +61,7 @@ private struct InspectorPresentations: ViewModifier {
     func body(content: Content) -> some View {
         content
             .task { await profile.load() }
+            .task { await profile.loadSlack() }
             .task(id: profile.row?.conversationID) { await autoApprove.load(sessionID: profile.row?.conversationID) }
             .toast(Bindable(profile).toast)
             .macSheet(item: $creation, size: .form) { created in
@@ -88,7 +89,6 @@ private struct InspectorCloseButton: View {
     let suggestions: ConnectedServicesModel
     @Binding var creation: NewRoutineModel?
 
-    @AppStorage("mac.inspector.suggestionsHidden") private var suggestionsHidden = false
     @Environment(MacShell.self) private var shell
 
     var body: some View {
@@ -100,10 +100,6 @@ private struct InspectorCloseButton: View {
                         .accessibilityIdentifier("profileEditButton")
                     Button { creation = routines.creationModel() } label: { Label("New Routine…", palIcon: "plus") }
                         .accessibilityIdentifier("routinesNewButton")
-                    if suggestionsHidden, !suggestions.visibleSuggestions.isEmpty {
-                        Button { suggestionsHidden = false } label: { Label("Show Suggestions", palIcon: "eye") }
-                            .accessibilityIdentifier("inspectorShowSuggestions")
-                    }
                     Divider()
                     if !profile.isPrimary {
                         Button { profile.confirmsReplacePrimary = true } label: { Label("Replace Primary Bot…", palIcon: "star") }

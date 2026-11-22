@@ -62,7 +62,10 @@ def test_manifest_create_has_identity_scopes_socket_mode_and_redirect(tmp_path):
     kit.provider.records.update_workspace("w1", capabilities={"gateway_redirect": "automatic"})
     created = kit.begin()
     manifest = kit.slack.apps[created.app_id]
-    assert created.authorize_link == f"https://slack.invalid/oauth?app={created.app_id}"
+    from urllib.parse import parse_qs, urlsplit
+    link = urlsplit(created.authorize_link)
+    assert link._replace(query="").geturl() == "https://slack.invalid/oauth"
+    assert parse_qs(link.query) == {"app": [created.app_id], "redirect_uri": [REDIRECT]}
     assert manifest["display_information"]["name"] == "Pal Helper"
     assert manifest["features"]["bot_user"]["display_name"] == "Pal Helper"
     assert manifest["oauth_config"]["redirect_urls"] == [REDIRECT]
@@ -335,10 +338,11 @@ def _config_items(kit: Kit, access: str = ACCESS, refresh: str | None = REFRESH)
     return access_id, refresh_id
 
 
-def test_manifest_subscribes_to_membership_events_and_reads_channels(tmp_path):
+def test_manifest_subscribes_to_membership_and_uninstall_events_and_reads_channels(tmp_path):
     kit = Kit(tmp_path)
     manifest = kit.slack.apps[kit.begin().app_id]
-    assert {"member_joined_channel", "member_left_channel"} <= set(manifest["settings"]["event_subscriptions"]["bot_events"])
+    events = {"member_joined_channel", "member_left_channel", "app_uninstalled", "tokens_revoked"}
+    assert events <= set(manifest["settings"]["event_subscriptions"]["bot_events"])
     assert {"channels:read", "groups:read"} <= set(manifest["oauth_config"]["scopes"]["bot"])
 
 
@@ -429,6 +433,15 @@ def test_update_identity_resends_name_and_picture_when_the_icon_is_automatic(tmp
     assert kit.slack.calls[-1] == "apps.icon.set"
 
 
+def test_an_install_under_the_empty_workspace_key_uses_the_capabilities_its_probe_recorded(tmp_path):
+    kit = Kit(tmp_path)
+    kit.provider.records.update_workspace("", capabilities={"set_icon": "automatic"})
+    kit.provider.begin_install(ci.initial_state("pal", "slack", "", FIXED_NOW), kit.config_item)
+    assert "apps.icon.set" in kit.slack.calls
+    assert _modes(kit.provider.capabilities(""))[CAP.set_icon] is wire.CapabilityMode.automatic
+    assert _modes(kit.provider.capabilities())[CAP.set_icon] is wire.CapabilityMode.guided
+
+
 def test_update_identity_returns_the_guided_avatar_step_when_the_icon_is_manual(tmp_path):
     kit = Kit(tmp_path)
     installation = kit.install()[1]
@@ -451,3 +464,22 @@ def test_profile_identity_reads_the_profile_name_and_avatar(tmp_path, monkeypatc
     (home / "assets").mkdir()
     (home / "assets" / "avatar.png").write_bytes(b"x")
     assert profile_identity("scout") == ci.BotIdentitySource("scout", "Scout Prime", str(home / "assets" / "avatar.png"))
+
+
+def test_a_pal_bot_is_a_plain_member_app_not_an_assistant_panel():
+    from gateway.chat_slack.provider import bot_manifest
+    from tui_gateway.chat_install import IdentityProjection
+    projection = IdentityProjection(app_name="Mochi", display_name="Mochi", username="mochi",
+                                    avatar_ref=None, avatar_bytes=None)
+    manifest = bot_manifest(projection, None, "Mochi on Slack")
+    assert "assistant_view" not in manifest["features"] and "agent_view" not in manifest["features"]
+    assert "Hermes" not in json.dumps(manifest["display_information"])
+    slashes = manifest["features"]["slash_commands"]
+    assert "/pal" in {entry["command"] for entry in slashes} and "/hermes" not in {entry["command"] for entry in slashes}
+    assert not [entry for entry in slashes if "Hermes" in entry["description"] + entry.get("usage_hint", "")]
+
+
+def test_the_pal_slash_command_routes_like_the_hermes_one():
+    from plugins.platforms.slack.adapter_slash_payload import slash_command_text
+    assert slash_command_text({"command": "/pal", "text": "new"}) == slash_command_text({"command": "/hermes", "text": "new"})
+    assert slash_command_text({"command": "/pal", "text": "what time is it"}) == "what time is it"

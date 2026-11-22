@@ -601,6 +601,42 @@
       }
     },
     {
+      "name": "chat.audience.get",
+      "summary": "Who may talk to the bot besides its owner, with the revision to send back on a change. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatAudienceResult"
+        }
+      }
+    },
+    {
+      "name": "chat.audience.set",
+      "summary": "Change who may talk to the bot. Takes effect on the next message. stale_revision when another device changed it first. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatAudienceSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatAudienceResult"
+        }
+      }
+    },
+    {
       "name": "chat.binding.list",
       "summary": "Channels this bot is bound to and whether it is live in each.",
       "params": [
@@ -619,8 +655,44 @@
       }
     },
     {
+      "name": "chat.desk.decide",
+      "summary": "Approve or decline one waiting item, the same decision the owner's chat card makes. stale_revision when it moved since the client last saw it; not_found when it is gone.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatDeskDecideParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatDeskDecideResult"
+        }
+      }
+    },
+    {
+      "name": "chat.desk.list",
+      "summary": "Questions, hand-offs and sends the bot is holding for its owner, with the exact texts. Defaults to everything still waiting.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatDeskListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatDeskListResult"
+        }
+      }
+    },
+    {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.",
       "params": [
         {
           "name": "params",
@@ -656,7 +728,7 @@
     },
     {
       "name": "chat.install.revoke",
-      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id.",
       "params": [
         {
           "name": "params",
@@ -669,6 +741,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.set_icon",
+      "summary": "Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallSetIconParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallSetIconResult"
         }
       }
     },
@@ -709,6 +799,24 @@
       }
     },
     {
+      "name": "chat.people.list",
+      "summary": "People in the bot's workspace who can be allowed to talk to it, with an optional name filter and a cursor. Bots, removed accounts and people from other organizations are left out.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatPeopleListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatPeopleListResult"
+        }
+      }
+    },
+    {
       "name": "chat.provider.list",
       "summary": "Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.",
       "params": [
@@ -727,6 +835,42 @@
       }
     },
     {
+      "name": "chat.report.get",
+      "summary": "Where the bot sends its reports and owner questions: the owner's direct messages or a channel it has joined.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatReportResult"
+        }
+      }
+    },
+    {
+      "name": "chat.report.set",
+      "summary": "Choose where the bot sends its reports: the owner's direct messages or a channel it has joined. not_joined when the bot is not in that channel.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatReportSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatReportResult"
+        }
+      }
+    },
+    {
       "name": "chat.space.join",
       "summary": "Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live.",
       "params": [
@@ -741,6 +885,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ChatSpaceJoinResult"
+        }
+      }
+    },
+    {
+      "name": "chat.space.leave",
+      "summary": "Remove the bot from a channel, forget its binding there and retire the questions still waiting on answers in it. Safe to repeat: not_member when the bot was already out.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatSpaceLeaveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatSpaceLeaveResult"
         }
       }
     },
@@ -8121,6 +8283,34 @@
         ],
         "title": "AttachedImageResult",
         "type": "object"
+      },
+      "AudienceMember": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "AudienceMember",
+        "type": "object"
+      },
+      "AudiencePolicyKind": {
+        "enum": [
+          "owner_only",
+          "workspace",
+          "listed"
+        ],
+        "title": "AudiencePolicyKind",
+        "type": "string"
       },
       "AuthBeginOutcome": {
         "enum": [
@@ -17081,6 +17271,127 @@
         "title": "ChangeSignalPayload",
         "type": "object"
       },
+      "ChatAudienceResult": {
+        "additionalProperties": false,
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/AudiencePolicyKind"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/AudienceMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "include_restricted": {
+            "title": "Include Restricted",
+            "type": "boolean"
+          },
+          "member_turns_per_hour": {
+            "title": "Member Turns Per Hour",
+            "type": "integer"
+          },
+          "revision": {
+            "minimum": 0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "policy",
+          "members",
+          "include_restricted",
+          "member_turns_per_hour",
+          "revision"
+        ],
+        "title": "ChatAudienceResult",
+        "type": "object"
+      },
+      "ChatAudienceSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/AudiencePolicyKind"
+          },
+          "members": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 500,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Members"
+          },
+          "include_restricted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Include Restricted"
+          },
+          "member_turns_per_hour": {
+            "anyOf": [
+              {
+                "maximum": 1000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Member Turns Per Hour"
+          },
+          "expected_revision": {
+            "minimum": 0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider_id",
+          "policy",
+          "expected_revision"
+        ],
+        "title": "ChatAudienceSetParams",
+        "type": "object"
+      },
       "ChatBindingListResult": {
         "additionalProperties": false,
         "properties": {
@@ -17096,6 +17407,135 @@
           "bindings"
         ],
         "title": "ChatBindingListResult",
+        "type": "object"
+      },
+      "ChatDeskChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/DeskItemWire"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "ChatDeskChangedPayload",
+        "type": "object"
+      },
+      "ChatDeskDecideParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "item_id": {
+            "minLength": 1,
+            "title": "Item Id",
+            "type": "string"
+          },
+          "choice": {
+            "$ref": "#/components/schemas/DeskChoice"
+          },
+          "expected_revision": {
+            "minimum": 0,
+            "title": "Expected Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id",
+          "choice",
+          "expected_revision"
+        ],
+        "title": "ChatDeskDecideParams",
+        "type": "object"
+      },
+      "ChatDeskDecideResult": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/DeskItemWire"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "ChatDeskDecideResult",
+        "type": "object"
+      },
+      "ChatDeskListParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "states": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DeskItemState"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "States"
+          },
+          "kinds": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/DeskItemKind"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Kinds"
+          }
+        },
+        "title": "ChatDeskListParams",
+        "type": "object"
+      },
+      "ChatDeskListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DeskItemWire"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ChatDeskListResult",
         "type": "object"
       },
       "ChatIdentityUpdateResult": {
@@ -17253,6 +17693,58 @@
         "title": "ChatInstallParams",
         "type": "object"
       },
+      "ChatInstallSetIconParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "data": {
+            "minLength": 1,
+            "title": "Data",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "data"
+        ],
+        "title": "ChatInstallSetIconParams",
+        "type": "object"
+      },
+      "ChatInstallSetIconResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "ChatInstallSetIconResult",
+        "type": "object"
+      },
       "ChatInstallStatusResult": {
         "additionalProperties": false,
         "properties": {
@@ -17277,6 +17769,78 @@
         "title": "ChatInstallStatusResult",
         "type": "object"
       },
+      "ChatPeopleListParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "query": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Query",
+            "type": "string"
+          },
+          "cursor": {
+            "default": "",
+            "title": "Cursor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id"
+        ],
+        "title": "ChatPeopleListParams",
+        "type": "object"
+      },
+      "ChatPeopleListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/Person"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "people"
+        ],
+        "title": "ChatPeopleListResult",
+        "type": "object"
+      },
       "ChatProviderListResult": {
         "additionalProperties": false,
         "properties": {
@@ -17292,6 +17856,55 @@
           "providers"
         ],
         "title": "ChatProviderListResult",
+        "type": "object"
+      },
+      "ChatReportResult": {
+        "additionalProperties": false,
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/ReportDestination"
+          }
+        },
+        "required": [
+          "destination"
+        ],
+        "title": "ChatReportResult",
+        "type": "object"
+      },
+      "ChatReportSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/ReportDestination"
+          }
+        },
+        "required": [
+          "provider_id",
+          "destination"
+        ],
+        "title": "ChatReportSetParams",
         "type": "object"
       },
       "ChatSpaceJoinParams": {
@@ -17352,6 +17965,57 @@
           "next_action"
         ],
         "title": "ChatSpaceJoinResult",
+        "type": "object"
+      },
+      "ChatSpaceLeaveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "space_id": {
+            "minLength": 1,
+            "title": "Space Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "space_id"
+        ],
+        "title": "ChatSpaceLeaveParams",
+        "type": "object"
+      },
+      "ChatSpaceLeaveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/SpaceLeaveOutcome"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ChatSpaceLeaveResult",
         "type": "object"
       },
       "ChatSpacesListResult": {
@@ -23478,6 +24142,204 @@
           "max_concurrent_children"
         ],
         "title": "DelegationStatusResult",
+        "type": "object"
+      },
+      "DeskChoice": {
+        "enum": [
+          "approve",
+          "decline"
+        ],
+        "title": "DeskChoice",
+        "type": "string"
+      },
+      "DeskItemKind": {
+        "enum": [
+          "ask",
+          "handoff",
+          "send"
+        ],
+        "title": "DeskItemKind",
+        "type": "string"
+      },
+      "DeskItemState": {
+        "enum": [
+          "posting",
+          "open",
+          "approved",
+          "executing",
+          "done",
+          "declined",
+          "expired",
+          "unknown",
+          "cancelled",
+          "failed"
+        ],
+        "title": "DeskItemState",
+        "type": "string"
+      },
+      "DeskItemWire": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeskItemKind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/DeskItemState"
+          },
+          "revision": {
+            "minimum": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "number"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "number"
+          },
+          "requester": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeskPerson"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "where": {
+            "$ref": "#/components/schemas/DeskPlace"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Why"
+          },
+          "recipient": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeskRecipient"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "state",
+          "revision",
+          "created_at",
+          "expires_at",
+          "where",
+          "text"
+        ],
+        "title": "DeskItemWire",
+        "type": "object"
+      },
+      "DeskPerson": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DeskPerson",
+        "type": "object"
+      },
+      "DeskPlace": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "default": "",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "thread_ts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Thread Ts"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "title": "DeskPlace",
+        "type": "object"
+      },
+      "DeskRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Id"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Conversation Id"
+          },
+          "direct": {
+            "default": false,
+            "title": "Direct",
+            "type": "boolean"
+          }
+        },
+        "title": "DeskRecipient",
         "type": "object"
       },
       "DeviceConnectorId": {
@@ -40741,6 +41603,35 @@
         "title": "PersistedTurn",
         "type": "object"
       },
+      "Person": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "display_name": {
+            "default": "",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "is_restricted": {
+            "default": false,
+            "title": "Is Restricted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Person",
+        "type": "object"
+      },
       "PetCancelParams": {
         "additionalProperties": false,
         "properties": {
@@ -50006,6 +50897,44 @@
         },
         "title": "RepoDiscoveryPolicyParams",
         "type": "object"
+      },
+      "ReportDestination": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ReportDestinationKind"
+          },
+          "space_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Space Id"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ReportDestination",
+        "type": "object"
+      },
+      "ReportDestinationKind": {
+        "enum": [
+          "owner_dm",
+          "space"
+        ],
+        "title": "ReportDestinationKind",
+        "type": "string"
       },
       "RequestAnswerParams": {
         "additionalProperties": false,
@@ -59755,6 +60684,14 @@
         "title": "SpaceKind",
         "type": "string"
       },
+      "SpaceLeaveOutcome": {
+        "enum": [
+          "left",
+          "not_member"
+        ],
+        "title": "SpaceLeaveOutcome",
+        "type": "string"
+      },
       "SpaceRef": {
         "additionalProperties": false,
         "properties": {
@@ -67607,6 +68544,42 @@
       }
     },
     {
+      "name": "chat.audience.get",
+      "summary": "Who may talk to the bot besides its owner, with the revision to send back on a change. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatAudienceResult"
+        }
+      }
+    },
+    {
+      "name": "chat.audience.set",
+      "summary": "Change who may talk to the bot. Takes effect on the next message. stale_revision when another device changed it first. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatAudienceSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatAudienceResult"
+        }
+      }
+    },
+    {
       "name": "chat.binding.list",
       "summary": "Channels this bot is bound to and whether it is live in each.",
       "params": [
@@ -67625,8 +68598,44 @@
       }
     },
     {
+      "name": "chat.desk.decide",
+      "summary": "Approve or decline one waiting item, the same decision the owner's chat card makes. stale_revision when it moved since the client last saw it; not_found when it is gone.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatDeskDecideParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatDeskDecideResult"
+        }
+      }
+    },
+    {
+      "name": "chat.desk.list",
+      "summary": "Questions, hand-offs and sends the bot is holding for its owner, with the exact texts. Defaults to everything still waiting.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatDeskListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatDeskListResult"
+        }
+      }
+    },
+    {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.",
       "params": [
         {
           "name": "params",
@@ -67662,7 +68671,7 @@
     },
     {
       "name": "chat.install.revoke",
-      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id.",
       "params": [
         {
           "name": "params",
@@ -67675,6 +68684,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.set_icon",
+      "summary": "Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallSetIconParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallSetIconResult"
         }
       }
     },
@@ -67715,6 +68742,24 @@
       }
     },
     {
+      "name": "chat.people.list",
+      "summary": "People in the bot's workspace who can be allowed to talk to it, with an optional name filter and a cursor. Bots, removed accounts and people from other organizations are left out.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatPeopleListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatPeopleListResult"
+        }
+      }
+    },
+    {
       "name": "chat.provider.list",
       "summary": "Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.",
       "params": [
@@ -67733,6 +68778,42 @@
       }
     },
     {
+      "name": "chat.report.get",
+      "summary": "Where the bot sends its reports and owner questions: the owner's direct messages or a channel it has joined.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatReportResult"
+        }
+      }
+    },
+    {
+      "name": "chat.report.set",
+      "summary": "Choose where the bot sends its reports: the owner's direct messages or a channel it has joined. not_joined when the bot is not in that channel.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatReportSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatReportResult"
+        }
+      }
+    },
+    {
       "name": "chat.space.join",
       "summary": "Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live.",
       "params": [
@@ -67747,6 +68828,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ChatSpaceJoinResult"
+        }
+      }
+    },
+    {
+      "name": "chat.space.leave",
+      "summary": "Remove the bot from a channel, forget its binding there and retire the questions still waiting on answers in it. Safe to repeat: not_member when the bot was already out.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatSpaceLeaveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatSpaceLeaveResult"
         }
       }
     },
@@ -70657,6 +71756,18 @@
           "name": "payload",
           "schema": {
             "$ref": "#/components/schemas/SideAgentCompletePayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat.desk.changed",
+      "summary": "A desk item was created or moved, sent for the bot's profile. A burst between two checks arrives as the latest revision.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/ChatDeskChangedPayload"
           }
         }
       ]

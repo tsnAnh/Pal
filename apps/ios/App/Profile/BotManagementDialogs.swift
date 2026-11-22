@@ -59,7 +59,10 @@ private struct BotManagementDialogs: ViewModifier {
         guard let bot = renamingTarget else { return }
         let name = proposedName
         Task {
-            do { try await roster.rename(bot, to: name) } catch is CancellationError {} catch { roster.report(error) }
+            do {
+                try await roster.rename(bot, to: name)
+                roster.pushChatIcon(for: bot.name, spec: bot.spec)
+            } catch is CancellationError {} catch { roster.report(error) }
         }
     }
 }

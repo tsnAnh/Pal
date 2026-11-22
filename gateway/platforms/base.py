@@ -24,6 +24,7 @@ from gateway.platforms.base_image_sniff import _looks_like_image
 from gateway.platforms.base_media_flags import pad_inline_flags
 from gateway.platforms.base_kanban_media import _kanban_attachment_roots, _kanban_board_db_paths
 from gateway.runtime_footer import footer_onto_photo_caption, send_footer_unless_captioned
+from gateway.platforms.sender_admission import SenderAdmissionMixin
 from gateway.platforms.session_model import _SessionModelSettingsMixin
 from utils import normalize_proxy_url, unlink_files_older_than
 from agent.file_safety import is_project_env_basename
@@ -447,7 +448,7 @@ from gateway.platforms.base_exec_approval import (
 from gateway.platforms.base_streaming_tts import (
     AudioFormat, StreamingTTSHandle, streaming_tts_should_skip_whole_file, streaming_tts_turn_key)
 from gateway.platforms.event import MessageEvent, MessageType, ProcessingOutcome
-from gateway.warning_notifications import diagnostic_wake_muted
+from gateway.warning_notifications import diagnostic_wake_muted, turn_error_text
 from hermes_cli.observability.shared_metrics_gateway import records_delivery, stop_reply_clock
 from hermes_cli.home_data_layout import CREDENTIAL_STORE_DIRS, HOME_ENV_FILES, SECRET_CACHE_STORES
 from agent.file_safety import deny_path_under
@@ -1777,7 +1778,7 @@ def _lazy_attr(obj: Any, name: str, factory: Callable[[], Any]) -> Any:
 _strip_media_directives = _strip_media_tag_directives
 
 
-class BasePlatformAdapter(_SessionModelSettingsMixin, ABC):
+class BasePlatformAdapter(_SessionModelSettingsMixin, SenderAdmissionMixin, ABC):
     """Base class for platform adapters: connect/auth, receive, send, handle media."""
 
     # ``format_message`` renders ``` fences as real code blocks (tool-progress then sends a bare
@@ -2273,38 +2274,6 @@ class BasePlatformAdapter(_SessionModelSettingsMixin, ABC):
         ``user_id``, ``item_user_id``, ``channel_id``, ``message_ts``, ``event_ts``, ``raw_event``)
         fanned out via ``HookRegistry.emit``."""
         self._reaction_handler = handler
-
-    def set_authorization_check(
-        self, callback: Optional[Callable[[str, Optional[str], Optional[str]], bool]]) -> None:
-        """Register ``(user_id, chat_type, chat_id) -> bool``; adapters pulling external context
-        (Slack thread replies) use it to flag non-allowlisted senders as unverified background."""
-        self._authorization_check = callback
-
-    def _is_sender_authorized(self, user_id: Optional[str], chat_type: Optional[str] = None,
-                              chat_id: Optional[str] = None, *, is_bot: bool = False,
-                              thread_id: Optional[str] = None) -> Optional[bool]:
-        """True/False from the registered check, or None when no check exists ("trust unknown",
-        legacy). ``is_bot``/``thread_id`` are forwarded as keywords only when set so legacy
-        three-positional callbacks keep working. Only literal booleans propagate: a truthy
-        non-boolean is "unknown", never an authorization that gates a credentialed side effect."""
-        if not user_id or self._authorization_check is None:
-            return None
-        extra: dict[str, Any] = {}
-        if is_bot:
-            extra["is_bot"] = True
-        if thread_id is not None:
-            extra["thread_id"] = thread_id
-        try:
-            result = self._authorization_check(user_id, chat_type, chat_id, **extra)
-        except Exception:
-            logger.warning("[%s] Authorization check raised for user %s; treating as unknown",
-                           self.name, user_id, exc_info=True)
-            return None
-        if result is True or result is False:
-            return result
-        logger.warning("[%s] Authorization check returned %s for user %s; treating as unknown",
-                       self.name, type(result).__name__, user_id)
-        return None
 
     def set_session_store(self, session_store: Any) -> None:
         """Set the session store (e.g. Slack checks for an active thread session
@@ -4207,7 +4176,7 @@ class BasePlatformAdapter(_SessionModelSettingsMixin, ABC):
             # as before, so delivery bookkeeping keeps landing where boot-time recovery reads it.
             with self._media_delivery_scope(event.source):
                 content = None if diagnostic_wake_muted(event) else self.warning_text(
-                    t("gateway.errors.generic_failed"),  # raw exception text can carry credentials (logged above)
+                    turn_error_text(event.source),  # raw exception text can carry credentials (logged above)
                     t("gateway.notify.turn_error"),
                     logical_platform=event.source.platform, chat_id=event.source.chat_id, metadata=_thread_metadata)
             if content is None:

@@ -18,6 +18,7 @@ import os
 import time
 from agent.i18n import DEFAULT_LANGUAGE, t
 from agent.session_activity import format_iteration_progress
+from gateway.audience.model import Audience
 from gateway.config import Platform
 from gateway.platforms.base import EphemeralReply
 from gateway.platforms.event import MessageEvent, MessageType
@@ -953,7 +954,14 @@ class GatewayBusySessionMixin:
         from gateway.run import _AGENT_PENDING_SENTINEL
         # See #17775. A primary transport can route a turn into a secondary
         # profile, so authorize in the stamped transport scope.
-        if not self._is_user_authorized_for_source(event.source):
+        if event.desk_ask_id is not None:
+            from gateway.desk.runtime import handle_desk_reply
+            await handle_desk_reply(self, event)
+            return True
+        if event.source.audience is Audience.MEMBER:
+            if not await self._admit_member_event(event, event.source):
+                return True
+        elif not self._is_user_authorized_for_source(event.source):
             logger.warning(
                 "Dropping message from unauthorized user in active session: "
                 "user=%s, platform=%s, session=%s", event.source.user_id,

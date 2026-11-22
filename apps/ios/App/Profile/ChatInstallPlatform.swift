@@ -9,11 +9,14 @@ import Photos
 enum ChatAvatarExport {
     static let pixels: CGFloat = 1024
 
+    static let tintOpacity = 0.25
+
     @MainActor
-    static func render(spec: BotAvatarSpec, background: Color) -> CGImage? {
-        let content = BotAvatarView(spec: spec, size: pixels * 0.8, animated: false)
+    static func render(spec: BotAvatarSpec) -> CGImage? {
+        let content = BotAvatarView(spec: spec, size: pixels, animated: false)
             .frame(width: pixels, height: pixels)
-            .background(background)
+            .background(spec.bodyColor.swiftUIColor.opacity(tintOpacity))
+            .background(Color.white)
         let renderer = ImageRenderer(content: content)
         renderer.scale = 1
         renderer.isOpaque = true

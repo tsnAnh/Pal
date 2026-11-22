@@ -64,9 +64,37 @@ public enum ChatIdentityUpdateOutcome: String, ChatWireEnum {
     case updated = "updated", needsManualAvatar = "needs_manual_avatar", unknown
 }
 
+// swiftlint:disable redundant_string_enum_value
+public enum ChatSpaceLeaveOutcome: String, ChatWireEnum {
+    case left = "left", notMember = "not_member", unknown
+}
+
+public enum ChatAudiencePolicy: String, ChatWireEnum {
+    case ownerOnly = "owner_only", workspace = "workspace", listed = "listed", unknown
+}
+
+public enum ChatReportDestinationKind: String, ChatWireEnum {
+    case ownerDirectMessages = "owner_dm", space = "space", unknown
+}
+
+public enum ChatDeskItemKind: String, ChatWireEnum {
+    case ask = "ask", handoff = "handoff", send = "send", unknown
+}
+
+public enum ChatDeskItemState: String, ChatWireEnum {
+    case posting = "posting", open = "open", approved = "approved", executing = "executing", done = "done"
+    case declined = "declined", expired = "expired", cancelled = "cancelled", failed = "failed", unknown = "unknown"
+}
+
+public enum ChatDeskChoice: String, ChatWireEnum {
+    case approve = "approve", decline = "decline", unknown
+}
+
+// swiftlint:enable redundant_string_enum_value
+
 public enum ChatRpcErrorReason: String, ChatWireEnum {
     case providerUnknown = "provider_unknown", notImplemented = "not_implemented"
-    case staleRevision = "stale_revision", noInstallation = "no_installation", unknown
+    case staleRevision = "stale_revision", noInstallation = "no_installation", notJoined = "not_joined", unknown
 }
 
 public struct ChatCapabilityEntryWire: Decodable, Sendable, Hashable {

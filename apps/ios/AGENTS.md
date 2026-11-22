@@ -4,11 +4,10 @@ Pal is the SwiftUI iPhone and macOS app (`apps/ios`), not the Electron desktop a
 
 ## Rule 1: service suggestions follow Connected apps
 
-A Suggested item that depends on a service shows only when Connected apps reports that service connected. Otherwise, unknown state included, it is hidden with no placeholder. An empty Suggested section does not render.
+A Suggested item that depends on a service shows only when Connected apps reports that service connected. Otherwise, unknown state included, it is hidden with no placeholder. An empty Suggested section does not render. Slack is not a suggestion: the bot profile always shows its Slack row (`ProfileSlackStatus`, `BotProfileModel.loadSlack`), since Slack is about the bot, not a connected app.
 
-- Shared helper: `ConnectedServices` and `ServiceSuggestion` in `Packages/PalKit/Sources/PalConnect/ConnectedServices.swift`. "Connected" is the Connected apps catalog (`ConnectAppsService.load()`), never a second status call.
-- App wiring: `ProfileSuggestion` and `ConnectedServicesModel` in `App/Profile/ProfileSuggestion.swift`. Both `MacInspector` and `BotProfileView` render `visibleSuggestions` only.
-- New suggestion: add a `ServiceKind` case if it needs a service, add a `ProfileSuggestion` case with its `requiredService`, and render it inside the `visibleSuggestions` loop. The Connect entry point lives in Connected apps, never in Suggested.
+- Shared helper: `ConnectedServices` and `ServiceSuggestion` in `Packages/PalKit/Sources/PalConnect/ConnectedServices.swift`. "Connected" is the Connected apps catalog (`ConnectAppsService.load()`), never a second status call; `ConnectedServicesModel` (`App/Profile/ConnectedServicesModel.swift`) holds it for the profile.
+- New suggestion: add a `ServiceKind` case and render the item only where `services.visible(_:)` allows it. The Connect entry point lives in Connected apps, never in Suggested.
 
 ## Rule 2: sign-in, OAuth and add-to links open in the system browser
 

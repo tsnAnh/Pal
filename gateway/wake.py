@@ -121,7 +121,9 @@ def _runner_draining(adapter: Any) -> bool:
 
 
 async def deliver_wake(adapter: Any, *, text: str, session_id: str = "", source: Any = None,
-                       notification_category: str = "result", profile: Optional[str] = None) -> None:
+                       notification_category: str = "result", profile: Optional[str] = None,
+                       producer: str = "kanban-wake", identity_seed: Optional[str] = None,
+                       tainted: bool = False) -> None:
     """Deliver a wake turn to the session behind ``adapter``. ``session_id`` is the RAW session id
     (``X-Hermes-Session-Id`` / state.db key) — required for non-push adapters. ``source`` is the
     ``SessionSource`` for the synthetic event — required for push-capable adapters. ``profile``
@@ -138,11 +140,13 @@ async def deliver_wake(adapter: Any, *, text: str, session_id: str = "", source:
             from persistence.core.errors import AuthorityRefusal
             category = {"notification_category": notification_category} if notification_category != "result" else {}
             try:
-                if await admit_route_wake(runner, adapter, source, text, "kanban-wake", category):
+                if await admit_route_wake(runner, adapter, source, text, producer, category,
+                                          identity_seed=identity_seed, tainted=tainted):
                     return  # committed to the session FIFO: never interrupts the admitted turn
             except AuthorityRefusal as exc:
                 raise WakeNotAccepted(str(exc), reason=exc.reason) from exc
         synth_event = MessageEvent(text=text, message_type=MessageType.TEXT, source=source, internal=True,
+                                   carries_member_content=tainted,
                                    metadata={"notification_category": notification_category})
         await admit_internal_event(adapter, synth_event)
         return

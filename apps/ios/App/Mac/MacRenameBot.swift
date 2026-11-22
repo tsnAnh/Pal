@@ -114,6 +114,7 @@ struct MacRenameBot: View {
             defer { isSaving = false }
             do {
                 try await roster.rename(bot, to: trimmed)
+                roster.pushChatIcon(for: bot.name, spec: bot.spec)
                 router.renamingBot = nil
             } catch is CancellationError {
             } catch {

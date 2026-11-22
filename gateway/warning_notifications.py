@@ -1,5 +1,7 @@
 """Delivery policy for engine diagnostics, never assistant or command responses."""
 
+from agent.i18n import t
+from gateway.audience.model import Audience
 from gateway.display_config import resolve_display_setting
 
 
@@ -65,6 +67,10 @@ def diagnostic_wake_muted(event, user_config=None) -> bool:
         return snapshot
     return bool(getattr(event, "internal", False)) and diagnostic_turn_muted(
         getattr(event, "metadata", None), event.source.platform, user_config)
+
+
+def turn_error_text(source) -> str:
+    return t("gateway.errors.member_failed" if getattr(source, "audience", None) is Audience.MEMBER else "gateway.errors.generic_failed")
 
 
 def render_notification(render, *, platform, diagnostic=True, user_config=None) -> bool:

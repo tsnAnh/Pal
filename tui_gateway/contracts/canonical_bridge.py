@@ -34,6 +34,8 @@ BRIDGED = (
     "skills.manage",
     "chat.provider.list", "chat.install.status", "chat.install.begin", "chat.install.advance",
     "chat.spaces.list", "chat.space.join", "chat.binding.list", "chat.install.revoke", "chat.install.update_identity",
+    "chat.install.set_icon", "chat.space.leave", "chat.audience.get", "chat.audience.set", "chat.people.list",
+    "chat.report.get", "chat.report.set", "chat.desk.list", "chat.desk.decide",
     "diag.recent", "diag.report",
     "webapp.public_url.get", "webapp.public_url.set", "webapp.public_url.check",
 )

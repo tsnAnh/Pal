@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from gateway.chat_install_service import ReloadOutcome
 from tests.tui_gateway.contracts.chat_provider_fakes import FAKE_TOKEN
 from tui_gateway import chat_providers
 
@@ -16,14 +17,16 @@ class RecordingControl:
         self.applied: list[tuple[str, str, dict[str, str], list[str]]] = []
         self.reloads: list[str] = []
         self.fail_apply = False
+        self.reload_outcome = ReloadOutcome.live
 
     def apply_env(self, profile, platform_id, env, clear) -> None:
         if self.fail_apply:
             raise RuntimeError("apply exploded: provider secret text")
         self.applied.append((profile, platform_id, dict(env), list(clear)))
 
-    def reload(self, profile) -> None:
+    def reload(self, profile) -> ReloadOutcome:
         self.reloads.append(profile)
+        return self.reload_outcome
 
 
 def nonce_of(link: str) -> str:

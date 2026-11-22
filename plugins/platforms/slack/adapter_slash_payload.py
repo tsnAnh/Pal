@@ -5,13 +5,16 @@ from __future__ import annotations
 from typing import Optional
 
 
+ENTRY_SLASHES = frozenset({"hermes", "pal", ""})
+
+
 def slash_command_text(command: dict) -> str:
     """Gateway message text for a slash payload. Native slashes keep Slack's raw argument
     payload verbatim (internal/trailing spacing). ``/hermes`` (or a missing ``command``) maps
     ``<subcommand> [args]`` via the registry, else free-form text is a regular question."""
     slash_name = (command.get("command") or "").lstrip("/").strip()
     raw_text = str(command.get("text") or "")
-    if slash_name not in {"hermes", ""}:
+    if slash_name not in ENTRY_SLASHES:
         return f"/{slash_name}" if not raw_text else f"/{slash_name} {raw_text}"
     legacy_text = raw_text.strip()
     from hermes_cli.commands_platforms import slack_subcommand_map

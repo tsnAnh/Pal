@@ -142,6 +142,11 @@ def scoped_session_key(session_key: str) -> Iterator[None]:
         _SESSION_KEY.reset(token)
 
 
+def current_turn_event() -> Any:
+    """The MessageEvent of the turn running in THIS context, ``None`` when none is bound."""
+    return _SESSION_TURN_EVENT.get()
+
+
 def bound_session_key() -> str:
     """The route key bound in THIS context, ``""`` when none is: no ``os.environ`` fallback, so a
     thread that inherited no context never borrows another session's key."""

@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional, cast
 
 from agent.i18n import t
 from agent.retry_utils import jittered_backoff
+from gateway.chat_bot_identity import installed_bot_name
 from gateway.config import Platform, _BUILTIN_PLATFORM_VALUES
 from gateway.platforms.base import BasePlatformAdapter, _mark_notify_metadata
 from gateway.platforms.event import MessageEvent, MessageType
@@ -28,6 +29,8 @@ from gateway.run_shutdown import _delivery_target_key, _log_suppressed, _notice_
 from gateway.run_notifications_update import GatewayUpdateNotificationsMixin
 from gateway.run_notifications_ownership import GatewayNotificationOwnershipMixin, _local_completion_card
 from gateway.run_notifications_restart import GatewayRestartNoticeMixin
+from hermes_cli.profiles import get_profile_dir
+from hermes_constants import get_process_hermes_home
 
 # Log-record parity with the origin module.
 logger = logging.getLogger("gateway.run")
@@ -42,6 +45,12 @@ def _served_notice_target_key(profile: Optional[str], platform_value: str, chat_
     """
     return _notice_target_key(
         platform_value if profile is None else f"{profile}:{platform_value}", chat_id, thread_id)
+
+
+def _startup_online_message(profile: Optional[str]) -> str:
+    home = get_process_hermes_home() if profile is None else get_profile_dir(profile)  # profile None = launch profile
+    name = installed_bot_name(home)
+    return t("gateway.startup.online") if name is None else t("gateway.startup.online_named", name=name)
 
 
 def _safe_delivery_transport(platform, config, adapters, *, profile: Optional[str] = None):
@@ -537,7 +546,6 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
         """
         delivered: set[tuple[str, str, Optional[str]]] = set()
         skipped = skip_targets or set()
-        message = t("gateway.startup.online")
         targets = list(self._served_home_channel_transports())
         # A chat already notified for ANOTHER profile is not notified again.
         notified_chats = {
@@ -559,6 +567,7 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
             if chat in notified_chats:
                 delivered.add(target)
                 continue
+            message = await asyncio.to_thread(_startup_online_message, profile)
             if await self._send_home_channel_message(
                 platform, home, transport, message, "Home-channel startup notification failed for %s:%s: %s",
             ):
