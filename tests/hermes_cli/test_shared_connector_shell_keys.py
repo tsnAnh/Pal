@@ -156,3 +156,10 @@ def test_the_error_an_app_can_surface_for_a_missing_shared_key_stays_in_product_
         text = str(refused.value)
         assert GITHUB_KEY in text
         assert "$" not in text and "config set" not in text and ".env" not in text
+
+
+@pytest.mark.parametrize("action", ["list", "ls"])
+def test_a_command_that_takes_no_server_name_runs_without_one(world, capsys, action):
+    with world.acting_as(world.bot):
+        mcp_command(SimpleNamespace(mcp_action=action))
+    assert "upwork" in capsys.readouterr().out
