@@ -20,6 +20,8 @@ public final class ChatDeskModel {
 
     private let client: any ChatMemberClient
 
+    public var newestFirst: [ChatDeskCard] { cards.reversed() }
+
     public init(client: any ChatMemberClient) {
         self.client = client
     }

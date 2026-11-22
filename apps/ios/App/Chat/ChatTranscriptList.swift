@@ -1,3 +1,4 @@
+import PalBotProfile
 import PalChat
 import PalDesign
 import PalDiagnostics
@@ -12,14 +13,24 @@ struct ChatTranscriptList: View {
 
     @State private var chrome = EdgeInsets()
     @State private var connectionIsSlow = false
+    @LazyState private var desk: ChatDeskFeed
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(model: ChatModel, scroll: ChatScrollController, teach: TeachModel, router: AppRouter) {
+        self.model = model
+        self.scroll = scroll
+        self.teach = teach
+        self.router = router
+        _desk = LazyState { ChatDeskFeed(botName: model.bot.name, connection: model.roster.connection) }
+    }
 
     var body: some View {
         let _ = PalPerf.event("chat.scroll.body") // swiftlint:disable:this redundant_discardable_let
         ScrollView {
-            ChatTranscriptRows(model: model, scroll: scroll, router: router, connectionIsSlow: connectionIsSlow)
+            ChatTranscriptRows(model: model, scroll: scroll, router: router, desk: desk.desk, connectionIsSlow: connectionIsSlow)
         }
         .scrollPosition($scroll.position)
+        .task(id: model.bot.name) { await desk.run() }
         .contentMargins(.top, max(0, chrome.bottom - chrome.top) + ChatMetrics.composerClearance, for: .automatic)
         .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
         .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
@@ -75,6 +86,7 @@ private struct ChatTranscriptRows: View {
     let model: ChatModel
     let scroll: ChatScrollController
     let router: AppRouter
+    let desk: ChatDeskModel
     let connectionIsSlow: Bool
 
     var body: some View {
@@ -82,6 +94,16 @@ private struct ChatTranscriptRows: View {
         let source = model.rowContextSource
         let ink = BubblePalette.ink(accent: source.accent)
         LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(desk.newestFirst) { card in
+                ChatDeskCardView(card: card, botName: model.bot.displayName) { choice in
+                    Task { await desk.decide(card.id, choice) }
+                }
+                .padding(.top, ChatMetrics.senderSwitchGap)
+                .frame(maxWidth: ChatDeskCardView.maxWidth)
+                .frame(maxWidth: .infinity)
+                .chatListRow()
+                .newestFirst()
+            }
             footer(ink: ink)
                 .chatListRow()
                 .newestFirst()
