@@ -15,7 +15,7 @@ Every sign-in, OAuth or "add to <service>" link opens in the system browser (`UI
 
 - Shared helper: `ExternalLink.open(_:)` in `App/Platform/ExternalLink.swift`. Only https and http URLs open.
 - New link: `ExternalLink.open(url)`; `inAppBrowser(url:)` is only for plain content links in the Library.
-- Exception: `WebAuthenticationBrowser` (`ASWebAuthenticationSession`) stays for gateway and Connected apps sign-in: they return through the `dev.tsnanh.hermes.bot` callback or a loopback redirect a plain `open` cannot deliver.
+- Exception: `WebAuthenticationBrowser` (`ASWebAuthenticationSession`) stays for gateway and Connected apps sign-in: they return through `PalURLScheme.current` or a loopback redirect a plain `open` cannot deliver.
 - Upwork (`mcp:upwork`) signs in from any device (`signin_on: owner_app`): `McpOAuthFlow` (PalConnect) runs discovery, dynamic client registration and PKCE in two phases. Mac: `LoopbackRedirectListener`. iPhone/iPad: paste route only (`PastedAuthorization.parse`, masked `PasteAddressEntry`, `PasteboardScrub`), registering `http://127.0.0.1:<port>/callback` that nothing serves. Tokens go to the gateway with `auth.submit_oauth_tokens`. Routes per device: `ConnectorPlatform.signInRoutes`. A rejected saved sign-in shows its reason with Reconnect on every device. Upwork and every `mcp_oauth` connector sign in through one sheet (`McpSignInSheet`, state in `McpSignInController`); a failure shows `StatusBlock` with the reason code, method and trace behind Details.
 - Enforced by `ExternalLinkPolicyTests` (PalKitTests): it scans `App/` for web surfaces outside their allowlist.
 

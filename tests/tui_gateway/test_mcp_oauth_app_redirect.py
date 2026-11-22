@@ -16,11 +16,12 @@ from fastapi.testclient import TestClient
 
 from hermes_constants import get_hermes_home
 from tools.connectors import mcp_oauth
+from tools.connectors.app_scheme import AppScheme
 from tools.connectors.mcp_oauth import _validate_client_redirect_uri
 from tools.connectors.mcp_oauth_redirect import (
-    APP_DONE_URL,
     APP_REDIRECT_URI,
     GATEWAY_CALLBACK_PATH,
+    app_done_url,
     is_registration_refusal,
 )
 from tests.waiting import wait_until
@@ -29,6 +30,7 @@ from tui_gateway import mcp_oauth_sessions as sessions
 
 PUBLIC = "https://pal.example.com"
 GATEWAY_URI = PUBLIC + GATEWAY_CALLBACK_PATH
+DEV_REDIRECT_URI = "dev.tsnanh.hermes.bot.dev:/mcp-oauth/callback"
 CFG = {"url": "https://mcp.example.com/mcp", "auth": "oauth"}
 REFUSAL = 'Registration failed: 400 {"error":"invalid_redirect_uri","error_description":"redirect_uri not allowed"}'
 
@@ -83,8 +85,8 @@ def set_public_url(url):
     (get_hermes_home() / "config.yaml").write_text(f"webapp:\n  public_url: {url}\n")
 
 
-def start(name="srv", **kw):
-    return sessions.start_flow(str(get_hermes_home()), name, dict(CFG), client_redirect_uri=APP_REDIRECT_URI, **kw)
+def start(name="srv", redirect=APP_REDIRECT_URI, **kw):
+    return sessions.start_flow(str(get_hermes_home()), name, dict(CFG), client_redirect_uri=redirect, **kw)
 
 
 def finish(result, name="srv", state=None):
@@ -103,6 +105,7 @@ def stop(result, name="srv"):
 @pytest.mark.parametrize("uri,expected", [
     ("dev.tsnanh.hermes.bot:/mcp-oauth/callback", "dev.tsnanh.hermes.bot:/mcp-oauth/callback"),
     ("  DEV.tsnanh.hermes.bot:/x/y ", "dev.tsnanh.hermes.bot:/x/y"),
+    (DEV_REDIRECT_URI, DEV_REDIRECT_URI),
     ("http://127.0.0.1:8412/callback", "http://127.0.0.1:8412/callback"),
 ])
 def test_validator_accepts_app_scheme_and_loopback(uri, expected):
@@ -113,6 +116,8 @@ def test_validator_accepts_app_scheme_and_loopback(uri, expected):
     "dev.tsnanh.hermes.bot://evil/callback", "dev.tsnanh.hermes.bot:/", "dev.tsnanh.hermes.bot:",
     "dev.tsnanh.hermes.bot://user@host/x", "dev.tsnanh.hermes.bot:/x?a=1", "other.app:/mcp-oauth/callback",
     "https://pal.example.com/webapp/mcp-oauth/callback", "http://pal.example.com/callback", "javascript:alert(1)",
+    "dev.tsnanh.hermes.bot.evil:/mcp-oauth/callback", "dev.tsnanh.hermes.bot.dev.evil:/mcp-oauth/callback",
+    "dev.tsnanh.hermes.bot.dev://evil/callback",
 ])
 def test_validator_rejects_everything_else(uri):
     with pytest.raises(ValueError):
@@ -279,17 +284,17 @@ def _arm_gateway_flow(vendor):
 def test_gateway_state_is_single_use(vendor):
     _, rec = _arm_gateway_flow(vendor)
     state = rec["flow"].expected_state
-    assert sessions.deliver_gateway_callback("wrong-" + state, code="c") is False
-    assert sessions.deliver_gateway_callback("", code="c") is False
-    assert sessions.deliver_gateway_callback(state, code="c") is True
-    assert sessions.deliver_gateway_callback(state, code="c") is False
+    assert sessions.deliver_gateway_callback("wrong-" + state, code="c") is None
+    assert sessions.deliver_gateway_callback("", code="c") is None
+    assert sessions.deliver_gateway_callback(state, code="c") is AppScheme.release
+    assert sessions.deliver_gateway_callback(state, code="c") is None
     assert rec["flow"].wait_worker_done(5)
 
 
 def test_gateway_state_expires_with_the_session(vendor):
     result, rec = _arm_gateway_flow(vendor)
     rec["created_at"] = time.time() - sessions._SESSION_TTL_SECONDS - 1
-    assert sessions.deliver_gateway_callback(rec["flow"].expected_state, code="c") is False
+    assert sessions.deliver_gateway_callback(rec["flow"].expected_state, code="c") is None
     stop(result)
 
 
@@ -297,7 +302,7 @@ def test_app_flow_state_is_not_reachable_through_gateway_route(vendor):
     set_public_url(PUBLIC)
     result = start()
     rec = sessions._sessions[result["session_id"]]
-    assert sessions.deliver_gateway_callback(rec["flow"].expected_state, code="c") is False
+    assert sessions.deliver_gateway_callback(rec["flow"].expected_state, code="c") is None
     finish(result)
 
 
@@ -315,7 +320,7 @@ def test_callback_route_completes_flow_and_opens_the_app(vendor, client, caplog)
     state = rec["flow"].expected_state
     page = client.get(GATEWAY_CALLBACK_PATH, params={"code": "the-code", "state": state, "iss": "https://as.example.com"})
     assert page.status_code == 200
-    assert APP_DONE_URL in page.text
+    assert app_done_url(AppScheme.release) in page.text
     assert 'http-equiv="refresh"' in page.text
     assert "the-code" not in page.text and state not in page.text
     assert rec["flow"].wait_worker_done(5)
@@ -324,6 +329,41 @@ def test_callback_route_completes_flow_and_opens_the_app(vendor, client, caplog)
     assert replay.status_code == 400
     logged = "\n".join(r.getMessage() for r in caplog.records if not r.name.startswith("httpx"))
     assert "the-code" not in logged and state not in logged
+
+
+def test_dev_build_registers_its_own_scheme_and_the_gateway_page_returns_to_it(vendor, client):
+    set_public_url(PUBLIC)
+    use(vendor, "https_only")
+    result = start(redirect=DEV_REDIRECT_URI)
+    assert vendor["attempts"] == [DEV_REDIRECT_URI, GATEWAY_URI]
+    rec = sessions._sessions[result["session_id"]]
+    page = client.get(GATEWAY_CALLBACK_PATH, params={"code": "the-code", "state": rec["flow"].expected_state})
+    assert page.status_code == 200
+    assert app_done_url(AppScheme.development) in page.text
+    assert app_done_url(AppScheme.release) not in page.text
+    assert rec["flow"].wait_worker_done(5)
+
+
+def test_dev_build_gets_its_own_redirect_on_the_app_step(vendor):
+    set_public_url(PUBLIC)
+    result = start(redirect=DEV_REDIRECT_URI)
+    assert (result["redirect"], result["redirect_uri"]) == ("app", DEV_REDIRECT_URI)
+    assert vendor["attempts"] == [DEV_REDIRECT_URI]
+    finish(result)
+
+
+def test_release_build_still_returns_to_the_release_app(vendor, client):
+    _, rec = _arm_gateway_flow(vendor)
+    page = client.get(GATEWAY_CALLBACK_PATH, params={"code": "the-code", "state": rec["flow"].expected_state})
+    assert app_done_url(AppScheme.release) in page.text
+    assert AppScheme.development.value not in page.text
+    assert rec["flow"].wait_worker_done(5)
+
+
+def test_unknown_state_page_returns_to_the_release_app(vendor, client):
+    page = client.get(GATEWAY_CALLBACK_PATH, params={"code": "c", "state": "never-issued"})
+    assert page.status_code == 400
+    assert app_done_url(AppScheme.release) in page.text
 
 
 def test_callback_route_reports_provider_denial_without_echo(vendor, client):

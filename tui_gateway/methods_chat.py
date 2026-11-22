@@ -91,18 +91,21 @@ def _(rid, params: dict) -> dict:
 @method("chat.install.begin")
 @_profile_scoped
 def _(rid, params: dict) -> dict:
-    return _chat_run(rid, params, lambda service, bot: _chat_status_body(*service.begin(bot, *_chat_target(params))))
+    from tools.connectors.app_scheme import AppScheme
+    scheme = AppScheme.parse(params.get("app_scheme"))
+    return _chat_run(rid, params, lambda service, bot: _chat_status_body(*service.begin(bot, *_chat_target(params), scheme)))
 
 
 @method("chat.install.advance")
 @_profile_scoped
 def _(rid, params: dict) -> dict:
+    from tools.connectors.app_scheme import AppScheme
     from tui_gateway.contracts.chat_provider import ProviderCapability, SetupEventKind
     manual = params.get("manual_step")
     return _chat_run(rid, params, lambda service, bot: _chat_status_body(*service.advance(
         bot, *_chat_target(params), SetupEventKind(params["event"]), int(params["expected_revision"]),
         ProviderCapability(manual) if manual else None, params.get("vault_item_id"),
-        params.get("refresh_vault_item_id"), params.get("owner_member_id"))))
+        params.get("refresh_vault_item_id"), params.get("owner_member_id"), AppScheme.parse(params.get("app_scheme")))))
 
 
 @method("chat.spaces.list")

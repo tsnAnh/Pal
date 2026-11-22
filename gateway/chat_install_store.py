@@ -13,15 +13,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gateway.device_registry import install_root
+from hermes_cli.sqlite_util import add_column_if_missing
+from tools.connectors.app_scheme import NONCE_COLUMN_DDL, AppScheme
 from tui_gateway.chat_install import SetupKey, StaleRevision, setup_key
 from tui_gateway.contracts.chat_provider import Binding, Installation, InstallationStatus, SetupState
 
 DB_NAME = "chat_install.db"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 NONCE_TTL_SECONDS = 600.0
 OUTBOX_RETENTION_SECONDS = 24 * 60 * 60
 
-SCHEMA = """
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS setup_states (
     bot TEXT NOT NULL,
     provider_id TEXT NOT NULL,
@@ -44,7 +46,8 @@ CREATE TABLE IF NOT EXISTS nonces (
     bot TEXT NOT NULL,
     provider_id TEXT NOT NULL,
     workspace TEXT NOT NULL,
-    expires_at REAL NOT NULL
+    expires_at REAL NOT NULL,
+    {NONCE_COLUMN_DDL}
 );
 CREATE TABLE IF NOT EXISTS installations (
     id TEXT PRIMARY KEY,
@@ -89,6 +92,7 @@ class BindingRow:
 def _initialize(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+        add_column_if_missing(conn, "nonces", "app_scheme", NONCE_COLUMN_DDL)
         conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 
@@ -193,27 +197,27 @@ class ChatInstallStore:
             row = conn.execute("SELECT MAX(seq) AS seq FROM outbox").fetchone()
         return row["seq"] or 0
 
-    def issue_nonce(self, key: SetupKey, ttl: float = NONCE_TTL_SECONDS) -> str:
+    def issue_nonce(self, key: SetupKey, app_scheme: AppScheme = AppScheme.release, ttl: float = NONCE_TTL_SECONDS) -> str:
         raw = secrets.token_urlsafe(32)
         with self._write() as conn:
             conn.execute("DELETE FROM nonces WHERE bot=? AND provider_id=? AND workspace=?", key)
             conn.execute("DELETE FROM nonces WHERE expires_at <= ?", (self._clock(),))
-            conn.execute("INSERT INTO nonces (digest, bot, provider_id, workspace, expires_at) VALUES (?, ?, ?, ?, ?)",
-                         (digest(raw), *key, self._clock() + ttl))
+            conn.execute("INSERT INTO nonces (digest, bot, provider_id, workspace, expires_at, app_scheme)"
+                         " VALUES (?, ?, ?, ?, ?, ?)", (digest(raw), *key, self._clock() + ttl, app_scheme.value))
         return raw
 
-    def consume_nonce(self, raw: str, now: float | None = None) -> SetupKey | None:
+    def consume_nonce(self, raw: str, now: float | None = None) -> tuple[SetupKey, AppScheme] | None:
         wanted = digest(raw)
         now = self._clock() if now is None else now
         with self._write() as conn:
-            row = conn.execute("SELECT digest, bot, provider_id, workspace, expires_at FROM nonces WHERE digest=?",
-                               (wanted,)).fetchone()
+            row = conn.execute("SELECT digest, bot, provider_id, workspace, expires_at, app_scheme FROM nonces"
+                               " WHERE digest=?", (wanted,)).fetchone()
             if row is None or not hmac.compare_digest(row["digest"], wanted):
                 return None
             conn.execute("DELETE FROM nonces WHERE digest=?", (wanted,))
         if row["expires_at"] <= now:
             return None
-        return row["bot"], row["provider_id"], row["workspace"]
+        return (row["bot"], row["provider_id"], row["workspace"]), AppScheme.parse(row["app_scheme"])
 
     def save_installation(self, installation: Installation, env_keys: list[str], owner_id: str) -> None:
         with self._write() as conn:

@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from gateway.audience import AudiencePolicy, AudiencePolicyKind
 from gateway.chat_audience import AudienceSettings, read_audience, read_home, write_audience, write_home
 from gateway.chat_install_store import ChatInstallStore
+from tools.connectors.app_scheme import AppScheme
 from tools.image_asset import ImageAssetError, decode_image
 from tui_gateway.chat_install import (
     CREDENTIAL_STEPS,
@@ -149,10 +150,10 @@ class ChatInstallService:
     def _fail(self, provider: ChatProvider, state: SetupState, code: SetupErrorCode) -> SetupState:
         return self._apply(provider, state, SetupEvent(kind=SetupEventKind.failed, error=code))
 
-    def _with_nonce(self, link: str, key: SetupKey) -> str:
+    def _with_nonce(self, link: str, key: SetupKey, app_scheme: AppScheme) -> str:
         parts = urlsplit(link)
         query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "state"]
-        query.append(("state", self.store.issue_nonce(key)))
+        query.append(("state", self.store.issue_nonce(key, app_scheme)))
         return urlunsplit(parts._replace(query=urlencode(query)))
 
     def _attach_link(self, state: SetupState, link: str) -> SetupState:
@@ -169,7 +170,7 @@ class ChatInstallService:
         self.store.set_authorize_link(key, base)
         return base
 
-    def _drive(self, provider: ChatProvider, state: SetupState) -> SetupState:
+    def _drive(self, provider: ChatProvider, state: SetupState, app_scheme: AppScheme) -> SetupState:
         key = setup_key(state)
         if needs_app_creation(state):
             try:
@@ -180,10 +181,10 @@ class ChatInstallService:
             self.store.set_authorize_link(key, created.authorize_link)
             state = self._apply(provider, state, SetupEvent(
                 kind=SetupEventKind.app_created, app_id=created.app_id,
-                authorize_link=self._with_nonce(created.authorize_link, key)))
+                authorize_link=self._with_nonce(created.authorize_link, key, app_scheme)))
         if state.step is SetupStep.needs_allow and (state.next_action.link is None or state.next_action.kind is not NextActionKind.open_link):
             try:
-                state = self._attach_link(state, self._with_nonce(self._authorize_base(provider, state), key))
+                state = self._attach_link(state, self._with_nonce(self._authorize_base(provider, state), key, app_scheme))
             except StaleRevision:
                 raise
             except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
@@ -206,7 +207,8 @@ class ChatInstallService:
             return None
         return self.store.installation(state.installation_id)
 
-    def begin(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation | None]:
+    def begin(self, bot: str, provider_id: str, workspace: str,
+              app_scheme: AppScheme = AppScheme.release) -> tuple[SetupState, Installation | None]:
         provider = self._provider(provider_id)
         state = self._current(bot, provider_id, workspace)
         if state.step is SetupStep.ready:
@@ -216,22 +218,24 @@ class ChatInstallService:
         try:
             state = self._reopen_unmet(provider, self._apply(provider, state, SetupEvent(kind=SetupEventKind.begin)))
             if state.step is SetupStep.needs_allow and state.next_action.link:
-                state = self._attach_link(state, self._with_nonce(self._authorize_base(provider, state), setup_key(state)))
+                state = self._attach_link(
+                    state, self._with_nonce(self._authorize_base(provider, state), setup_key(state), app_scheme))
             else:
-                state = self._drive(provider, state)
+                state = self._drive(provider, state, app_scheme)
         except StaleRevision:
             raise ChatServiceError(ChatRpcErrorReason.stale_revision, self._current(bot, provider_id, workspace)) from None
         return state, self._installation_of(state)
 
     def advance(self, bot: str, provider_id: str, workspace: str, event: SetupEventKind, expected_revision: int,
                 manual_step=None, vault_item_id: str | None = None, refresh_vault_item_id: str | None = None,
-                owner_member_id: str | None = None) -> tuple[SetupState, Installation | None]:
+                owner_member_id: str | None = None,
+                app_scheme: AppScheme = AppScheme.release) -> tuple[SetupState, Installation | None]:
         provider = self._provider(provider_id)
         state = self._current(bot, provider_id, workspace)
         if state.revision != expected_revision:
             raise ChatServiceError(ChatRpcErrorReason.stale_revision, state)
         if event is SetupEventKind.begin:
-            return self.begin(bot, provider_id, workspace)
+            return self.begin(bot, provider_id, workspace, app_scheme)
         if event is SetupEventKind.revoked:
             return self.revoke(bot, provider_id, workspace)
         if event not in CLIENT_EVENTS:
@@ -242,18 +246,19 @@ class ChatInstallService:
             elif event is SetupEventKind.owner_confirmed:
                 new = self._confirm_owner(provider, state, owner_member_id)
             else:
-                new = self._client_event(provider, state, event, manual_step, vault_item_id, refresh_vault_item_id)
+                new = self._client_event(provider, state, event, manual_step, vault_item_id, refresh_vault_item_id, app_scheme)
         except StaleRevision:
             raise ChatServiceError(ChatRpcErrorReason.stale_revision, self._current(bot, provider_id, workspace)) from None
         if new is state:
             raise ChatServiceError(GatewayReason.invalid_event, state)
         return new, self._installation_of(new)
 
-    def _client_event(self, provider, state, event, manual_step, vault_item_id, refresh_vault_item_id) -> SetupState:
+    def _client_event(self, provider, state, event, manual_step, vault_item_id, refresh_vault_item_id,
+                      app_scheme: AppScheme) -> SetupState:
         if event is SetupEventKind.manual_step_done and manual_step is None and state.step is SetupStep.needs_manual_step:
             manual_step = ProviderCapability(state.next_action.action_id)
         if event is SetupEventKind.manual_step_done and manual_step in CREDENTIAL_STEPS:
-            return self._credential_step(provider, state, manual_step, vault_item_id)
+            return self._credential_step(provider, state, manual_step, vault_item_id, app_scheme)
         new = self._apply(provider, state, SetupEvent(kind=event, manual_step=manual_step))
         if new is state:
             return state
@@ -264,7 +269,7 @@ class ChatInstallService:
                 logger.warning("chat install credential rejected provider=%s error=%s", state.provider_id, type(exc).__name__)
                 return self._fail(provider, new, self._error_code(exc))
             self.store.set_config_item(setup_key(new), vault_item_id)
-        return self._drive(provider, self._reopen_unmet(provider, new))
+        return self._drive(provider, self._reopen_unmet(provider, new), app_scheme)
 
     @staticmethod
     def _error_code(exc: Exception) -> SetupErrorCode:
@@ -276,7 +281,8 @@ class ChatInstallService:
         code = getattr(exc, "code", None)
         return code if code in CREDENTIAL_FAILURES else SetupErrorCode.app_create_failed
 
-    def _credential_step(self, provider: ChatProvider, state: SetupState, step, vault_item_id: str | None) -> SetupState:
+    def _credential_step(self, provider: ChatProvider, state: SetupState, step, vault_item_id: str | None,
+                         app_scheme: AppScheme) -> SetupState:
         if state.step is not SetupStep.needs_manual_step:
             return state
         if not vault_item_id:
@@ -287,7 +293,7 @@ class ChatInstallService:
             logger.warning("chat install app credential rejected provider=%s error=%s", state.provider_id, type(exc).__name__)
             return self._fail(provider, state, self._error_code(exc))
         new = self._apply(provider, state, SetupEvent(kind=SetupEventKind.manual_step_done, manual_step=step))
-        return self._drive(provider, new)
+        return self._drive(provider, new, app_scheme)
 
     def _adopt(self, provider: ChatProvider, state: SetupState, vault_item_id: str | None) -> SetupState:
         if state.step is not SetupStep.needs_allow or not vault_item_id:
@@ -352,15 +358,16 @@ class ChatInstallService:
             return self._fail(provider, state, SetupErrorCode.install_failed)
         return self._apply(provider, state, SetupEvent(kind=SetupEventKind.installed))
 
-    def complete_redirect(self, raw_state: str, code: str | None, error: str | None) -> RedirectOutcome:
-        key = self.store.consume_nonce(raw_state) if raw_state else None
-        if key is None:
-            return RedirectOutcome.rejected
+    def complete_redirect(self, raw_state: str, code: str | None, error: str | None) -> tuple[RedirectOutcome, AppScheme]:
+        issued = self.store.consume_nonce(raw_state) if raw_state else None
+        if issued is None:
+            return RedirectOutcome.rejected, AppScheme.release
+        key, app_scheme = issued
         try:
             with self.bot_scope(key[0]):
-                return self._finish_redirect(key, code, error)
+                return self._finish_redirect(key, code, error), app_scheme
         except (StaleRevision, ChatServiceError):
-            return RedirectOutcome.rejected
+            return RedirectOutcome.rejected, app_scheme
 
     def _finish_redirect(self, key: SetupKey, code: str | None, error: str | None) -> RedirectOutcome:
         provider = self._provider(key[1])

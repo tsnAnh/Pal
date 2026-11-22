@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
-APP_REDIRECT_SCHEME = "dev.tsnanh.hermes.bot"
-APP_REDIRECT_URI = f"{APP_REDIRECT_SCHEME}:/mcp-oauth/callback"
-APP_DONE_URL = f"{APP_REDIRECT_SCHEME}://mcp-oauth/done"
+from tools.connectors.app_scheme import AppScheme
+
+APP_REDIRECT_URI = AppScheme.release.link("/mcp-oauth/callback")
 GATEWAY_CALLBACK_PATH = "/webapp/mcp-oauth/callback"
 CLIENT_METADATA_PATH = "/webapp/oauth/client-metadata.json"
 CLIENT_NAME = "Pal"
@@ -38,18 +38,23 @@ def client_metadata_document(public_url: str) -> dict:
     }
 
 
+def app_done_url(scheme: AppScheme) -> str:
+    return scheme.link("//mcp-oauth/done")
+
+
 def is_app_redirect(uri: str | None) -> bool:
-    return urlparse(str(uri or "").strip()).scheme.lower() == APP_REDIRECT_SCHEME
+    return AppScheme.of_uri(uri) is not None
 
 
 def normalize_app_redirect(uri: str) -> str:
-    """``dev.tsnanh.hermes.bot:/<path>``; no authority, userinfo, query or fragment, and a non-empty path."""
+    """``<app scheme>:/<path>`` for one of the Pal app's schemes; no authority, userinfo, query or fragment, and a non-empty path."""
     parsed = urlparse(uri.strip())
     path = parsed.path
-    if (parsed.scheme.lower() != APP_REDIRECT_SCHEME or parsed.netloc or parsed.query or parsed.fragment
+    scheme = AppScheme.of_uri(uri)
+    if (scheme is None or parsed.netloc or parsed.query or parsed.fragment
             or parsed.params or path.strip("/") == "" or not path.startswith("/")):
         raise ValueError(f"client_redirect_uri must look like {APP_REDIRECT_URI}")
-    return f"{APP_REDIRECT_SCHEME}:{path}"
+    return scheme.link(path)
 
 
 def is_registration_refusal(text: str | None) -> bool:

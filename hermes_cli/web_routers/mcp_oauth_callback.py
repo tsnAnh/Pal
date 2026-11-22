@@ -10,7 +10,8 @@ from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
 
-from tools.connectors.mcp_oauth_redirect import APP_DONE_URL, GATEWAY_CALLBACK_PATH
+from tools.connectors.app_scheme import AppScheme
+from tools.connectors.mcp_oauth_redirect import GATEWAY_CALLBACK_PATH, app_done_url
 
 router = APIRouter()
 
@@ -25,7 +26,7 @@ REJECTED_MESSAGE = "This link has expired or was already used. Go back to Pal an
 _REJECTED = (400, REJECTED_MESSAGE)
 
 
-def _deliver(code: str, state: str, error: str, iss: str, description: str) -> bool:
+def _deliver(code: str, state: str, error: str, iss: str, description: str) -> AppScheme | None:
     from tui_gateway.mcp_oauth_sessions import deliver_gateway_callback
     return deliver_gateway_callback(
         state, code=code or None, error=error or None, iss=iss or None, error_description=description or None)
@@ -36,8 +37,9 @@ async def mcp_oauth_callback(
     code: str = "", state: str = "", error: str = "", iss: str = "", error_description: str = ""
 ) -> HTMLResponse:
     try:
-        delivered = await run_in_threadpool(_deliver, code, state, error, iss, error_description) if state else False
+        delivered = await run_in_threadpool(_deliver, code, state, error, iss, error_description) if state else None
     except Exception:  # health: allow BLE001 -- the page must not echo anything, any failure reads as an expired link
-        delivered = False
-    status, message = _REJECTED if not delivered else _DENIED if error else _DONE
-    return HTMLResponse(_PAGE.format(message=message, link=APP_DONE_URL), status_code=status, headers=_HEADERS)
+        delivered = None
+    status, message = _REJECTED if delivered is None else _DENIED if error else _DONE
+    link = app_done_url(delivered or AppScheme.release)
+    return HTMLResponse(_PAGE.format(message=message, link=link), status_code=status, headers=_HEADERS)
