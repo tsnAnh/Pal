@@ -7,7 +7,7 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
         case copyCard(copies: [SetupCopy])
         case paste(fields: [SetupField])
         case browserRoundTrip(waitingTitle: String, waitingBody: String)
-        case action(waitingTitle: String, waitingBody: String, copies: [SetupCopy] = [])
+        case action(waitingTitle: String, waitingBody: String)
         case confirm(items: [SetupConfirmItem])
         case openAndCheck(SetupOpenAndCheck)
         case switches(groups: [SetupSwitchGroup])

@@ -217,20 +217,4 @@ struct SlackSetupPlanTests {
         #expect(other.currentID == SlackSetupPlan.credentialID)
         #expect(other.failure?.reason.contains("App-Level Tokens") == false)
     }
-
-    @Test func theReturnAddressStepShowsTheAddressToCopyAndTheSlackPage() throws {
-        let address = "https://pal.example.test/webapp/chat-install/callback"
-        let action: [String: Any?] = [
-            "kind": "button", "action_id": "gateway_redirect", "link": "https://api.slack.com/apps/A1/oauth", "copy_text": address,
-        ]
-        let state = try chatState("needs_manual_step", 5, action: action)
-        let plan = try plan(state, guided: ["gateway_redirect"])
-        let step = try #require(plan.steps.first { $0.id == SlackSetupPlan.manualID(.gatewayRedirect) })
-        guard case .action(_, _, let copies) = step.kind else {
-            Issue.record("the return address step runs an action")
-            return
-        }
-        #expect(copies.map(\.value) == [address])
-        #expect(step.pageLink?.url.absoluteString == "https://api.slack.com/apps/A1/oauth")
-    }
 }
