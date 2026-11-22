@@ -64,7 +64,7 @@ struct ConnectorToolsCard: View {
                     .foregroundStyle(PalTokens.textSecondary)
                     .padding(.bottom, 6)
                 Button("Try again") { Task { await model.refresh() } }
-                    .buttonStyle(ConnectorDetailsStyle.capsule)
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("connectorDetailsToolsRetry")
             }
             .frame(maxWidth: .infinity, alignment: .leading)

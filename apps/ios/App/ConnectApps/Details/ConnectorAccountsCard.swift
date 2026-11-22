@@ -232,11 +232,11 @@ struct ConnectorAccountsCard: View {
     private var connectButton: some View {
         if model.canSubmitAdd {
             Button("Connect") { model.submitAdd() }
-                .buttonStyle(ConnectorDetailsStyle.prominent)
+                .glassButtonStyle(prominent: true)
                 .accessibilityIdentifier("connectorAccountAddConnect")
         } else {
             Button("Connect") {}
-                .buttonStyle(ConnectorDetailsStyle.capsule)
+                .buttonStyle(.glass)
                 .disabled(true)
                 .accessibilityIdentifier("connectorAccountAddConnect")
         }

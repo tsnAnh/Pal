@@ -18,14 +18,17 @@ struct EditBotSheet: View {
             accessibilityIdentifier: "editBotSheet",
             onLeading: onClose,
             trailing: {
-                PillButton(
-                    String(localized: "Save"),
-                    kind: model.canSave ? .accent : .dimmed,
-                    isBusy: model.isSaving,
-                    accessibilityIdentifier: "editBotSave"
-                ) {
+                Button {
                     Task { if await model.save() { onClose() } }
+                } label: {
+                    HStack(spacing: 6) {
+                        if model.isSaving { ProgressView().controlSize(.small) }
+                        Text(String(localized: "Save"))
+                    }
                 }
+                .glassButtonStyle(prominent: true)
+                .disabled(!model.canSave || model.isSaving)
+                .accessibilityIdentifier("editBotSave")
             },
             content: {
                 ScrollView {
@@ -82,7 +85,7 @@ struct EditBotSheet: View {
 
     private func avatarAction(_ title: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Text(title) }
-            .buttonStyle(.pill())
+            .buttonStyle(.glass)
             .accessibilityIdentifier(id)
     }
 }

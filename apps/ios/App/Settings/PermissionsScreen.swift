@@ -150,7 +150,7 @@ struct PermissionsScreen: View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionHeader(title, subtitle: subtitle, accessibilityIdentifier: "permissionsHeader-\(list.rawValue)") {
                 Button("Add Rule") { addingTo = list }
-                    .buttonStyle(.pill())
+                    .buttonStyle(.glass)
                     .padding(.trailing, 1)
                     .accessibilityIdentifier("permissionsAddRule-\(list.rawValue)")
             }
@@ -190,11 +190,17 @@ struct AddRuleSheet: View {
             title: list == .ask ? "Always Ask" : "Allow without Asking", accessibilityIdentifier: "permissionsAddSheet",
             onLeading: close,
             trailing: {
-                PillButton(
-                    "Add", kind: isValid ? .accent : .dimmed, isBusy: model.isBusy, accessibilityIdentifier: "permissionsSaveRule"
-                ) {
+                Button {
                     Task { if await model.add(trimmed, to: list, hub: hub) { close() } }
+                } label: {
+                    HStack(spacing: 6) {
+                        if model.isBusy { ProgressView().controlSize(.small) }
+                        Text("Add")
+                    }
                 }
+                .glassButtonStyle(prominent: true)
+                .disabled(!isValid || model.isBusy)
+                .accessibilityIdentifier("permissionsSaveRule")
             },
             content: {
                 VStack(alignment: .leading, spacing: 8) {

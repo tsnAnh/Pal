@@ -275,8 +275,7 @@ extension ConnectionView {
             capsuleLabel(primaryTitle, leading: primaryLeading)
                 .foregroundStyle(tone.background)
         }
-        .buttonStyle(.glassProminent)
-        .tint(tone.primaryText)
+        .glassButtonStyle(prominent: true, tint: tone.primaryText)
         .buttonBorderShape(.capsule)
         .disabled(!primaryEnabled)
         .accessibilityIdentifier("signInButton")

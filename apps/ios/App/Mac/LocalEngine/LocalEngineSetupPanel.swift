@@ -234,9 +234,8 @@ private struct PanelButton: View {
         switch kind {
         case .primary:
             Button(action: action) { label }
-                .buttonStyle(.glassProminent)
+                .glassButtonStyle(prominent: true, tint: PalTokens.inverseFill)
                 .buttonBorderShape(.capsule)
-                .tint(PalTokens.inverseFill)
                 .keyboardShortcut(.defaultAction)
                 .accessibilityIdentifier(identifier)
         case .secondary:

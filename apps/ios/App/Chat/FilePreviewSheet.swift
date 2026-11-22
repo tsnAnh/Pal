@@ -92,13 +92,13 @@ struct FilePreviewSheet: View {
         } label: {
             Label("Save as…", palIcon: "square.and.arrow.down")
         }
-        .buttonStyle(PillButtonStyle(kind: .neutral))
+        .buttonStyle(.glass)
         .accessibilityIdentifier("filePreviewSave")
         #else
         ShareLink(item: url) {
             Label("Share", palIcon: "square.and.arrow.up")
         }
-        .buttonStyle(PillButtonStyle(kind: .neutral))
+        .buttonStyle(.glass)
         .accessibilityIdentifier("filePreviewShare")
         #endif
     }

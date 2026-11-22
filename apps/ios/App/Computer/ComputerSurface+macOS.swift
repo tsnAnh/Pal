@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import PalDesign
 import PalRFB
 import SwiftUI
 
@@ -32,6 +33,7 @@ struct ComputerSurface: NSViewRepresentable {
 final class ScreenSurfaceView: NSView {
     private static let scrollNotchPoints: CGFloat = 22
     private static let zoomPointsPerDoubling: CGFloat = 120
+    private static let letterbox = NSColor(PalTokens.elevated)
 
     weak var model: ComputerModel?
     var canControl = false {
@@ -62,7 +64,7 @@ final class ScreenSurfaceView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.black.cgColor
+        layer?.backgroundColor = Self.letterbox.cgColor
         layer?.masksToBounds = true
         addSubview(imageView)
     }

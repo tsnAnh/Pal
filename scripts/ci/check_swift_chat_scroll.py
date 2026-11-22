@@ -12,7 +12,11 @@ The chat list scrolls vertically only. Two things keep it there:
 * every programmatic scroll of the list (``ChatTranscriptList.swift``, ``ChatScrollController.swift``) sets only the vertical axis: ``scrollTo(edge: .top)``,
   ``scrollTo(edge: .bottom)``, ``scrollTo(y:)`` or ``scrollTo(id:, anchor: ChatScrollController.revealAnchor)``
   (an anchor with ``x: 0``). ``scrollTo(x:)``, ``scrollTo(point:)``, a leading or trailing edge and a centred
-  anchor carry an x and move the list sideways. A justified exception carries ``chat-scroll: ok`` on the line.
+  anchor carry an x and move the list sideways. A justified exception carries ``chat-scroll: ok`` on the line;
+* the row stack marked ``.scrollTargetLayout()`` sits at the content origin: no ``.padding(`` or ``.chatColumn()``
+  in the modifier chain that follows it. SwiftUI keeps the anchored row in place as rows change, and an inset
+  between the content and the target layout comes back as a horizontal content offset of that inset (the list jumped
+  16pt left during a tool turn). Each row carries its margins and column with ``.chatListRow()``.
 
 Run: python scripts/ci/check_swift_chat_scroll.py [apps_ios_root]
 """
@@ -37,6 +41,10 @@ FIX = ("Scroll the chat list on the vertical axis only: scrollTo(edge: .top), sc
 MAC_PIN = ("containerRelativeFrame(.horizontal) in the macOS build of the chat list: on Mac it resolves against the window, "
            "not the pane MacShellLayout proposes, so the content is as wide as the whole window and overflows the pane by the "
            "sidebar width. Put the pin inside #if os(iOS) and bound the Mac list with .chatColumn() alone")
+TARGET_LAYOUT = ".scrollTargetLayout()"
+TARGET_INSET = re.compile(r"\.padding\(|\.chatColumn\(\)")
+INSET_FIX = ("an inset around the scroll target layout; SwiftUI turns it into a sideways scroll offset when rows change. "
+             "Keep the target layout at the content origin and give each row its margins and column with .chatListRow()")
 IOS_PIN = "the list content is not pinned to the viewport width on iOS; add containerRelativeFrame(.horizontal) inside #if os(iOS)"
 CONDITIONAL = re.compile(r"^\s*#(if|elseif|else|endif)\b(.*)$")
 OS_TEST = re.compile(r"\bos\((\w+)\)")
@@ -127,8 +135,24 @@ def scan(root: Path) -> list[str]:
         for number, line in active_lines(text, "macOS"):
             if WIDTH_PIN in line and OPT_OUT not in line:
                 found.append(f"{LIST_VIEW}:{number}: {MAC_PIN}")
+        found.extend(_insets_around_target_layout(text))
         if not any(WIDTH_PIN in line for _, line in active_lines(text, "iOS")):
             found.append(f"{LIST_VIEW}:1: {IOS_PIN}")
+    return found
+
+
+def _insets_around_target_layout(text: str) -> list[str]:
+    found = []
+    inside = False
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if TARGET_LAYOUT in line:
+            inside = True
+            continue
+        if inside and not (stripped.startswith(".") or stripped.startswith("#")):
+            inside = False
+        if inside and TARGET_INSET.search(line) and OPT_OUT not in line:
+            found.append(f"{LIST_VIEW}:{number}: {INSET_FIX}")
     return found
 
 

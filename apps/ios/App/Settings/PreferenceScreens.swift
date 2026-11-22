@@ -286,13 +286,18 @@ struct ImportMemoryScreen: View {
                     accessibilityIdentifier: "importMemoryFootnote"
                 )
             }
-            PillButton(
-                "Import", kind: model.canImport ? .accent : .dimmed, size: .large, isBusy: model.isBusy,
-                accessibilityIdentifier: "importMemoryButton"
-            ) {
+            Button {
                 focused = false
                 Task { await model.run(api: hub.api) }
+            } label: {
+                HStack(spacing: 6) {
+                    if model.isBusy { ProgressView().controlSize(.small) }
+                    Text("Import")
+                }
             }
+            .glassButtonStyle(prominent: true)
+            .disabled(!model.canImport || model.isBusy)
+            .accessibilityIdentifier("importMemoryButton")
             .frame(maxWidth: .infinity)
         }
         .macAlert(isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {

@@ -8,8 +8,9 @@ line do not break it); only a NEW finding fails. Fixing one leaves a stale basel
 reported and harmless; ``--write-baseline`` rewrites the file. A justified exception carries
 ``glass-lint: ok`` on the flagged line.
 
-Rules: glass-dark-tint, glass-hand-rolled, glass-pill-button, glass-container, glass-sheet-chrome,
-glass-close-chrome, glass-search-field, glass-floating-bar, glass-raw-color, glass-system-tint.
+Rules: glass-dark-tint, glass-hand-rolled, glass-pill-button, glass-button-size, glass-button-tint, glass-prominent-direct,
+glass-custom-button-style, glass-container, glass-sheet-chrome, glass-close-chrome,
+glass-search-field, glass-floating-bar, glass-raw-color, glass-system-tint.
 
 Run: python scripts/ci/check_swift_glass.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -233,6 +234,38 @@ LINE_RULES = (
         "delete the .tint/.accentColor, or use PalTokens.textPrimary when a view must restate the ink",
     ),
     LineRule(
+        "glass-button-size",
+        re.compile(r"\.controlSize\(\s*\.(?:mini|small|large|extraLarge)\s*\)"),
+        EVERYWHERE,
+        "custom size on a glass button. Native .glass / .glassProminent buttons keep the default control size; "
+        "drop .controlSize(...)",
+        window_must_match=re.compile(r"\.buttonStyle\(\s*\.glass"),
+        skip=re.compile(r"ProgressView"),
+    ),
+    LineRule(
+        "glass-button-tint",
+        re.compile(r"\.tint\("),
+        OUTSIDE_DESIGN,
+        "tint on a native glass button. Any tint fills .glass (the blue Cancel); the app accent is already neutral, "
+        "so drop .tint(...)",
+        window_must_match=re.compile(r"\.buttonStyle\(\s*\.glass"),
+        skip=re.compile(r"ProgressView|Toggle|Slider"),
+    ),
+    LineRule(
+        "glass-prominent-direct",
+        re.compile(r"\.buttonStyle\(\s*\.glassProminent\b"),
+        OUTSIDE_DESIGN,
+        "raw .glassProminent follows the Mac system accent (pink, blue). Use .glassButtonStyle(prominent: true), "
+        "which pins the neutral tint",
+    ),
+    LineRule(
+        "glass-custom-button-style",
+        re.compile(r"\b(?:struct|extension)\s+\w+\s*:\s*(?:\w+\s*,\s*)*(?:Primitive)?ButtonStyle\b"),
+        EVERYWHERE,
+        "custom ButtonStyle. Text buttons use native .buttonStyle(.glass) / .glassProminent at the default size "
+        "(.glassButtonStyle(prominent:) for selected chips)",
+    ),
+    LineRule(
         "glass-raw-color",
         re.compile(r"\b(?:Color|UIColor|NSColor)\(\s*(?:\.\w+\s*,\s*)?(?:red|white|hue)\s*:"
                    r"|\"#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?\"|\bColor\(\s*hex"),
@@ -249,7 +282,7 @@ BLUE = re.compile(r"\.blue\b|Color\.blue|\bsystemBlue\b|\baccentBlue(?:Text)?\b|
 SCROLLING = re.compile(r"\b(?:ScrollView|ScrollViewReader|LazyVStack|LazyVGrid|List|Table)\b")
 FLOATING_EDGE = re.compile(r"\.overlay\(\s*alignment:\s*\.(?:top|bottom)\b|\bZStack\(\s*alignment:\s*\.(?:top|bottom)\b")
 OWNS_BACKGROUND = re.compile(r"\.background\(|palGlass|glassEffect|Material\b|FloatingSearchBar|GlassEffectContainer"
-                             r"|\.buttonStyle\(\s*\.glass|ChatComposer|\.bar\b|\.scrollEdgeEffect")
+                             r"|\.buttonStyle\(\s*\.glass|\.glassButtonStyle\(|ChatComposer|\.bar\b|\.scrollEdgeEffect")
 DECL = re.compile(r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|private|fileprivate|internal|static|final|nonisolated|"
                   r"override|mutating)\s+)*(?:var|func|init)\b")
 CLOSE_SIDE = re.compile(r'"(?:Close|Cancel|Dismiss)"|xmark|role:\s*\.(?:close|cancel)')

@@ -20,11 +20,10 @@ struct ChatTranscriptList: View {
             ChatTranscriptRows(model: model, scroll: scroll, router: router, connectionIsSlow: connectionIsSlow)
         }
         .scrollPosition($scroll.position)
-        .contentMargins(.top, max(0, chrome.bottom - chrome.top), for: .automatic)
+        .contentMargins(.top, max(0, chrome.bottom - chrome.top) + ChatMetrics.composerClearance, for: .automatic)
         .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
         .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
         .newestFirst()
-        .mask { ChatEdgeFadeMask() }
         .overlay { ChatOpeningOverlay(model: model) }
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectHidden(true, for: .all)
@@ -84,6 +83,7 @@ private struct ChatTranscriptRows: View {
         let ink = BubblePalette.ink(accent: source.accent)
         LazyVStack(alignment: .leading, spacing: 0) {
             footer(ink: ink)
+                .chatListRow()
                 .newestFirst()
             ForEach(model.rowsNewestFirst) { row in
                 ChatRowView(row: row, context: source.context(for: row), model: model) { link in
@@ -94,19 +94,19 @@ private struct ChatTranscriptRows: View {
                     )))
                 }
                 .equatable()
+                .chatListRow()
                 .newestFirst()
                 .background { ChatPinProbe(id: row.id, scroll: scroll, slot: scroll.pinSlots.slot(for: row.id)) }
             }
             if !model.rows.isEmpty {
                 OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
+                    .chatListRow()
                     .newestFirst()
                     .padding(.bottom, 8)
             }
         }
         .scrollTargetLayout()
         .coordinateSpace(.named(ChatScrollController.contentSpace))
-        .padding(.horizontal, ChatMetrics.edgeMargin)
-        .chatColumn()
         .paneOverflowProbe("chat.list")
         #if os(iOS)
         .containerRelativeFrame(.horizontal)
@@ -145,7 +145,7 @@ private struct ChatOpeningOverlay: View {
 
     var body: some View {
         if model.isOpening {
-            DelayedReveal(after: ChatEdgeFade.loadingDelay) {
+            DelayedReveal(after: ChatLoading.delay) {
                 Text("Loading…")
                     .hermesText(.chatStatus)
                     .foregroundStyle(PalTokens.textSecondary)

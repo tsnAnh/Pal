@@ -36,7 +36,7 @@ private struct RoomActionButton: View {
                 Text(title)
             }
         }
-        .buttonStyle(.glassProminent)
+        .glassButtonStyle(prominent: true)
         .disabled(isBusy || !isEnabled)
         .accessibilityIdentifier(identifier)
     }

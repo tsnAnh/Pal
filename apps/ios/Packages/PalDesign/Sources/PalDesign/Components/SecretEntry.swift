@@ -214,18 +214,18 @@ public struct SecretEntryView: View {
         if showsField {
             VStack(spacing: 8) {
                 Button(state == .submitting ? String(localized: "Saving…") : submitTitle, action: submit)
-                    .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
+                    .glassButtonStyle(prominent: true)
                     .disabled(!canSubmit)
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier(identifiers.submit)
                 Button(cancelTitle, action: cancel)
-                    .buttonStyle(PillButtonStyle(kind: .dimmed, size: .large))
+                    .buttonStyle(.glass)
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier(identifiers.cancel)
             }
         } else {
             Button(String(localized: "Close"), action: cancel)
-                .buttonStyle(PillButtonStyle(kind: .neutral, size: .large))
+                .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier(identifiers.cancel)
         }

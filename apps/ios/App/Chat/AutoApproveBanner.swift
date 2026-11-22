@@ -22,7 +22,7 @@ struct AutoApproveBanner: View {
                         .accessibilityIdentifier("autoApproveBannerTitle")
                     Spacer(minLength: 8)
                     Button("Off") { Task { await autoApprove.setEnabled(false, sessionID: sessionID) } }
-                        .buttonStyle(.palPill(height: 28, fontSize: 12.5, horizontalPadding: 14))
+                        .buttonStyle(.glass)
                         .disabled(autoApprove.isPending(sessionID))
                         .accessibilityIdentifier("autoApproveBannerOff")
                 }
@@ -34,8 +34,7 @@ struct AutoApproveBanner: View {
                         .accessibilityIdentifier("autoApproveBannerError")
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .padding(12)
             .background(PalTokens.elevated, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .padding(.horizontal, ChatMetrics.edgeMargin)

@@ -89,8 +89,8 @@ private struct MacRoomRow: View {
 
     var body: some View {
         Button { router.openRoom(id: room.roomID) } label: {
-            HStack(spacing: 8.5) {
-                RoomFace(room: room, roster: roster, diameter: 33)
+            HStack(spacing: MacMetrics.rowSpacing) {
+                RoomFace(room: room, roster: roster, diameter: MacMetrics.rowAvatar)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(room.name)
                         .hermesText(.botName)
@@ -103,9 +103,8 @@ private struct MacRoomRow: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.leading, 8.5)
-            .padding(.trailing, 8)
-            .frame(height: 50)
+            .padding(.horizontal, MacMetrics.rowInset)
+            .frame(height: MacMetrics.rowHeight)
             .background(
                 isSelected ? PalTokens.selected : hovering ? PalTokens.hover : Color.clear,
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)

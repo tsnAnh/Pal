@@ -101,16 +101,16 @@ struct TeachBanner: View {
         HStack(spacing: 8) {
             switch model.phase {
             case .recording:
-                pill("Stop", .accent, "teachStop") { Task { await model.stop(discard: false) } }
+                pill("Stop", prominent: true, "teachStop") { Task { await model.stop(discard: false) } }
             case .ended:
-                pill("Create skill", .accent, "teachCreateSkill") { Task { await model.stop(discard: false) } }
-                pill("Discard", .neutral, "teachDiscardRecording") { model.confirmation = .discardRecording }
+                pill("Create skill", prominent: true, "teachCreateSkill") { Task { await model.stop(discard: false) } }
+                pill("Discard", "teachDiscardRecording") { model.confirmation = .discardRecording }
             case .drafting:
-                pill("Ask again", model.busy || date < model.askAgainAt ? .dimmed : .neutral, "teachAskAgain") { Task { await model.askAgain() } }
-                pill("Discard", .neutral, "teachDiscardDraft") { model.confirmation = .discardDraft }
+                pill("Ask again", disabled: model.busy || date < model.askAgainAt, "teachAskAgain") { Task { await model.askAgain() } }
+                pill("Discard", "teachDiscardDraft") { model.confirmation = .discardDraft }
             case .ready:
-                pill("Review", .accent, "teachReview") { Task { await model.openReview(from: surface) } }
-                pill("Discard", .neutral, "teachDiscardDraft") { model.confirmation = .discardDraft }
+                pill("Review", prominent: true, "teachReview") { Task { await model.openReview(from: surface) } }
+                pill("Discard", "teachDiscardDraft") { model.confirmation = .discardDraft }
             case .hidden, .idle:
                 EmptyView()
             }
@@ -118,8 +118,17 @@ struct TeachBanner: View {
         .disabled(model.busy && model.phase != .drafting)
     }
 
-    private func pill(_ title: LocalizedStringResource, _ kind: PillKind, _ identifier: String, action: @escaping () -> Void) -> some View {
-        PillButton(String(localized: title), kind: kind, accessibilityIdentifier: identifier, action: action)
+    private func pill(
+        _ title: LocalizedStringResource,
+        prominent: Bool = false,
+        disabled: Bool = false,
+        _ identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(String(localized: title), action: action)
+            .glassButtonStyle(prominent: prominent)
+            .disabled(disabled)
+            .accessibilityIdentifier(identifier)
     }
 }
 
@@ -163,9 +172,9 @@ struct TeachReviewSheet: View {
                 Text("Couldn't load the draft")
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
-                PillButton(String(localized: "Try again"), accessibilityIdentifier: "teachReviewRetry") {
-                    Task { await model.openReview(from: model.surface) }
-                }
+                Button("Try again") { Task { await model.openReview(from: model.surface) } }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("teachReviewRetry")
             }
             .padding(.horizontal, PalMetrics.rowInset)
             .padding(.vertical, PalMetrics.rowVerticalPadding)
@@ -194,19 +203,19 @@ struct TeachReviewSheet: View {
             }
             .scrollIndicators(.hidden)
             HStack {
-                PillButton(String(localized: "Discard"), size: .large, accessibilityIdentifier: "teachReviewDiscard") {
-                    model.confirmation = .discardDraft
-                }
+                Button("Discard") { model.confirmation = .discardDraft }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("teachReviewDiscard")
                 Spacer(minLength: 0)
-                PillButton(
-                    String(localized: "Approve"),
-                    kind: draft.canApprove ? .accent : .dimmed,
-                    size: .large,
-                    isBusy: model.busy,
-                    accessibilityIdentifier: "teachReviewApprove"
-                ) {
-                    model.confirmation = .approve
+                Button { model.confirmation = .approve } label: {
+                    HStack(spacing: 6) {
+                        if model.busy { ProgressView().controlSize(.small) }
+                        Text("Approve")
+                    }
                 }
+                .glassButtonStyle(prominent: true)
+                .disabled(model.busy || !draft.canApprove)
+                .accessibilityIdentifier("teachReviewApprove")
             }
             .padding(.horizontal, PalMetrics.screenMargin)
             .padding(.bottom, PalMetrics.screenMargin)

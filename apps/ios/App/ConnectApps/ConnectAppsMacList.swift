@@ -24,8 +24,9 @@ extension ConnectAppsList {
                     macContent(state)
                     Button { model.addCustomConnector() } label: {
                         Label("Add a custom connector", palIcon: "plus")
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.palClearWide)
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("addCustomConnectorButton")
                     .padding(.top, PalMetrics.cardGap)
                     .padding(.horizontal, PalMetrics.screenMargin)
@@ -151,11 +152,11 @@ extension ConnectAppsList {
             switch look.action {
             case .allow:
                 Button(localized) { Task { await model.devices.allow(id) } }
-                    .buttonStyle(.palClearCapsule)
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("\(identifier)-action")
             case .openSettings:
                 Button(localized) { model.devices.openSettings(for: id) }
-                    .buttonStyle(.palClearCapsule)
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("\(identifier)-action")
             case nil:
                 EmptyView()

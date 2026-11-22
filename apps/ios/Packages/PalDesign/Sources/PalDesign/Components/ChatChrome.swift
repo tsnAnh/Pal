@@ -18,7 +18,15 @@ public struct ChatBubble<Content: View>: View {
         content
             .padding(.horizontal, ChatMetrics.bubbleHorizontalPadding)
             .padding(.vertical, ChatMetrics.bubbleVerticalPadding)
-            .background(fill, in: RoundedRectangle(cornerRadius: ChatMetrics.bubbleRadius, style: .continuous))
+            .background(fill, in: ChatBubbleShape())
+    }
+}
+
+public struct ChatBubbleShape: Shape {
+    public init() {}
+
+    public func path(in rect: CGRect) -> Path {
+        RoundedRectangle(cornerRadius: min(rect.height / 2, ChatMetrics.bubbleCapsuleRadius), style: .continuous).path(in: rect)
     }
 }
 

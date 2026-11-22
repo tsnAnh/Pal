@@ -127,14 +127,16 @@ struct TelegramView: View {
             switch model.phase {
             case .loading:
                 DelayedReveal {
-                    PillButton(String(localized: "Loading"), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "telegramLoading") {}
+                    busyButton(String(localized: "Loading"), identifier: "telegramLoading")
                 }
             case .busy(let activity):
-                PillButton(busyTitle(activity), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "telegramBusy") {}
+                busyButton(busyTitle(activity), identifier: "telegramBusy")
             case .unavailable:
-                PillButton(String(localized: "Try again"), kind: .accent, size: .large, accessibilityIdentifier: "telegramRetry") {
+                Button(String(localized: "Try again")) {
                     Task { await model.recheck() }
                 }
+                .glassButtonStyle(prominent: true)
+                .accessibilityIdentifier("telegramRetry")
             case .ready(let connection):
                 readyAction(connection)
             }
@@ -148,9 +150,11 @@ struct TelegramView: View {
         VStack(spacing: 8) {
             primaryAction(connection)
             if model.showsUpdateToken {
-                PillButton(String(localized: "Update token"), kind: .neutral, size: .large, accessibilityIdentifier: "telegramUpdateTokenButton") {
+                Button(String(localized: "Update token")) {
                     model.beginUpdateToken()
                 }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("telegramUpdateTokenButton")
             }
         }
     }
@@ -159,20 +163,38 @@ struct TelegramView: View {
     private func primaryAction(_ connection: TelegramConnection) -> some View {
         switch connection {
         case .notConnected:
-            PillButton(String(localized: "Connect"), kind: .accent, size: .large, accessibilityIdentifier: "telegramConnectButton") {
+            Button(String(localized: "Connect")) {
                 model.beginConnect()
             }
+            .glassButtonStyle(prominent: true)
+            .accessibilityIdentifier("telegramConnectButton")
         case .failed, .connected:
-            PillButton(String(localized: "Disconnect"), kind: .neutral, size: .large, accessibilityIdentifier: "telegramDisconnectButton") {
+            Button(String(localized: "Disconnect")) {
                 model.confirmsDisconnect = true
             }
+            .buttonStyle(.glass)
+            .accessibilityIdentifier("telegramDisconnectButton")
         case .restartNeeded:
-            PillButton(String(localized: "Check again"), kind: .accent, size: .large, accessibilityIdentifier: "telegramRecheckButton") {
+            Button(String(localized: "Check again")) {
                 Task { await model.recheck() }
             }
+            .glassButtonStyle(prominent: true)
+            .accessibilityIdentifier("telegramRecheckButton")
         case .starting:
-            PillButton(String(localized: "Connecting…"), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "telegramStartingButton") {}
+            busyButton(String(localized: "Connecting…"), identifier: "telegramStartingButton")
         }
+    }
+
+    private func busyButton(_ title: String, identifier: String) -> some View {
+        Button {} label: {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(title)
+            }
+        }
+        .glassButtonStyle(prominent: true)
+        .disabled(true)
+        .accessibilityIdentifier(identifier)
     }
 
     private func busyTitle(_ activity: TelegramModel.Activity) -> String {
@@ -197,13 +219,12 @@ private struct TelegramTokenSheet: View {
             accessibilityIdentifier: "telegramTokenSheet",
             onLeading: { model.isEnteringToken = false },
             trailing: {
-                PillButton(
-                    isUpdate ? String(localized: "Update") : String(localized: "Connect"),
-                    kind: model.canSubmitToken ? .accent : .dimmed,
-                    accessibilityIdentifier: "telegramTokenSubmit"
-                ) {
+                Button(isUpdate ? String(localized: "Update") : String(localized: "Connect")) {
                     Task { await model.submitToken() }
                 }
+                .glassButtonStyle(prominent: true)
+                .disabled(!model.canSubmitToken)
+                .accessibilityIdentifier("telegramTokenSubmit")
             },
             content: {
                 ScrollView {

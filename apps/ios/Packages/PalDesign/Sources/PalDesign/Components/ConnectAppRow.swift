@@ -60,12 +60,12 @@ public struct PluginGlyphTile: View {
 
 public struct ConnectRowAction {
     public let title: String
-    public let kind: PillKind
+    public let prominent: Bool
     public let action: () -> Void
 
-    public init(_ title: String, kind: PillKind = .neutral, action: @escaping () -> Void) {
+    public init(_ title: String, prominent: Bool = false, action: @escaping () -> Void) {
         self.title = title
-        self.kind = kind
+        self.prominent = prominent
         self.action = action
     }
 }
@@ -177,7 +177,7 @@ public struct ConnectAppRow<Icon: View>: View {
                         if isBusy { ProgressView().controlSize(.small) }
                     }
                 }
-                .buttonStyle(.pill(trailing.kind))
+                .glassButtonStyle(prominent: trailing.prominent)
                 .disabled(isBusy)
                 .accessibilityLabel(Text("\(trailing.title) \(title)"))
                 .accessibilityIdentifier("\(accessibilityIdentifier)-action")

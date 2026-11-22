@@ -2,42 +2,17 @@ import PalDesign
 import PalRoster
 import SwiftUI
 
-enum ChatEdgeFade {
-    static let feather: CGFloat = 24
-    static let loadingDelay = Duration.milliseconds(300)
-    static var topFloor: CGFloat {
-        #if os(macOS)
-        MacMetrics.topBarHeight
-        #else
-        0
-        #endif
-    }
-}
-
-struct ChatEdgeFadeMask: View {
-    var body: some View {
-        GeometryReader { proxy in
-            let insets = proxy.safeAreaInsets
-            VStack(spacing: 0) {
-                Color.clear
-                    .frame(height: max(0, max(insets.top, ChatEdgeFade.topFloor) - ChatEdgeFade.feather / 2))
-                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                    .frame(height: ChatEdgeFade.feather * 1.5)
-                Color.black
-                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: ChatEdgeFade.feather)
-                Color.clear
-                    .frame(height: max(0, insets.bottom - ChatEdgeFade.feather))
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height + insets.top + insets.bottom)
-            .offset(y: -insets.top)
-        }
-    }
+enum ChatLoading {
+    static let delay = Duration.milliseconds(300)
 }
 
 extension View {
     func newestFirst() -> some View {
         scaleEffect(x: 1, y: -1, anchor: .center)
+    }
+
+    func chatListRow() -> some View {
+        padding(.horizontal, ChatMetrics.edgeMargin).chatColumn()
     }
 
     func chatColumn() -> some View {

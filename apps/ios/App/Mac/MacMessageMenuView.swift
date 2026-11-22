@@ -5,6 +5,7 @@ import SwiftUI
 
 struct MacMessageMenuView: View {
     let actions: MessageActions
+    var selection: String?
     let dismiss: () -> Void
 
     static let width = MessageMenuMetrics.cellWidth * 7 + 10
@@ -139,6 +140,11 @@ struct MacMessageMenuView: View {
             .accessibilityIdentifier(action.identifier)
         case .copyTable:
             MacMenuRow(title: title, symbol: action.symbol, identifier: action.identifier) { page = .tables }
+        case .copy where selection != nil:
+            MacMenuRow(title: title, symbol: action.symbol, identifier: action.identifier) {
+                dismiss()
+                Pasteboard.string = selection
+            }
         default:
             MacMenuRow(title: title, symbol: action.symbol, identifier: action.identifier) {
                 dismiss()

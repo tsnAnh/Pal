@@ -126,16 +126,24 @@ struct PublicAccessContent: View {
                 route.name, value: route.isEnabled ? "On" : "Off", subtitle: routeSubtitle(route),
                 accessibilityIdentifier: "publicRouteSummary-\(route.name)")
             HStack(spacing: 8) {
-                PillButton(
-                    copiedRoute == route.name ? "Copied" : "Copy address", kind: route.publicURL == nil ? .dimmed : .neutral,
-                    accessibilityIdentifier: "publicRouteCopy-\(route.name)"
-                ) { copy(route) }
-                    .disabled(route.publicURL == nil)
-                PillButton(
-                    model.probes[route.name] == .running ? "Checking…" : "Check", kind: .accent,
-                    isBusy: model.probes[route.name] == .running, accessibilityIdentifier: "publicRouteProbe-\(route.name)"
-                ) { Task { await model.probe(route.name) } }
-                PillButton("Remove", accessibilityIdentifier: "publicRouteRemove-\(route.name)") { removing = route }
+                Button { copy(route) } label: {
+                    Text(copiedRoute == route.name ? "Copied" : "Copy address")
+                }
+                .buttonStyle(.glass)
+                .disabled(route.publicURL == nil)
+                .accessibilityIdentifier("publicRouteCopy-\(route.name)")
+                Button { Task { await model.probe(route.name) } } label: {
+                    HStack(spacing: 6) {
+                        if model.probes[route.name] == .running { ProgressView().controlSize(.small) }
+                        Text(model.probes[route.name] == .running ? "Checking…" : "Check")
+                    }
+                }
+                .glassButtonStyle(prominent: true)
+                .disabled(model.probes[route.name] == .running)
+                .accessibilityIdentifier("publicRouteProbe-\(route.name)")
+                Button("Remove") { removing = route }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("publicRouteRemove-\(route.name)")
             }
             .padding(.horizontal, PalMetrics.rowInset)
             .padding(.vertical, 8)
@@ -247,13 +255,17 @@ private struct AddPublicRouteSheet: View {
             title: "Add a public address", accessibilityIdentifier: "publicAccessAddSheet", onLeading: close,
             trailing: {
                 if model.issuedSecret == nil, !hasOwnSecret {
-                    PillButton(
-                        "Create", kind: draft.isComplete ? .accent : .dimmed, isBusy: model.addState == .saving,
-                        accessibilityIdentifier: "publicAccessCreateButton"
-                    ) {
+                    Button {
                         Task { _ = await model.add(draft, typedSecret: nil) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            if model.addState == .saving { ProgressView().controlSize(.small) }
+                            Text("Create")
+                        }
                     }
-                    .disabled(!draft.isComplete)
+                    .glassButtonStyle(prominent: true)
+                    .disabled(!draft.isComplete || model.addState == .saving)
+                    .accessibilityIdentifier("publicAccessCreateButton")
                 }
             },
             content: {
@@ -342,11 +354,17 @@ private struct AddPublicRouteSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("publicAccessIssuedSecret")
             HStack {
-                PillButton(copied ? "Copied" : "Copy", kind: .accent, accessibilityIdentifier: "publicAccessCopySecret") {
+                Button {
                     Pasteboard.string = secret
                     copied = true
+                } label: {
+                    Text(copied ? "Copied" : "Copy")
                 }
-                PillButton("Done", accessibilityIdentifier: "publicAccessSecretDone", action: close)
+                .glassButtonStyle(prominent: true)
+                .accessibilityIdentifier("publicAccessCopySecret")
+                Button("Done", action: close)
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("publicAccessSecretDone")
             }
             .padding(.horizontal, PalMetrics.rowInset)
             .padding(.bottom, 8)

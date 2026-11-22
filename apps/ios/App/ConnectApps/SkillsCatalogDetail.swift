@@ -53,7 +53,9 @@ extension SkillsCatalogSheet {
         case .failed(let message):
             VStack(alignment: .leading, spacing: 12) {
                 Text(message).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textSecondary))
-                PillButton(String(localized: "Try again"), accessibilityIdentifier: "skillDetailRetry") { Task { await model.loadDetail() } }
+                Button("Try again") { Task { await model.loadDetail() } }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("skillDetailRetry")
             }
             .accessibilityIdentifier("skillDetailFailed")
             sourceBlock(source: row.source, identifier: row.installTarget, trust: row.trust)
@@ -111,7 +113,7 @@ extension SkillsCatalogSheet {
                     }
                     if !key.isOptional, row.isInstalled {
                         Button(String(localized: "Add key")) { model.beginKeyEntry(row, keyName: key.name) }
-                            .buttonStyle(.pill())
+                            .buttonStyle(.glass)
                             .accessibilityLabel(Text("Add key for \(key.name)"))
                             .accessibilityIdentifier("skillAddKey-\(key.name)")
                     }
@@ -141,13 +143,11 @@ extension SkillsCatalogSheet {
         VStack(spacing: 10) {
             switch row.state {
             case .available:
-                PillButton(String(localized: "Install"), kind: .accent, size: .large, isBusy: working, accessibilityIdentifier: "skillInstall") {
-                    Task { await model.install(row) }
-                }
+                busyButton(String(localized: "Install"), isBusy: working, identifier: "skillInstall") { Task { await model.install(row) } }
+                    .glassButtonStyle(prominent: true)
             case .updateAvailable where row.isRemovable:
-                PillButton(String(localized: "Update"), kind: .accent, size: .large, isBusy: working, accessibilityIdentifier: "skillUpdate") {
-                    Task { await model.update(row) }
-                }
+                busyButton(String(localized: "Update"), isBusy: working, identifier: "skillUpdate") { Task { await model.update(row) } }
+                    .glassButtonStyle(prominent: true)
                 removeButton(row, working: working)
             case .installed where row.isRemovable, .updateAvailable:
                 removeButton(row, working: working)
@@ -163,9 +163,19 @@ extension SkillsCatalogSheet {
     @ViewBuilder
     private func removeButton(_ row: SkillRow, working: Bool) -> some View {
         if row.isRemovable {
-            PillButton(String(localized: "Remove"), size: .large, isBusy: working, accessibilityIdentifier: "skillRemove") {
-                model.removeTarget = row
+            busyButton(String(localized: "Remove"), isBusy: working, identifier: "skillRemove") { model.removeTarget = row }
+                .buttonStyle(.glass)
+        }
+    }
+
+    private func busyButton(_ title: String, isBusy: Bool, identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if isBusy { ProgressView().controlSize(.small) }
+                Text(title)
             }
         }
+        .disabled(isBusy)
+        .accessibilityIdentifier(identifier)
     }
 }

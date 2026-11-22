@@ -32,13 +32,11 @@ struct CapabilitySetKeyButton: View {
         let keys = row.settableKeys
         if keys.count == 1, let key = keys.first {
             SetupButton(title: String(localized: "Set key"), identifier: "capabilitySetKey-\(row.id)") { onSelect(key) }
-                .controlSize(.small)
         } else if keys.count > 1 {
             Menu(String(localized: "Set key")) {
                 ForEach(keys, id: \.self) { key in Button(key) { onSelect(key) } }
             }
             .buttonStyle(.glass(.regular.interactive()))
-            .controlSize(.small)
             .accessibilityIdentifier("capabilitySetKey-\(row.id)")
         }
     }

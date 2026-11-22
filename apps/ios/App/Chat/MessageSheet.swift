@@ -3,7 +3,7 @@ import PalChat
 import PalDesign
 import SwiftUI
 
-private struct MessageSheetRowStyle: ButtonStyle {
+private struct MessageSheetRowStyle: ButtonStyle { // glass-lint: ok
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(configuration.isPressed ? PalTokens.selected : Color.clear)

@@ -44,9 +44,15 @@ struct ChatInstallStatus<Secondary: View>: View {
         } actions: {
             VStack(spacing: 12) {
                 if let primaryTitle {
-                    PillButton(primaryTitle, kind: .accent, size: .large, isBusy: isBusy, accessibilityIdentifier: "\(identifierPrefix)Primary") {
-                        perform()
+                    Button(action: perform) {
+                        HStack(spacing: 6) {
+                            if isBusy { ProgressView().controlSize(.small) }
+                            Text(primaryTitle)
+                        }
                     }
+                    .glassButtonStyle(prominent: true)
+                    .disabled(isBusy)
+                    .accessibilityIdentifier("\(identifierPrefix)Primary")
                 }
                 secondary()
                 details
@@ -76,7 +82,7 @@ struct ChatInstallStatus<Secondary: View>: View {
                 }
                 Spacer(minLength: 0)
                 Button(String(localized: "Copy")) { Pasteboard.string = copy.details }
-                    .buttonStyle(.pill())
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("\(identifierPrefix)CopyDetails")
             }
             .padding(.top, 8)

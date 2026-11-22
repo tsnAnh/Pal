@@ -121,11 +121,11 @@ struct FaultDetails: View {
                 Spacer(minLength: 0)
                 VStack(spacing: 8) {
                     Button(String(localized: "Copy")) { Pasteboard.string = copyText }
-                        .buttonStyle(.pill())
+                        .buttonStyle(.glass)
                         .accessibilityIdentifier("diagnosticsCopy")
                     #if os(iOS)
                     Button(String(localized: "Share")) { sharing = true }
-                        .buttonStyle(.pill())
+                        .buttonStyle(.glass)
                         .accessibilityIdentifier("diagnosticsShare")
                     #endif
                 }
@@ -220,10 +220,10 @@ struct MacDiagnosticsSection: View {
         MacSectionPage(section: .diagnostics) {
             HStack(spacing: 8) {
                 Button(DiagnosticsCopy.copyAll) { Pasteboard.string = model.allText }
-                    .buttonStyle(.palPill)
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("diagnosticsCopyAll")
                 Button(DiagnosticsCopy.clear, role: .destructive) { confirmingClear = true }
-                    .buttonStyle(.palPill)
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("diagnosticsClear")
             }
             .disabled(model.records?.isEmpty ?? true)

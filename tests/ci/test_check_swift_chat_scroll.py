@@ -92,6 +92,38 @@ def test_a_pin_behind_a_mac_only_branch_fails_and_an_ios_or_else_branch_passes(t
     assert css.scan(_tree(tmp_path / "b", view=ios_else)) == []
 
 
+TARGETED_VIEW = (
+    "struct ChatView: View {\n"
+    "    var chat: some View {\n"
+    "        ScrollView {\n"
+    "            LazyVStack {\n"
+    "                rows.chatListRow()\n"
+    "            }\n"
+    "            .scrollTargetLayout()\n"
+    "            .coordinateSpace(.named(space))\n"
+    "            #if os(iOS)\n"
+    "            .containerRelativeFrame(.horizontal)\n"
+    "            #endif\n"
+    "        }\n"
+    "        .scrollPosition($position)\n"
+    "        .padding(.horizontal, 4)\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_rows_carrying_their_own_margins_pass(tmp_path):
+    assert css.scan(_tree(tmp_path, view=TARGETED_VIEW)) == []
+
+
+def test_margins_or_a_column_around_the_scroll_target_layout_fail_naming_the_line(tmp_path):
+    for modifier in (".padding(.horizontal, ChatMetrics.edgeMargin)", ".chatColumn()"):
+        view = TARGETED_VIEW.replace("            .coordinateSpace(.named(space))\n", f"            .coordinateSpace(.named(space))\n            {modifier}\n")
+        found = css.scan(_tree(tmp_path / modifier[1:8], view=view))
+        assert len(found) == 1, modifier
+        assert found[0].startswith("App/Chat/ChatTranscriptList.swift:9:") and ".chatListRow()" in found[0]
+
+
 def test_the_opt_out_marker_waives_the_line(tmp_path):
     root = _tree(tmp_path, controller=CONTROLLER.replace("position.scrollTo(y: 12)", "position.scrollTo(x: 0) // chat-scroll: ok"))
     assert css.scan(root) == []

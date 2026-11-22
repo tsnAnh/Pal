@@ -87,7 +87,7 @@ struct MacRenameBot: View {
         HStack(spacing: 7) {
             Spacer()
             Button("Cancel") { router.renamingBot = nil }
-                .buttonStyle(.palPill(horizontalPadding: 14))
+                .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("renameBotCancel")
             Button {
@@ -98,12 +98,7 @@ struct MacRenameBot: View {
                     Text("Save")
                 }
             }
-            .buttonStyle(.palPill(
-                horizontalPadding: 14,
-                fill: canSave ? PalTokens.inverseFill : PalTokens.fieldBorder,
-                textColor: canSave ? PalTokens.inverseText : PalTokens.textTertiary,
-                disabledOpacity: 1
-            ))
+            .glassButtonStyle(prominent: true)
             .disabled(!canSave)
             .accessibilityIdentifier("renameBotSave")
         }

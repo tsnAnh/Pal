@@ -21,7 +21,7 @@ struct KanbanRefChip: View {
             Button(action: copy) {
                 Text(copied ? String(localized: "Copied") : String(localized: "Copy"))
             }
-            .buttonStyle(.palGlass)
+            .buttonStyle(.glass)
             .accessibilityIdentifier("kanbanRefCopy")
         }
         .onDisappear { reset?.cancel() }

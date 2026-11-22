@@ -36,7 +36,7 @@ struct CreateBotImportRow: View {
                     Text("Import a template")
                 }
             }
-            .buttonStyle(.pill())
+            .buttonStyle(.glass)
             .disabled(importer.isBusy)
             .accessibilityIdentifier("createBotImport")
             if importer.phase == .idle, let failure = importer.failure {
@@ -97,7 +97,7 @@ private struct TemplateReviewSheet: View {
                 .padding(.top, 16)
                 .padding(.bottom, 32)
             }
-            .safeAreaInset(edge: .bottom) { importButton }
+            .sheetBottomAction(keyboardUp: false) { importButton }
         }
         .macSheetDismissDisabled(importer.isBusy)
     }
@@ -148,21 +148,12 @@ private struct TemplateReviewSheet: View {
     }
 
     private var importButton: some View {
-        Button {
+        SheetBottomButton(
+            String(localized: "Import"), isBusy: importer.phase == .importing, isEnabled: importer.canImport,
+            accessibilityIdentifier: "templateImportConfirm"
+        ) {
             Task { await onImport() }
-        } label: {
-            HStack(spacing: 8) {
-                if importer.phase == .importing { ProgressView().controlSize(.small) }
-                Text("Import").hermesText(.largePill)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: PalMetrics.createButtonHeight)
         }
-        .buttonStyle(.pill())
-        .disabled(!importer.canImport)
-        .padding(.horizontal, 29)
-        .padding(.bottom, PalMetrics.createButtonBottomPadding)
-        .accessibilityIdentifier("templateImportConfirm")
     }
 
     private struct Row {

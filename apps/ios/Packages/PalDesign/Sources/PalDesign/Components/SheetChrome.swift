@@ -191,7 +191,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
 
     #if os(iOS)
     private var navigationContent: some View {
-        content
+        AnyView(content)
             .environment(\.sheetChromeHostedInNavigation, false)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(background.ignoresSafeArea())

@@ -82,42 +82,6 @@ struct ConnectorDetailsDivider: View {
     }
 }
 
-struct ConnectorProminentCapsuleStyle: ButtonStyle {
-    var height: CGFloat = 30
-    var horizontalPadding: CGFloat = 14
-
-    @Environment(\.isEnabled) private var isEnabled
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(PalTokens.inverseText)
-            .padding(.horizontal, horizontalPadding)
-            .frame(height: height)
-            .background(PalTokens.inverseFill, in: Capsule())
-            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
-            .contentShape(Capsule())
-    }
-}
-
-enum ConnectorDetailsStyle {
-    static var capsule: PalClearCapsuleStyle {
-        #if os(macOS)
-        PalClearCapsuleStyle()
-        #else
-        PalClearCapsuleStyle(height: 30, horizontalPadding: 14)
-        #endif
-    }
-
-    static var prominent: ConnectorProminentCapsuleStyle {
-        #if os(macOS)
-        ConnectorProminentCapsuleStyle(height: 32, horizontalPadding: 16)
-        #else
-        ConnectorProminentCapsuleStyle(height: 30, horizontalPadding: 14)
-        #endif
-    }
-}
-
 struct ConnectorInformationCard: View {
     let rows: [ConnectorInformationRow]
 

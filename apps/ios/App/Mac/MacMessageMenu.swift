@@ -6,6 +6,7 @@ struct MacMessageMenuRequest: Identifiable {
     let id = UUID()
     let anchor: CGPoint
     let actions: MessageActions
+    var selection: String?
 }
 
 struct MacPopupItem: Identifiable {
@@ -30,7 +31,7 @@ struct MacMessageMenuHost: View {
             let origin = proxy.frame(in: .global).origin
             if let request = shell.messageMenu {
                 popup(anchor: request.anchor, origin: origin, size: proxy.size, above: false, dismiss: { shell.messageMenu = nil }) {
-                    MacMessageMenuView(actions: request.actions, dismiss: { shell.messageMenu = nil })
+                    MacMessageMenuView(actions: request.actions, selection: request.selection, dismiss: { shell.messageMenu = nil })
                 }
                 .background { Color.black.opacity(0.12).allowsHitTesting(false).accessibilityHidden(true) }
                 .id(request.id)

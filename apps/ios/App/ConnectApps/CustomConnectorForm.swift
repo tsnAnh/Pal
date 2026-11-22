@@ -69,17 +69,17 @@ struct CustomConnectorForm: View {
     private var footer: some View {
         HStack {
             if model.screen == .form {
-                footerButton("Cancel", kind: .neutral, identifier: "customConnectorCancelButton", action: onCancel)
+                footerButton("Cancel", prominent: false, identifier: "customConnectorCancelButton", action: onCancel)
                 Spacer(minLength: 12)
                 footerButton(
-                    model.submitTitle, kind: model.canSubmit ? .accent : .dimmed, identifier: "customConnectorAddButton"
+                    model.submitTitle, prominent: true, identifier: "customConnectorAddButton"
                 ) { Task { await model.submit() } }
                 .disabled(!model.canSubmit)
             } else {
-                footerButton("Remove", kind: .neutral, identifier: "customConnectorRemoveButton") { model.confirmingRemove = true }
+                footerButton("Remove", prominent: false, identifier: "customConnectorRemoveButton") { model.confirmingRemove = true }
                     .disabled(model.isBusy)
                 Spacer(minLength: 12)
-                footerButton("Edit", kind: model.isBusy ? .dimmed : .accent, identifier: "customConnectorEditButton") { model.edit() }
+                footerButton("Edit", prominent: true, identifier: "customConnectorEditButton") { model.edit() }
                     .disabled(model.isBusy)
             }
         }
@@ -87,10 +87,9 @@ struct CustomConnectorForm: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func footerButton(_ title: String, kind: PillKind, identifier: String, action: @escaping () -> Void) -> some View {
+    private func footerButton(_ title: String, prominent: Bool, identifier: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
-            .macOnly { $0.buttonStyle(.palPill(height: 28, fontSize: 12, fill: kind == .accent ? PalTokens.toggleOn.opacity(0.7) : nil)) }
-            .iOSOnly { $0.buttonStyle(.pill(kind, size: .regular)) }
+            .glassButtonStyle(prominent: prominent)
             .accessibilityIdentifier(identifier)
     }
 }

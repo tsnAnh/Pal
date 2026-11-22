@@ -53,16 +53,16 @@ struct PasteAddressEntry: View {
             }
             VStack(spacing: 8) {
                 Button(state == .submitting ? String(localized: "Signing in…") : String(localized: "Finish sign-in"), action: submit)
-                    .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
+                    .glassButtonStyle(prominent: true)
                     .disabled(!canSubmit)
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier(identifiers.submit)
                 Button(String(localized: "Open the sign-in page again"), action: onReopen)
-                    .buttonStyle(PillButtonStyle(kind: .neutral, size: .large))
+                    .buttonStyle(.glass)
                     .disabled(state == .submitting)
                     .accessibilityIdentifier("paste-address-reopen")
                 Button(String(localized: "Cancel"), action: cancel)
-                    .buttonStyle(PillButtonStyle(kind: .dimmed, size: .large))
+                    .buttonStyle(.glass)
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier(identifiers.cancel)
             }

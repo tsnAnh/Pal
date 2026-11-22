@@ -101,3 +101,15 @@ public extension BotLookCatalog {
         return isSelected ? String(localized: "\(base), selected") : base
     }
 }
+
+public extension BotLookCatalog {
+    static func prepareLooks(seed: String) {
+        let previewOrder = [defaultShape] + shapes.filter { $0 != defaultShape }
+        let solids = previewOrder.compactMap { kind -> AvatarSolid? in
+            let spec = BotAvatarSpec(name: seed, meta: BotAvatarMeta(shape: shapeString(seed: seed, kind: kind), color: defaultSwatch.hex, custom: true))
+            guard case .solid(let solid) = AvatarContent(spec) else { return nil }
+            return solid
+        }
+        for solid in solids { _ = solid.detailed(for: PalMetrics.createPreviewFrame) }
+    }
+}

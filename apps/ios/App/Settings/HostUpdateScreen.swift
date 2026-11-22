@@ -115,7 +115,7 @@ private struct HostUpdateProgressSheet: View {
             working(phase: phase, tail: tail, message: "Updating… Pal is restarting")
         case .succeeded(let version)?:
             message("Pal is now on version \(version).")
-            closeButton("Done", kind: .accent)
+            closeButton("Done", prominent: true)
         case .failed(let failure, let tail)?:
             message(HostUpdateModel.failureText(failure))
             tailView(tail)
@@ -159,7 +159,9 @@ private struct HostUpdateProgressSheet: View {
             .multilineTextAlignment(.center)
     }
 
-    private func closeButton(_ title: String, kind: PillKind = .dimmed) -> some View {
-        PillButton(title, kind: kind, size: .large, accessibilityIdentifier: "hostUpdateClose", action: close)
+    private func closeButton(_ title: String, prominent: Bool = false) -> some View {
+        Button(title, action: close)
+            .glassButtonStyle(prominent: prominent)
+            .accessibilityIdentifier("hostUpdateClose")
     }
 }

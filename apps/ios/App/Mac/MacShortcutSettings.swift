@@ -36,7 +36,7 @@ struct MacShortcutSettingsSection: View {
             section: .shortcuts,
             accessory: {
                 Button("Restore Defaults") { confirmingRestore = true }
-                    .buttonStyle(.palPill)
+                    .buttonStyle(.glass)
                     .disabled(!store.bindings.hasCustomizations)
                     .accessibilityIdentifier("shortcutsRestoreDefaults")
             },
@@ -149,13 +149,13 @@ struct MacShortcutSettingsSection: View {
         return HStack(spacing: 8) {
             Text(message).font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary)
             Spacer(minLength: 8)
-            Button("Cancel") { stopRecording() }.buttonStyle(.palPill(height: 22, fontSize: 11))
+            Button("Cancel") { stopRecording() }.buttonStyle(.glass)
                 .accessibilityIdentifier("shortcutConflictCancel")
             Button(confirm) {
                 store.assign(pending.chord, to: pending.action)
                 stopRecording()
             }
-            .buttonStyle(.palPill(height: 22, fontSize: 11))
+            .buttonStyle(.glass)
             .accessibilityIdentifier("shortcutConflictConfirm")
         }
         .accessibilityElement(children: .contain)

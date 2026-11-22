@@ -54,7 +54,16 @@ CASES = [
      "Button(\"Try again\") {}.buttonStyle(.glass)\n"),
     ("glass-pill-button", SCREEN, "Button(\"Go\") {}.buttonStyle(.palPill(height: 28))\n", "Button(\"Go\") {}.buttonStyle(.palGlass)\n"),
     ("glass-pill-button", SCREEN, "Button(\"Go\") { go() }\n    .background(Color.blue, in: Capsule())\n",
-     "Button(\"Go\") { go() }\n    .buttonStyle(.glassProminent)\n"),
+     "Button(\"Go\") { go() }\n    .glassButtonStyle(prominent: true)\n"),
+    ("glass-button-size", SCREEN, "Button(\"Back\") { goBack() }\n    .buttonStyle(.glass)\n    .controlSize(.large)\n",
+     "Button(\"Back\") { goBack() }\n    .buttonStyle(.glass)\n"),
+    ("glass-button-tint", SCREEN, "Button(\"Create\", action: create)\n    .buttonStyle(.glassProminent)\n    .tint(PalTokens.textPrimary)\n",
+     "Button(\"Create\", action: create)\n    .glassButtonStyle(prominent: true)\n"),
+    ("glass-prominent-direct", SCREEN, "Button(\"Take control\") { take() }\n    .buttonStyle(.glassProminent)\n",
+     "Button(\"Take control\") { take() }\n    .glassButtonStyle(prominent: true)\n"),
+    ("glass-custom-button-style", SCREEN,
+     "struct ComputerPillStyle: ButtonStyle {\n    func makeBody(configuration: Configuration) -> some View { configuration.label }\n}\n",
+     "Button(\"Take control\") { take() }\n    .glassButtonStyle(prominent: true)\n"),
     ("glass-system-tint", SCREEN, "Toggle(\"On\", isOn: $on).tint(.blue)\n", "Toggle(\"On\", isOn: $on)\n"),
     ("glass-system-tint", SCREEN, "Menu(\"More\") { items }\n    .tint(.accentColor)\n", "Menu(\"More\") { items }\n"),
     ("glass-system-tint", SCREEN, "Link(\"Docs\", destination: url).tint(Color.blue)\n", "Link(\"Docs\", destination: url)\n"),
@@ -182,7 +191,8 @@ def test_planted_violation_is_reported_with_file_line_rule_and_fix(tmp_path: Pat
 def test_real_tree_fails_without_baseline_and_passes_with_it() -> None:
     root = REPO / "apps" / "ios"
     without = csg.scan(root)
-    assert any(f.rule == "glass-pill-button" for f in without)
+    assert without
+    assert not any(f.rule == "glass-pill-button" for f in without)
     assert csg.new_findings(without, csg.load_baseline(root / csg.BASELINE_NAME))[0] == []
     entries = json.loads((root / csg.BASELINE_NAME).read_text(encoding="utf-8-sig"))
     assert all(set(e) == {"rule", "file", "text"} for e in entries)

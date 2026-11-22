@@ -68,7 +68,7 @@ struct FailureCard: View {
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Try Again", action: retry)
-                    .buttonStyle(.pill())
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("\(identifier)-retry")
             }
             .padding(.horizontal, PalMetrics.rowInset)

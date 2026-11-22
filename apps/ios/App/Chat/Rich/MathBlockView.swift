@@ -55,7 +55,7 @@ struct RichSourceFallback: View {
             .background(PalTokens.textPrimary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             if offersCopy {
                 Button("Copy source") { Pasteboard.string = source }
-                    .buttonStyle(.pill())
+                    .buttonStyle(.glass)
             }
         }
     }

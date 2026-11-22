@@ -16,33 +16,31 @@ struct CreateBotSheet: View {
             title: String(localized: "Create New Bot"),
             surface: .grouped,
             accessibilityIdentifier: "createBotSheet",
-            onLeading: { router.dismissSheet() }
-        ) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    CreateBotPreview(spec: model.spec)
-                        .frame(width: PalMetrics.createPreviewBox, height: PalMetrics.createPreviewBox)
-                        .padding(.top, 33)
-                    CreateBotNameField(model: model, focused: $nameFocused)
-                        .padding(.top, 60)
-                    BotLookPicker(shape: $model.shape, colorHex: $model.colorHex, seed: model.seed)
-                        .padding(.top, 26)
-                    CreateBotSourceRow(model: model, roster: roster)
-                        .padding(.top, 20)
-                    CreateBotImportRow(importer: importer, roster: roster, router: router)
-                        .padding(.top, 14)
+            onLeading: { router.dismissSheet() },
+            content: {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        CreateBotPreview(spec: model.spec)
+                            .frame(width: PalMetrics.createPreviewBox, height: PalMetrics.createPreviewBox)
+                            .padding(.top, 33)
+                        CreateBotNameField(model: model, focused: $nameFocused)
+                            .padding(.top, 60)
+                        BotLookPicker(shape: $model.shape, colorHex: $model.colorHex, seed: model.seed)
+                            .padding(.top, 26)
+                        CreateBotSourceRow(model: model, roster: roster)
+                            .padding(.top, 20)
+                        CreateBotImportRow(importer: importer, roster: roster, router: router)
+                            .padding(.top, 14)
+                    }
+                    .padding(.bottom, 24)
                 }
-                .padding(.bottom, 24)
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollDismissesKeyboard(.interactively)
+                .sheetBottomAction(keyboardUp: nameFocused) {
+                    CreateBotConfirmButton(model: model, roster: roster, router: router) { nameFocused = false }
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
-            .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) {
-                CreateBotConfirmButton(model: model, roster: roster, router: router) { nameFocused = false }
-            }
-        }
-        .presentationDetents([.fraction(PalMetrics.createSheetDetentFraction)])
-        .presentationCornerRadius(PalMetrics.sheetRadius)
-        .presentationDragIndicator(.hidden)
+        )
         .interactiveDismissDisabled(model.isCreating)
     }
 }
@@ -104,25 +102,16 @@ private struct CreateBotConfirmButton: View {
     let willCreate: () -> Void
 
     var body: some View {
-        Button {
+        SheetBottomButton(
+            String(localized: "Create"), isBusy: model.isCreating, isEnabled: model.canCreate,
+            accessibilityIdentifier: "createBotConfirm"
+        ) {
             willCreate()
             Task {
                 guard let created = await model.create(in: roster) else { return }
                 router.openChat(botName: created.name)
             }
-        } label: {
-            HStack(spacing: 8) {
-                if model.isCreating { ProgressView().controlSize(.small) }
-                Text("Create").hermesText(.largePill)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: PalMetrics.createButtonHeight)
         }
-        .buttonStyle(CreateButtonStyle())
-        .disabled(!model.canCreate)
-        .padding(.horizontal, 29)
-        .padding(.bottom, PalMetrics.createButtonBottomPadding)
-        .accessibilityIdentifier("createBotConfirm")
     }
 }
 
@@ -205,21 +194,5 @@ private struct EnteringDot: View {
             }
         }
         .accessibilityHidden(true)
-    }
-}
-
-private struct CreateButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.hermesTheme) private var theme
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Color(isEnabled ? theme.palette.chipSelectedText : theme.palette.sheetBackground))
-            .background(
-                Color(isEnabled ? theme.palette.chipSelectedFill : theme.palette.pillDimmedText),
-                in: Capsule()
-            )
-            .opacity(configuration.isPressed ? 0.8 : 1)
-            .contentShape(Capsule())
     }
 }

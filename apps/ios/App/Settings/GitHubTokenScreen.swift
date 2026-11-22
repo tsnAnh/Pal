@@ -126,15 +126,17 @@ private struct GitHubSignInCodeSheet: View {
             VStack(spacing: 16) {
                 message("Open GitHub and enter this code to approve Pal.")
                 ServiceSignInCodeCard(code: code.userCode).id(code.sessionID)
-                PillButton("Open GitHub", kind: .accent, size: .large, accessibilityIdentifier: "githubSignInOpen") {
+                Button("Open GitHub") {
                     ExternalLink.open(code.verificationURL)
                 }
+                .glassButtonStyle(prominent: true)
+                .accessibilityIdentifier("githubSignInOpen")
                 message("Waiting for approval…")
                 closeButton("Cancel")
             }
         case .signedIn(let login):
             message(login.map { "Signed in as \($0)." } ?? "Signed in.")
-            closeButton("Done", kind: .accent)
+            closeButton("Done", prominent: true)
         case .denied:
             message("Sign-in was denied.")
             retryButtons
@@ -152,15 +154,19 @@ private struct GitHubSignInCodeSheet: View {
 
     private var retryButtons: some View {
         VStack(spacing: 8) {
-            PillButton("Try again", kind: .accent, size: .large, accessibilityIdentifier: "githubSignInRetry") {
+            Button("Try again") {
                 Task { await model.beginSignIn() }
             }
+            .glassButtonStyle(prominent: true)
+            .accessibilityIdentifier("githubSignInRetry")
             closeButton("Close")
         }
     }
 
-    private func closeButton(_ title: String, kind: PillKind = .dimmed) -> some View {
-        PillButton(title, kind: kind, size: .large, accessibilityIdentifier: "githubSignInClose", action: close)
+    private func closeButton(_ title: String, prominent: Bool = false) -> some View {
+        Button(title, action: close)
+            .glassButtonStyle(prominent: prominent)
+            .accessibilityIdentifier("githubSignInClose")
     }
 
     private func message(_ text: String) -> some View {

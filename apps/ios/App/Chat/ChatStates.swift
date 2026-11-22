@@ -22,19 +22,11 @@ struct NewChatIntro: View {
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 280)
             }
-            Button(action: send) {
-                Text(suggestion)
-                    .hermesText(.chatStatus)
-                    .foregroundStyle(PalTokens.textPrimary)
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: ChatMetrics.minimumHitTarget)
-                    .background(PalTokens.chipFill, in: Capsule())
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .padding(.top, 4)
-            .accessibilityHint(Text("Sends this message"))
-            .accessibilityIdentifier("newChatSuggestion")
+            Button(suggestion, action: send)
+                .buttonStyle(.glass)
+                .padding(.top, 4)
+                .accessibilityHint(Text("Sends this message"))
+                .accessibilityIdentifier("newChatSuggestion")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .contain)

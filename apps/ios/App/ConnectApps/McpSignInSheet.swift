@@ -185,14 +185,8 @@ struct McpSignInSheet: View {
                 identifier: "mcpSignInPrimary", action: submit
             )
             .disabled(McpPasteShape.of(address) != .valid)
-            #if os(iOS)
-            .controlSize(.large)
-            #endif
         case .signedIn:
             SetupButton(title: String(localized: "Done"), kind: .primary, fillsWidth: phone, identifier: "mcpSignInPrimary", action: close)
-            #if os(iOS)
-                .controlSize(.large)
-            #endif
         default:
             EmptyView()
         }

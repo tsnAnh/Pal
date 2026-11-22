@@ -100,6 +100,37 @@ struct MacModalPanel<Content: View>: View {
     }
 }
 
+struct MacModalActions: View {
+    let isBusy: Bool
+    let canConfirm: Bool
+    let confirmTitle: LocalizedStringKey
+    let busyTitle: LocalizedStringKey
+    let cancelIdentifier: String
+    let confirmIdentifier: String
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Spacer(minLength: 0)
+            Button("Cancel", action: onCancel)
+                .buttonStyle(.glass)
+                .disabled(isBusy)
+                .accessibilityIdentifier(cancelIdentifier)
+            Button(action: onConfirm) {
+                HStack(spacing: 6) {
+                    if isBusy { ProgressView().controlSize(.small) }
+                    Text(isBusy ? busyTitle : confirmTitle)
+                }
+            }
+            .glassButtonStyle(prominent: true)
+            .disabled(!canConfirm && !isBusy)
+            .accessibilityIdentifier(confirmIdentifier)
+        }
+        .buttonBorderShape(.capsule)
+    }
+}
+
 struct MacCaption: View {
     let text: Text
 
@@ -230,7 +261,7 @@ struct MacFailure: View {
         MacCard {
             VStack(alignment: .leading, spacing: 10) {
                 Text(message).font(.system(size: 12)).foregroundStyle(PalTokens.textSecondary)
-                Button("Try Again", action: retry).buttonStyle(.palPill(height: 24, fontSize: 11))
+                Button("Try Again", action: retry).buttonStyle(.glass)
             }
             .padding(13)
         }
@@ -274,12 +305,10 @@ struct MacRowAction {
             .accessibilityLabel(Text(title))
             .accessibilityIdentifier(identifier)
         } else {
-            Button(action: action) {
-                Text(title).frame(minWidth: 65)
-            }
-            .buttonStyle(.palPill(height: 22, fontSize: 11, fill: prominent ? PalTokens.toggleOn.opacity(0.7) : nil))
-            .accessibilityLabel(Text(title))
-            .accessibilityIdentifier(identifier)
+            Button(title, action: action)
+                .glassButtonStyle(prominent: prominent)
+                .accessibilityLabel(Text(title))
+                .accessibilityIdentifier(identifier)
         }
     }
 }

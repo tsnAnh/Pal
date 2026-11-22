@@ -37,7 +37,7 @@ struct MarkdownView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ChatMetrics.blockSpacing) {
             switch content {
             case .items(let items):
                 ForEach(items) { item in
@@ -99,7 +99,7 @@ struct MarkdownQuote<Inner: View>: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) { content }
+        VStack(alignment: .leading, spacing: ChatMetrics.blockSpacing) { content }
             .padding(.leading, 13)
             .overlay(alignment: .leading) {
                 Rectangle().fill(Color(theme.palette.textTertiary)).frame(width: 3)
@@ -185,7 +185,7 @@ struct MarkdownBlockView: View, Equatable {
     private var marker: some View {
         if block.startsListItem, let list = block.lists.last {
             Text(list.style == .ordered ? "\(list.ordinal)." : "•")
-                .hermesText(.chatBody)
+                .chatText(.chatBody)
                 .foregroundStyle(Color(theme.palette.textSecondary))
         } else {
             Color.clear.frame(width: 1, height: 1)
@@ -229,9 +229,8 @@ struct InlineText: View {
 
     var body: some View {
         composed
-            .hermesText(style)
+            .chatText(style)
             .fontWeight(weight)
-            .lineSpacing(3.2)
             .foregroundStyle(foreground ?? defaultInk)
             .tint(foreground ?? defaultInk)
             .fixedSize(horizontal: false, vertical: true)

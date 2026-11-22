@@ -97,7 +97,6 @@ struct SlackSettingsView: View {
             SetupButton(title: String(localized: "Update"), isBusy: chat.isWorking, identifier: "slackUpdateIdentity") {
                 Task { await chat.updateIdentity() }
             }
-            .controlSize(.small)
         }
     }
 

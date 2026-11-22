@@ -50,11 +50,11 @@ struct EmbedCardView: View {
                 } label: {
                     Label("Load \(descriptor.label)", palIcon: "play.fill", ink: .onFill)
                 }
-                .buttonStyle(.pill(.accent))
+                .glassButtonStyle(prominent: true)
                 Button("Always allow \(descriptor.label)") {
                     store.allowAlways(descriptor.provider)
                 }
-                .buttonStyle(.pill())
+                .buttonStyle(.glass)
                 Text(hostLabel)
                     .hermesText(.timestamp)
                     .foregroundStyle(PalTokens.textTertiary)
@@ -86,6 +86,6 @@ struct EmbedCardView: View {
         Button("Open in browser") {
             ExternalLink.open(descriptor.sourceURL)
         }
-        .buttonStyle(.pill(.dimmed))
+        .buttonStyle(.glass)
     }
 }
