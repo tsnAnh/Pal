@@ -45,7 +45,7 @@ class ConfigTokenStore:
         return self.adopt(workspace, json.dumps(asdict(pair)))
 
     def adopt(self, workspace: str, raw: str) -> str:
-        with self._lock(workspace):
+        with self._lock(workspace), self._records.exclusive():
             self._unwritten.pop(workspace, None)
             item_id = self._held_item(workspace)
             if item_id is None:
@@ -86,7 +86,7 @@ class ConfigTokenStore:
         return item_id
 
     def _token(self, workspace: str, *, force: bool) -> str:
-        with self._lock(workspace):
+        with self._lock(workspace), self._records.exclusive():
             item_id = self._item_id(workspace)
             pair = self._unwritten.get(workspace)
             if pair is not None:

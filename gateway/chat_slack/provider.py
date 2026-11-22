@@ -51,6 +51,7 @@ from .icon import icon_path, store_icon
 from .people import list_people, names_for
 from .records import SlackRecords
 from .token_store import REFRESH_TOKEN_PREFIX, ConfigTokenStore
+from .workspace_store import WorkspaceRecords, profile_sources
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,9 @@ class SlackProvider(ChatProvider):
         self.records = records or SlackRecords()
         root = get_default_hermes_root()
         self.workspace_vault = workspace_vault or VaultStore(root / "vault")
-        self.workspace_records = workspace_records or SlackRecords(root / "chat_slack" / "workspaces.json")
+        self.workspace_records = workspace_records or WorkspaceRecords(
+            root / "chat_slack" / "workspaces.json", self.workspace_vault,
+            lambda: profile_sources((self.records, self.vault)))
         self.tokens = ConfigTokenStore(self.workspace_vault, self.api, self.workspace_records, clock=clock)
         self._identity, self._clock = identity, clock
 

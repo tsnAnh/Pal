@@ -16,7 +16,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from agent.vault_store import VaultStore
+from agent.vault_store import VaultError, VaultStore
 from gateway import chat_install_runtime, control_socket
 from gateway.chat_install_store import ChatInstallStore
 from gateway.chat_slack.api import SlackApi
@@ -392,6 +392,29 @@ def test_a_second_bot_asks_for_the_credential_when_slack_no_longer_accepts_the_s
         assert resumed.step is wire.SetupStep.needs_allow
         assert r.allow(resumed).status_code == 200
         assert r.status().step is wire.SetupStep.ready
+
+
+AUTOMATIC = {"set_icon": "automatic", "app_level_credential": "automatic", "gateway_redirect": "automatic",
+             "unattended_refresh": "automatic"}
+
+
+def test_a_workspace_credential_left_in_a_bots_profile_serves_the_next_bot_and_moves_to_the_shared_store(rig):
+    r = rig()
+    legacy = r.records(BOT)
+    legacy.update_workspace("w1", config_item_id=r.config_item, capabilities=AUTOMATIC, refresh_token_lifetime="unknown")
+    with r.acting_as(SECOND_BOT):
+        begun = r.state(r.rpc("chat.install.begin"))
+        assert begun.step is wire.SetupStep.needs_allow and begun.manual_steps_done == []
+        assert r.allow(begun).status_code == 200
+        assert r.status().step is wire.SetupStep.ready
+    shared = r.workspace_records().workspace("w1")
+    assert shared["capabilities"] == AUTOMATIC and shared["refresh_token_lifetime"] == "unknown"
+    assert VaultStore(r.home / "vault").resolve_secret(shared["config_item_id"])["api_key"]
+    assert legacy.workspace("w1") == {}
+    with pytest.raises(VaultError):
+        VaultStore(get_profile_dir(BOT) / "vault").resolve_secret(r.config_item)
+    again = r.state(r.rpc("chat.install.begin"))
+    assert again.step is wire.SetupStep.needs_allow and r.workspace_records().workspace("w1") == shared
 
 
 def slack_adapter(team_bot_user: str = "UBOT") -> SlackAdapter:
