@@ -99,7 +99,7 @@ def _probe_icon() -> bytes:
 
 
 def bot_manifest(projection: IdentityProjection, redirect_url: str | None, description: str) -> dict[str, Any]:
-    manifest = _build_full_manifest(projection.app_name, description)
+    manifest = _build_full_manifest(projection.app_name, description, messaging_experience="none")
     manifest["features"]["bot_user"]["display_name"] = projection.display_name
     scopes = manifest["oauth_config"]["scopes"]
     scopes["bot"] = sorted({*scopes["bot"], *EXTRA_BOT_SCOPES})

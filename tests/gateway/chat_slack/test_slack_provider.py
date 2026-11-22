@@ -62,7 +62,10 @@ def test_manifest_create_has_identity_scopes_socket_mode_and_redirect(tmp_path):
     kit.provider.records.update_workspace("w1", capabilities={"gateway_redirect": "automatic"})
     created = kit.begin()
     manifest = kit.slack.apps[created.app_id]
-    assert created.authorize_link == f"https://slack.invalid/oauth?app={created.app_id}"
+    from urllib.parse import parse_qs, urlsplit
+    link = urlsplit(created.authorize_link)
+    assert link._replace(query="").geturl() == "https://slack.invalid/oauth"
+    assert parse_qs(link.query) == {"app": [created.app_id], "redirect_uri": [REDIRECT]}
     assert manifest["display_information"]["name"] == "Pal Helper"
     assert manifest["features"]["bot_user"]["display_name"] == "Pal Helper"
     assert manifest["oauth_config"]["redirect_urls"] == [REDIRECT]
@@ -452,3 +455,13 @@ def test_profile_identity_reads_the_profile_name_and_avatar(tmp_path, monkeypatc
     (home / "assets").mkdir()
     (home / "assets" / "avatar.png").write_bytes(b"x")
     assert profile_identity("scout") == ci.BotIdentitySource("scout", "Scout Prime", str(home / "assets" / "avatar.png"))
+
+
+def test_a_pal_bot_is_a_plain_member_app_not_an_assistant_panel():
+    from gateway.chat_slack.provider import bot_manifest
+    from tui_gateway.chat_install import IdentityProjection
+    projection = IdentityProjection(app_name="Mochi", display_name="Mochi", username="mochi",
+                                    avatar_ref=None, avatar_bytes=None)
+    manifest = bot_manifest(projection, None, "Mochi on Slack")
+    assert "assistant_view" not in manifest["features"] and "agent_view" not in manifest["features"]
+    assert "Hermes" not in json.dumps(manifest["display_information"])
