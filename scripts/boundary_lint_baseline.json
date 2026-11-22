@@ -526,6 +526,7 @@
     "plugins/platforms/slack/adapter.py utils.warn_if_credential_file_broadly_readable": 1,
     "plugins/platforms/slack/adapter_forwarded.py agent.compression_marker.ELISION_MARKER_MAX_LEN": 1,
     "plugins/platforms/slack/adapter_forwarded.py agent.compression_marker.elide": 1,
+    "plugins/platforms/slack/adapter_install_events.py gateway.chat_install_runtime.build_service": 1,
     "plugins/platforms/slack/adapter_install_events.py gateway.chat_install_service.bot_joined": 1,
     "plugins/platforms/slack/adapter_install_events.py gateway.chat_install_service.bot_left": 1,
     "plugins/platforms/slack/adapter_install_events.py gateway.chat_install_service.pending_welcome": 1,
