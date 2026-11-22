@@ -40,10 +40,10 @@ _UNSET: Any = object()
 _thread_lock = threading.Lock()
 
 
-def about_you_root() -> Path:
+def about_you_root(home: Path | None = None) -> Path:
     from tools.bot_mode_probe import _default_home, _hermes_root
 
-    return _hermes_root(Path(_default_home()))
+    return _hermes_root(Path(home) if home is not None else Path(_default_home()))
 
 
 def about_you_path(root: Path) -> Path:

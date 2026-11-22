@@ -14228,6 +14228,11 @@
             "title": "Bot Onboarding",
             "type": "boolean"
           },
+          "bot_opening": {
+            "default": false,
+            "title": "Bot Opening",
+            "type": "boolean"
+          },
           "install_id": {
             "default": "",
             "title": "Install Id",
@@ -46200,7 +46205,7 @@
       },
       "ProfilesListResult": {
         "additionalProperties": false,
-        "description": "``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself;\n``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this\nbackend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``.",
+        "description": "``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself;\n``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this\nbackend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``; ``bot_opening``\nsays a new bot's first hidden turn plays the scripted greeting card and clears that flag on an answer.",
         "properties": {
           "profiles": {
             "items": {
@@ -46227,6 +46232,11 @@
           "bot_onboarding": {
             "default": false,
             "title": "Bot Onboarding",
+            "type": "boolean"
+          },
+          "bot_opening": {
+            "default": false,
+            "title": "Bot Opening",
             "type": "boolean"
           },
           "install_id": {

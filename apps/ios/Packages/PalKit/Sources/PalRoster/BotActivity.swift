@@ -19,19 +19,13 @@ public enum LiveSessionStatus: String, Sendable, Equatable, Decodable {
     }
 }
 
-public enum AttentionReason: String, Sendable, Equatable {
-    case setupIncomplete
-}
-
 public struct BotLiveState: Sendable, Equatable {
     public var sessions: [LiveSessionStatus]
     public var workerLastActive: TimeInterval?
-    public var onboardingPending: Bool
 
-    public init(sessions: [LiveSessionStatus] = [], workerLastActive: TimeInterval? = nil, onboardingPending: Bool = false) {
+    public init(sessions: [LiveSessionStatus] = [], workerLastActive: TimeInterval? = nil) {
         self.sessions = sessions
         self.workerLastActive = workerLastActive
-        self.onboardingPending = onboardingPending
     }
 }
 
@@ -40,7 +34,6 @@ public enum BotActivity: Sendable, Equatable {
     case idle
     case working
     case needsInput
-    case attention(AttentionReason)
 
     public static let workerLivenessWindow: TimeInterval = 150
 
@@ -49,7 +42,6 @@ public enum BotActivity: Sendable, Equatable {
         let sessions = live?.sessions ?? []
         if hasLocalPrompt || sessions.contains(.waiting) { return .needsInput }
         if sessions.contains(where: { $0 == .working || $0 == .starting }) || workerIsLive(live, now: now) { return .working }
-        if live?.onboardingPending == true { return .attention(.setupIncomplete) }
         return .idle
     }
 
@@ -64,14 +56,13 @@ public enum BotActivity: Sendable, Equatable {
         case .idle: "idle"
         case .working: "working"
         case .needsInput: "needs-input"
-        case .attention: "attention"
         }
     }
 
     public var isLive: Bool {
         switch self {
         case .working, .needsInput: true
-        case .offline, .idle, .attention: false
+        case .offline, .idle: false
         }
     }
 }

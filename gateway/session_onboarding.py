@@ -318,16 +318,17 @@ async def skip(connection, ref, params):
     return {'skipped': bool(step.result.get('skipped_all'))}
 
 
-def arm_onboarding_turn(agent, owner, history):
-    """The onboarding chat's per-turn inputs on an authority-owned local turn: the turn note (which
-    card is closed and how to bring it back) appended to the API-only notes, and the scripted opening
-    returned for ``run_conversation(prelude=...)``. Nothing for a chat without ``setup_beat``."""
-    from agent.onboarding_session import append_turn_note, builds_onboarding, onboarding_prelude, onboarding_turn_note
-    if owner is None or not builds_onboarding(agent):
+def arm_onboarding_turn(agent, owner, history, *, hidden=False):
+    """The per-turn inputs of an authority-owned local turn: for the onboarding chat the turn note (which
+    card is closed and how to bring it back) appended to the API-only notes, and for it or a new bot's
+    first hidden turn the scripted opening returned for ``run_conversation(prelude=...)``."""
+    from agent.onboarding_session import append_turn_note, builds_onboarding, onboarding_turn_note, opening_prelude
+    if owner is None:
         return None
-    from gateway.session_server_requests import waiting
-    authority, session_id, _generation = owner
-    live = authority.sessions.get(session_id)
-    card_waiting = live is not None and waiting(live.event_stream, session_id, 'setup_beat')
-    append_turn_note(agent, onboarding_turn_note(agent, history_empty=not history, card_waiting=card_waiting))
-    return onboarding_prelude(agent, history)
+    if builds_onboarding(agent):
+        from gateway.session_server_requests import waiting
+        authority, session_id, _generation = owner
+        live = authority.sessions.get(session_id)
+        card_waiting = live is not None and waiting(live.event_stream, session_id, 'setup_beat')
+        append_turn_note(agent, onboarding_turn_note(agent, history_empty=not history, card_waiting=card_waiting))
+    return opening_prelude(agent, history, hidden=hidden)

@@ -18,13 +18,11 @@ struct BotActivityTests {
 
     private static func live(
         _ statuses: [LiveSessionStatus] = [],
-        worker: TimeInterval? = nil,
-        onboarding: Bool = false
+        worker: TimeInterval? = nil
     ) -> BotLiveState {
         BotLiveState(
             sessions: statuses,
-            workerLastActive: worker.map { now.timeIntervalSince1970 - $0 },
-            onboardingPending: onboarding
+            workerLastActive: worker.map { now.timeIntervalSince1970 - $0 }
         )
     }
 
@@ -45,12 +43,8 @@ struct BotActivityTests {
         Case(name: "worker at the window edge is idle", live: live(worker: 150), expected: .idle),
         Case(name: "stale worker is idle", live: live(worker: 3_600), expected: .idle),
         Case(name: "worker stamp from the future counts as fresh", live: live(worker: -5), expected: .working),
-        Case(name: "onboarding pending needs attention", live: live(onboarding: true), expected: .attention(.setupIncomplete)),
-        Case(name: "working beats attention", live: live([.working], onboarding: true), expected: .working),
-        Case(name: "needs input beats attention", live: live([.waiting], onboarding: true), expected: .needsInput),
         Case(name: "reconnecting hides working", link: .reconnecting, live: live([.working]), expected: .offline),
         Case(name: "offline hides needs input", link: .offline, live: live([.waiting]), localPrompt: true, expected: .offline),
-        Case(name: "offline hides attention", link: .offline, live: live(onboarding: true), expected: .offline),
         Case(name: "offline without a snapshot", link: .offline, live: nil, expected: .offline),
     ]
 
@@ -70,7 +64,6 @@ struct BotActivityTests {
         #expect(BotActivity.idle.accessibilityValue == "idle")
         #expect(BotActivity.working.accessibilityValue == "working")
         #expect(BotActivity.needsInput.accessibilityValue == "needs-input")
-        #expect(BotActivity.attention(.setupIncomplete).accessibilityValue == "attention")
     }
 
     @Test func sessionStatusDecodesUnknownValuesTolerantly() throws {

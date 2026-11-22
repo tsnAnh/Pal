@@ -24,10 +24,9 @@ public enum RosterSnapshotFetcher {
             for row in rows {
                 guard let name = row["name"]?.stringValue else { continue }
                 let worker = row["worker_session"]?["last_active"]?.timeIntervalValue
-                let onboarding = row["onboarding_pending"]?.boolValue ?? false
                 group.addTask {
                     let sessions = await activeSessions(of: name, call: call)
-                    return (name, BotLiveState(sessions: sessions, workerLastActive: worker, onboardingPending: onboarding))
+                    return (name, BotLiveState(sessions: sessions, workerLastActive: worker))
                 }
             }
             var states: [String: BotLiveState] = [:]

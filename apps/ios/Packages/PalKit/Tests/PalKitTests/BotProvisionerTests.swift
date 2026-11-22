@@ -111,6 +111,19 @@ struct BotProvisionerTests {
         #expect(created.greetsUnprompted == false)
     }
 
+    @Test(arguments: [true, false])
+    func aNewBotAsksForTheScriptedOpeningOnlyWhenTheGatewayPlaysIt(gatewayPlaysOpening: Bool) async throws {
+        let fake = FakeRoster(names: ["default"])
+        fake.state.withLock { $0.scriptedOpening = gatewayPlaysOpening }
+        let (provisioner, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        _ = try await provisioner.create(request("Opening"))
+
+        let create = try #require(fake.calls("profiles.create").first ?? nil)
+        #expect(create["onboarding"] == (gatewayPlaysOpening ? .bool(true) : nil))
+    }
+
     @Test func aFailedLookWriteLeavesAnIncompleteBotAndARetryDoesNotRecreateIt() async throws {
         let fake = FakeRoster(names: ["default"])
         fake.state.withLock { $0.failConfigure = 1 }

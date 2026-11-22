@@ -12,7 +12,7 @@ extension BotActivity {
     var avatarMood: AvatarMood {
         switch self {
         case .working: .work
-        case .offline, .idle, .needsInput, .attention: .idle
+        case .offline, .idle, .needsInput: .idle
         }
     }
 
@@ -23,7 +23,6 @@ extension BotActivity {
     var glyph: ActivityGlyph? {
         switch self {
         case .needsInput: ActivityGlyph(systemName: "checklist", color: .secondary, label: "Waiting for your answer")
-        case .attention: ActivityGlyph(systemName: "exclamationmark.circle.fill", color: .orange, label: "Needs your attention")
         case .offline, .idle, .working: nil
         }
     }

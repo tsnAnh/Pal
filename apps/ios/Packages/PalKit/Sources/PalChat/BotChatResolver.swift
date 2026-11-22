@@ -12,7 +12,13 @@ public struct BotIntro: Sendable, Hashable {
     }
 
     public static let birthNotice = BotIntro(
-        text: "You were just created and your owner has opened this chat. Greet them first, in one or two short sentences: say who you are, and ask what job you should own unless you already have one.",
+        text: [
+            "You were just created and your owner has opened this chat.",
+            "If you have already greeted them and asked what they want you for, build on their answer:",
+            "ask at most one short follow-up only if you need it, then save the job as your Role with the memory tool's identity target",
+            "and tell them in one sentence what you will do.",
+            "Otherwise greet them first, in one or two short sentences: say who you are, and ask what job you should own unless you already have one.",
+        ].joined(separator: " "),
         hidden: true
     )
 

@@ -3260,13 +3260,14 @@ export interface ProfilesListParams {
   include_sessions?: boolean | string | null
   include_routines?: boolean | string | null
 }
-/** ``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself; ``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this backend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``. */
+/** ``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself; ``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this backend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``; ``bot_opening`` says a new bot's first hidden turn plays the scripted greeting card and clears that flag on an answer. */
 export interface ProfilesListResult {
   profiles?: ProfileRow[]
   bot_mode_protocol?: boolean
   bot_birth_notice?: boolean
   bot_about_you?: boolean
   bot_onboarding?: boolean
+  bot_opening?: boolean
   install_id?: string
 }
 /** One roster row; the session fields are present only with ``include_sessions``. */
@@ -7118,6 +7119,7 @@ export interface CanonicalProfilesResult {
   bot_birth_notice?: boolean
   bot_about_you?: boolean
   bot_onboarding?: boolean
+  bot_opening?: boolean
   install_id?: string
 }
 export interface CanonicalProfileRow {
