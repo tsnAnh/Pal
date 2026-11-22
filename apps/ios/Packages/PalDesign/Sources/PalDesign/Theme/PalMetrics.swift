@@ -1,6 +1,11 @@
 import CoreGraphics
 import Foundation
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 public enum PalMetrics {
     public static let screenMargin: CGFloat = 16
@@ -14,7 +19,6 @@ public enum PalMetrics {
 
     public static let cardRadius: CGFloat = 12
     public static let tileRadius: CGFloat = 15
-    public static let sheetRadius: CGFloat = 39
 
     public static let circleButtonDiameter: CGFloat = 44
     public static let circleButtonStrokeWidth: CGFloat = 0.7
@@ -61,12 +65,10 @@ public enum PalMetrics {
     public static let swatchRowPitch: CGFloat = 43.5
     public static let swatchPitch: CGFloat = 60
     public static let createPreviewFrame: CGFloat = 201
+    public static let createButtonHeight: CGFloat = 56
     public static let createPreviewBox: CGFloat = 138
-    public static let createSheetDetentFraction: CGFloat = 0.948
     public static let nameFieldHeight: CGFloat = 53
     public static let nameFieldHorizontalMargin: CGFloat = 16
-    public static let createButtonHeight: CGFloat = 48
-    public static let createButtonBottomPadding: CGFloat = -4
 
     public static let primaryBadgeDiameterRatio: CGFloat = 0.25
     public static let primaryBadgeRingRatio: CGFloat = 0.028
@@ -99,11 +101,11 @@ public enum PalTextStyle: CaseIterable, Sendable {
     public var size: CGFloat {
         #if os(macOS)
         switch self {
-        case .chatBody: 14
-        case .composerField: 13
+        case .chatBody: 15
+        case .composerField: 15
         case .chatStatus: 13
-        case .botName: 13
-        case .botPreview: 12
+        case .botName: 14
+        case .botPreview: 13
         case .timestamp: 12
         case .unreadLabel: 12
         case .chatCode: 12
@@ -121,8 +123,8 @@ public enum PalTextStyle: CaseIterable, Sendable {
         case .rowSubtitle, .version: 11
         case .sectionCaption, .footnoteCaption: 10.5
         case .timestamp: 12
-        case .botName: 15.5
-        case .botPreview: 12.5
+        case .botName: 16
+        case .botPreview: 13.5
         case .heroName: 11
         case .chip: 13
         case .pill: 12.5
@@ -168,9 +170,46 @@ struct PalTextModifier: ViewModifier {
     }
 }
 
+public struct ChatLineBox: Equatable, Sendable {
+    public let height: CGFloat
+    public let baselineOffset: CGFloat
+
+    public init(fontSize: CGFloat) {
+        #if os(macOS)
+        let font = NSFont.systemFont(ofSize: fontSize)
+        #else
+        let font = UIFont.systemFont(ofSize: fontSize)
+        #endif
+        height = (fontSize * ChatMetrics.bodyLineHeight / PalTextStyle.chatBody.size).rounded()
+        baselineOffset = (height - font.ascender + font.descender) / 2
+    }
+}
+
+struct ChatTextModifier: ViewModifier {
+    let style: PalTextStyle
+    @ScaledMetric private var size: CGFloat
+
+    init(style: PalTextStyle) {
+        self.style = style
+        _size = ScaledMetric(wrappedValue: style.size, relativeTo: style.relativeTextStyle)
+    }
+
+    func body(content: Content) -> some View {
+        let line = ChatLineBox(fontSize: size)
+        content
+            .font(.system(size: size, weight: style.weight))
+            .lineHeight(.exact(points: line.height))
+            .baselineOffset(-line.baselineOffset)
+    }
+}
+
 extension View {
     public func hermesText(_ style: PalTextStyle) -> some View {
         modifier(PalTextModifier(style: style))
+    }
+
+    public func chatText(_ style: PalTextStyle) -> some View {
+        modifier(ChatTextModifier(style: style))
     }
 
     public func chatRowFrame(for sender: ChatSender) -> some View {
@@ -196,11 +235,11 @@ public enum ChatMetrics {
         rowAlignment(for: side == .trailing ? .user : .bot)
     }
     public static let edgeMargin: CGFloat = 16
-    public static let bubbleHorizontalPadding: CGFloat = 12
-    public static let bubbleVerticalPadding: CGFloat = 8
+    public static let bubbleHorizontalPadding: CGFloat = 14
+    public static let bubbleVerticalPadding: CGFloat = 9
     public static let bubbleRadius: CGFloat = 18
     #if os(macOS)
-    public static let bubbleMaxWidth: CGFloat = 560
+    public static let bubbleMaxWidth: CGFloat = 640
     #else
     public static let bubbleWidthFraction: CGFloat = 0.78
     public static let padColumn: CGFloat = 720
@@ -212,11 +251,19 @@ public enum ChatMetrics {
         column * bubbleWidthFraction
         #endif
     }
-    public static let sameSenderGap: CGFloat = 4
-    public static let senderSwitchGap: CGFloat = 16
+    public static let sameSenderGap: CGFloat = 10
+    public static let senderSwitchGap: CGFloat = 24
     public static let bubbleTrailingGap: CGFloat = 60
     public static let rowSpacing: CGFloat = 12
-    public static let bodyLineHeight: CGFloat = 20.3
+    #if os(macOS)
+    public static let bodyLineHeight: CGFloat = 23
+    public static let composerClearance: CGFloat = 24
+    #else
+    public static let bodyLineHeight: CGFloat = 22
+    public static let composerClearance: CGFloat = 16
+    #endif
+    public static let blockSpacing: CGFloat = 10
+    public static let bubbleCapsuleRadius: CGFloat = bodyLineHeight / 2 + bubbleVerticalPadding
     public static let separatorTopPadding: CGFloat = 20
     public static let separatorBottomPadding: CGFloat = 12
     public static let unreadTopPadding: CGFloat = 4
@@ -226,7 +273,7 @@ public enum ChatMetrics {
     public static let statusIconSize: CGFloat = 12
     public static let statusLeadingInset: CGFloat = 24
     public static let statusTextGap: CGFloat = 8
-    public static let composerHeight: CGFloat = 50
+    public static let composerHeight: CGFloat = 44
     public static let composerButtonDiameter: CGFloat = 34
     public static let composerInset: CGFloat = 8
     public static let headerButtonDiameter: CGFloat = 44

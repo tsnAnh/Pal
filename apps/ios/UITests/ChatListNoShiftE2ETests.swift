@@ -5,10 +5,9 @@ import XCTest
 final class ChatListNoShiftE2ETests: E2ETestCase {
     private static let tolerance: CGFloat = 1
 
-    override func setUp() async throws {
+    private func requireParitySeed() throws {
         let seed = ProcessInfo.processInfo.environment["HERMES_UITEST_SEED"] ?? ""
         try XCTSkipUnless(seed == "parity", "needs a gateway started with --seed parity and HERMES_UITEST_SEED=parity")
-        try await super.setUp()
     }
 
     private func any(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
@@ -45,6 +44,7 @@ final class ChatListNoShiftE2ETests: E2ETestCase {
     }
 
     func test1OpeningAChatWithAWideTableAndCodeKeepsTheListAtItsMargins() throws {
+        try requireParitySeed()
         let app = launch(extraArguments: ["-hermes-reset-preferences"])
         signInIfNeeded(app)
         openBot(app, "cho-dinh")
@@ -56,6 +56,7 @@ final class ChatListNoShiftE2ETests: E2ETestCase {
     }
 
     func test2SendingAMessageKeepsTheListAtItsMargins() throws {
+        try requireParitySeed()
         let app = launch(extraArguments: ["-hermes-reset-preferences"])
         signInIfNeeded(app)
         openBot(app, "cho-dinh")
@@ -66,5 +67,23 @@ final class ChatListNoShiftE2ETests: E2ETestCase {
         Thread.sleep(forTimeInterval: 1)
         shot(app, "list-no-shift-after-send")
         assertListIsAtItsMargins(app, "after send")
+    }
+
+    func test3AToolTurnAfterAWrappedDraftKeepsTheListAtItsMargins() throws {
+        let app = launch(extraArguments: ["-hermes-reset-preferences"])
+        signInIfNeeded(app)
+        openBot(app, "bot-beta")
+        send(app, "SLOW a longer draft that wraps onto a second line so the composer grows " + UUID().uuidString.prefix(4))
+        waitFor(any(app, "assistantBubble-streaming"), timeout: 30, "the slow reply starts")
+        waitGone(any(app, "assistantBubble-streaming"), timeout: 90, "the slow reply completes")
+        send(app, "TOOLCALL margin " + UUID().uuidString.prefix(4))
+        waitFor(any(app, "workingStatus"), timeout: 60, "the tool status row")
+        Thread.sleep(forTimeInterval: 1)
+        shot(app, "list-no-shift-tool-running")
+        assertListIsAtItsMargins(app, "while a tool runs")
+        waitGone(any(app, "assistantBubble-streaming"), timeout: 90, "the tool turn completes")
+        Thread.sleep(forTimeInterval: 1)
+        shot(app, "list-no-shift-tool-done")
+        assertListIsAtItsMargins(app, "after the tool turn")
     }
 }

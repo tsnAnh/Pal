@@ -38,8 +38,6 @@ struct SelectableMarkdownText: View {
 
 enum SelectableAttributedBuilder {
     static let indentStep: CGFloat = 25.7
-    static let lineSpacing: CGFloat = 3.2
-    static let paragraphSpacing: CGFloat = 8
 
     private struct Inks {
         let ink: NSColor
@@ -93,24 +91,34 @@ enum SelectableAttributedBuilder {
 
     private static func append(_ paragraph: SelectableParagraph, isLast: Bool, inks: Inks, to result: NSMutableAttributedString) -> NSRange {
         let sizing = metrics(for: paragraph.style)
-        let style = paragraphStyle(for: paragraph, isLast: isLast)
+        let line = ChatLineBox(fontSize: sizing.size)
+        let style = paragraphStyle(for: paragraph, line: line, isLast: isLast)
         let baseFont = inks.fonts.font(size: sizing.size, bold: sizing.bold, italic: false, monospaced: false)
         if !paragraph.marker.isEmpty {
             let markerAttributes: [NSAttributedString.Key: Any] = [
                 .font: inks.fonts.font(size: PalTextStyle.chatBody.size, bold: false, italic: false, monospaced: false),
                 .foregroundColor: inks.secondaryInk,
                 .paragraphStyle: style,
+                .baselineOffset: line.baselineOffset,
             ]
             result.append(NSAttributedString(string: paragraph.marker + "\t", attributes: markerAttributes))
         }
         let start = result.length
         for run in paragraph.text.runs {
             let piece = String(paragraph.text[run.range].characters)
-            result.append(NSAttributedString(string: piece, attributes: attributes(for: run, metrics: sizing, style: style, inks: inks)))
+            var runAttributes = attributes(for: run, metrics: sizing, style: style, inks: inks)
+            runAttributes[.baselineOffset] = line.baselineOffset
+            result.append(NSAttributedString(string: piece, attributes: runAttributes))
         }
         let textRange = NSRange(location: start, length: result.length - start)
         if !isLast {
-            result.append(NSAttributedString(string: "\n", attributes: [.font: baseFont, .foregroundColor: inks.ink, .paragraphStyle: style]))
+            let separator: [NSAttributedString.Key: Any] = [
+                .font: baseFont,
+                .foregroundColor: inks.ink,
+                .paragraphStyle: style,
+                .baselineOffset: line.baselineOffset,
+            ]
+            result.append(NSAttributedString(string: "\n", attributes: separator))
         }
         return textRange
     }
@@ -157,10 +165,11 @@ enum SelectableAttributedBuilder {
         return NSFont(descriptor: descriptor, size: size) ?? base
     }
 
-    private static func paragraphStyle(for paragraph: SelectableParagraph, isLast: Bool) -> NSParagraphStyle {
+    private static func paragraphStyle(for paragraph: SelectableParagraph, line: ChatLineBox, isLast: Bool) -> NSParagraphStyle {
         let style = NSMutableParagraphStyle()
-        style.lineSpacing = lineSpacing
-        style.paragraphSpacing = isLast ? 0 : paragraphSpacing
+        style.minimumLineHeight = line.height
+        style.maximumLineHeight = line.height
+        style.paragraphSpacing = isLast ? 0 : ChatMetrics.blockSpacing
         guard paragraph.listDepth > 0 else { return style }
         let textIndent = CGFloat(paragraph.listDepth) * indentStep
         let markerIndent = CGFloat(paragraph.listDepth - 1) * indentStep
@@ -301,6 +310,25 @@ private final class SelectableTextCoordinator: NSObject, NSTextViewDelegate {
 
 final class PassiveTextView: NSTextView {
     override var writablePasteboardTypes: [NSPasteboard.PasteboardType] { [.string] }
+
+    var selectedPlainText: String? {
+        let whole = string as NSString
+        let pieces = selectedRanges.map(\.rangeValue).filter { $0.length > 0 }.map(whole.substring(with:))
+        return pieces.isEmpty ? nil : pieces.joined(separator: "\n")
+    }
+
+    override func writeSelection(to pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        guard type == .string else { return super.writeSelection(to: pboard, type: type) }
+        guard let selectedPlainText else { return false }
+        return pboard.setString(selectedPlainText, forType: .string)
+    }
+
+    static func selection(in window: NSWindow?, at point: NSPoint) -> String? {
+        guard let view = window?.firstResponder as? PassiveTextView,
+              view.convert(view.bounds, to: nil).contains(point)
+        else { return nil }
+        return view.selectedPlainText
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let event = NSApp.currentEvent else { return super.hitTest(point) }

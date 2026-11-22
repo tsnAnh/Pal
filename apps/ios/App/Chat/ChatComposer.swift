@@ -97,11 +97,11 @@ struct ChatComposer: View {
     }
 
     private var surfaceHeight: CGFloat {
-        PlatformVariant.pick(mac: 42, iOS: ChatMetrics.composerHeight)
+        ChatMetrics.composerHeight
     }
 
     private var bottomMargin: CGFloat {
-        PlatformVariant.pick(mac: 14, iOS: 8)
+        PlatformVariant.pick(mac: 14, iOS: 16)
     }
 
     private var promptText: Text { prompt.map { Text($0) } ?? (answersQuestion ? Text("Or type your own answer") : Text("Message \(botName)")) }

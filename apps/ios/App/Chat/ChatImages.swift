@@ -181,7 +181,7 @@ private struct ChatImageTile: View {
         case .loading:
             ZStack {
                 PalTokens.agentBubble
-                DelayedProgressView(after: ChatEdgeFade.loadingDelay).controlSize(.small).tint(PalTokens.textTertiary)
+                DelayedProgressView(after: ChatLoading.delay).controlSize(.small).tint(PalTokens.textTertiary)
             }
             .accessibilityIdentifier("chatImageLoading")
         case .loaded(let image):

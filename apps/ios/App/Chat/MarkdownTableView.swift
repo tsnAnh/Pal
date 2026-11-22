@@ -151,8 +151,8 @@ struct TableBubbleView: View {
             MarkdownTableView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch, showsChrome: false)
             footer
         }
-        .background(BubblePalette.agentBubble, in: RoundedRectangle(cornerRadius: ChatMetrics.bubbleRadius, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: ChatMetrics.bubbleRadius, style: .continuous))
+        .background(BubblePalette.agentBubble, in: ChatBubbleShape())
+        .clipShape(ChatBubbleShape())
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -170,8 +170,7 @@ struct TableBubbleView: View {
         }
         .font(.caption)
         .foregroundStyle(PalTokens.textTertiary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(10)
         .overlay(alignment: .top) { Rectangle().fill(PalTokens.divider).frame(height: 1) }
     }
 }

@@ -258,8 +258,7 @@ private struct ClarifySurface: ViewModifier {
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: ChatMetrics.bubbleRadius, style: .continuous)
         content
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(theme.palette.groupedCard), in: shape)
             .overlay(shape.strokeBorder(Color(theme.palette.cardStroke), lineWidth: 1))
