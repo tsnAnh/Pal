@@ -27,6 +27,7 @@ _HUMAN_REQUIRED_DESCRIPTIONS = {
     ("profile", "install"): "create a bot or profile",
     ("profile", "delete"): "delete a profile",
 }
+_HELP_FLAGS = frozenset({"-h", "--help"})
 _TEXT_ONLY_COMMANDS = frozenset({
     "grep", "egrep", "fgrep", "rg", "ag", "ack", "echo", "printf", "cat", "head", "tail", "less", "more",
     "man", "diff", "wc",
@@ -170,6 +171,8 @@ def _human_required_hit(argv: list[str]) -> tuple[str, str | None, str | None] |
         verb = tuple(token.lower() for token in argv[position:position + 2])
         later_args = argv[position + 2:]
         description = _HUMAN_REQUIRED_DESCRIPTIONS.get(verb) or flagged_verb_description(verb, later_args)
+        if verb in _HUMAN_REQUIRED_DESCRIPTIONS and _only_prints_help(later_args):
+            return None
         if description:
             binding = GRANT_BINDINGS.get(verb)
             if binding is None:
@@ -178,6 +181,11 @@ def _human_required_hit(argv: list[str]) -> tuple[str, str | None, str | None] |
         if argv[position].startswith("-"):
             pending.extend((position + 1, position + 2))
     return None
+
+
+def _only_prints_help(later_args: list[str]) -> bool:
+    options = itertools.takewhile(lambda token: token != "--", later_args)
+    return any(token in _HELP_FLAGS for token in options)
 
 
 def _human_required_description(argv: list[str]) -> str | None:

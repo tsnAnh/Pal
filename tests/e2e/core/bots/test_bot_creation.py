@@ -105,6 +105,28 @@ def test_a_bot_is_created_with_the_launching_profiles_model_and_nothing_else_whe
     assert all(p.read_text(encoding="utf-8").strip() == "" for p in memory_files)
 
 
+def test_a_bot_is_created_with_its_soul_after_exactly_one_human_approval(attached) -> None:
+    from tools.terminal_tool import set_approval_callback
+
+    w, srv = attached()
+    soul = "You are Evo, a focused research bot. Draft only; never send without the owner's OK.\n"
+    soul_file = w.workdir / "evo-soul.md"
+    soul_file.write_text(soul, encoding="utf-8")
+    srv.push(ToolCall("terminal", {"command": "hermes bot create --help"}),
+             ToolCall("terminal", {"command": f"hermes bot create evo --soul-file {soul_file} --json"}),
+             Text("done"))
+    human = Human("once")
+    set_approval_callback(human)
+    session = InProcessSession(srv.base_url, w.default, "e2e-bot-session")
+    session.turn("make me a research bot")
+    session.db.close()
+
+    assert len(human.asked) == 1 and "bot create evo" in human.asked[0], human.asked
+    assert w.profile_exists("evo")
+    assert (w.home_of("evo") / "SOUL.md").read_text(encoding="utf-8") == soul
+    assert w.config("evo")["model"]["default"] == LAUNCH_MODEL
+
+
 def test_a_bot_created_from_a_chat_runs_the_model_that_chat_runs_rather_than_the_config_default(attached) -> None:
     from hermes_state import SessionDB
 

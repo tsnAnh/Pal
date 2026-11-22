@@ -20,6 +20,9 @@ def build_bot_parser(subparsers) -> None:
     bot_create.add_argument("bot_name", help="Bot name (lowercase, alphanumeric)")
     bot_create.add_argument("--display-name", default=None, help="Name shown in the UI (max 64 characters)")
     bot_create.add_argument("--description", default=None, help="One- or two-sentence description of the bot")
+    bot_create.add_argument(
+        "--soul-file", default=None, metavar="PATH",
+        help="Text file whose contents become the bot's SOUL.md, written as part of this one approved create")
     bot_create.add_argument("--json", action="store_true", help="Print {\"name\", \"home\"} as JSON")
 
     bot_parser.set_defaults(func=_cmd_bot)

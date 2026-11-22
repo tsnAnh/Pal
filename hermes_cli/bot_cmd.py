@@ -145,7 +145,8 @@ def _pin_creating_session_model(profile_dir: Path) -> None:
     atomic_config_replace(path, config)
 
 
-def create_bot(name: str, *, display_name: str | None = None, description: str | None = None) -> tuple[str, Path]:
+def create_bot(name: str, *, display_name: str | None = None, description: str | None = None,
+               soul: str | None = None) -> tuple[str, Path]:
     from hermes_cli.bot_onboarding import mark_onboarding_pending
     from hermes_cli.profiles import create_profile, set_profile_display_name  # profile-create: ok — Pal bot creation: a bare profile, then this module applies its own skills, model and onboarding steps
 
@@ -153,7 +154,7 @@ def create_bot(name: str, *, display_name: str | None = None, description: str |
     if len(cleaned_display) > _MAX_DISPLAY_NAME:
         raise BotCreateError(f"Display name too long ({len(cleaned_display)} chars, max {_MAX_DISPLAY_NAME}).")
     try:
-        profile_dir = create_profile(name, no_alias=True, no_skills=True, description=description)  # profile-create: ok — Pal bot creation: a bare profile, then this module applies its own skills, model and onboarding steps
+        profile_dir = create_profile(name, no_alias=True, no_skills=True, description=description, soul=soul)  # profile-create: ok — Pal bot creation: a bare profile, then this module applies its own skills, model and onboarding steps
     except (ValueError, FileExistsError) as exc:
         raise BotCreateError(str(exc)) from exc
     canon = profile_dir.name
@@ -169,11 +170,24 @@ def create_bot(name: str, *, display_name: str | None = None, description: str |
     return canon, profile_dir
 
 
+def _read_soul_file(path: str | None) -> str | None:
+    if path is None:
+        return None
+    try:
+        soul = Path(path).expanduser().read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        _die(f"Could not read --soul-file {path}: {exc}")
+    if not soul.strip():
+        _die(f"--soul-file {path} is empty.")
+    return soul
+
+
 def _bot_create(args) -> None:
+    soul = _read_soul_file(getattr(args, "soul_file", None))
     try:
         canon, profile_dir = create_bot(
             args.bot_name, display_name=getattr(args, "display_name", None),
-            description=getattr(args, "description", None),
+            description=getattr(args, "description", None), soul=soul,
         )
     except (BotCreateError, ValueError, ProfileAdminDenied) as exc:
         _die(str(exc))
@@ -189,5 +203,5 @@ BOT_ACTIONS = {"create": _bot_create}
 def cmd_bot(args) -> None:
     handler = BOT_ACTIONS.get(getattr(args, "bot_action", None))
     if handler is None:
-        _die("usage: hermes bot create <name> [--display-name X] [--description X] [--json]")
+        _die("usage: hermes bot create <name> [--display-name X] [--description X] [--soul-file PATH] [--json]")
     handler(args)
