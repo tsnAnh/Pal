@@ -162,6 +162,15 @@
       ]
     },
     {
+      "source": "platform plugins that admit non-owner senders: the admission verdict and the sender facts an adapter proves",
+      "entries": [
+        "gateway.audience:Admission",
+        "gateway.audience:AdmissionKind",
+        "gateway.audience:Audience",
+        "gateway.audience:SenderFacts"
+      ]
+    },
+    {
       "source": "plugin-llm-access.md § From the plugin's frontend: a plugin RPC method (`force=True` where secrets must never leave)",
       "entries": [
         "agent.redact:redact_sensitive_text"

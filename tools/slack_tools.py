@@ -134,14 +134,35 @@ def _list_users(call: Callable[..., dict], args: dict, install: SlackInstall) ->
             "next_cursor": _next_cursor(body)}
 
 
-def _read_channel(call: Callable[..., dict], args: dict, install: SlackInstall) -> dict:
+def _member_scope_refusal(call: Callable[..., dict], channel: str) -> str | None:
+    from gateway.audience import Audience, audience_of_key
+    from gateway.chat_slack.api import SlackSetupError
+    from gateway.session_context import bound_session_key, get_session_env
+    if audience_of_key(bound_session_key()) is not Audience.MEMBER or channel == get_session_env("HERMES_SESSION_CHAT_ID", ""):
+        return None
+    try:
+        info = call("conversations.info", {"channel": channel}).get("channel") or {}
+    except SlackSetupError:
+        info = {}
+    private = info.get("is_private") or info.get("is_im") or info.get("is_mpim") or info.get("is_group")
+    if info.get("is_channel") is True and not private:
+        return None
+    return tool_error("People talking to the bot can only read public channels and the conversation they are in.",
+                      code="slack_member_scope")
+
+
+def _read_channel(call: Callable[..., dict], args: dict, install: SlackInstall) -> dict | str:
+    if refusal := _member_scope_refusal(call, str(args["channel"])):
+        return refusal
     body = call("conversations.history", {"channel": str(args["channel"]),
                                           "limit": str(_bounded(args.get("limit"), 20, MAX_MESSAGES)),
                                           "cursor": str(args.get("cursor") or "")})
     return {"messages": [_message(m) for m in body.get("messages", [])], "next_cursor": _next_cursor(body)}
 
 
-def _read_thread(call: Callable[..., dict], args: dict, install: SlackInstall) -> dict:
+def _read_thread(call: Callable[..., dict], args: dict, install: SlackInstall) -> dict | str:
+    if refusal := _member_scope_refusal(call, str(args["channel"])):
+        return refusal
     body = call("conversations.replies", {"channel": str(args["channel"]), "ts": str(args["thread_ts"]),
                                           "limit": str(_bounded(args.get("limit"), 20, MAX_MESSAGES)),
                                           "cursor": str(args.get("cursor") or "")})
