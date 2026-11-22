@@ -25,7 +25,7 @@ struct MacModelProvidersSection: View {
                     section: .providers,
                     accessory: {
                         Button("Refresh") { Task { await model.load() } }
-                            .buttonStyle(.palPill(height: 28))
+                            .buttonStyle(.glass)
                             .disabled(model.isLoading)
                             .accessibilityIdentifier("providersRefreshButton")
                     },
@@ -191,13 +191,13 @@ private struct MacProviderAddressEditor: View {
             HStack(spacing: 6) {
                 if provider.baseURL != nil {
                     Button("Use Default") { Task { await finish { await model.useDefaultAddress(provider) } } }
-                        .buttonStyle(.palPill(height: 24, fontSize: 11))
+                        .buttonStyle(.glass)
                         .disabled(model.isWorking(provider.id))
                         .accessibilityIdentifier("modelProvider-\(provider.id)-address-default")
                 }
                 Spacer()
                 Button("Save", action: save)
-                    .buttonStyle(.palPill(height: 24, fontSize: 11, fill: PalTokens.toggleOn.opacity(0.7)))
+                    .glassButtonStyle(prominent: true)
                     .disabled(model.isWorking(provider.id) || !model.addressIsDirty(for: provider))
                     .accessibilityIdentifier("modelProvider-\(provider.id)-address-save")
             }

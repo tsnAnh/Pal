@@ -25,7 +25,6 @@ struct SetupBanner: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             if let actionTitle {
                 SetupButton(title: actionTitle, kind: .primary, identifier: "\(identifier)Action", action: action)
-                    .controlSize(.small)
             }
         }
         .padding(PalMetrics.screenMargin)

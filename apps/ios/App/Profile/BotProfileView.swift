@@ -100,7 +100,7 @@ struct BotProfileView: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("profileName")
             Button("Edit") { model.beginEditing() }
-                .buttonStyle(ProfileEditPillStyle())
+                .buttonStyle(.glass)
                 .disabled(model.profile == nil)
                 .padding(.top, ProfileMetrics.nameToEdit)
                 .accessibilityIdentifier("profileEditButton")
@@ -191,30 +191,12 @@ struct BotProfileView: View {
     }
 }
 
-private struct ProfileEditPillStyle: ButtonStyle {
-    @Environment(\.hermesTheme) private var theme
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: ProfileMetrics.editPillTextSize))
-            .foregroundStyle(Color(theme.palette.pillText))
-            .padding(.horizontal, ProfileMetrics.editPillPadding)
-            .frame(height: ProfileMetrics.editPillHeight)
-            .background(Color(theme.palette.pillFill), in: Capsule())
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .contentShape(Capsule())
-    }
-}
-
 enum ProfileMetrics {
     static let avatarDiameter: CGFloat = 88
     static let avatarTop: CGFloat = 19
     static let avatarToName: CGFloat = 18
     static let nameSize: CGFloat = 20
     static let nameToEdit: CGFloat = 11
-    static let editPillHeight: CGFloat = 37
-    static let editPillPadding: CGFloat = 12
-    static let editPillTextSize: CGFloat = 15
     static let editToCards: CGFloat = 25
     static let cardToCaption: CGFloat = 25
     static let captionToCard: CGFloat = 10

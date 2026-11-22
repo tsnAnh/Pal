@@ -15,24 +15,15 @@ struct SetupButton: View {
     let identifier: String
     let action: () -> Void
 
-    @Environment(\.controlSize) private var controlSize
-
-    private var isCompact: Bool { controlSize == .small }
-
-    private var capsule: PalClearCapsuleStyle {
-        PalClearCapsuleStyle(
-            height: isCompact ? 30 : 38, horizontalPadding: isCompact ? 14 : 18, selected: kind == .primary, fillsWidth: fillsWidth
-        )
-    }
-
     var body: some View {
         Button(action: action) {
             ZStack {
                 label.opacity(isBusy ? 0 : 1)
                 if isBusy { ProgressView().controlSize(.small) }
             }
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
         }
-        .buttonStyle(capsule)
+        .glassButtonStyle(prominent: kind == .primary)
         .disabled(isBusy)
         .accessibilityLabel(Text(title))
         .accessibilityIdentifier(identifier)

@@ -206,9 +206,8 @@ struct OwnerIntroSheet: View {
                 .foregroundStyle(PalTokens.inverseText)
                 .frame(maxWidth: .infinity, minHeight: 40)
             }
-            .buttonStyle(.glassProminent)
+            .glassButtonStyle(prominent: true, tint: PalTokens.inverseFill)
             .buttonBorderShape(.capsule)
-            .tint(PalTokens.inverseFill)
             .disabled(!model.canContinue)
             .keyboardShortcut(.defaultAction)
             .accessibilityIdentifier("ownerIntroContinue")
@@ -251,7 +250,6 @@ struct OwnerIntroSheet: View {
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
-        .controlSize(.small)
         .disabled(model.isSaving)
         .accessibilityIdentifier(identifier)
     }

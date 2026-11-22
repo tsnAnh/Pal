@@ -10,11 +10,9 @@ struct ConnectAppsChips: View {
 
     var body: some View {
         #if os(macOS)
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 8) {
-                chips
-                Spacer(minLength: 0)
-            }
+        HStack(spacing: PalMetrics.chipSpacing) {
+            chips
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, PalMetrics.screenMargin)
         .padding(.bottom, 10)
@@ -22,13 +20,12 @@ struct ConnectAppsChips: View {
         .accessibilityIdentifier("connectAppsChips")
         #else
         ScrollView(.horizontal) {
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) { chips }
-            }
+            HStack(spacing: PalMetrics.chipSpacing) { chips }
         }
         .contentMargins(.horizontal, PalMetrics.screenMargin, for: .scrollContent)
         .scrollIndicators(.hidden)
         .scrollClipDisabled()
+        .padding(.top, 8)
         .padding(.bottom, 10)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectAppsChips")
@@ -46,10 +43,9 @@ struct ConnectAppsChips: View {
     private func isSelected(_ value: ConnectChip) -> Bool { !isSearching && model.chip == value }
 
     private func chip(_ title: String, _ value: ConnectChip, identifier: String) -> some View {
-        Button { model.selectChip(value) } label: { Text(title) }
-            .buttonStyle(.palClearChip(selected: isSelected(value)))
-            .accessibilityAddTraits(isSelected(value) ? .isSelected : [])
-            .accessibilityIdentifier("connectAppsChip-\(identifier)")
+        FilterChip(title: title, isSelected: isSelected(value), accessibilityIdentifier: "connectAppsChip-\(identifier)") {
+            model.selectChip(value)
+        }
     }
 
     private var moreSelected: Bool { !isSearching && bar.moreIsSelected(model.chip) }
@@ -64,15 +60,10 @@ struct ConnectAppsChips: View {
                 Button(name) { model.selectChip(.category(name)) }
             }
         } label: {
-            HStack(spacing: 6) {
-                Text(moreTitle)
-                PalIcon("chevron.down").font(.system(size: 9, weight: .semibold))
-            }
+            FilterChipLabel(title: moreTitle, isSelected: moreSelected, trailingSymbol: "chevron.down")
         }
-        #if os(macOS)
         .menuStyle(.button)
-        #endif
-        .buttonStyle(.palClearChip(selected: moreSelected))
+        .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityIdentifier("connectAppsChip-more")

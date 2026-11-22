@@ -155,7 +155,9 @@ private struct RoutinesNotice: View {
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .multilineTextAlignment(.center)
-            PillButton(actionTitle, accessibilityIdentifier: "\(accessibilityIdentifier)-action", action: action)
+            Button(actionTitle, action: action)
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("\(accessibilityIdentifier)-action")
                 .padding(.top, 8)
         }
         .padding(.horizontal, 48)

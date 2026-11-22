@@ -233,10 +233,7 @@ struct AddVaultSheet: View {
         SheetChrome(
             title: choice == .login ? "Add Login" : "Add API Key", accessibilityIdentifier: "vaultAddSheet", onLeading: close,
             trailing: {
-                PillButton(
-                    "Save", kind: isComplete ? .accent : .dimmed, isBusy: model.isBusy,
-                    accessibilityIdentifier: "vaultSaveButton"
-                ) {
+                Button {
                     Task {
                         if await save() {
                             login.password = ""
@@ -244,7 +241,15 @@ struct AddVaultSheet: View {
                             close()
                         }
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        if model.isBusy { ProgressView().controlSize(.small) }
+                        Text("Save")
+                    }
                 }
+                .glassButtonStyle(prominent: true)
+                .disabled(!isComplete || model.isBusy)
+                .accessibilityIdentifier("vaultSaveButton")
             },
             content: {
                 ScrollView {
@@ -308,17 +313,22 @@ struct VaultEditSheet: View {
         SheetChrome(
             title: "Edit", accessibilityIdentifier: "vaultEditSheet", onLeading: close,
             trailing: {
-                PillButton(
-                    "Save", kind: draft.isComplete ? .accent : .dimmed, isBusy: model.isBusy,
-                    accessibilityIdentifier: "vaultEditSaveButton"
-                ) {
+                Button {
                     Task {
                         if await model.update(draft, api: api) {
                             draft.secret = ""
                             close()
                         }
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        if model.isBusy { ProgressView().controlSize(.small) }
+                        Text("Save")
+                    }
                 }
+                .glassButtonStyle(prominent: true)
+                .disabled(!draft.isComplete || model.isBusy)
+                .accessibilityIdentifier("vaultEditSaveButton")
             },
             content: {
                 ScrollView {

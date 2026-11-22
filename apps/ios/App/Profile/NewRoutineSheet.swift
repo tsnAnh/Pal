@@ -14,14 +14,17 @@ struct NewRoutineSheet: View {
             accessibilityIdentifier: "newRoutineSheet",
             onLeading: onClose,
             trailing: {
-                PillButton(
-                    String(localized: "Save"),
-                    kind: model.canSave ? .accent : .dimmed,
-                    isBusy: model.isSaving,
-                    accessibilityIdentifier: "newRoutineSave"
-                ) {
+                Button {
                     Task { if await model.save() { onClose() } }
+                } label: {
+                    HStack(spacing: 6) {
+                        if model.isSaving { ProgressView().controlSize(.small) }
+                        Text(String(localized: "Save"))
+                    }
                 }
+                .glassButtonStyle(prominent: true)
+                .disabled(!model.canSave || model.isSaving)
+                .accessibilityIdentifier("newRoutineSave")
             },
             content: {
                 ScrollView {

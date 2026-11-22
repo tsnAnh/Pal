@@ -37,18 +37,63 @@ public struct FilterChipBar<ID: Hashable & Sendable>: View {
     }
 
     private func chip(_ item: FilterChipItem<ID>) -> some View {
-        let isSelected = item.id == selection
-        return Button { selection = item.id } label: {
-            Text(item.title)
+        FilterChip(title: item.title, isSelected: item.id == selection, accessibilityIdentifier: "\(accessibilityIdentifier)-\(item.id)") {
+            selection = item.id
+        }
+    }
+}
+
+public struct FilterChipLabel: View {
+    public let title: String
+    public let isSelected: Bool
+    public let trailingSymbol: String?
+
+    @Environment(\.hermesTheme) private var theme
+
+    public init(title: String, isSelected: Bool, trailingSymbol: String? = nil) {
+        self.title = title
+        self.isSelected = isSelected
+        self.trailingSymbol = trailingSymbol
+    }
+
+    public var body: some View {
+        let ink = Color(isSelected ? theme.palette.chipSelectedText : theme.palette.chipText)
+        HStack(spacing: 6) {
+            Text(title)
                 .hermesText(.chip)
-                .foregroundStyle(Color(isSelected ? theme.palette.chipSelectedText : theme.palette.chipText))
-                .padding(.horizontal, PalMetrics.chipHorizontalPadding)
-                .frame(height: PalMetrics.chipHeight)
-                .background(Color(isSelected ? theme.palette.chipSelectedFill : theme.palette.chipFill), in: Capsule())
-                .contentShape(Capsule())
+            if let trailingSymbol {
+                PalIcon(trailingSymbol, ink: isSelected ? .onInverseFill : .primary)
+                    .font(.system(size: 9, weight: .semibold))
+                    .accessibilityHidden(true)
+            }
+        }
+        .foregroundStyle(ink)
+        .padding(.horizontal, PalMetrics.chipHorizontalPadding)
+        .frame(height: PalMetrics.chipHeight)
+        .background(Color(isSelected ? theme.palette.chipSelectedFill : theme.palette.chipFill), in: Capsule())
+        .contentShape(Capsule())
+    }
+}
+
+public struct FilterChip: View {
+    public let title: String
+    public let isSelected: Bool
+    public let accessibilityIdentifier: String
+    public let action: () -> Void
+
+    public init(title: String, isSelected: Bool, accessibilityIdentifier: String, action: @escaping () -> Void) {
+        self.title = title
+        self.isSelected = isSelected
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            FilterChipLabel(title: title, isSelected: isSelected)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .accessibilityIdentifier("\(accessibilityIdentifier)-\(item.id)")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }

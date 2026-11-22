@@ -22,8 +22,6 @@ private struct MacDialogPanel: View {
     let request: MacDialogRequest
     let window: CGSize
 
-    @Environment(\.hermesTheme) private var theme
-
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 12, style: .continuous) }
 
     var body: some View {
@@ -84,9 +82,8 @@ private struct MacDialogPanel: View {
     }
 
     private func button(_ action: MacDialogAction) -> some View {
-        Button(action.title) { request.activate(action) }
-            .buttonStyle(.palGlass)
-            .foregroundStyle(action.role == .destructive ? Color(theme.palette.destructive) : PalTokens.textPrimary)
+        Button(action.title, role: action.role == .destructive ? .destructive : nil) { request.activate(action) }
+            .buttonStyle(.glass)
             .accessibilityIdentifier(action.identifier ?? "macDialogAction-\(action.title)")
     }
 

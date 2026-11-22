@@ -123,13 +123,13 @@ struct ServiceSignInPasteStep: View {
                 } label: {
                     Label("Paste", palIcon: "doc.on.clipboard")
                 }
-                .buttonStyle(PillButtonStyle(kind: .neutral))
+                .buttonStyle(.glass)
                 .accessibilityIdentifier("service-signin-callback-paste-button")
                 Button("Continue") {
                     onSubmit(text)
                     text = ""
                 }
-                .buttonStyle(PillButtonStyle(kind: .accent))
+                .glassButtonStyle(prominent: true)
                 .disabled(PastedCallback(text) == nil)
                 .accessibilityIdentifier("service-signin-callback-submit-button")
             }
@@ -154,7 +154,7 @@ struct ServiceSignInCodeCard: View {
             } label: {
                 Label(copied ? String(localized: "Copied") : String(localized: "Copy"), palIcon: copied ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(PillButtonStyle(kind: .neutral))
+            .buttonStyle(.glass)
             .accessibilityIdentifier("service-signin-copy-button")
         }
         .frame(maxWidth: .infinity)
@@ -181,7 +181,7 @@ struct ServiceSignInSetupTokenHelp: View {
             } label: {
                 Label(copied ? String(localized: "Copied") : String(localized: "Copy Command"), palIcon: copied ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(PillButtonStyle(kind: .neutral))
+            .buttonStyle(.glass)
             .accessibilityIdentifier("service-signin-copy-command-button")
         }
         .frame(maxWidth: .infinity)
@@ -340,24 +340,24 @@ struct ServiceSignInDialogView: View {
         case .failed, .expired:
             if dialog.canPasteInstead {
                 Button("Paste the address instead") { Task { await center.signInByPasting() } }
-                    .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
+                    .glassButtonStyle(prominent: true)
                     .accessibilityIdentifier("service-signin-paste-instead-button")
             }
             Button("Close") { Task { await center.notNow() } }
-                .buttonStyle(PillButtonStyle(kind: .neutral, size: .large))
+                .buttonStyle(.glass)
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("service-signin-notnow-button")
         case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .callbackFailed:
             VStack(spacing: 8) {
                 if dialog.canSignIn {
                     Button(dialog.phase == .prompting ? "Sign in" : "Signing in…") { Task { await center.signIn() } }
-                        .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
+                        .glassButtonStyle(prominent: true)
                         .disabled(dialog.phase != .prompting)
                         .keyboardShortcut(.defaultAction)
                         .accessibilityIdentifier("service-signin-signin-button")
                 }
                 Button(dialog.canSignIn ? "Not now" : "Close") { Task { await center.notNow() } }
-                    .buttonStyle(PillButtonStyle(kind: .dimmed, size: .large))
+                    .buttonStyle(.glass)
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("service-signin-notnow-button")
             }

@@ -263,10 +263,10 @@ private struct MacGeneralSection: View {
                     GlassEffectContainer(spacing: 6) {
                         HStack(spacing: 6) {
                             Button("Add account") { confirmingAdd = true }
-                                .buttonStyle(.palPill)
+                                .buttonStyle(.glass)
                                 .accessibilityIdentifier("accountAddRow")
                             Button("Sign Out") { confirmingSignOut = true }
-                                .buttonStyle(.palPill)
+                                .buttonStyle(.glass)
                                 .accessibilityIdentifier("settingsSignOutRow")
                         }
                     }
@@ -457,7 +457,7 @@ private struct MacComputerSection: View {
                     identifier: "botComputerResetRow"
                 ) {
                     Button("Reset") { confirmingReset = true }
-                        .buttonStyle(.palPill)
+                        .buttonStyle(.glass)
                         .disabled(computer.isResetting)
                         .accessibilityIdentifier("botComputerResetButton")
                 }
@@ -497,7 +497,7 @@ private struct MacComputerSection: View {
             Spacer()
             if !device.isThisDevice {
                 Button("Remove") { removing = device }
-                    .buttonStyle(.palPill(height: 24, fontSize: 11))
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("deviceRemove-\(device.id)")
             }
         }
@@ -584,7 +584,7 @@ private struct MacPermissionsSection: View {
                 }
                 Spacer()
                 Button("Add Rule") { addingTo = list }
-                    .buttonStyle(.palPill(height: 24, fontSize: 11))
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("permissionsAddRule-\(list.rawValue)")
             }
             .padding(.horizontal, 13)
@@ -593,7 +593,7 @@ private struct MacPermissionsSection: View {
                     ForEach(rules) { rule in
                         MacRow(title: rule.text, identifier: "permissionsRule-\(rule.id)") {
                             Button("Remove") { removing = rule }
-                                .buttonStyle(.palPill(height: 24, fontSize: 11))
+                                .buttonStyle(.glass)
                                 .accessibilityIdentifier("permissionsRemove-\(rule.id)")
                         }
                     }
@@ -647,7 +647,7 @@ private struct MacPublicAccessSection: View {
             accessory: {
                 if model.canManage {
                     Button("Add address") { adding = true }
-                        .buttonStyle(.palPill(height: 28, fontSize: 12, horizontalPadding: 14, fill: PalTokens.inverseFill, textColor: PalTokens.inverseText))
+                        .glassButtonStyle(prominent: true)
                         .accessibilityIdentifier("publicAccessAddButton")
                 }
             },
@@ -677,7 +677,7 @@ private struct MacVaultSection: View {
             section: .vault,
             accessory: {
                 Button("New item") { adding = true }
-                    .buttonStyle(.palPill(height: 28, fontSize: 12, horizontalPadding: 14, fill: PalTokens.inverseFill, textColor: PalTokens.inverseText))
+                    .glassButtonStyle(prominent: true)
                     .accessibilityIdentifier("vaultAddButton")
             },
             content: {
@@ -784,12 +784,12 @@ private struct MacVaultSection: View {
             Spacer()
             if entry.isEditable {
                 Button("Edit") { editing = entry }
-                    .buttonStyle(.palPill(height: 24, fontSize: 11))
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("vaultEditButton-\(entry.id)")
             }
             if entry.isRemovable {
                 Button("Remove") { removing = entry }
-                    .buttonStyle(.palPill(height: 24, fontSize: 11))
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("vaultRemove-\(entry.id)")
             }
         }
@@ -815,7 +815,7 @@ private struct MacUsageSection: View {
             section: .usage,
             accessory: {
                 Button("Refresh") { Task { await model.refresh(api: hub.api) } }
-                    .buttonStyle(.palPill(height: 28))
+                    .buttonStyle(.glass)
                     .disabled(model.isRefreshing)
                     .accessibilityIdentifier("usageRefreshButton")
             },
@@ -931,7 +931,7 @@ private struct MacUpdatesSection: View {
                         identifier: "updatesVersionRow"
                     ) {
                         Button("Check for Updates") {}
-                            .buttonStyle(.palPill)
+                            .buttonStyle(.glass)
                             .disabled(true)
                             .accessibilityIdentifier("updatesCheckButton")
                     }

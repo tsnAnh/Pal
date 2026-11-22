@@ -11,7 +11,7 @@ struct NeutralSheetTests {
     func backgroundsAreNeutral(mode: AppearanceMode, scheme: ColorScheme) {
         let palette = PalTheme(mode: mode, palette: mode.palette(systemScheme: scheme)).palette
         #expect([PalPalette.measuredDark, .derivedLight, .derivedBlack].contains(palette))
-        for surface in [palette.canvas, palette.sheetBackground, palette.groupedCard, palette.chipFill, palette.pillFill] {
+        for surface in [palette.canvas, palette.sheetBackground, palette.groupedCard, palette.chipFill] {
             #expect(surface.hueSaturationBrightness.saturation < 0.1)
         }
     }

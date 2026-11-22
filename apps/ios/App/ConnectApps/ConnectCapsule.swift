@@ -22,14 +22,6 @@ struct ConnectCapsule: View {
     var quiet = false
     let perform: () -> Void
 
-    private var capsuleStyle: PalClearCapsuleStyle {
-        #if os(macOS)
-        PalClearCapsuleStyle()
-        #else
-        PalClearCapsuleStyle(height: 30, horizontalPadding: 14)
-        #endif
-    }
-
     var body: some View {
         switch state {
         case .connect, .setUp, .needsAttention, .connected:
@@ -40,7 +32,7 @@ struct ConnectCapsule: View {
                     .accessibilityIdentifier(identifier)
             } else {
                 Button(action: perform) { Text(verbatim: state.actionTitle ?? "") }
-                    .buttonStyle(capsuleStyle)
+                    .buttonStyle(.glass)
                     .opacity(state == .connected ? 0.7 : 1)
                     .accessibilityIdentifier(identifier)
             }
@@ -61,7 +53,7 @@ struct ConnectCapsule: View {
                         Text("Connecting")
                     }
                 }
-                .buttonStyle(capsuleStyle)
+                .buttonStyle(.glass)
                 .disabled(true)
                 .accessibilityIdentifier(identifier)
             }

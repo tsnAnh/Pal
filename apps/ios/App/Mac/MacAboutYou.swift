@@ -80,7 +80,6 @@ struct MacAboutYouCard: View {
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
-        .controlSize(.small)
         .disabled(isWorking)
         .accessibilityIdentifier(identifier)
     }

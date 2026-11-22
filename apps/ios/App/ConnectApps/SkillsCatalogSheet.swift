@@ -153,7 +153,9 @@ struct SkillsCatalogSheet: View {
                 Text("Couldn't load skills")
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
-                PillButton(String(localized: "Try again"), accessibilityIdentifier: "skillsRetry") { Task { await model.load() } }
+                Button { Task { await model.load() } } label: { Text("Try again") }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("skillsRetry")
             }
             .padding(.top, 60)
             .accessibilityIdentifier("skillsUnavailable")
@@ -169,9 +171,15 @@ struct SkillsCatalogSheet: View {
             }
             ForEach(rows) { skillRow($0) }
             if model.canLoadMore {
-                PillButton(String(localized: "Show more"), isBusy: model.isLoadingMore, accessibilityIdentifier: "skillsShowMore") {
-                    Task { await model.loadMore() }
+                Button { Task { await model.loadMore() } } label: {
+                    HStack(spacing: 6) {
+                        if model.isLoadingMore { ProgressView().controlSize(.small) }
+                        Text("Show more")
+                    }
                 }
+                .buttonStyle(.glass)
+                .disabled(model.isLoadingMore)
+                .accessibilityIdentifier("skillsShowMore")
                 .padding(.top, 16)
             }
         }
@@ -199,8 +207,8 @@ struct SkillsCatalogSheet: View {
     private func rowAction(_ row: SkillRow) -> ConnectRowAction {
         switch row.state {
         case .available: ConnectRowAction(String(localized: "Install")) { Task { await model.install(row) } }
-        case .updateAvailable where row.isRemovable: ConnectRowAction(String(localized: "Update"), kind: .accent) { Task { await model.update(row) } }
-        case .updateAvailable, .installed: ConnectRowAction(String(localized: "Installed"), kind: .dimmed) { model.openDetail(row) }
+        case .updateAvailable where row.isRemovable: ConnectRowAction(String(localized: "Update"), prominent: true) { Task { await model.update(row) } }
+        case .updateAvailable, .installed: ConnectRowAction(String(localized: "Installed")) { model.openDetail(row) }
         }
     }
 

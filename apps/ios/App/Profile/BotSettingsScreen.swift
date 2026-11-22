@@ -143,7 +143,7 @@ struct BotSettingsBanner: View {
                 .accessibilityIdentifier(identifier)
             if let retry {
                 Button("Try again", action: retry)
-                    .buttonStyle(PalClearCapsuleStyle(height: 28))
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("\(identifier)-retry")
             }
         }

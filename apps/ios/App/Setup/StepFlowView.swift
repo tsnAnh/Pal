@@ -196,9 +196,6 @@ struct StepFlowView<Accessory: View>: View {
                 if engine.primaryAction == .finish { close() } else { Task { await model.performPrimary() } }
             }
             .disabled(!engine.isPrimaryEnabled || inlineRefusal != nil)
-            #if os(iOS)
-            .controlSize(.large)
-            #endif
         }
     }
 

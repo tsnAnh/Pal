@@ -41,13 +41,12 @@ struct UsageBanner: View {
             HStack {
                 Spacer()
                 Button("Review Usage", action: review)
-                    .buttonStyle(.palPill(height: 28, fontSize: 12.5, horizontalPadding: 14))
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("usageBannerReview")
             }
             .padding(.top, 4)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .padding(12)
         .background(PalTokens.elevated, in: shape)
         .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
         .accessibilityElement(children: .contain)

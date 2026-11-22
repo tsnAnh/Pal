@@ -83,12 +83,12 @@ struct ConnectorDetailsScreen: View {
     private var primaryAction: some View {
         if model.isConnected {
             Button("Disconnect") { model.disconnect() }
-                .buttonStyle(ConnectorDetailsStyle.capsule)
+                .buttonStyle(.glass)
                 .disabled(model.isBusy)
                 .accessibilityIdentifier("connectorDetailsDisconnect")
         } else if let title = model.rowState.actionTitle {
             Button(title) { model.connect() }
-                .buttonStyle(ConnectorDetailsStyle.prominent)
+                .glassButtonStyle(prominent: true)
                 .disabled(model.isBusy)
                 .accessibilityIdentifier("connectorDetailsConnect")
         }
@@ -125,7 +125,7 @@ struct ConnectorDetailsScreen: View {
                 .foregroundStyle(PalTokens.textSecondary)
                 .multilineTextAlignment(.center)
             Button("Try again") { Task { await model.retryApp() } }
-                .buttonStyle(ConnectorDetailsStyle.prominent)
+                .glassButtonStyle(prominent: true)
                 .accessibilityIdentifier("connectorDetailsRetry")
         }
         .frame(maxWidth: 420)

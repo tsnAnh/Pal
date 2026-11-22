@@ -118,7 +118,7 @@ struct ChatFileCard: View {
             Button { Task { await save() } } label: {
                 Label("Save", palIcon: "square.and.arrow.down")
             }
-            .buttonStyle(PillButtonStyle(kind: .neutral))
+            .buttonStyle(.glass)
             .disabled(isSaving)
             .accessibilityLabel(Text("Save \(file.name)"))
             .accessibilityIdentifier("chatFileSave")
@@ -127,7 +127,7 @@ struct ChatFileCard: View {
                 Button { attempt += 1 } label: {
                     Label("Retry", palIcon: "arrow.clockwise")
                 }
-                .buttonStyle(PillButtonStyle(kind: .neutral))
+                .buttonStyle(.glass)
                 .accessibilityIdentifier("chatFileRetry")
             }
         }

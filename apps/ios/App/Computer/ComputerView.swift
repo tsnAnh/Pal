@@ -8,6 +8,8 @@ struct ComputerView: View {
     let title: String
     let spec: BotAvatarSpec?
 
+    @Environment(\.dismiss) private var dismiss
+
     init(model: ComputerModel, teach: TeachModel, title: String, spec: BotAvatarSpec?) {
         _model = State(initialValue: model)
         self.teach = teach
@@ -17,7 +19,7 @@ struct ComputerView: View {
 
     var body: some View {
         ZStack {
-            Color.black
+            ComputerChrome.background
                 .ignoresSafeArea()
                 .accessibilityElement()
                 .accessibilityIdentifier("computerScreen")
@@ -32,6 +34,9 @@ struct ComputerView: View {
                     model: model
                 )
                 .iOSOnly { $0.ignoresSafeArea(.container) }
+                #if os(macOS)
+                .macComputerScreenFrame()
+                #endif
                 .accessibilityLabel(Text("Computer screen"))
             } else {
                 overlayState
@@ -47,6 +52,9 @@ struct ComputerView: View {
         }
         .overlay(alignment: .top) { TeachBanner(model: teach, surface: .computer) }
         .overlay(alignment: .bottom) { bottomBar }
+        #if os(macOS)
+        .overlay(alignment: .topTrailing) { MacComputerCorner(help: { model.showsHelp = true }, collapse: { dismiss() }) }
+        #endif
         .clearNavigationBackground()
         .darkNavigationBar()
         .toolbar { toolbar }
@@ -80,11 +88,13 @@ struct ComputerView: View {
             .accessibilityIdentifier("computerTitle")
         }
         .sharedBackgroundVisibility(.hidden)
+        #if os(iOS)
         ToolbarItem(placement: .trailingBar) {
             Button { model.showsHelp = true } label: { PalIcon("questionmark") }
                 .accessibilityLabel(Text("Help"))
                 .accessibilityIdentifier("computerHelpButton")
         }
+        #endif
     }
 
     private var overlayState: some View {
@@ -125,7 +135,7 @@ struct ComputerView: View {
                 .accessibilityIdentifier("computerFailureMessage")
             if retry {
                 Button("Try again") { model.retry() }
-                    .buttonStyle(ComputerPillStyle())
+                    .buttonStyle(.glass)
                     .accessibilityIdentifier("computerRetry")
             }
         }
@@ -144,27 +154,30 @@ struct ComputerView: View {
 
     @ViewBuilder
     private var bottomBar: some View {
+        #if os(macOS)
+        MacComputerBar(model: model, teach: teach)
+        #else
         HStack(spacing: ComputerMetrics.barSpacing) {
             if model.hasControl {
                 controlTools
                 if teach.canStart {
                     Button("Teach a skill") { Task { await teach.start() } }
-                        .buttonStyle(ComputerPillStyle())
+                        .buttonStyle(.glass)
                         .accessibilityIdentifier("computerTeachSkill")
                 }
                 Spacer(minLength: 0)
                 Button("I'm done") { Task { await model.handBack() } }
-                    .buttonStyle(ComputerPillStyle())
+                    .glassButtonStyle(prominent: true)
                     .accessibilityIdentifier("computerImDone")
             } else if model.phase == .connecting || model.phase == .live {
                 if teach.canStart {
                     Button("Teach a skill") { Task { await teach.start() } }
-                        .buttonStyle(ComputerPillStyle())
+                        .buttonStyle(.glass)
                         .accessibilityIdentifier("computerTeachSkill")
                 }
                 Spacer(minLength: 0)
                 Button("Take control") { Task { await model.takeControl() } }
-                    .buttonStyle(ComputerPillStyle())
+                    .glassButtonStyle(prominent: true)
                     .disabled(!model.canAct || model.isTakingControl)
                     .accessibilityIdentifier("computerTakeControl")
             }
@@ -172,6 +185,7 @@ struct ComputerView: View {
         .padding(.horizontal, ComputerMetrics.barMargin)
         .padding(.bottom, ComputerMetrics.barBottom)
         .ignoresSafeArea(.container, edges: .bottom)
+        #endif
     }
 
     private var controlTools: some View {
@@ -213,8 +227,6 @@ enum ComputerMetrics {
     static let statusSize: CGFloat = 12.5
     static let spinnerToText: CGFloat = 14
     static let pillHeight: CGFloat = 38
-    static let pillTextSize: CGFloat = 12
-    static let pillPadding: CGFloat = 13
     static let barMargin: CGFloat = 30
     static let barBottom: CGFloat = 30
     static let barSpacing: CGFloat = 10
@@ -222,6 +234,11 @@ enum ComputerMetrics {
 
 enum ComputerChrome {
     static let fill = Color(red: 29 / 255, green: 29 / 255, blue: 29 / 255)
+    #if os(macOS)
+    static let background = PalTokens.content
+    #else
+    static let background = Color.black
+    #endif
 }
 
 struct ComputerToolIcon: View {
@@ -232,19 +249,6 @@ struct ComputerToolIcon: View {
             .font(.system(size: 17, weight: .regular))
             .frame(width: ComputerMetrics.pillHeight + 8, height: ComputerMetrics.pillHeight)
             .background(ComputerChrome.fill, in: Capsule())
-            .contentShape(Capsule())
-    }
-}
-
-struct ComputerPillStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: ComputerMetrics.pillTextSize))
-            .foregroundStyle(.white)
-            .padding(.horizontal, ComputerMetrics.pillPadding)
-            .frame(height: ComputerMetrics.pillHeight)
-            .background(ComputerChrome.fill, in: Capsule())
-            .opacity(configuration.isPressed ? 0.7 : 1)
             .contentShape(Capsule())
     }
 }

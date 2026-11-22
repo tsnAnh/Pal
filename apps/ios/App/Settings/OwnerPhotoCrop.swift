@@ -172,9 +172,8 @@ struct OwnerPhotoCropStep: View {
                 .foregroundStyle(PalTokens.inverseText)
                 .frame(maxWidth: .infinity, minHeight: 40)
             }
-            .buttonStyle(.glassProminent)
+            .glassButtonStyle(prominent: true, tint: PalTokens.inverseFill)
             .buttonBorderShape(.capsule)
-            .tint(PalTokens.inverseFill)
             .disabled(model.isBusy)
             .accessibilityIdentifier("ownerPhotoUse")
             if showsCancel {

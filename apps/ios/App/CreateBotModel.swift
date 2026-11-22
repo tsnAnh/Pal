@@ -33,6 +33,11 @@ final class CreateBotModel {
 
     let seed = String(UUID().uuidString.lowercased().prefix(8))
 
+    init() {
+        let lookSeed = self.seed
+        Task.detached(priority: .utility) { BotLookCatalog.prepareLooks(seed: lookSeed) }
+    }
+
     private(set) var identity = BotIdentity(entered: "")
 
     var canCreate: Bool { identity.isValid && !isCreating }

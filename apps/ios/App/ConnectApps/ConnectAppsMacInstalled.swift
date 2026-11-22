@@ -34,7 +34,7 @@ struct ConnectAppsMacHeader: View {
                 PalIcon("chevron.down").font(.system(size: 9, weight: .semibold))
             }
         }
-        .buttonStyle(PalClearCapsuleStyle(height: 34, horizontalPadding: 12, weight: .regular))
+        .buttonStyle(.glass)
         .accessibilityIdentifier("connectAppsInstalledButton")
     }
 }

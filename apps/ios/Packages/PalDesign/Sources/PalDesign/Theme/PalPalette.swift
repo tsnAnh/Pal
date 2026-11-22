@@ -13,11 +13,7 @@ public struct PalPalette: Equatable, Sendable {
     public var chipText: RGB
     public var chipSelectedFill: RGB
     public var chipSelectedText: RGB
-    public var pillFill: RGB
-    public var pillText: RGB
-    public var pillDimmedText: RGB
     public var accentBlue: RGB
-    public var accentBlueText: RGB
     public var destructive: RGB
     public var textPrimary: RGB
     public var textSecondary: RGB
@@ -44,7 +40,6 @@ extension PalPalette {
         palette.cardStroke = RGB(hex: 0x2c2c2e)
         palette.separator = RGB(hex: 0x2c2c2e)
         palette.chipFill = RGB(hex: 0x1c1c1e)
-        palette.pillFill = RGB(hex: 0x1c1c1e)
         palette.tileStroke = RGB(hex: 0x2c2c2e)
         palette.toggleOffTrack = RGB(hex: 0x2c2c2e)
         palette.unreadLine = RGB(hex: 0x1a2a40)
@@ -73,11 +68,7 @@ extension PalPalette {
             chipText: solid(PalSwatches.textPrimary),
             chipSelectedFill: inverseFill,
             chipSelectedText: inverseText,
-            pillFill: RGB(hex: PalSwatches.control.ink(isDark: isDark).hex),
-            pillText: solid(PalSwatches.textPrimary),
-            pillDimmedText: solid(PalSwatches.textTertiary),
             accentBlue: RGB(hex: 0x1c65cb),
-            accentBlueText: RGB(hex: 0xffffff),
             destructive: RGB(hex: isDark ? 0xe88b96 : 0xd70015),
             textPrimary: solid(PalSwatches.textPrimary),
             textSecondary: solid(PalSwatches.textSecondary),

@@ -316,7 +316,9 @@ private struct LibraryNotice: View {
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .multilineTextAlignment(.center)
             if let actionTitle, let action {
-                PillButton(actionTitle, accessibilityIdentifier: "\(accessibilityIdentifier)-action", action: action)
+                Button(actionTitle, action: action)
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("\(accessibilityIdentifier)-action")
                     .padding(.top, 8)
             }
         }

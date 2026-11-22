@@ -158,8 +158,8 @@ struct RoomActionCard: View {
                 }
             } else {
                 HStack(spacing: 10) {
-                    Button("Retry", action: retry).roomPill().accessibilityIdentifier("roomRetry")
-                    Button("Discard", role: .destructive, action: discard).roomPill().accessibilityIdentifier("roomDiscard")
+                    Button("Retry", action: retry).buttonStyle(.glass).accessibilityIdentifier("roomRetry")
+                    Button("Discard", role: .destructive, action: discard).buttonStyle(.glass).accessibilityIdentifier("roomDiscard")
                 }
                 .disabled(isBusy)
             }
@@ -176,16 +176,6 @@ struct RoomActionCard: View {
             command: action.shownCommand.isEmpty ? nil : action.shownCommand,
             description: action.description.isEmpty ? nil : action.description
         )
-    }
-}
-
-private extension Button {
-    func roomPill() -> some View {
-        #if os(macOS)
-        buttonStyle(.palPill(height: 28, fontSize: 12))
-        #else
-        buttonStyle(.pill())
-        #endif
     }
 }
 
