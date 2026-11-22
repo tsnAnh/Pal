@@ -102,7 +102,7 @@ private struct MacRailItem: View {
     var body: some View {
         let activity = roster.activity(for: bot.name)
         Button { router.openChat(botName: bot.name) } label: {
-            MacBotAvatar(bot: bot, roster: roster, diameter: 34, showsPrimaryBadge: true)
+            MacBotAvatar(bot: bot, roster: roster, diameter: MacMetrics.rowAvatar, showsPrimaryBadge: true)
                 .frame(width: 50, height: 50)
                 .overlay(alignment: .topTrailing) { MacUnreadDot(bot: bot).padding(7) }
                 .background(

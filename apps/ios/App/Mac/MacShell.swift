@@ -92,9 +92,14 @@ struct MacSidebarResizeHandle: View {
 private struct MacSidebarFrame: ViewModifier {
     let width: DragWidth
     let compact: Bool
+    let hidden: Bool
 
     func body(content: Content) -> some View {
-        content.frame(width: compact ? MacLayoutMetrics.railWidth : CGFloat(width.live))
+        content
+            .frame(width: hidden ? 0 : compact ? MacLayoutMetrics.railWidth : CGFloat(width.live))
+            .opacity(hidden ? 0 : 1)
+            .allowsHitTesting(!hidden)
+            .accessibilityHidden(hidden)
     }
 }
 
@@ -106,6 +111,12 @@ extension DragWidth {
     }
 }
 
+extension AppRouter {
+    var isFullWindow: Bool {
+        if case .computer? = path.last { true } else { false }
+    }
+}
+
 enum MacMetrics {
     static let sidebarWidthKey = "mac.sidebar.width"
     static let topBarHeight: CGFloat = 55
@@ -113,6 +124,11 @@ enum MacMetrics {
     static let footerHeight: CGFloat = 64
     static let trafficLightCenter = CGPoint(x: 21, y: 20)
     static let trafficLightPitch: CGFloat = 21
+    static let rowAvatar: CGFloat = 37
+    static let heroAvatar: CGFloat = 58
+    static let rowHeight: CGFloat = 55
+    static let rowInset: CGFloat = 10
+    static let rowSpacing: CGFloat = 12
 }
 
 struct MacShellView<Destination: View>: View {
@@ -132,9 +148,9 @@ struct MacShellView<Destination: View>: View {
     private var shellContent: some View {
         MacShellLayout {
             MacSidebar(roster: roster, connection: connection, router: router)
-                .modifier(MacSidebarFrame(width: sidebarWidth, compact: shell.isCompact))
+                .modifier(MacSidebarFrame(width: sidebarWidth, compact: shell.isCompact, hidden: router.isFullWindow))
                 .overlay(alignment: .trailing) {
-                    if !shell.isCompact { MacSidebarResizeHandle(width: sidebarWidth) }
+                    if !shell.isCompact, !router.isFullWindow { MacSidebarResizeHandle(width: sidebarWidth) }
                 }
             detail
             if shell.showsInspector, router.path.count == 1, let name = router.currentBotName, roster.bot(named: name) != nil {

@@ -144,8 +144,8 @@ private struct MacBotRow: View {
         let _ = PalPerf.event("roster.row.body")
         let activity = roster.activity(for: bot.name)
         Button { router.openChat(botName: bot.name) } label: {
-            HStack(spacing: 8.5) {
-                MacBotAvatar(bot: bot, roster: roster, diameter: 33, showsPrimaryBadge: true)
+            HStack(spacing: MacMetrics.rowSpacing) {
+                MacBotAvatar(bot: bot, roster: roster, diameter: MacMetrics.rowAvatar, showsPrimaryBadge: true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(bot.displayName)
                         .hermesText(.botName)
@@ -156,9 +156,8 @@ private struct MacBotRow: View {
                 Spacer(minLength: 0)
                 MacUnreadDot(bot: bot)
             }
-            .padding(.leading, 8.5)
-            .padding(.trailing, 8)
-            .frame(height: 50)
+            .padding(.horizontal, MacMetrics.rowInset)
+            .frame(height: MacMetrics.rowHeight)
             .background(
                 isSelected ? PalTokens.selected : hovering ? PalTokens.hover : Color.clear,
                 in: RoundedRectangle(cornerRadius: 10, style: .continuous)

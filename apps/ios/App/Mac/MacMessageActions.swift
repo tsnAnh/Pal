@@ -18,9 +18,9 @@ struct MacRowHoverModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(MacRowTracker(hover: hover, actions: actions) { anchor in
+            .background(MacRowTracker(hover: hover, actions: actions) { anchor, selection in
                 guard let actions else { return }
-                shell.messageMenu = MacMessageMenuRequest(anchor: anchor, actions: actions)
+                shell.messageMenu = MacMessageMenuRequest(anchor: anchor, actions: actions, selection: selection)
             })
             .overlayPreferenceValue(MessageCarrierKey.self) { carrier in
                 if let carrier, let actions {
@@ -148,7 +148,7 @@ private extension CGPoint {
 private struct MacRowTracker: NSViewRepresentable {
     let hover: RowHoverState
     let actions: MessageActions?
-    let openMenu: (CGPoint) -> Void
+    let openMenu: (CGPoint, String?) -> Void
 
     func makeNSView(context: Context) -> TrackingView {
         let view = TrackingView()
@@ -170,7 +170,7 @@ private struct MacRowTracker: NSViewRepresentable {
 
     final class TrackingView: NSView {
         var onChange: (Bool) -> Void = { _ in }
-        var openMenu: (CGPoint) -> Void = { _ in }
+        var openMenu: (CGPoint, String?) -> Void = { _, _ in }
         var actions: MessageActions?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -214,7 +214,8 @@ private struct MacRowTracker: NSViewRepresentable {
 
         func showMenu(for event: NSEvent) {
             guard let height = window?.contentView?.bounds.height else { return }
-            openMenu(CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y))
+            let selection = PassiveTextView.selection(in: window, at: event.locationInWindow)
+            openMenu(CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y), selection)
         }
     }
 }

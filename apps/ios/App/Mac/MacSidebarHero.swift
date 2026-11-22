@@ -42,11 +42,11 @@ private struct MacPrimaryTile: View {
         let activity = roster.activity(for: bot.name)
         Button { router.openChat(botName: bot.name) } label: {
             VStack(spacing: 4) {
-                AvatarBadge(diameter: 53, showsPrimaryBadge: bot.isPrimary, accessibilityIdentifier: "heroAvatar-\(bot.name)") {
-                    BotAvatarView(spec: bot.spec, size: 53 * 1.25, mood: roster.avatarMood(for: bot.name))
+                AvatarBadge(diameter: MacMetrics.heroAvatar, showsPrimaryBadge: bot.isPrimary, accessibilityIdentifier: "heroAvatar-\(bot.name)") {
+                    BotAvatarView(spec: bot.spec, size: MacMetrics.heroAvatar * 1.25, mood: roster.avatarMood(for: bot.name))
                         .opacity(activity.avatarOpacity)
                 }
-                .frame(width: 53, height: 53)
+                .frame(width: MacMetrics.heroAvatar, height: MacMetrics.heroAvatar)
                 Text(bot.displayName)
                     .hermesText(.heroName)
                     .foregroundStyle(PalTokens.textPrimary.opacity(0.9))

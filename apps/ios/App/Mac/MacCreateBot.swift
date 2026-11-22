@@ -25,42 +25,41 @@ struct MacCreateBot: View {
         }
     }
 
+    private static let inset: CGFloat = 24
+    private static let sectionSpacing: CGFloat = 18
+
+    @ViewBuilder
     private func layout(scrolls: Bool) -> some View {
-        VStack(spacing: 0) {
-            Text("Create New Bot")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(PalTokens.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 22)
-                .padding(.trailing, PalMetrics.macPanelTitleClearance + PalMetrics.macPanelCloseLeadingInset)
-                .frame(height: 49)
-                .accessibilityAddTraits(.isHeader)
-            PalHairline(color: PalTokens.divider)
-            if scrolls {
-                ScrollView { fields }
-                    .scrollIndicators(.never)
-            } else {
-                fields
-            }
-            PalHairline(color: PalTokens.divider)
-            MacCreateBotFooter(model: model, router: router, onCreate: create)
+        if scrolls {
+            ScrollView { content }
+                .scrollIndicators(.never)
+        } else {
+            content
         }
     }
 
-    private var fields: some View {
-        VStack(spacing: 14) {
-            MacCreateBotPreview(model: model)
-            MacCreateBotNameField(model: model, focus: $focus, onSubmit: create)
-            MacCreateBotShapeGrid(model: model, focus: $focus, onSubmit: create)
-            MacCreateBotSwatches(model: model, focus: $focus, onSubmit: create)
-            if let message = MacCreateBotNameField.failureBanner(model.failure) {
-                MacCreateBotBanner(message: message)
+    private var content: some View {
+        VStack(spacing: Self.sectionSpacing) {
+            Text("Create New Bot")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(PalTokens.textPrimary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, PalMetrics.macPanelTitleClearance + PalMetrics.macPanelCloseLeadingInset - Self.inset)
+                .accessibilityAddTraits(.isHeader)
+            Group {
+                MacCreateBotPreview(model: model)
+                MacCreateBotNameField(model: model, focus: $focus, onSubmit: create)
+                MacCreateBotShapeGrid(model: model, focus: $focus, onSubmit: create)
+                MacCreateBotSwatches(model: model, focus: $focus, onSubmit: create)
+                if let message = MacCreateBotNameField.failureBanner(model.failure) {
+                    MacCreateBotBanner(message: message)
+                }
             }
+            .disabled(model.isCreating)
+            MacCreateBotActions(model: model, router: router, onCreate: create)
         }
-        .padding(.horizontal, 22)
-        .padding(.top, 10)
-        .padding(.bottom, 16)
-        .disabled(model.isCreating)
+        .padding(Self.inset)
     }
 
     private func create() {
@@ -105,6 +104,7 @@ private struct MacCreateBotNameField: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 14))
                 .foregroundStyle(PalTokens.textPrimary)
+                .multilineTextAlignment(.center)
                 .focused(focus, equals: .name)
                 .onSubmit(onSubmit)
                 .padding(.horizontal, 12)
@@ -115,7 +115,7 @@ private struct MacCreateBotNameField: View {
                         Text("Name your Bot")
                             .font(.system(size: 14))
                             .foregroundStyle(PalTokens.textTertiary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: .infinity)
                             .padding(.horizontal, 12)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
@@ -131,15 +131,27 @@ private struct MacCreateBotNameField: View {
     @ViewBuilder
     private var hint: some View {
         if let message = Self.inlineError(model) {
-            Text(message)
-                .font(.system(size: 11.5))
+            hintText(message)
                 .foregroundStyle(Color(theme.palette.destructive))
                 .accessibilityIdentifier("createBotError")
-        } else {
-            Text(model.identity.isValid ? "Shown in the sidebar and in chats" : " ")
-                .font(.system(size: 11.5))
+        } else if let reason = Self.gateReason(model.gate) {
+            hintText(reason)
                 .foregroundStyle(PalTokens.textTertiary)
-                .accessibilityHidden(true)
+                .accessibilityIdentifier("createBotReason")
+        }
+    }
+
+    private func hintText(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.system(size: 12.5))
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    static func gateReason(_ gate: CreateBotGate) -> LocalizedStringKey? {
+        switch gate {
+        case .pickAnotherName: "Pick another name"
+        case .needsName, .ready, .creating: nil
         }
     }
 
@@ -183,23 +195,6 @@ private struct MacCreateBotBanner: View {
     }
 }
 
-private struct MacCreateBotSection<Content: View>: View {
-    let title: LocalizedStringKey
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
-                .textCase(.uppercase)
-                .tracking(0.4)
-                .foregroundStyle(PalTokens.textTertiary)
-                .accessibilityHidden(true)
-            content
-        }
-    }
-}
-
 private extension View {
     func lookKeys(
         focus: FocusState<MacCreateBotField?>.Binding,
@@ -223,23 +218,24 @@ private struct MacCreateBotShapeGrid: View {
     var focus: FocusState<MacCreateBotField?>.Binding
     let onSubmit: () -> Void
 
-    private static let cell: CGFloat = 40
+    private static let cell: CGFloat = 54
+    private static let avatar: CGFloat = 42
+    private static let spacing: CGFloat = 6
 
     private var chosenColor: Color { AvatarColor(css: model.colorHex)?.swiftUIColor ?? .gray }
 
     var body: some View {
-        MacCreateBotSection(title: "Shape") {
-            VStack(spacing: 6) {
-                ForEach(Array(BotLookCatalog.shapeRows.enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 6) {
-                        ForEach(row, id: \.self) { kind in shapeCell(kind) }
-                    }
+        VStack(spacing: Self.spacing) {
+            ForEach(Array(BotLookCatalog.shapeRows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: Self.spacing) {
+                    ForEach(row, id: \.self) { kind in shapeCell(kind) }
                 }
             }
-            .lookKeys(focus: focus, field: .shapes, onMove: move, onSubmit: onSubmit)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("botLookPicker")
         }
+        .lookKeys(focus: focus, field: .shapes, onMove: move, onSubmit: onSubmit)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Shape"))
+        .accessibilityIdentifier("botLookPicker")
     }
 
     private func move(_ direction: LookDirection) {
@@ -253,14 +249,10 @@ private struct MacCreateBotShapeGrid: View {
             name: model.seed,
             meta: BotAvatarMeta(shape: BotLookCatalog.shapeString(seed: model.seed, kind: kind), color: model.colorHex, custom: true)
         )
-        let frame = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        let frame = RoundedRectangle(cornerRadius: 14, style: .continuous)
         return Button { model.shape = kind } label: {
-            BotAvatarView(spec: spec, size: 30, animated: false)
+            BotAvatarView(spec: spec, size: Self.avatar, animated: false)
                 .frame(width: Self.cell, height: Self.cell)
-                .background(PalTokens.chipFill, in: frame)
-                .overlay {
-                    if selected { frame.strokeBorder(PalTokens.borderStrong, lineWidth: 1) }
-                }
                 .overlay {
                     if selected { frame.strokeBorder(chosenColor, lineWidth: 2) }
                 }
@@ -287,18 +279,17 @@ private struct MacCreateBotSwatches: View {
     }
 
     var body: some View {
-        MacCreateBotSection(title: "Colour") {
-            VStack(spacing: 2) {
-                ForEach(Array(BotLookCatalog.swatchRows.enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 2) {
-                        ForEach(row) { option in swatch(option) }
-                    }
+        VStack(spacing: 4) {
+            ForEach(Array(BotLookCatalog.swatchRows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 4) {
+                    ForEach(row) { option in swatch(option) }
                 }
             }
-            .lookKeys(focus: focus, field: .colors, onMove: move, onSubmit: onSubmit)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("botColourPicker")
         }
+        .lookKeys(focus: focus, field: .colors, onMove: move, onSubmit: onSubmit)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Color"))
+        .accessibilityIdentifier("botColourPicker")
     }
 
     private func move(_ direction: LookDirection) {
@@ -311,16 +302,16 @@ private struct MacCreateBotSwatches: View {
         let color = AvatarColor(css: option.hex)?.swiftUIColor ?? .gray
         return Button { model.colorHex = option.hex } label: {
             ZStack {
-                Circle().fill(color).frame(width: 24, height: 24)
-                Circle().strokeBorder(PalTokens.borderStrong, lineWidth: 1).frame(width: 24, height: 24)
+                Circle().fill(color).frame(width: 32, height: 32)
+                Circle().strokeBorder(PalTokens.borderStrong, lineWidth: 1).frame(width: 32, height: 32)
                 if selected {
-                    Circle().strokeBorder(color, lineWidth: 2).frame(width: 32, height: 32)
+                    Circle().strokeBorder(color, lineWidth: 2).frame(width: 40, height: 40)
                 }
                 if selected, focus.wrappedValue == .colors {
-                    Circle().strokeBorder(PalTokens.textPrimary.opacity(0.9), lineWidth: 2).frame(width: 38, height: 38)
+                    Circle().strokeBorder(PalTokens.textPrimary.opacity(0.9), lineWidth: 2).frame(width: 46, height: 46)
                 }
             }
-            .frame(width: 34, height: 34)
+            .frame(width: 46, height: 46)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -329,45 +320,22 @@ private struct MacCreateBotSwatches: View {
     }
 }
 
-private struct MacCreateBotFooter: View {
+private struct MacCreateBotActions: View {
     let model: CreateBotModel
     let router: AppRouter
     let onCreate: () -> Void
 
-    private var reason: LocalizedStringKey? {
-        switch model.gate {
-        case .needsName: "Type a name first"
-        case .pickAnotherName: "Pick another name"
-        case .ready, .creating: nil
-        }
-    }
-
     var body: some View {
-        HStack(spacing: 8) {
-            Spacer(minLength: 0)
-            if let reason {
-                Text(reason)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(PalTokens.textTertiary)
-                    .padding(.trailing, 2)
-                    .accessibilityIdentifier("createBotReason")
-            }
-            Button("Cancel") { router.dismissSheet() }
-                .buttonStyle(.palGlass)
-                .disabled(model.isCreating)
-                .accessibilityIdentifier("createBotCancel")
-            Button(action: onCreate) {
-                HStack(spacing: 6) {
-                    if model.isCreating { ProgressView().controlSize(.small) }
-                    Text(model.isCreating ? "Creating…" : "Create")
-                }
-            }
-            .buttonStyle(.palGlass)
-            .disabled(!model.gate.canCreate && !model.isCreating)
-            .accessibilityIdentifier("createBotConfirm")
-        }
-        .padding(.horizontal, 22)
-        .frame(height: 56)
+        MacModalActions(
+            isBusy: model.isCreating,
+            canConfirm: model.gate.canCreate,
+            confirmTitle: "Create",
+            busyTitle: "Creating…",
+            cancelIdentifier: "createBotCancel",
+            confirmIdentifier: "createBotConfirm",
+            onCancel: { router.dismissSheet() },
+            onConfirm: onCreate
+        )
     }
 }
 #endif
