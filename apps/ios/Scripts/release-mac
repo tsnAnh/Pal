@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: Scripts/release-mac [--build-number N] [--notes FILE] [--notary-profile NAME] [--dry-run]
+
+Archives Pal for macOS, signs it with Developer ID (team G94PJ7VQBJ), notarizes and
+staples it, then publishes the zip as GitHub release pal-mac-<build> on tsnAnh/Pal and
+refreshes the Sparkle appcast on the pal-mac-feed release.
+
+  --build-number N       CFBundleVersion to stamp (default: UTC yymmdd.HHMM); must be newer than the live feed
+  --notes FILE           release notes markdown (default: "Pal for Mac <version> (<build>)")
+  --notary-profile NAME  notarytool keychain profile (default: pal-notary)
+  --dry-run              archive, export, verify, zip and generate the appcast locally;
+                         skip notarization, stapling and every GitHub write
+USAGE
+}
+
+REPO=tsnAnh/Pal
+FEED_TAG=pal-mac-feed
+FEED_URL="https://github.com/$REPO/releases/download/$FEED_TAG/appcast.xml"
+TEAM=G94PJ7VQBJ
+
+build_number="$(date -u +%y%m%d.%H%M)"
+notes=""
+notary_profile=pal-notary
+dry_run=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --build-number) build_number="${2:?--build-number needs a value}"; shift 2 ;;
+    --notes) notes="${2:?--notes needs a file}"; shift 2 ;;
+    --notary-profile) notary_profile="${2:?--notary-profile needs a name}"; shift 2 ;;
+    --dry-run) dry_run=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+[[ "$build_number" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "--build-number must be dotted digits, got: $build_number" >&2; exit 2; }
+[[ -z "$notes" || -f "$notes" ]] || { echo "notes file not found: $notes" >&2; exit 2; }
+
+ios_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="$ios_dir/build/release-mac/$build_number"
+tag="pal-mac-$build_number"
+zip_name="Pal-$build_number.zip"
+archive="$out/Pal.xcarchive"
+app="$out/export/Pal.app"
+options="$out/ExportOptions.plist"
+stage="$out/stage"
+download_prefix="https://github.com/$REPO/releases/download/$tag/"
+
+die() { echo "$*" >&2; exit 1; }
+
+sha256_of() { shasum -a 256 "$1" | awk '{print $1}'; }
+
+plist_value() { /usr/libexec/PlistBuddy -c "Print :$2" "$1/Contents/Info.plist"; }
+
+preflight() {
+  local tool
+  for tool in xcodegen gh xcrun ditto xmllint curl shasum; do
+    command -v "$tool" >/dev/null || die "$tool is required"
+  done
+  if [[ $dry_run -eq 0 ]]; then
+    gh auth status >/dev/null 2>&1 || die "gh is not authenticated (gh auth login)"
+    [[ -z "$(git -C "$ios_dir" status --porcelain -- "$ios_dir")" ]] || die "apps/ios has uncommitted changes; commit or stash them first"
+    git -C "$ios_dir" fetch --quiet origin main || die "could not fetch origin/main"
+    git -C "$ios_dir" merge-base --is-ancestor HEAD origin/main || die "HEAD is not contained in origin/main; merge first"
+    xcrun notarytool history --keychain-profile "$notary_profile" >/dev/null 2>&1 \
+      || die "notarytool profile '$notary_profile' is unusable; run: xcrun notarytool store-credentials $notary_profile"
+  fi
+  rm -rf "$archive" "$out/export" "$stage"
+  mkdir -p "$out" "$stage"
+}
+
+sparkle_bin() {
+  local bin="$out/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin"
+  [[ -x "$bin/generate_appcast" && -x "$bin/generate_keys" ]] \
+    || die "Sparkle tools not found in $bin; the archive step should have resolved the Sparkle package"
+  echo "$bin"
+}
+
+live_feed_version() {
+  local code
+  code="$(curl -sSL -o "$out/live.xml" -w '%{http_code}' "$FEED_URL")" || die "could not reach $FEED_URL"
+  case "$code" in
+    404) echo 0 ;;
+    200) xmllint --xpath 'string((//item)[1]/*[local-name()="version"])' "$out/live.xml" ;;
+    *) die "unexpected HTTP $code from $FEED_URL" ;;
+  esac
+}
+
+archive_and_export() {
+  (cd "$ios_dir" && xcodegen generate --quiet)
+
+  xcodebuild archive \
+    -project "$ios_dir/HermesBots.xcodeproj" \
+    -scheme HermesBots \
+    -configuration Release \
+    -destination generic/platform=macOS \
+    -derivedDataPath "$out/DerivedData" \
+    -archivePath "$archive" \
+    -allowProvisioningUpdates \
+    CURRENT_PROJECT_VERSION="$build_number" \
+    PAL_UPDATE_FEED="$FEED_URL" \
+    | tee "$out/archive.log" | grep -E "error:|warning: .*signing|ARCHIVE (SUCCEEDED|FAILED)" || true
+  [[ -d "$archive" ]] || die "archive failed; see $out/archive.log"
+
+  cat > "$options" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>developer-id</string>
+  <key>teamID</key><string>$TEAM</string>
+  <key>signingStyle</key><string>automatic</string>
+</dict>
+</plist>
+PLIST
+
+  xcodebuild -exportArchive \
+    -archivePath "$archive" \
+    -exportOptionsPlist "$options" \
+    -exportPath "$out/export" \
+    -allowProvisioningUpdates \
+    > "$out/export.log" 2>&1 || { tail -40 "$out/export.log" >&2; exit 1; }
+  [[ -d "$app" ]] || die "export produced no Pal.app; see $out/export.log"
+
+  short_version="$(plist_value "$app" CFBundleShortVersionString)"
+}
+
+verify_bundle() {
+  local feed bundle_version embedded_key signing_key details live
+  feed="$(plist_value "$app" SUFeedURL)"
+  [[ "$feed" == "$FEED_URL" ]] || die "SUFeedURL is '$feed', expected $FEED_URL"
+  bundle_version="$(plist_value "$app" CFBundleVersion)"
+  [[ "$bundle_version" == "$build_number" ]] || die "CFBundleVersion is '$bundle_version', expected $build_number"
+
+  embedded_key="$(plist_value "$app" SUPublicEDKey)"
+  signing_key="$("$(sparkle_bin)/generate_keys" -p)" || die "generate_keys could not read the Sparkle signing key from the keychain"
+  [[ -n "$signing_key" && "$embedded_key" == "$signing_key" ]] \
+    || die "SUPublicEDKey in the app does not match the keychain signing key; run generate_keys once and set PAL_UPDATE_PUBLIC_KEY in project.yml"
+
+  codesign --verify --deep --strict "$app" || die "codesign verification failed for $app"
+  details="$(codesign -dvv "$app" 2>&1)"
+  grep -q "^TeamIdentifier=$TEAM\$" <<<"$details" || die "TeamIdentifier is not $TEAM"
+  grep -q "^Authority=Developer ID Application" <<<"$details" || die "app is not signed with a Developer ID Application certificate"
+
+  live="$(live_feed_version)"
+  if [[ "$live" != "0" ]]; then
+    [[ "$live" != "$build_number" && "$(printf '%s\n%s\n' "$live" "$build_number" | sort -V | tail -1)" == "$build_number" ]] \
+      || die "build $build_number is not newer than live feed build $live"
+  fi
+  echo "verified bundle $build_number (live feed: $live)"
+}
+
+notarize() {
+  mkdir -p "$stage"
+  if [[ $dry_run -eq 1 ]]; then
+    echo "dry run: skipping notarization and stapling"
+  else
+    local submission status id
+    ditto -c -k --keepParent "$app" "$out/notarize.zip"
+    xcrun notarytool submit "$out/notarize.zip" --keychain-profile "$notary_profile" --wait --output-format json > "$out/notarize.json" \
+      || { cat "$out/notarize.json" >&2; die "notarytool submit failed"; }
+    status="$(plutil -extract status raw -o - "$out/notarize.json")"
+    id="$(plutil -extract id raw -o - "$out/notarize.json")"
+    if [[ "$status" != "Accepted" ]]; then
+      submission="$out/notarize-log.json"
+      xcrun notarytool log "$id" --keychain-profile "$notary_profile" "$submission" >/dev/null 2>&1 || true
+      die "notarization $status (submission $id); see $submission"
+    fi
+    xcrun stapler staple "$app" || die "stapling failed"
+    spctl -a -vvv -t exec "$app" || die "Gatekeeper rejected the notarized app"
+  fi
+  ditto -c -k --sequesterRsrc --keepParent "$app" "$stage/$zip_name"
+}
+
+make_feed() {
+  if [[ -n "$notes" ]]; then
+    cp "$notes" "$stage/Pal-$build_number.md"
+  else
+    printf 'Pal for Mac %s (%s)\n' "$short_version" "$build_number" > "$stage/Pal-$build_number.md"
+  fi
+  "$(sparkle_bin)/generate_appcast" \
+    --download-url-prefix "$download_prefix" \
+    --embed-release-notes \
+    -o "$stage/appcast.xml" \
+    "$stage" > "$out/appcast.log" 2>&1 || { tail -40 "$out/appcast.log" >&2; exit 1; }
+
+  local items version signature
+  items="$(xmllint --xpath 'count(//item)' "$stage/appcast.xml")"
+  [[ "$items" == "1" ]] || die "appcast has $items items, expected exactly 1"
+  version="$(xmllint --xpath 'string(//item/*[local-name()="version"])' "$stage/appcast.xml")"
+  [[ "$version" == "$build_number" ]] || die "appcast sparkle:version is '$version', expected $build_number"
+  signature="$(xmllint --xpath 'string(//item/enclosure/@*[local-name()="edSignature"])' "$stage/appcast.xml")"
+  [[ -n "$signature" ]] || die "appcast enclosure has no sparkle:edSignature"
+}
+
+publish_archive() {
+  local local_sha remote_sha
+  local_sha="$(sha256_of "$stage/$zip_name")"
+  if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
+    curl -fsSL -o "$out/remote-$zip_name" "${download_prefix}$zip_name" \
+      || die "release $tag exists but asset $zip_name is not downloadable"
+    remote_sha="$(sha256_of "$out/remote-$zip_name")"
+    [[ "$remote_sha" == "$local_sha" ]] || die "release $tag exists with different bytes; use a new build number"
+    echo "release $tag already published with identical bytes"
+    return
+  fi
+  gh release create "$tag" "$stage/$zip_name" \
+    --repo "$REPO" \
+    --target "$(git -C "$ios_dir" rev-parse HEAD)" \
+    --title "Pal for Mac $short_version ($build_number)" \
+    --notes-file "$stage/Pal-$build_number.md" \
+    --latest=false
+  curl -fsSL -o "$out/public-$zip_name" "${download_prefix}$zip_name" || die "published asset is not downloadable"
+  [[ "$(sha256_of "$out/public-$zip_name")" == "$local_sha" ]] || die "public download of $zip_name does not match the local zip"
+}
+
+publish_feed() {
+  gh release view "$FEED_TAG" --repo "$REPO" >/dev/null 2>&1 \
+    || gh release create "$FEED_TAG" --repo "$REPO" --prerelease --latest=false \
+         --title "Pal for Mac update feed" --notes "Sparkle feed. Do not delete."
+  gh release upload "$FEED_TAG" "$stage/appcast.xml" --repo "$REPO" --clobber
+  local i
+  for i in $(seq 1 10); do
+    if curl -fsSL "$FEED_URL" | grep -q "$build_number"; then
+      return
+    fi
+    sleep 3
+  done
+  die "live feed does not list build $build_number after 30s"
+}
+
+short_version=""
+preflight
+archive_and_export
+verify_bundle
+notarize
+make_feed
+
+if [[ $dry_run -eq 1 ]]; then
+  echo "dry run complete for build $build_number"
+  echo "  app:      $app"
+  echo "  zip:      $stage/$zip_name"
+  echo "  appcast:  $stage/appcast.xml"
+  echo "  logs:     $out"
+  exit 0
+fi
+
+publish_archive
+publish_feed
+echo "published $tag"
+echo "feed $FEED_URL"
