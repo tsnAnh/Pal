@@ -465,3 +465,12 @@ def test_a_pal_bot_is_a_plain_member_app_not_an_assistant_panel():
     manifest = bot_manifest(projection, None, "Mochi on Slack")
     assert "assistant_view" not in manifest["features"] and "agent_view" not in manifest["features"]
     assert "Hermes" not in json.dumps(manifest["display_information"])
+    slashes = manifest["features"]["slash_commands"]
+    assert "/pal" in {entry["command"] for entry in slashes} and "/hermes" not in {entry["command"] for entry in slashes}
+    assert not [entry for entry in slashes if "Hermes" in entry["description"] + entry.get("usage_hint", "")]
+
+
+def test_the_pal_slash_command_routes_like_the_hermes_one():
+    from plugins.platforms.slack.adapter_slash_payload import slash_command_text
+    assert slash_command_text({"command": "/pal", "text": "new"}) == slash_command_text({"command": "/hermes", "text": "new"})
+    assert slash_command_text({"command": "/pal", "text": "what time is it"}) == "what time is it"

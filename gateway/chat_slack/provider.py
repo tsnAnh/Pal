@@ -98,9 +98,18 @@ def _probe_icon() -> bytes:
     return out.getvalue()
 
 
+def _pal_slash(entry: dict[str, Any]) -> dict[str, Any]:
+    reworded = {key: value.replace("Hermes", "Pal") if isinstance(value, str) and key != "url" else value
+                for key, value in entry.items()}
+    if reworded.get("command") == "/hermes":
+        reworded["command"] = "/pal"
+    return reworded
+
+
 def bot_manifest(projection: IdentityProjection, redirect_url: str | None, description: str) -> dict[str, Any]:
     manifest = _build_full_manifest(projection.app_name, description, messaging_experience="none")
     manifest["features"]["bot_user"]["display_name"] = projection.display_name
+    manifest["features"]["slash_commands"] = [_pal_slash(entry) for entry in manifest["features"].get("slash_commands", [])]
     scopes = manifest["oauth_config"]["scopes"]
     scopes["bot"] = sorted({*scopes["bot"], *EXTRA_BOT_SCOPES})
     if redirect_url:
