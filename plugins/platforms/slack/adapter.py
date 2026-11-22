@@ -50,7 +50,8 @@ from gateway.platforms._shared import (
 )
 from gateway.platforms.base_log_safety import safe_url_for_log
 from gateway.platforms.helpers import MessageDeduplicator, clarify_text_with_choices, inline_document_text
-from plugins.platforms.slack.adapter_install_events import event_handlers as install_event_handlers, schedule_install_welcomes
+from plugins.platforms.slack.adapter_install_events import (
+    event_handlers as install_event_handlers, schedule_identity_retry, schedule_install_welcomes)
 from plugins.platforms.slack.owner_cards import SlackOwnerDeskMixin
 from plugins.platforms.slack.adapter_config_readers import (
     _extra_or_env_channel_set_getter, _extra_or_env_flag_getter)
@@ -1826,6 +1827,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
             logger.info("[Slack] Socket Mode connected (%d workspace(s))", len(self._team_clients))
             self._hint_allow_bots()
             schedule_install_welcomes(self)
+            schedule_identity_retry(self)
             self.schedule_desk_recovery()
             return True
         except Exception as e:  # pragma: no cover - defensive logging

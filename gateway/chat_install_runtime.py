@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from gateway.chat_install_service import ChatInstallService, ReloadOutcome
 from gateway.chat_install_store import ChatInstallStore
@@ -30,6 +31,11 @@ class MessagingAdapterControl:
         with messaging._profile_scope(_scope_name(profile)):
             messaging._apply_platform_update(platform_id, entry, messaging._env_value_rules(platform_id),
                                              env, clear, bool(env))
+
+    def seed_config(self, profile: str, defaults: dict[str, Any]) -> None:
+        from gateway.chat_audience import seed_missing
+        with bot_profile_scope(profile):
+            seed_missing(defaults)
 
     def reload(self, profile: str) -> ReloadOutcome:
         from tui_gateway.methods_messaging_slack import _slack_reload

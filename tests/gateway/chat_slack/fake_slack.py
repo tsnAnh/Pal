@@ -27,6 +27,15 @@ class FakeSlack:
         self.rate_limit: dict[str, int] = {}
         self.rotate_gate: threading.Event | None = None
         self.joined: set[str] = set()
+        self.members = [
+            {"id": "UOWNER", "team_id": "T1", "real_name": "Olive Owner", "profile": {"display_name": "olive"}},
+            {"id": "U0AMY0001", "team_id": "T1", "real_name": "Amy Adams", "profile": {"display_name": "amy"}},
+            {"id": "U0GUEST01", "team_id": "T1", "real_name": "Gus Guest", "is_restricted": True, "profile": {}},
+            {"id": "UBOTX", "team_id": "T1", "real_name": "Some Bot", "is_bot": True, "profile": {}},
+            {"id": "UGONE", "team_id": "T1", "real_name": "Gone Person", "deleted": True, "profile": {}},
+            {"id": "UEXT", "team_id": "T1", "real_name": "Ext Person", "is_stranger": True, "profile": {}},
+            {"id": "USLACKBOT", "team_id": "T1", "real_name": "Slackbot", "profile": {}},
+        ]
         self.channels = [{"id": "C1", "name": "general", "is_private": False, "is_member": False},
                          {"id": "G1", "name": "secret-plans", "is_private": True, "is_member": True}]
         self.transport = httpx.MockTransport(self.handle)
@@ -114,6 +123,25 @@ class FakeSlack:
         already = form["channel"] in self.joined
         self.joined.add(form["channel"])
         return {"ok": True, **({"warning": "already_in_channel"} if already else {})}
+
+    def m_conversations_open(self, form):
+        return {"ok": True, "channel": {"id": "D" + form["users"]}}
+
+    def m_conversations_leave(self, form):
+        if form["channel"] not in self.joined and form["channel"] != "G1":
+            return {"ok": True, "not_in_channel": True}
+        self.joined.discard(form["channel"])
+        return {"ok": True}
+
+    def m_users_list(self, form):
+        start = int(form.get("cursor") or 0)
+        page = self.members[start:start + 2]
+        more = start + 2 < len(self.members)
+        return {"ok": True, "members": page, "response_metadata": {"next_cursor": str(start + 2) if more else ""}}
+
+    def m_users_info(self, form):
+        found = next((m for m in self.members if m["id"] == form["user"]), None)
+        return {"ok": True, "user": found} if found else {"ok": False, "error": "user_not_found"}
 
     def m_auth_test(self, form):
         return {"ok": True, "team_id": "T1", "team": "Acme", "user_id": "UBOT", "bot_id": "B1"}

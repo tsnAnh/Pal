@@ -7,7 +7,7 @@ catalog rejects a contract that has no handler or emitter.
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from .base import Params, Payload, Result, WireEnum
 from .common import ProfileParams
@@ -214,6 +214,178 @@ class ChatSpaceJoinParams(ChatInstallParams):
     hello: bool = False
 
 
+class SpaceLeaveOutcome(WireEnum):
+    left = "left"
+    not_member = "not_member"
+
+
+class AudiencePolicyKind(WireEnum):
+    owner_only = "owner_only"
+    workspace = "workspace"
+    listed = "listed"
+
+
+class ReportDestinationKind(WireEnum):
+    owner_dm = "owner_dm"
+    space = "space"
+
+
+class DeskItemKind(WireEnum):
+    ask = "ask"
+    handoff = "handoff"
+    send = "send"
+
+
+class DeskItemState(WireEnum):
+    posting = "posting"
+    open = "open"
+    approved = "approved"
+    executing = "executing"
+    done = "done"
+    declined = "declined"
+    expired = "expired"
+    unknown = "unknown"
+    cancelled = "cancelled"
+    failed = "failed"
+
+
+class DeskChoice(WireEnum):
+    approve = "approve"
+    decline = "decline"
+
+
+MAX_AUDIENCE_MEMBERS = 500
+MAX_TURNS_PER_HOUR = 1000
+
+
+class Person(Result):
+    id: str
+    name: str
+    display_name: str = ""
+    is_restricted: bool = False
+
+
+class AudienceMember(Result):
+    id: str
+    name: str = ""
+
+
+class ReportDestination(Result):
+    kind: ReportDestinationKind
+    space_id: str | None = None
+    name: str = ""
+
+    @model_validator(mode="after")
+    def _space_has_id(self) -> ReportDestination:
+        if (self.kind is ReportDestinationKind.space) != bool(self.space_id):
+            raise ValueError("a channel destination needs its space_id and an owner DM has none")
+        return self
+
+
+class DeskPerson(Result):
+    id: str
+    name: str = ""
+
+
+class DeskPlace(Result):
+    conversation_id: str = ""
+    thread_ts: str | None = None
+    label: str = ""
+
+
+class DeskRecipient(Result):
+    user_id: str | None = None
+    conversation_id: str | None = None
+    direct: bool = False
+
+
+class DeskItemWire(Result):
+    id: str
+    kind: DeskItemKind
+    state: DeskItemState
+    revision: int = Field(ge=0)
+    created_at: float
+    expires_at: float
+    requester: DeskPerson | None = None
+    where: DeskPlace
+    text: str
+    why: str | None = None
+    recipient: DeskRecipient | None = None
+
+
+class ChatSpaceLeaveParams(ChatInstallParams):
+    space_id: str = Field(min_length=1)
+
+
+class ChatInstallSetIconParams(ChatInstallParams):
+    data: str = Field(min_length=1)
+
+
+class ChatAudienceSetParams(ChatInstallParams):
+    policy: AudiencePolicyKind
+    members: list[str] | None = Field(default=None, max_length=MAX_AUDIENCE_MEMBERS)
+    include_restricted: bool | None = None
+    member_turns_per_hour: int | None = Field(default=None, ge=1, le=MAX_TURNS_PER_HOUR)
+    expected_revision: int = Field(ge=0)
+
+
+class ChatPeopleListParams(ChatInstallParams):
+    query: str = Field(default="", max_length=100)
+    cursor: str = ""
+
+
+class ChatReportSetParams(ChatInstallParams):
+    destination: ReportDestination
+
+
+class ChatDeskListParams(ProfileParams):
+    states: list[DeskItemState] | None = None
+    kinds: list[DeskItemKind] | None = None
+
+
+class ChatDeskDecideParams(ProfileParams):
+    item_id: str = Field(min_length=1)
+    choice: DeskChoice
+    expected_revision: int = Field(ge=0)
+
+
+class ChatSpaceLeaveResult(Result):
+    outcome: SpaceLeaveOutcome
+
+
+class ChatInstallSetIconResult(Result):
+    ok: bool
+
+
+class ChatAudienceResult(Result):
+    policy: AudiencePolicyKind
+    members: list[AudienceMember]
+    include_restricted: bool
+    member_turns_per_hour: int
+    revision: int = Field(ge=0)
+
+
+class ChatPeopleListResult(Result):
+    people: list[Person]
+    next_cursor: str | None = None
+
+
+class ChatReportResult(Result):
+    destination: ReportDestination
+
+
+class ChatDeskListResult(Result):
+    items: list[DeskItemWire]
+
+
+class ChatDeskDecideResult(Result):
+    item: DeskItemWire
+
+
+class ChatDeskChangedPayload(Payload):
+    item: DeskItemWire
+
+
 class ChatProviderListResult(Result):
     providers: list[Capabilities]
 
@@ -269,6 +441,33 @@ method("chat.install.update_identity", params=ChatInstallParams, result=ChatIden
 method("chat.install.revoke", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, "
            "so a reinstall starts from a fresh one and the revoked state carries no app id.")
+method("chat.install.set_icon", params=ChatInstallSetIconParams, result=ChatInstallSetIconResult,
+       doc="Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active "
+           "install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. "
+           "Owner connections only.")
+method("chat.space.leave", params=ChatSpaceLeaveParams, result=ChatSpaceLeaveResult,
+       doc="Remove the bot from a channel, forget its binding there and retire the questions still waiting on answers in it. "
+           "Safe to repeat: not_member when the bot was already out.")
+method("chat.audience.get", params=ChatInstallParams, result=ChatAudienceResult,
+       doc="Who may talk to the bot besides its owner, with the revision to send back on a change. Owner connections only.")
+method("chat.audience.set", params=ChatAudienceSetParams, result=ChatAudienceResult,
+       doc="Change who may talk to the bot. Takes effect on the next message. stale_revision when another device changed it first. "
+           "Owner connections only.")
+method("chat.people.list", params=ChatPeopleListParams, result=ChatPeopleListResult,
+       doc="People in the bot's workspace who can be allowed to talk to it, with an optional name filter and a cursor. "
+           "Bots, removed accounts and people from other organizations are left out.")
+method("chat.report.get", params=ChatInstallParams, result=ChatReportResult,
+       doc="Where the bot sends its reports and owner questions: the owner's direct messages or a channel it has joined.")
+method("chat.report.set", params=ChatReportSetParams, result=ChatReportResult,
+       doc="Choose where the bot sends its reports: the owner's direct messages or a channel it has joined. "
+           "not_joined when the bot is not in that channel.")
+method("chat.desk.list", params=ChatDeskListParams, result=ChatDeskListResult,
+       doc="Questions, hand-offs and sends the bot is holding for its owner, with the exact texts. Defaults to everything still waiting.")
+method("chat.desk.decide", params=ChatDeskDecideParams, result=ChatDeskDecideResult,
+       doc="Approve or decline one waiting item, the same decision the owner's chat card makes. "
+           "stale_revision when it moved since the client last saw it; not_found when it is gone.")
+event("chat.desk.changed", ChatDeskChangedPayload,
+      doc="A desk item was created or moved, sent for the bot's profile. A burst between two checks arrives as the latest revision.")
 event("chat.install.changed", ChatInstallChangedPayload,
       doc="A chat setup state moved, or a binding went live or not live. Exactly one per setup revision.")
 
@@ -276,4 +475,8 @@ WIRE_MODELS: tuple[type[Params | Result | Payload], ...] = (
     ChatProviderParams, ChatInstallParams, ChatInstallAdvanceParams, ChatSpaceJoinParams,
     ChatProviderListResult, ChatInstallStatusResult, ChatSpacesListResult, ChatSpaceJoinResult,
     ChatBindingListResult, ChatInstallChangedPayload, ChatIdentityUpdateResult, IdentityProjection,
+    ChatSpaceLeaveParams, ChatInstallSetIconParams, ChatAudienceSetParams, ChatPeopleListParams, ChatReportSetParams,
+    ChatDeskListParams, ChatDeskDecideParams, ChatSpaceLeaveResult, ChatInstallSetIconResult, ChatAudienceResult,
+    ChatPeopleListResult, ChatReportResult, ChatDeskListResult, ChatDeskDecideResult, ChatDeskChangedPayload,
+    Person, AudienceMember, ReportDestination, DeskPerson, DeskPlace, DeskRecipient, DeskItemWire,
 )

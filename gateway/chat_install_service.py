@@ -6,15 +6,20 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
-from typing import Protocol
+from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from gateway.audience import AudiencePolicy, AudiencePolicyKind
+from gateway.chat_audience import AudienceSettings, read_audience, read_home, write_audience, write_home
 from gateway.chat_install_store import ChatInstallStore
+from tools.image_asset import ImageAssetError, decode_image
 from tui_gateway.chat_install import (
     CREDENTIAL_STEPS,
+    OWNER_DM_HOME_NAME,
     ChatProvider,
     ChatProviderError,
     IdentityUpdate,
+    PeoplePage,
     ProviderNotImplemented,
     SetupEvent,
     SetupKey,
@@ -33,10 +38,13 @@ from tui_gateway.contracts.chat_provider import (
     Installation,
     NextAction,
     NextActionKind,
+    ReportDestination,
+    ReportDestinationKind,
     SetupErrorCode,
     SetupEventKind,
     SetupState,
     SetupStep,
+    SpaceLeaveOutcome,
     SpaceRef,
 )
 
@@ -61,11 +69,16 @@ class AdapterControl(Protocol):
 
     def reload(self, profile: str) -> ReloadOutcome: ...
 
+    def seed_config(self, profile: str, defaults: dict[str, Any]) -> None: ...
+
 
 class GatewayReason(Enum):
     owner_only = "owner_only"
     needs_public_url = "needs_public_url"
     invalid_event = "invalid_event"
+    invalid_input = "invalid_input"
+    invalid_image = "invalid_image"
+    not_joined = "not_joined"
     provider_failed = "provider_failed"
 
 
@@ -286,6 +299,13 @@ class ChatInstallService:
         if installation is None or not owner:
             return self._fail(provider, state, SetupErrorCode.install_failed)
         try:
+            defaults = provider.new_install_config(installation, owner)
+            if defaults:
+                self.control.seed_config(state.bot, defaults)
+        except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
+            logger.warning("chat install defaults failed provider=%s error=%s", state.provider_id, type(exc).__name__)
+            return self._fail(provider, state, SetupErrorCode.install_failed)
+        try:
             env = dict(provider.adapter_env(installation))
             if provider.allowed_users_env:
                 env[provider.allowed_users_env] = owner
@@ -366,6 +386,97 @@ class ChatInstallService:
 
     def bindings(self, bot: str) -> list[Binding]:
         return [row.wire() for row in self.store.bindings(bot)]
+
+    def set_icon(self, bot: str, provider_id: str, data: str) -> None:
+        provider = self._provider(provider_id)
+        try:
+            png, _ = decode_image(data, ("png",))
+            provider.store_icon(bot, png)
+        except ImageAssetError:
+            raise ChatServiceError(GatewayReason.invalid_image) from None
+        except ProviderNotImplemented:
+            raise ChatServiceError(ChatRpcErrorReason.not_implemented) from None
+
+    def audience(self, bot: str, provider_id: str, workspace: str) -> tuple[AudienceSettings, dict[str, str]]:
+        provider, _, installation = self._installed(bot, provider_id, workspace)
+        with self.bot_scope(bot):
+            settings = read_audience(provider_id)
+        names: dict[str, str] = {}
+        if settings.policy.members:
+            try:
+                names = provider.people_names(installation, sorted(settings.policy.members))
+            except Exception as exc:  # health: allow BLE001 -- names are cosmetic and provider text must not reach the log, so only the exception type is logged
+                logger.warning("chat audience names unavailable provider=%s error=%s", provider_id, type(exc).__name__)
+        return settings, names
+
+    def set_audience(self, bot: str, provider_id: str, workspace: str, kind: AudiencePolicyKind,
+                     members: list[str] | None, include_restricted: bool | None, turns_per_hour: int | None,
+                     expected_revision: int) -> tuple[AudienceSettings, dict[str, str]]:
+        provider, state, _ = self._installed(bot, provider_id, workspace)
+        parsed = None
+        if members is not None:
+            checked = [provider.parse_owner_identity(member) for member in members]
+            if not all(checked):
+                raise ChatServiceError(GatewayReason.invalid_input, state)
+            parsed = frozenset(checked)
+        with self.bot_scope(bot):
+            current = read_audience(provider_id)
+            policy = AudiencePolicy(
+                kind, current.policy.members if parsed is None else parsed,
+                current.policy.include_restricted if include_restricted is None else include_restricted,
+                current.policy.member_turns_per_hour if turns_per_hour is None else turns_per_hour)
+            try:
+                write_audience(provider_id, policy, expected_revision)
+            except StaleRevision:
+                raise ChatServiceError(ChatRpcErrorReason.stale_revision, state) from None
+        return self.audience(bot, provider_id, workspace)
+
+    def people(self, bot: str, provider_id: str, workspace: str, query: str, cursor: str) -> PeoplePage:
+        provider, state, installation = self._installed(bot, provider_id, workspace)
+        return self._call(state, lambda: provider.list_people(installation, query, cursor))
+
+    def report(self, bot: str, provider_id: str, workspace: str) -> ReportDestination:
+        provider, _, _ = self._installed(bot, provider_id, workspace)
+        with self.bot_scope(bot):
+            home = read_home(provider_id)
+        if home is None or provider.is_direct_space(home.chat_id):
+            return ReportDestination(kind=ReportDestinationKind.owner_dm)
+        return ReportDestination(kind=ReportDestinationKind.space, space_id=home.chat_id, name=home.name)
+
+    def set_report(self, bot: str, provider_id: str, workspace: str, destination: ReportDestination) -> ReportDestination:
+        from gateway.config import HomeChannel, Platform
+        provider, state, installation = self._installed(bot, provider_id, workspace)
+        owner = self.store.owner_id(installation.id)
+        if not owner:
+            raise ChatServiceError(GatewayReason.invalid_event, state)
+        if destination.kind is ReportDestinationKind.owner_dm:
+            chat_id, name = self._call(state, lambda: provider.open_owner_dm(installation, owner)), OWNER_DM_HOME_NAME
+        else:
+            spaces = self._call(state, lambda: provider.list_spaces(installation))
+            space = next((item for item in spaces if item.id == destination.space_id and item.joined), None)
+            if space is None:
+                raise ChatServiceError(GatewayReason.not_joined, state)
+            chat_id, name = space.id, space.name
+        home = HomeChannel(platform=Platform(provider_id), chat_id=chat_id, name=name, user_id=owner,
+                           scope_id=installation.workspace_id)
+        with self.bot_scope(bot):
+            write_home(home)
+        return self.report(bot, provider_id, workspace)
+
+    def leave(self, bot: str, provider_id: str, workspace: str, space_id: str) -> SpaceLeaveOutcome:
+        provider, state, installation = self._installed(bot, provider_id, workspace)
+        outcome = self._call(state, lambda: provider.leave_space(installation, space_id))
+        self.store.delete_binding(installation.id, space_id)
+        self.retire_asks(bot, provider_id, installation.workspace_id, space_id)
+        return outcome
+
+    @staticmethod
+    def retire_asks(bot: str, provider_id: str, scope_id: str, space_id: str) -> None:
+        from gateway.desk.store import DB_NAME, DeskStore
+        from hermes_cli.profiles import get_profile_dir
+        home = get_profile_dir(bot)
+        if (home / DB_NAME).exists():
+            DeskStore(home).expire_open_asks_in(provider_id, scope_id, space_id)
 
     def revoke(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation | None]:
         provider = self._provider(provider_id)

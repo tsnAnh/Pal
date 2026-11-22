@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from tui_gateway.contracts.chat_provider import (
     Capabilities,
@@ -15,6 +15,7 @@ from tui_gateway.contracts.chat_provider import (
     Installation,
     NextAction,
     NextActionKind,
+    Person,
     ProviderCapability,
     SetupError,
     SetupErrorCode,
@@ -22,6 +23,7 @@ from tui_gateway.contracts.chat_provider import (
     SetupState,
     SetupStep,
     SpaceJoinOutcome,
+    SpaceLeaveOutcome,
     SpaceRef,
 )
 
@@ -67,7 +69,14 @@ class SpaceJoin:
     next_action: NextAction
 
 
+@dataclass(frozen=True)
+class PeoplePage:
+    people: list[Person]
+    next_cursor: str | None
+
+
 REDIRECT_PATH = "/webapp/chat-install/callback"
+OWNER_DM_HOME_NAME = "Direct messages"
 OWNER_FIELD_ID = "owner_member_id"
 
 
@@ -119,6 +128,27 @@ class ChatProvider(abc.ABC):
 
     def update_identity(self, installation: Installation) -> IdentityUpdate:
         raise self._missing("update_identity")
+
+    def store_icon(self, bot: str, png: bytes) -> None:
+        raise self._missing("store_icon")
+
+    def new_install_config(self, installation: Installation, owner: str) -> dict[str, Any]:
+        return {}
+
+    def open_owner_dm(self, installation: Installation, owner: str) -> str:
+        raise self._missing("open_owner_dm")
+
+    def is_direct_space(self, space_id: str) -> bool:
+        return False
+
+    def list_people(self, installation: Installation, query: str, cursor: str) -> PeoplePage:
+        raise self._missing("list_people")
+
+    def people_names(self, installation: Installation, member_ids: list[str]) -> dict[str, str]:
+        raise self._missing("people_names")
+
+    def leave_space(self, installation: Installation, space_id: str) -> SpaceLeaveOutcome:
+        raise self._missing("leave_space")
 
 
 SETUP_CAPABILITIES = (

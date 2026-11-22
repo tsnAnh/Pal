@@ -119,6 +119,12 @@ async def send_install_welcomes(adapter: Any) -> None:
             store.release_welcome(installation.id)
 
 
+def schedule_identity_retry(adapter: Any) -> None:
+    from gateway.chat_identity_sync import retry_pending_identity
+    from hermes_constants import get_hermes_home
+    retry_pending_identity(_bot(adapter), get_hermes_home())
+
+
 def schedule_install_welcomes(adapter: Any) -> None:
     task = asyncio.ensure_future(send_install_welcomes(adapter))
     _tasks.add(task)

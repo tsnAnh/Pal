@@ -192,9 +192,15 @@ def test_abstract_provider_raises_typed_not_implemented():
         "adopt_token": lambda: bare.adopt_token(state, "vault-item"),
         "update_identity": lambda: bare.update_identity(install),
         "accept_app_level_credential": lambda: bare.accept_app_level_credential(state, "vault-item"),
+        "store_icon": lambda: bare.store_icon("pal", b""),
+        "open_owner_dm": lambda: bare.open_owner_dm(install, "U1"),
+        "list_people": lambda: bare.list_people(install, "", ""),
+        "people_names": lambda: bare.people_names(install, []),
+        "leave_space": lambda: bare.leave_space(install, "s"),
     }
     assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity",
-                                                                                  "accept_config_credential", "parse_owner_identity"}
+                                                                                  "accept_config_credential", "parse_owner_identity",
+                                                                                  "new_install_config", "is_direct_space"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()

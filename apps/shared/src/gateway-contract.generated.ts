@@ -936,6 +936,126 @@ export interface IdentityProjection {
   avatar_ref?: string | null
   avatar_bytes?: number | null
 }
+export interface ChatInstallSetIconParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+  data: string
+}
+export interface ChatInstallSetIconResult {
+  ok: boolean
+}
+export interface ChatSpaceLeaveParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+  space_id: string
+}
+export interface ChatSpaceLeaveResult {
+  outcome: SpaceLeaveOutcome
+}
+export type SpaceLeaveOutcome = 'left' | 'not_member'
+export interface ChatAudienceResult {
+  policy: AudiencePolicyKind
+  members: AudienceMember[]
+  include_restricted: boolean
+  member_turns_per_hour: number
+  revision: number
+}
+export type AudiencePolicyKind = 'owner_only' | 'workspace' | 'listed'
+export interface AudienceMember {
+  id: string
+  name?: string
+}
+export interface ChatAudienceSetParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+  policy: AudiencePolicyKind
+  members?: string[] | null
+  include_restricted?: boolean | null
+  member_turns_per_hour?: number | null
+  expected_revision: number
+}
+export interface ChatPeopleListParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+  query?: string
+  cursor?: string
+}
+export interface ChatPeopleListResult {
+  people: Person[]
+  next_cursor?: string | null
+}
+export interface Person {
+  id: string
+  name: string
+  display_name?: string
+  is_restricted?: boolean
+}
+export interface ChatReportResult {
+  destination: ReportDestination
+}
+export interface ReportDestination {
+  kind: ReportDestinationKind
+  space_id?: string | null
+  name?: string
+}
+export type ReportDestinationKind = 'owner_dm' | 'space'
+export interface ChatReportSetParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+  destination: ReportDestination
+}
+export interface ChatDeskListParams {
+  profile?: string | null
+  states?: DeskItemState[] | null
+  kinds?: DeskItemKind[] | null
+}
+export type DeskItemState = 'posting' | 'open' | 'approved' | 'executing' | 'done' | 'declined' | 'expired' | 'unknown' | 'cancelled' | 'failed'
+export type DeskItemKind = 'ask' | 'handoff' | 'send'
+export interface ChatDeskListResult {
+  items: DeskItemWire[]
+}
+export interface DeskItemWire {
+  id: string
+  kind: DeskItemKind
+  state: DeskItemState
+  revision: number
+  created_at: number
+  expires_at: number
+  requester?: DeskPerson | null
+  where: DeskPlace
+  text: string
+  why?: string | null
+  recipient?: DeskRecipient | null
+}
+export interface DeskPerson {
+  id: string
+  name?: string
+}
+export interface DeskPlace {
+  conversation_id?: string
+  thread_ts?: string | null
+  label?: string
+}
+export interface DeskRecipient {
+  user_id?: string | null
+  conversation_id?: string | null
+  direct?: boolean
+}
+export interface ChatDeskDecideParams {
+  profile?: string | null
+  item_id: string
+  choice: DeskChoice
+  expected_revision: number
+}
+export type DeskChoice = 'approve' | 'decline'
+export interface ChatDeskDecideResult {
+  item: DeskItemWire
+}
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
   profile?: string | null
@@ -7949,6 +8069,9 @@ export interface DisplayInstallSudoParams {
   session_id: string
   profile_key: string
 }
+export interface ChatDeskChangedPayload {
+  item: DeskItemWire
+}
 export interface ChatInstallChangedPayload {
   state: SetupState
 }
@@ -8583,22 +8706,40 @@ export interface RpcMethods {
   'capabilities.set_key': { params: CapabilitySetKeyParams; result: CapabilitySetKeyResult }
   /** Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
+  /** Who may talk to the bot besides its owner, with the revision to send back on a change. Owner connections only. */
+  'chat.audience.get': { params: ChatInstallParams; result: ChatAudienceResult }
+  /** Change who may talk to the bot. Takes effect on the next message. stale_revision when another device changed it first. Owner connections only. */
+  'chat.audience.set': { params: ChatAudienceSetParams; result: ChatAudienceResult }
   /** Channels this bot is bound to and whether it is live in each. */
   'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
+  /** Approve or decline one waiting item, the same decision the owner's chat card makes. stale_revision when it moved since the client last saw it; not_found when it is gone. */
+  'chat.desk.decide': { params: ChatDeskDecideParams; result: ChatDeskDecideResult }
+  /** Questions, hand-offs and sends the bot is holding for its owner, with the exact texts. Defaults to everything still waiting. */
+  'chat.desk.list': { params: ChatDeskListParams; result: ChatDeskListResult }
   /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
+  'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }
   /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
   'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
+  /** People in the bot's workspace who can be allowed to talk to it, with an optional name filter and a cursor. Bots, removed accounts and people from other organizations are left out. */
+  'chat.people.list': { params: ChatPeopleListParams; result: ChatPeopleListResult }
   /** Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only. */
   'chat.provider.list': { params: ProfileParams; result: ChatProviderListResult }
+  /** Where the bot sends its reports and owner questions: the owner's direct messages or a channel it has joined. */
+  'chat.report.get': { params: ChatInstallParams; result: ChatReportResult }
+  /** Choose where the bot sends its reports: the owner's direct messages or a channel it has joined. not_joined when the bot is not in that channel. */
+  'chat.report.set': { params: ChatReportSetParams; result: ChatReportResult }
   /** Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live. */
   'chat.space.join': { params: ChatSpaceJoinParams; result: ChatSpaceJoinResult }
+  /** Remove the bot from a channel, forget its binding there and retire the questions still waiting on answers in it. Safe to repeat: not_member when the bot was already out. */
+  'chat.space.leave': { params: ChatSpaceLeaveParams; result: ChatSpaceLeaveResult }
   /** Channels the installed bot can see, with whether it has joined. */
   'chat.spaces.list': { params: ChatInstallParams; result: ChatSpacesListResult }
   /** Lock one answer of a batch clarify request (editable until every question is locked). */
@@ -9299,14 +9440,23 @@ export const RPC_METHODS = [
   'browser.manage',
   'capabilities.set_key',
   'capabilities.status',
+  'chat.audience.get',
+  'chat.audience.set',
   'chat.binding.list',
+  'chat.desk.decide',
+  'chat.desk.list',
   'chat.install.advance',
   'chat.install.begin',
   'chat.install.revoke',
+  'chat.install.set_icon',
   'chat.install.status',
   'chat.install.update_identity',
+  'chat.people.list',
   'chat.provider.list',
+  'chat.report.get',
+  'chat.report.set',
   'chat.space.join',
+  'chat.space.leave',
   'chat.spaces.list',
   'clarify.lock',
   'cli.exec',
@@ -9682,22 +9832,40 @@ export interface CanonicalRpcMethods {
   'bot_relay.stop': { params: CanonicalBotStopParams; result: CanonicalBotStopResult }
   /** Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
+  /** Who may talk to the bot besides its owner, with the revision to send back on a change. Owner connections only. */
+  'chat.audience.get': { params: ChatInstallParams; result: ChatAudienceResult }
+  /** Change who may talk to the bot. Takes effect on the next message. stale_revision when another device changed it first. Owner connections only. */
+  'chat.audience.set': { params: ChatAudienceSetParams; result: ChatAudienceResult }
   /** Channels this bot is bound to and whether it is live in each. */
   'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
+  /** Approve or decline one waiting item, the same decision the owner's chat card makes. stale_revision when it moved since the client last saw it; not_found when it is gone. */
+  'chat.desk.decide': { params: ChatDeskDecideParams; result: ChatDeskDecideResult }
+  /** Questions, hand-offs and sends the bot is holding for its owner, with the exact texts. Defaults to everything still waiting. */
+  'chat.desk.list': { params: ChatDeskListParams; result: ChatDeskListResult }
   /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
+  'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }
   /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
   'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
+  /** People in the bot's workspace who can be allowed to talk to it, with an optional name filter and a cursor. Bots, removed accounts and people from other organizations are left out. */
+  'chat.people.list': { params: ChatPeopleListParams; result: ChatPeopleListResult }
   /** Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only. */
   'chat.provider.list': { params: ProfileParams; result: ChatProviderListResult }
+  /** Where the bot sends its reports and owner questions: the owner's direct messages or a channel it has joined. */
+  'chat.report.get': { params: ChatInstallParams; result: ChatReportResult }
+  /** Choose where the bot sends its reports: the owner's direct messages or a channel it has joined. not_joined when the bot is not in that channel. */
+  'chat.report.set': { params: ChatReportSetParams; result: ChatReportResult }
   /** Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live. */
   'chat.space.join': { params: ChatSpaceJoinParams; result: ChatSpaceJoinResult }
+  /** Remove the bot from a channel, forget its binding there and retire the questions still waiting on answers in it. Safe to repeat: not_member when the bot was already out. */
+  'chat.space.leave': { params: ChatSpaceLeaveParams; result: ChatSpaceLeaveResult }
   /** Channels the installed bot can see, with whether it has joined. */
   'chat.spaces.list': { params: ChatInstallParams; result: ChatSpacesListResult }
   /** Lock one answer of the owner's batch clarify request (editable until every question is locked); only a viewer attached to that session with session:respond may lock. */
@@ -9981,14 +10149,23 @@ export const CANONICAL_RPC_METHODS = [
   'bot_relay.settle',
   'bot_relay.stop',
   'capabilities.status',
+  'chat.audience.get',
+  'chat.audience.set',
   'chat.binding.list',
+  'chat.desk.decide',
+  'chat.desk.list',
   'chat.install.advance',
   'chat.install.begin',
   'chat.install.revoke',
+  'chat.install.set_icon',
   'chat.install.status',
   'chat.install.update_identity',
+  'chat.people.list',
   'chat.provider.list',
+  'chat.report.get',
+  'chat.report.set',
   'chat.space.join',
+  'chat.space.leave',
   'chat.spaces.list',
   'clarify.lock',
   'clarify.respond',
@@ -10214,6 +10391,8 @@ export interface BackendGatewayEventMap {
   'browser.progress': BrowserProgressPayload
   /** A /btw side question was answered. */
   'btw.complete': SideAgentCompletePayload
+  /** A desk item was created or moved, sent for the bot's profile. A burst between two checks arrives as the latest revision. */
+  'chat.desk.changed': ChatDeskChangedPayload
   /** A chat setup state moved, or a binding went live or not live. Exactly one per setup revision. */
   'chat.install.changed': ChatInstallChangedPayload
   /** A connection operation opened on this session; the desktop renders its card. */
@@ -10380,6 +10559,7 @@ export const GATEWAY_EVENT_TYPES = [
   'bot_threads.changed',
   'browser.progress',
   'btw.complete',
+  'chat.desk.changed',
   'chat.install.changed',
   'connection.request',
   'connection.update',

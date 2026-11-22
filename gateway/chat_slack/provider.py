@@ -17,9 +17,11 @@ from tui_gateway.chat_install import (
     SLACK_CAPABILITIES,
     SLACK_IDENTITY_POLICY,
     AppCreated,
+    OWNER_DM_HOME_NAME,
     BotIdentitySource,
     ChatProvider,
     IdentityUpdate,
+    PeoplePage,
     SpaceJoin,
 )
 from tui_gateway.contracts.chat_provider import (
@@ -37,11 +39,14 @@ from tui_gateway.contracts.chat_provider import (
     SetupState,
     SpaceJoinOutcome,
     SpaceKind,
+    SpaceLeaveOutcome,
     SpaceRef,
 )
 
 from .api import SlackApi, SlackSetupError
 from .avatar import prepare_avatar
+from .icon import icon_path, store_icon
+from .people import list_people, names_for
 from .records import SlackRecords
 from .token_store import REFRESH_TOKEN_PREFIX, ConfigTokenStore
 
@@ -60,6 +65,7 @@ MEMBER_ID = re.compile(r"[UW][A-Z0-9]{6,20}")
 AVATAR_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 PROBED = (ProviderCapability.set_icon, ProviderCapability.app_level_credential,
           ProviderCapability.gateway_redirect, ProviderCapability.unattended_refresh)
+LEFT_ALREADY_ERRORS = {"not_in_channel", "channel_not_found", "is_archived"}
 _NO_ACTION = NextAction(kind=NextActionKind.none, action_id="none")
 
 
@@ -74,6 +80,8 @@ def profile_identity(bot: str) -> BotIdentitySource:
     from hermes_cli.profiles import get_profile_dir, read_profile_meta
     home = get_profile_dir(bot)
     avatar = next((path for ext in AVATAR_EXTENSIONS if (path := home / "assets" / f"avatar.{ext}").is_file()), None)
+    if avatar is None and (icon := icon_path(bot)).is_file():
+        avatar = icon
     return BotIdentitySource(bot=bot, display_name=read_profile_meta(home).get("display_name") or bot,
                              avatar_path=str(avatar) if avatar else None)
 
@@ -302,6 +310,42 @@ class SlackProvider(ChatProvider):
         if source.avatar_path:
             self._set_icon(bot, workspace, token, record["app_id"], source.avatar_path)
         return IdentityUpdate(IdentityUpdateOutcome.updated, projection, _NO_ACTION)
+
+    def store_icon(self, bot: str, png: bytes) -> None:
+        store_icon(bot, png)
+
+    def new_install_config(self, installation: Installation, owner: str) -> dict[str, Any]:
+        from gateway.config import HomeChannel, Platform
+        home = HomeChannel(platform=Platform.SLACK, chat_id=self.open_owner_dm(installation, owner),
+                           name=OWNER_DM_HOME_NAME, user_id=owner, scope_id=installation.workspace_id)
+        return {"platforms": {self.provider_id: {"audience": {"policy": "workspace"}, "home_channel": home.to_dict()}},
+                "slack": {"strict_mention": True}}
+
+    def open_owner_dm(self, installation: Installation, owner: str) -> str:
+        token = self._secret(self._record_for(installation)[1]["bot_token_item_id"])
+        body = self.api.call("conversations.open", token=token, data={"users": owner})
+        return str((body.get("channel") or {})["id"])
+
+    def is_direct_space(self, space_id: str) -> bool:
+        return space_id.startswith("D")
+
+    def list_people(self, installation: Installation, query: str, cursor: str) -> PeoplePage:
+        record = self._record_for(installation)[1]
+        return list_people(self.api, self._secret(record["bot_token_item_id"]), record["team_id"], query, cursor)
+
+    def people_names(self, installation: Installation, member_ids: list[str]) -> dict[str, str]:
+        record = self._record_for(installation)[1]
+        return names_for(self.api, self._secret(record["bot_token_item_id"]), record["team_id"], member_ids)
+
+    def leave_space(self, installation: Installation, space_id: str) -> SpaceLeaveOutcome:
+        token = self._secret(self._record_for(installation)[1]["bot_token_item_id"])
+        try:
+            body = self.api.call("conversations.leave", token=token, data={"channel": space_id})
+        except SlackSetupError as exc:
+            if exc.slack_error in LEFT_ALREADY_ERRORS:
+                return SpaceLeaveOutcome.not_member
+            raise
+        return SpaceLeaveOutcome.not_member if body.get("not_in_channel") else SpaceLeaveOutcome.left
 
     def _installation(self, bot: str, record: dict[str, Any]) -> Installation:
         items = [record[k] for k in ("bot_token_item_id", "app_token_item_id", "credentials_item_id") if record.get(k)]

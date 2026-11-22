@@ -17,6 +17,7 @@ _profile_scoped = _registry.profile_scoped
 _CHAT_CODES = {
     "owner_only": 4403, "provider_unknown": 4404, "no_installation": 4404, "invalid_event": 4101,
     "stale_revision": 4409, "needs_public_url": 4412, "not_implemented": 4501, "provider_failed": 5104,
+    "invalid_input": 4102, "invalid_image": 4413, "not_joined": 4405, "not_found": 4406,
 }
 _CHAT_MESSAGES = {
     "owner_only": "Only the owner can set up chat apps",
@@ -27,6 +28,10 @@ _CHAT_MESSAGES = {
     "needs_public_url": "Set this gateway's public https address first",
     "not_implemented": "That is not supported for this chat app yet",
     "provider_failed": "The chat app did not respond. Try again",
+    "invalid_input": "Check what you entered and try again",
+    "invalid_image": "That picture can't be used. Try a different one",
+    "not_joined": "The bot is not in that channel yet",
+    "not_found": "That item is no longer there",
 }
 
 

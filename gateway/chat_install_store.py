@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS bindings (
     hello_sent_at REAL,
     PRIMARY KEY (installation_id, space_id)
 );
+CREATE TABLE IF NOT EXISTS identity_pending (
+    installation_id TEXT PRIMARY KEY,
+    marked_at REAL NOT NULL
+);
 """
 
 
@@ -305,6 +309,44 @@ class ChatInstallStore:
     def delete_bindings(self, installation_id: str) -> None:
         with self._write() as conn:
             conn.execute("DELETE FROM bindings WHERE installation_id=?", (installation_id,))
+            conn.execute("DELETE FROM identity_pending WHERE installation_id=?", (installation_id,))
+
+    def delete_binding(self, installation_id: str, space_id: str) -> bool:
+        with self._write() as conn:
+            deleted = conn.execute("DELETE FROM bindings WHERE installation_id=? AND space_id=?",
+                                   (installation_id, space_id)).rowcount == 1
+            if deleted:
+                self._append_current(conn, installation_id)
+        return deleted
+
+    def active_installations(self, bot: str) -> list[Installation]:
+        with self._read() as conn:
+            rows = conn.execute("SELECT installation_json FROM installations WHERE bot=?", (bot,)).fetchall()
+        found = [Installation.model_validate_json(row["installation_json"]) for row in rows]
+        return [item for item in found if item.status is InstallationStatus.active]
+
+    def mark_identity_pending(self, installation_id: str) -> float:
+        with self._write() as conn:
+            row = conn.execute("SELECT marked_at FROM identity_pending WHERE installation_id=?",
+                               (installation_id,)).fetchone()
+            marked = max(self._clock(), row["marked_at"] + 1e-6) if row else self._clock()
+            conn.execute("INSERT INTO identity_pending (installation_id, marked_at) VALUES (?, ?) "
+                         "ON CONFLICT(installation_id) DO UPDATE SET marked_at=excluded.marked_at",
+                         (installation_id, marked))
+        return marked
+
+    def pending_identity(self, bot: str) -> list[tuple[Installation, float]]:
+        with self._read() as conn:
+            rows = conn.execute(
+                "SELECT i.installation_json, p.marked_at FROM identity_pending p JOIN installations i "
+                "ON i.id = p.installation_id WHERE i.bot=? ORDER BY p.marked_at", (bot,)).fetchall()
+        pending = [(Installation.model_validate_json(row["installation_json"]), row["marked_at"]) for row in rows]
+        return [(item, marked) for item, marked in pending if item.status is InstallationStatus.active]
+
+    def clear_identity_pending(self, installation_id: str, marked_at: float) -> None:
+        with self._write() as conn:
+            conn.execute("DELETE FROM identity_pending WHERE installation_id=? AND marked_at=?",
+                         (installation_id, marked_at))
 
     def claim_hello(self, installation_id: str, space_id: str) -> bool:
         with self._write() as conn:

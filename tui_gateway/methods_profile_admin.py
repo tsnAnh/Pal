@@ -50,9 +50,11 @@ def _(rid, params: dict) -> dict:
     except Exception as e:
         logger.exception("profiles.rename failed")
         return _err(rid, _PROFILE_ADMIN_FAILED, str(e))
+    renamed = "default" if is_primary else profiles_mod.normalize_profile_name(new_name)
+    __import__("gateway.chat_identity_sync", fromlist=["x"]).schedule_identity_sync(renamed, path)
     if is_primary:
         return _ok(rid, {"ok": True, "name": "default", "display_name": new_name.strip(), "path": str(path)})
-    return _ok(rid, {"ok": True, "name": profiles_mod.normalize_profile_name(new_name), "path": str(path)})
+    return _ok(rid, {"ok": True, "name": renamed, "path": str(path)})
 
 
 @method("profiles.delete")
