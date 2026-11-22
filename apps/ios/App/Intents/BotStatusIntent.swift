@@ -7,7 +7,6 @@ enum BotStatus: String, AppEnum {
     case working
     case needsInput
     case offline
-    case needsSetup
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Bot Status"
     static let caseDisplayRepresentations: [BotStatus: DisplayRepresentation] = [
@@ -15,7 +14,6 @@ enum BotStatus: String, AppEnum {
         .working: "Working",
         .needsInput: "Needs your input",
         .offline: "Offline",
-        .needsSetup: "Needs setup",
     ]
 
     init(_ activity: BotActivity) {
@@ -24,7 +22,6 @@ enum BotStatus: String, AppEnum {
         case .working: .working
         case .needsInput: .needsInput
         case .offline: .offline
-        case .attention: .needsSetup
         }
     }
 
@@ -35,7 +32,6 @@ enum BotStatus: String, AppEnum {
         case .needsInput:
             String(localized: "\(botName) is waiting for you. Say “\(VoicePhrase.answer(botName))” to reply to a question, or “\(VoicePhrase.approval(botName))” to decide on a request.")
         case .offline: String(localized: "Pal can't reach \(botName) right now.")
-        case .needsSetup: String(localized: "\(botName) hasn't finished setting up. Open the chat to continue.")
         }
     }
 }
