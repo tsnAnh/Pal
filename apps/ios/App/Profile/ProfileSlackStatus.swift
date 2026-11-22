@@ -27,6 +27,19 @@ enum ProfileSlackStatus: Equatable {
         }
     }
 
+    @MainActor
+    static func load(botName: String, source: ChatInstallSource, services: BotsServices) async -> ProfileSlackStatus? {
+        do {
+            return ProfileSlackStatus(try await source.client.status(ChatInstallScope(provider: "slack", workspace: "")))
+        } catch is CancellationError {
+            return nil
+        } catch ChatInstallClientError.unsupported {
+            return (try? await services.slack.status(profile: botName)).map { ProfileSlackStatus($0.connection) } ?? .unavailable
+        } catch {
+            return .unavailable
+        }
+    }
+
     var title: String {
         self == .notAdded ? String(localized: "Add to Slack") : String(localized: "Slack")
     }

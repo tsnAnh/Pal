@@ -70,14 +70,7 @@ final class BotProfileModel {
 
     func loadSlack() async {
         let source = ChatInstallSource.make(botName: botName, connection: roster.connection)
-        do {
-            slack = ProfileSlackStatus(try await source.client.status(ChatInstallScope(provider: "slack", workspace: "")))
-        } catch is CancellationError {
-        } catch ChatInstallClientError.unsupported {
-            slack = (try? await services.slack.status(profile: botName)).map { ProfileSlackStatus($0.connection) } ?? .unavailable
-        } catch {
-            slack = .unavailable
-        }
+        if let status = await ProfileSlackStatus.load(botName: botName, source: source, services: services) { slack = status }
     }
 
     func refreshSlack() async {

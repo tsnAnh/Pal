@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from hermes_constants import get_hermes_home
+from tools.skill_usage import skill_file_lock
 from utils import atomic_write_text
 
 
@@ -15,18 +16,30 @@ class SlackRecords:
         self._path = path or Path(get_hermes_home()) / "chat_slack" / "records.json"
         self._lock = threading.RLock()
 
+    @property
+    def path(self) -> Path:
+        return self._path
+
     def _read(self) -> dict[str, Any]:
         if not self._path.exists():
             return {"workspaces": {}, "apps": {}}
         return json.loads(self._path.read_text(encoding="utf-8-sig"))
 
     @contextmanager
+    def exclusive(self) -> Iterator[None]:
+        with self._lock, skill_file_lock(self._path.with_name(f"{self._path.name}.lock")):
+            yield
+
+    @contextmanager
     def edit(self) -> Iterator[dict[str, Any]]:
-        with self._lock:
+        with self.exclusive():
             data = self._read()
+            before = json.dumps(data, sort_keys=True)
             yield data
-            self._path.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(self._path, json.dumps(data, sort_keys=True))
+            after = json.dumps(data, sort_keys=True)
+            if after != before:
+                self._path.parent.mkdir(parents=True, exist_ok=True)
+                atomic_write_text(self._path, after)
 
     def workspace(self, workspace: str) -> dict[str, Any]:
         with self._lock:
@@ -35,6 +48,10 @@ class SlackRecords:
     def update_workspace(self, workspace: str, **changes: Any) -> None:
         with self.edit() as data:
             data["workspaces"].setdefault(workspace, {}).update(changes)
+
+    def drop_workspace(self, workspace: str) -> None:
+        with self.edit() as data:
+            data["workspaces"].pop(workspace, None)
 
     def app(self, bot: str, workspace: str) -> dict[str, Any]:
         with self._lock:
