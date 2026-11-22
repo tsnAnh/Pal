@@ -47,7 +47,7 @@ struct SlackSettingsView: View {
     }
 
     var body: some View {
-        SetupChrome(title: String(localized: "\(name) in Slack"), accessibilityIdentifier: "slackSettings", close: close) { page }
+        chrome
             .task { await model.loadMembers() }
             .slackChannelsPresentation(isPresented: $showsChannels) { SlackChannelsScreen(model: model) { showsChannels = false } }
             .macConfirm(isPresented: $confirmsReinstall) {
@@ -74,6 +74,19 @@ struct SlackSettingsView: View {
                     ]
                 )
             }
+    }
+
+    @ViewBuilder
+    private var chrome: some View {
+        #if os(iOS)
+        if showsChannels {
+            SlackChannelsScreen(model: model) { showsChannels = false }
+        } else {
+            SetupChrome(title: String(localized: "\(name) in Slack"), accessibilityIdentifier: "slackSettings", close: close) { page }
+        }
+        #else
+        SetupChrome(title: String(localized: "\(name) in Slack"), accessibilityIdentifier: "slackSettings", close: close) { page }
+        #endif
     }
 
     private var workspace: some View {
@@ -250,7 +263,7 @@ extension View {
         #if os(macOS)
         macSheet(isPresented: isPresented, size: .full, content: destination)
         #else
-        navigationDestination(isPresented: isPresented, destination: destination)
+        self
         #endif
     }
 }

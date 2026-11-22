@@ -83,6 +83,7 @@ struct SlackChannelsScreen: View {
                     .padding(PalMetrics.screenMargin)
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("slackChannelsLoading")
         case .failed:
             failed
@@ -108,6 +109,7 @@ struct SlackChannelsScreen: View {
             .frame(maxWidth: .infinity)
             .padding(PalMetrics.screenMargin * 1.5)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("slackChannelsFailed")
     }
 
@@ -125,6 +127,7 @@ struct SlackChannelsScreen: View {
                 .frame(maxWidth: .infinity)
                 .padding(PalMetrics.screenMargin * 1.5)
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("slackChannelsEmpty")
         } else if !joined.isEmpty {
             SlackGroup(
@@ -231,7 +234,9 @@ struct SlackChannelsScreen: View {
                 Text("Joining").hermesText(.rowSubtitle).foregroundStyle(PalTokens.textTertiary)
             }
         case .needsInvite:
-            Text("Private: invite \(name) there. Copy the message below.")
+            Text(row.invite == nil
+                ? String(localized: "Private: tap Join to get the invite message.")
+                : String(localized: "Private: invite \(name) there. Copy the message below."))
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textTertiary)
         case .available:

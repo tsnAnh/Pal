@@ -76,6 +76,7 @@ struct SlackPeoplePicker: View {
                     .padding(PalMetrics.screenMargin)
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("slackPeopleLoading")
         case .failed:
             message(
@@ -96,6 +97,7 @@ struct SlackPeoplePicker: View {
                         .task { await search.loadMoreIfNeeded(after: person) }
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("slackPeopleList")
         }
     }

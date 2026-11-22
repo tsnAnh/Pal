@@ -6,6 +6,7 @@ actor ScriptedChatInstallGateway: ChatInstallClient, ChatMemberClient {
     static let shared = ScriptedChatInstallGateway()
     static let resetArgument = "-hermes-test-chat-install-reset"
     static let failArgument = "-hermes-test-chat-install-fail"
+    static let readyArgument = "-hermes-test-chat-install-ready"
     static let allowLink = "https://slack.com/oauth/v2/authorize?client_id=scripted"
     private static let defaultsKey = "scriptedChatInstall"
 
@@ -36,10 +37,17 @@ actor ScriptedChatInstallGateway: ChatInstallClient, ChatMemberClient {
 
     private init() {
         let defaults = UserDefaults.standard
-        if ProcessInfo.processInfo.arguments.contains(Self.resetArgument) { defaults.removeObject(forKey: Self.defaultsKey) }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains(Self.resetArgument) || arguments.contains(Self.readyArgument) { defaults.removeObject(forKey: Self.defaultsKey) }
         snapshot = defaults.data(forKey: Self.defaultsKey)
             .flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) } // perf-lint: ok UI-test-only actor, never on the main actor
             ?? Snapshot()
+        if arguments.contains(Self.readyArgument) {
+            snapshot = Snapshot(
+                step: "ready", revision: 9, done: ["set_icon", "app_level_credential", "gateway_redirect"],
+                joined: ["C1", "C2"], live: ["C1", "C2"]
+            )
+        }
     }
 
     nonisolated var source: ChatInstallSource {
