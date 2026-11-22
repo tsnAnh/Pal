@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import Any, Optional
 
-from gateway.desk.service import AMBIGUOUS_ASK, DecideResult, Desk, Reply
+from gateway.desk.service import AMBIGUOUS_ASK, DecideResult, DecideStatus, Desk, Reply
 from gateway.desk.store import DB_NAME
 
 logger = logging.getLogger(__name__)
 
+DECIDE_TIMEOUT_SECONDS = 60.0
 AMBIGUOUS_REPLY_NOTICE = "Which question is this for? Please reply directly under the message you are answering."
 
 
@@ -48,15 +50,37 @@ async def handle_desk_reply(runner: Any, event: Any) -> None:
             logger.info("A reply to a desk question was not claimed: another message already answered it")
 
 
-async def decide_from_card(runner: Any, adapter: Any, item_id: str, actor_id: str, choice: str) -> DecideResult:
+async def decide_in_scope(runner: Any, home: Path, item_id: str, actor_id: str, choice: str,
+                           expected_revision: Optional[int] = None) -> DecideResult:
     from gateway.run import _async_profile_runtime_scope
+    async with _async_profile_runtime_scope(home):
+        return await Desk(home, runner=runner, profile=_profile_of(home)).decide(
+            item_id, actor_id=actor_id, choice=choice, expected_revision=expected_revision)
+
+
+async def decide_from_card(runner: Any, adapter: Any, item_id: str, actor_id: str, choice: str) -> DecideResult:
     from hermes_constants import get_process_hermes_home
     from hermes_cli.profiles import get_profile_dir
     profile = getattr(adapter, "_owner_profile", None)
     home = Path(get_profile_dir(profile) if profile else get_process_hermes_home())
-    async with _async_profile_runtime_scope(home):
-        return await Desk(home, runner=runner, profile=_profile_of(home)).decide(
-            item_id, actor_id=actor_id, choice=choice)
+    return await decide_in_scope(runner, home, item_id, actor_id, choice)
+
+
+def decide_for_owner(home: Path, item_id: str, choice: str, expected_revision: int) -> DecideResult:
+    from gateway.desk.store import DeskStore
+    from gateway.run import _gateway_runner_ref
+    from gateway.session_cron import owner_for_home
+    from hermes_constants import get_process_hermes_home
+    item = DeskStore(home).get(item_id)
+    if item is None:
+        return DecideResult(DecideStatus.NOT_FOUND, None)
+    bound = owner_for_home(home) or owner_for_home(get_process_hermes_home())
+    runner = _gateway_runner_ref() if bound else None
+    if runner is None:
+        return asyncio.run(decide_in_scope(None, home, item_id, item.owner_id, choice, expected_revision))
+    return asyncio.run_coroutine_threadsafe(
+        decide_in_scope(runner, home, item_id, item.owner_id, choice, expected_revision), bound[1],
+    ).result(timeout=DECIDE_TIMEOUT_SECONDS)
 
 
 def cancel_asks(runner: Any, session_key: str) -> None:

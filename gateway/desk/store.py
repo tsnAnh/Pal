@@ -228,6 +228,15 @@ class DeskStore:
                 (*_TERMINAL, settled_before))
             return cursor.rowcount
 
+    def expire_open_asks_in(self, platform: str, scope_id: str, conversation_id: str) -> list[DeskItem]:
+        expired = []
+        for item in self._items("kind = 'ask' AND state = 'open' AND platform = ? AND scope_id = ? "
+                                "AND reply_conversation = ?", (platform, scope_id, conversation_id)):
+            settled = self.transition(item.id, ItemState.OPEN, ItemState.EXPIRED, revision=item.revision)
+            if settled is not None:
+                expired.append(settled)
+        return expired
+
     def cancel_open_asks(self, session_key: str) -> list[DeskItem]:
         cancelled = []
         for item in self._items("kind = 'ask' AND state = 'open'"):

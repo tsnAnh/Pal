@@ -160,6 +160,8 @@ class Desk:
                                       revision=item.revision)
         if moved is None:
             return DecideResult(DecideStatus.STALE, self.store.get(item_id))
+        if self.runner is None:
+            return DecideResult(DecideStatus.APPLIED, moved)
         if approving:
             await self._execute(moved)
         else:
