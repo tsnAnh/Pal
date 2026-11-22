@@ -75,7 +75,7 @@ private struct MacImageViewer: View {
             dictation: dictation,
             draft: $composer.draft,
             focused: $composerFocused,
-            send: submit,
+            send: { _ in submit() },
             openVoiceMode: nil,
             removeAttachment: { model.removeViewerAttachment($0) },
             attachPhotos: attach.photos,

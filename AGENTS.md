@@ -173,8 +173,9 @@ Per `REVIEW.md`: Blocking rules are P1. Mark findings `[blocking]` or `[nit]`; s
 
 ## Learned
 
-- Pal=apps/ios, tsnAnh/Pal, no review bot; Pal learnings: apps/ios/AGENTS.md
-- Hermes=Pi (host: gateway-connections.json); deploy: PATH+=~/.local/bin, hermes update --yes, sudo systemctl restart hermes-backend (:9119); Claude/Codex subs: $=API-equiv
+- Pal=apps/ios, tsnAnh/Pal, no review bot; learnings: apps/ios/AGENTS.md
+- Hermes=Pi (gateway-connections.json); Pal→hermes.tsnanh.dev (cloudflared→:9120; tailnet 400s); auth log ~/.hermes/logs/dashboard-auth.log; deploy: PATH+=~/.local/bin, hermes update --yes, sudo systemctl restart hermes-backend (:9119); Claude/Codex subs: $=API-equiv
 - faker-kit ~/AIProjects/faker-kit: Pi ~/.hermes/faker-kit/kit/hermes/install.sh --ref <sha> --no-gateway (resets kit edits); routines: event babysit only
 - Bot chats: reply to owner now, never queue; long work async
 - Claude-config tests: unset CLAUDE_CONFIG_DIR
+- No E2E suites; prove a change with one real run

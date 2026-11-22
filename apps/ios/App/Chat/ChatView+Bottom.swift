@@ -112,10 +112,10 @@ struct ChatBottomBar: View {
             dictation: dictation,
             draft: $draft,
             focused: focused,
-            send: {
+            send: { text in
                 dictation.stop()
                 model.dismissError()
-                model.send(draft)
+                model.send(text)
                 draft = ""
                 scroll.jumpToBottom(animated: !reduceMotion)
             },
