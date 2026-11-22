@@ -35,7 +35,7 @@ struct ChatTranscriptList: View {
         .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
         .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
         .newestFirst()
-        .overlay { ChatOpeningOverlay(model: model) }
+        .overlay { ChatOpeningOverlay(model: model, hidesIntro: !desk.desk.cards.isEmpty) }
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectHidden(true, for: .all)
         .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
@@ -164,6 +164,7 @@ private struct ChatTranscriptRows: View {
 
 private struct ChatOpeningOverlay: View {
     let model: ChatModel
+    let hidesIntro: Bool
 
     var body: some View {
         if model.isOpening {
@@ -173,7 +174,7 @@ private struct ChatOpeningOverlay: View {
                     .foregroundStyle(PalTokens.textSecondary)
                     .accessibilityIdentifier("chatLoading")
             }
-        } else if model.rows.isEmpty, !model.isRunning {
+        } else if model.rows.isEmpty, !model.isRunning, !hidesIntro {
             NewChatIntro(bot: model.bot, mood: model.avatarMood, suggestion: Self.firstSuggestion) {
                 model.send(Self.firstSuggestion)
             }
