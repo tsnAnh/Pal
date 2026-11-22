@@ -66,6 +66,8 @@ def test_no_workflow_runs_from_a_tag_push():
         # This nightly canary also gates releases with dedicated spend-capped keys.
         if filename == "live-providers.yml" and push == {"tags": ["v*"]}:
             continue
+        if filename == "release-mac.yml" and push == {"tags": ["mac-v*"]}:
+            continue
         if not isinstance(push, dict) or not ({"branches", "branches-ignore"} & set(push)) or {"tags", "tags-ignore"} & set(push):
             violations.append(filename)
     assert not violations, "tag-triggered workflows: " + ", ".join(violations)
