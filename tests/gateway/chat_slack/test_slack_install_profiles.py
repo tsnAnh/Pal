@@ -417,6 +417,48 @@ def test_a_workspace_credential_left_in_a_bots_profile_serves_the_next_bot_and_m
     assert again.step is wire.SetupStep.needs_allow and r.workspace_records().workspace("w1") == shared
 
 
+def lose_app_key(r: Rig) -> None:
+    with r.records(r.bot).edit() as data:
+        data["apps"][f"{r.bot}|w1"].pop("app_token_item_id")
+
+
+def finish_after_the_app_key_is_asked_again(r: Rig, asked: wire.SetupState) -> None:
+    assert asked.step is wire.SetupStep.needs_manual_step
+    assert asked.next_action.action_id == CAP.app_level_credential.value
+    assert CAP.app_level_credential not in asked.manual_steps_done
+    allowed = r.finish_manual_steps(asked)
+    assert allowed.step is wire.SetupStep.needs_allow
+    assert r.allow(allowed).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+    assert r.env_of(r.bot)["SLACK_APP_TOKEN"] == app_key_for(r.app_id)
+
+
+def test_allow_after_the_app_key_step_lost_its_key_returns_to_the_app_key_step_instead_of_failing(rig):
+    r = rig(**GUIDED)
+    state = r.to_allow()
+    lose_app_key(r)
+    page = r.allow(state)
+    assert page.status_code == 500 and "Done" not in page.text
+    returned = r.status()
+    assert returned.step is wire.SetupStep.error and returned.resume_step is wire.SetupStep.needs_manual_step
+    assert returned.error.code is wire.SetupErrorCode.credential_rejected
+    assert returned.error.fix is wire.FixAction.reenter_credential
+    assert ChatInstallStore(r.home).installation(returned.installation_id or "") is None
+    finish_after_the_app_key_is_asked_again(r, r.state(r.advance(returned, "retry")))
+
+
+def test_a_state_stuck_in_install_failed_by_a_lost_app_key_recovers_on_retry_at_the_app_key_step(rig):
+    r = rig(**GUIDED)
+    state = r.to_allow()
+    lose_app_key(r)
+    stuck = state.model_copy(update={
+        "step": wire.SetupStep.error, "resume_step": wire.SetupStep.needs_allow, "revision": state.revision + 1,
+        "error": wire.SetupError(code=wire.SetupErrorCode.install_failed, fix=wire.FixAction.retry),
+        "next_action": wire.NextAction(kind=wire.NextActionKind.button, action_id=wire.FixAction.retry.value)})
+    ChatInstallStore(r.home).save(stuck, state.revision)
+    finish_after_the_app_key_is_asked_again(r, r.state(r.advance(stuck, "retry")))
+
+
 def slack_adapter(team_bot_user: str = "UBOT") -> SlackAdapter:
     adapter = SlackAdapter(PlatformConfig(enabled=True, token="xoxb-fake-token"))
     adapter._app = MagicMock()

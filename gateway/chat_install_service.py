@@ -28,6 +28,7 @@ from tui_gateway.chat_install import (
     advance as pure_advance,
     initial_state,
     needs_app_creation,
+    reopen_manual_steps,
     setup_key,
 )
 from tui_gateway.chat_providers import UnknownProvider, registered_provider_ids
@@ -132,6 +133,19 @@ class ChatInstallService:
         step = ProviderCapability(state.next_action.action_id)
         return state.model_copy(update={"next_action": provider.manual_step_action(state, step)})
 
+    def _reopen_unmet(self, provider: ChatProvider, state: SetupState, *, rejected: bool = False) -> SetupState:
+        if state.step is not SetupStep.needs_allow:
+            return state
+        unmet = frozenset(state.manual_steps_done) - provider.satisfied_manual_steps(state)
+        if not unmet:
+            return state
+        new = reopen_manual_steps(state, provider.capabilities(state.workspace), unmet, self.clock(), rejected=rejected)
+        if new is state:
+            return state
+        new = self._with_manual_action(provider, new)
+        self.store.save(new, state.revision)
+        return new
+
     def _fail(self, provider: ChatProvider, state: SetupState, code: SetupErrorCode) -> SetupState:
         return self._apply(provider, state, SetupEvent(kind=SetupEventKind.failed, error=code))
 
@@ -200,7 +214,7 @@ class ChatInstallService:
         if not (self.public_url() or "").startswith("https://"):
             raise ChatServiceError(GatewayReason.needs_public_url, state, SET_PUBLIC_URL_ACTION)
         try:
-            state = self._apply(provider, state, SetupEvent(kind=SetupEventKind.begin))
+            state = self._reopen_unmet(provider, self._apply(provider, state, SetupEvent(kind=SetupEventKind.begin)))
             if state.step is SetupStep.needs_allow and state.next_action.link:
                 state = self._attach_link(state, self._with_nonce(self._authorize_base(provider, state), setup_key(state)))
             else:
@@ -250,7 +264,7 @@ class ChatInstallService:
                 logger.warning("chat install credential rejected provider=%s error=%s", state.provider_id, type(exc).__name__)
                 return self._fail(provider, new, self._error_code(exc))
             self.store.set_config_item(setup_key(new), vault_item_id)
-        return self._drive(provider, new)
+        return self._drive(provider, self._reopen_unmet(provider, new))
 
     @staticmethod
     def _error_code(exc: Exception) -> SetupErrorCode:
@@ -278,6 +292,8 @@ class ChatInstallService:
     def _adopt(self, provider: ChatProvider, state: SetupState, vault_item_id: str | None) -> SetupState:
         if state.step is not SetupStep.needs_allow or not vault_item_id:
             return state
+        if (reopened := self._reopen_unmet(provider, state, rejected=True)) is not state:
+            return reopened
         try:
             installation = provider.adopt_token(state, vault_item_id)
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
@@ -360,6 +376,8 @@ class ChatInstallService:
             return RedirectOutcome.denied
         if not code:
             return RedirectOutcome.rejected
+        if self._reopen_unmet(provider, state, rejected=True) is not state:
+            return RedirectOutcome.failed
         try:
             installation = provider.complete_install(state, code)
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged

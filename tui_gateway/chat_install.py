@@ -126,6 +126,9 @@ class ChatProvider(abc.ABC):
     def accept_app_level_credential(self, state: SetupState, vault_item_id: str) -> None:
         raise self._missing("accept_app_level_credential")
 
+    def satisfied_manual_steps(self, state: SetupState) -> frozenset[ProviderCapability]:
+        return frozenset(state.manual_steps_done)
+
     def manual_step_action(self, state: SetupState, step: ProviderCapability) -> NextAction:
         return NextAction(kind=NextActionKind.button, action_id=step.value)
 
@@ -282,12 +285,29 @@ def advance(state: SetupState, event: SetupEvent, caps: Capabilities, now: float
     if target is None:
         return state
     step, changes = target
+    return _commit(state, step, changes, caps, now, event.authorize_link)
+
+
+def reopen_manual_steps(state: SetupState, caps: Capabilities, unmet: frozenset[ProviderCapability], now: float, *,
+                        rejected: bool) -> SetupState:
+    done = [step for step in state.manual_steps_done if step not in unmet]
+    if state.step is not SetupStep.needs_allow or done == state.manual_steps_done or _pending_manual(caps, done) is None:
+        return state
+    if rejected:
+        error = SetupError(code=SetupErrorCode.credential_rejected, fix=FIX_FOR_ERROR[SetupErrorCode.credential_rejected])
+        return _commit(state, SetupStep.error, {
+            "manual_steps_done": done, "resume_step": SetupStep.needs_manual_step, "error": error}, caps, now, None)
+    return _commit(state, SetupStep.needs_manual_step, {"manual_steps_done": done}, caps, now, None)
+
+
+def _commit(state: SetupState, step: SetupStep, changes: dict, caps: Capabilities, now: float,
+            authorize_link: str | None) -> SetupState:
     merged = state.model_copy(update={"step": step, **changes})
     if merged == state:
         return state
     if step is SetupStep.creating_app and merged.app_id:
         merged = merged.model_copy(update={"step": _after_app(caps, merged.manual_steps_done)})
-    link = event.authorize_link if event.authorize_link else (state.next_action.link if state.next_action.kind is NextActionKind.open_link else None)
+    link = authorize_link if authorize_link else (state.next_action.link if state.next_action.kind is NextActionKind.open_link else None)
     action = _action_for(merged.step, _pending_manual(caps, merged.manual_steps_done), link, merged.error)
     fallback = NextAction(kind=NextActionKind.paste_credential, action_id="bot_token") if merged.step is SetupStep.needs_allow else None
     return merged.model_copy(update={"next_action": action, "fallback_action": fallback, "revision": state.revision + 1, "updated_at": now})

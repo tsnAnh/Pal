@@ -287,6 +287,19 @@ class SlackProvider(ChatProvider):
         if previous and previous != vault_item_id:
             self.vault.remove_item(previous)
 
+    def satisfied_manual_steps(self, state: SetupState) -> frozenset[ProviderCapability]:
+        done = frozenset(state.manual_steps_done)
+        if ProviderCapability.app_level_credential in done and not self._app_key_on_file(state.bot, state.workspace):
+            return done - {ProviderCapability.app_level_credential}
+        return done
+
+    def _app_key_on_file(self, bot: str, workspace: str) -> bool:
+        item_id = self.records.app(bot, workspace).get("app_token_item_id")
+        try:
+            return bool(item_id and self._secret(item_id))
+        except VaultError:
+            return False
+
     def complete_install(self, state: SetupState, authorization_code: str) -> Installation:
         bot, workspace = state.bot, state.workspace
         record = self.records.app(bot, workspace)
