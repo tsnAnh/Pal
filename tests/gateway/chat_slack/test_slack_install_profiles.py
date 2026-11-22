@@ -7,6 +7,7 @@ profile, never the launch profile's.
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -18,7 +19,8 @@ from fastapi.testclient import TestClient
 
 from agent.vault_store import VaultError, VaultStore
 from gateway import chat_install_runtime, control_socket
-from gateway.chat_install_store import ChatInstallStore
+from gateway.chat_install_store import DB_NAME, ChatInstallStore
+from gateway.device_registry import install_root
 from gateway.chat_slack.api import SlackApi
 from gateway.chat_slack.provider import SlackProvider
 from gateway.chat_slack.records import SlackRecords
@@ -457,6 +459,54 @@ def test_a_state_stuck_in_install_failed_by_a_lost_app_key_recovers_on_retry_at_
         "next_action": wire.NextAction(kind=wire.NextActionKind.button, action_id=wire.FixAction.retry.value)})
     ChatInstallStore(r.home).save(stuck, state.revision)
     finish_after_the_app_key_is_asked_again(r, r.state(r.advance(stuck, "retry")))
+
+
+def expire_nonces(r: Rig) -> None:
+    with sqlite3.connect(Path(install_root(r.home)) / DB_NAME) as conn:
+        conn.execute("UPDATE nonces SET expires_at = 0")
+
+
+def test_status_renews_an_allow_link_whose_nonce_expired_and_the_new_link_completes_the_install(rig):
+    r = rig()
+    stale = r.to_allow()
+    expire_nonces(r)
+    renewed = r.status()
+    assert renewed.step is wire.SetupStep.needs_allow
+    assert nonce_of(renewed.next_action.link) != nonce_of(stale.next_action.link)
+    assert renewed.revision == stale.revision + 1
+    assert ChatInstallStore(r.home).nonce_live(nonce_of(renewed.next_action.link), (BOT, "slack", "w1"))
+    assert r.allow(renewed).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+
+
+def test_status_renews_an_allow_link_whose_nonce_was_already_used(rig):
+    r = rig()
+    stale = r.to_allow()
+    assert ChatInstallStore(r.home).consume_nonce(nonce_of(stale.next_action.link)) is not None
+    renewed = r.status()
+    assert nonce_of(renewed.next_action.link) != nonce_of(stale.next_action.link)
+    assert r.allow(renewed).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+
+
+def test_status_returns_a_live_allow_link_unchanged(rig):
+    r = rig()
+    allowed = r.to_allow()
+    assert r.status() == allowed
+    assert r.status() == allowed
+    assert r.allow(allowed).status_code == 200
+
+
+def test_status_of_a_state_waiting_at_allow_returns_to_the_app_key_step_when_the_app_key_is_missing(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    lose_app_key(r)
+    asked = r.status()
+    assert asked.step is wire.SetupStep.needs_manual_step
+    assert asked.next_action.action_id == CAP.app_level_credential.value
+    assert CAP.app_level_credential not in asked.manual_steps_done
+    finish_after_the_app_key_is_asked_again(r, asked)
+    assert allowed.revision < asked.revision
 
 
 def slack_adapter(team_bot_user: str = "UBOT") -> SlackAdapter:

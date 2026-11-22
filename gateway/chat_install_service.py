@@ -149,17 +149,37 @@ class ChatInstallService:
     def _fail(self, provider: ChatProvider, state: SetupState, code: SetupErrorCode) -> SetupState:
         return self._apply(provider, state, SetupEvent(kind=SetupEventKind.failed, error=code))
 
-    def _with_nonce(self, link: str, key: SetupKey) -> str:
+    @staticmethod
+    def _with_state(link: str, nonce: str) -> str:
         parts = urlsplit(link)
         query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "state"]
-        query.append(("state", self.store.issue_nonce(key)))
+        query.append(("state", nonce))
         return urlunsplit(parts._replace(query=urlencode(query)))
 
-    def _attach_link(self, state: SetupState, link: str) -> SetupState:
+    def _with_nonce(self, link: str, key: SetupKey) -> str:
+        return self._with_state(link, self.store.issue_nonce(key))
+
+    def _allow_state(self, state: SetupState, link: str) -> SetupState:
         action = NextAction(kind=NextActionKind.open_link, action_id="allow", link=link)
-        new = state.model_copy(update={"next_action": action, "revision": state.revision + 1, "updated_at": self.clock()})
+        return state.model_copy(update={"next_action": action, "revision": state.revision + 1, "updated_at": self.clock()})
+
+    def _attach_link(self, state: SetupState, link: str) -> SetupState:
+        new = self._allow_state(state, link)
         self.store.save(new, state.revision)
         return new
+
+    def _renew_dead_allow_link(self, state: SetupState) -> SetupState:
+        if state.step is not SetupStep.needs_allow:
+            return state
+        key = setup_key(state)
+        action = state.next_action
+        base = action.link if action.kind is NextActionKind.open_link and action.link else self.store.authorize_link(key)
+        if base is None:
+            return state
+        nonce = dict(parse_qsl(urlsplit(base).query, keep_blank_values=True)).get("state")
+        if nonce and self.store.nonce_live(nonce, key):
+            return state
+        return self.store.save_with_nonce(key, state.revision, lambda fresh: self._allow_state(state, self._with_state(base, fresh)))
 
     def _authorize_base(self, provider: ChatProvider, state: SetupState) -> str:
         key = setup_key(state)
@@ -198,7 +218,12 @@ class ChatInstallService:
 
     def status(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation | None]:
         provider = self._provider(provider_id)
-        state = self._with_manual_action(provider, self._current(bot, provider_id, workspace))
+        state = self._current(bot, provider_id, workspace)
+        try:
+            state = self._renew_dead_allow_link(self._reopen_unmet(provider, state))
+        except StaleRevision:
+            state = self._current(bot, provider_id, workspace)
+        state = self._with_manual_action(provider, state)
         return state, self._installation_of(state)
 
     def _installation_of(self, state: SetupState) -> Installation | None:
