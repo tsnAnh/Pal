@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -15,12 +16,17 @@ logger = logging.getLogger(__name__)
 SERVER = "Slack"
 POST_TOOL = "slack_post_message"
 DM_TOOL = "slack_send_dm"
+REACT_TOOL = "slack_react"
 READ_TOOLS = frozenset({"slack_list_channels", "slack_list_users", "slack_read_channel", "slack_read_thread"})
 MAX_PAGE = 200
 MAX_MESSAGES = 50
 MAX_MESSAGE_CHARS = 2000
 MAX_POST_CHARS = 4000
 MAX_USER_PAGES = 10
+_EMOJI_NAME = re.compile(r"[a-z0-9_+\-]+(::skin-tone-[2-6])?")
+_CHANNEL_ID = re.compile(r"[A-Z][A-Z0-9]{2,}")
+_MESSAGE_TS = re.compile(r"\d+\.\d+")
+_NO_CHANGE_NEEDED = {False: "already_reacted", True: "no_reaction"}
 
 _REINSTALL = "Slack needs a new permission, reinstall in Settings."
 _RECONNECT = "This bot's Slack connection stopped working. Reconnect Slack in Settings."
@@ -30,6 +36,9 @@ _FRIENDLY_ERRORS: dict[str, tuple[str, str]] = {
     "channel_not_found": ("slack_channel_not_found",
                           "Slack could not find that channel, or it is private and the bot was never invited."),
     "thread_not_found": ("slack_thread_not_found", "Slack could not find that thread."),
+    "message_not_found": ("slack_message_not_found", "Slack could not find that message."),
+    "invalid_name": ("slack_unknown_emoji", "Slack does not have an emoji with that name."),
+    "too_many_reactions": ("slack_too_many_reactions", "That message already has too many reactions."),
     "is_archived": ("slack_channel_archived", "That channel is archived."),
     "msg_too_long": ("slack_message_too_long", "That message is too long for Slack."),
     "ratelimited": ("slack_rate_limited", "Slack is limiting requests right now. Try again in a minute."),
@@ -288,6 +297,86 @@ def _send_dm(call: Callable[..., dict], args: dict, install: SlackInstall) -> di
                                   legacy=lambda: _approved_once(DM_TOOL, shown, send))
 
 
+@dataclass(frozen=True)
+class _ReactTarget:
+    channel: str
+    ts: str
+    explicit: bool
+
+
+def _emoji_refusal(args: dict) -> str | None:
+    raw = str(args.get("emoji") or "").strip()
+    if _EMOJI_NAME.fullmatch(raw.strip(":").lower()):
+        return None
+    if raw and not raw.isascii():
+        return tool_error("Give the Slack name of the emoji, such as heart or thumbsup, not the emoji character.",
+                          code="emoji_unsupported")
+    return tool_error("Give a Slack emoji name, such as heart or thumbsup.", code="emoji_invalid")
+
+
+def _triggering_message() -> _ReactTarget | None:
+    from gateway.session_context import current_turn_event, get_session_env
+    ts = str(getattr(current_turn_event(), "message_id", "") or "")
+    channel = get_session_env("HERMES_SESSION_CHAT_ID", "")
+    if get_session_env("HERMES_SESSION_PLATFORM") != "slack" or not ts or not channel:
+        return None
+    return _ReactTarget(channel, ts, False)
+
+
+def _react_target(args: dict) -> _ReactTarget | str:
+    channel, ts = str(args.get("channel") or "").strip(), str(args.get("message_ts") or "").strip()
+    if bool(channel) != bool(ts):
+        return tool_error("Pass channel and message_ts together, or neither to react to the message you are answering.",
+                          code="react_target_incomplete")
+    if channel:
+        if not (_CHANNEL_ID.fullmatch(channel) and _MESSAGE_TS.fullmatch(ts)):
+            return tool_error("That is not a Slack channel id and message ts.", code="react_target_invalid")
+        return _ReactTarget(channel, ts, True)
+    return _triggering_message() or tool_error(
+        "There is no message in this conversation to react to. Pass channel and message_ts.",
+        code="react_target_missing")
+
+
+def _conversation_only() -> bool:
+    from gateway.audience import Audience, audience_of_key
+    from gateway.session_context import bound_session_key
+    from tools.tainted_turn_gate import is_tainted_turn
+    return audience_of_key(bound_session_key()) is Audience.MEMBER or is_tainted_turn()
+
+
+def _outside_conversation(call: Callable[..., dict], target: _ReactTarget) -> bool:
+    from gateway.session_context import get_session_env
+    if target.channel != get_session_env("HERMES_SESSION_CHAT_ID", ""):
+        return True
+    thread = get_session_env("HERMES_SESSION_THREAD_ID", "")
+    if not thread or target.ts == thread:
+        return False
+    found = call("conversations.replies", {"channel": target.channel, "ts": thread, "oldest": target.ts,
+                                           "latest": target.ts, "inclusive": "true", "limit": "2"})
+    return not any(m.get("ts") == target.ts and m.get("thread_ts") == thread for m in found.get("messages") or [])
+
+
+def _react(call: Callable[..., dict], args: dict, install: SlackInstall) -> dict | str:
+    from gateway.chat_slack.api import SlackSetupError
+    if refusal := _emoji_refusal(args):
+        return refusal
+    target = _react_target(args)
+    if isinstance(target, str):
+        return target
+    if target.explicit and _conversation_only() and _outside_conversation(call, target):
+        return tool_error("People talking to the bot can only react inside the conversation they are in.",
+                          code="slack_member_scope")
+    remove = args.get("remove") is True
+    name = str(args["emoji"]).strip().strip(":").lower()
+    try:
+        call("reactions.remove" if remove else "reactions.add",
+             {"channel": target.channel, "timestamp": target.ts, "name": name})
+    except SlackSetupError as exc:
+        if exc.slack_error != _NO_CHANGE_NEEDED[remove]:
+            raise
+    return {"emoji": name, "removed": remove, "channel": target.channel, "message_ts": target.ts}
+
+
 def _slack_error(exc: Exception, tool: str) -> str:
     slack_error = str(getattr(exc, "slack_error", "") or "")
     code, message = _FRIENDLY_ERRORS.get(slack_error, ("slack_failed", "Slack could not finish that request."))
@@ -375,6 +464,16 @@ _TOOLS: dict[str, tuple[Callable, dict]] = {
          "text": {"type": "string", "description": "The message text."},
          **_WAITING_PROPERTIES},
         ["text"])),
+    REACT_TOOL: (_react, _schema(
+        REACT_TOOL,
+        "React to a Slack message with an emoji, or take the bot's reaction off. Defaults to the message you are "
+        "answering. Use it when asked to react, or when a reaction is the natural reply; never announce it. People "
+        "talking to the bot can only react inside their own conversation.",
+        {"emoji": {"type": "string", "description": "Slack emoji name, such as heart or thumbsup."},
+         "remove": {"type": "boolean", "description": "Take the bot's reaction off instead of adding it."},
+         "channel": {"type": "string", "description": "Channel id of another message; needs message_ts."},
+         "message_ts": {"type": "string", "description": "ts of another message; needs channel."}},
+        ["emoji"])),
 }
 
 for _name, (_handler, _tool_schema) in _TOOLS.items():

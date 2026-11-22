@@ -31,7 +31,7 @@ OWNER_ONLY_TOOLS = {"terminal", "process_manage", "read_file", "write_file", "pa
                     "slack_post_message", "slack_send_dm", "slack_list_users", "slack_list_channels"}
 BRIDGE_TOOLS = {"tool_search", "tool_describe", "tool_call"}
 MEMBER_TOOLS = {"web_search", "web_extract", "vision_analyze", "clarify", "slack_read_thread", "slack_read_channel",
-               "request_owner_action"}
+               "slack_react", "request_owner_action"}
 MEMBER_SURFACE = MEMBER_TOOLS | BRIDGE_TOOLS
 
 

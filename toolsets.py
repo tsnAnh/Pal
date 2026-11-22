@@ -34,10 +34,11 @@ _HERMES_CORE_TOOLS = [
     # Service-gated connector account status and authorization links.
     "manage_connections",
     "slack_list_channels", "slack_list_users", "slack_read_channel", "slack_read_thread",
-    "slack_post_message", "slack_send_dm",
+    "slack_post_message", "slack_send_dm", "slack_react",
 ]
 
 UNTRUSTED_SENDER_SAFE_TOOLS = ["web_search", "web_extract", "vision_analyze", "clarify"]
+CONVERSATION_BOUND_TOOLS = ["slack_react"]
 _FEISHU_TOOLS = [
     "feishu_doc_read", "feishu_drive_list_comments", "feishu_drive_list_comment_replies",
     "feishu_drive_reply_comment", "feishu_drive_add_comment",
@@ -130,7 +131,7 @@ TOOLSETS = {
                  [t for t in _HERMES_CORE_TOOLS if t.startswith("slack_")]),
     "member": _ts(
         "Member lane: what a workspace member's conversation with the bot may use",
-        [*UNTRUSTED_SENDER_SAFE_TOOLS, "slack_read_thread", "slack_read_channel", "request_owner_action"],
+        [*UNTRUSTED_SENDER_SAFE_TOOLS, "slack_read_thread", "slack_read_channel", "slack_react", "request_owner_action"],
         posture=True,
     ),
     "connections": _ts("Remote connector discovery, execution, and account authorization", ["manage_connections"]),

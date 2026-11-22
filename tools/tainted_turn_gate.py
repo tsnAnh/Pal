@@ -1,7 +1,8 @@
 """Owner approval for tools called from an owner-lane turn that no human typed.
 
 An ask-reply wake, an owner-approved hand-off and any other internal turn whose input carries someone else's
-words run in the owner's lane with the owner's reach. Outside ``UNTRUSTED_SENDER_SAFE_TOOLS`` every call there
+words run in the owner's lane with the owner's reach. Outside ``UNTRUSTED_SENDER_SAFE_TOOLS`` and
+``CONVERSATION_BOUND_TOOLS`` (which refuse any target beyond the turn's own conversation themselves) every call there
 needs the owner to approve that exact call on a card in their own direct messages. yolo, session and permanent
 grants are never consulted. Ordinary owner turns pass straight through.
 """
@@ -83,14 +84,14 @@ def _owner_approves(tool_name: str, args: Mapping) -> Optional[str]:
                       f"request from the owner.", code=OWNER_DENIED)
 
 
-def _gated_turn() -> bool:
+def is_tainted_turn() -> bool:
     from gateway.session_context import current_turn_event
     event = current_turn_event()
     return event is not None and bool(event.internal) and bool(event.carries_member_content)
 
 
 def admit_tainted_call(tool_name: str, args: Optional[Mapping]) -> tuple[Optional[str], Optional[CallGrant]]:
-    if not _gated_turn():
+    if not is_tainted_turn():
         return None, None
     try:
         return _admit(tool_name, dict(args or {}))
@@ -103,8 +104,8 @@ def _admit(tool_name: str, args: dict[str, Any]) -> tuple[Optional[str], Optiona
     from gateway.audience.model import Audience
     from gateway.desk.owner import turn_facts
     from gateway.session_context import get_session_env
-    from toolsets import UNTRUSTED_SENDER_SAFE_TOOLS
-    if tool_name in UNTRUSTED_SENDER_SAFE_TOOLS:
+    from toolsets import CONVERSATION_BOUND_TOOLS, UNTRUSTED_SENDER_SAFE_TOOLS
+    if tool_name in UNTRUSTED_SENDER_SAFE_TOOLS or tool_name in CONVERSATION_BOUND_TOOLS:
         return None, None
     facts = turn_facts(get_session_env("HERMES_SESSION_PLATFORM"))
     if facts is None:
