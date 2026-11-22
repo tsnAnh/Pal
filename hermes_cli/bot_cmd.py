@@ -174,7 +174,7 @@ def _read_soul_file(path: str | None) -> str | None:
     if path is None:
         return None
     try:
-        soul = Path(path).expanduser().read_text(encoding="utf-8")
+        soul = Path(path).expanduser().read_text(encoding="utf-8-sig")
     except (OSError, UnicodeDecodeError) as exc:
         _die(f"Could not read --soul-file {path}: {exc}")
     if not soul.strip():
