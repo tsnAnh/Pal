@@ -53,6 +53,7 @@ struct GatewayChatInstallClient: ChatInstallClient {
     let bot: String
     let call: @Sendable (String, JSONValue?) async throws -> JSONValue
     let vault: SettingsAPI
+    var urlScheme = PalURLScheme.current
 
     func perform(_ method: String, _ scope: ChatInstallScope?, _ extra: [String: JSONValue] = [:]) async throws -> JSONValue {
         var params = extra
@@ -87,13 +88,13 @@ struct GatewayChatInstallClient: ChatInstallClient {
     }
 
     func begin(_ scope: ChatInstallScope) async throws {
-        _ = try await perform("chat.install.begin", scope)
+        _ = try await perform("chat.install.begin", scope, urlScheme.wireParameters)
     }
 
     func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws {
-        var extra: [String: JSONValue] = [
-            "event": .string(advance.event.rawValue), "expected_revision": .int(advance.expectedRevision),
-        ]
+        var extra = urlScheme.wireParameters
+        extra["event"] = .string(advance.event.rawValue)
+        extra["expected_revision"] = .int(advance.expectedRevision)
         if let step = advance.manualStep { extra["manual_step"] = .string(step.rawValue) }
         if let id = advance.vaultItemId { extra["vault_item_id"] = .string(id) }
         if let id = advance.refreshVaultItemId { extra["refresh_vault_item_id"] = .string(id) }

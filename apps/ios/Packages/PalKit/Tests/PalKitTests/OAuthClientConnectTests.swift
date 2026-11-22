@@ -242,6 +242,22 @@ struct OAuthClientConnectTests {
         #expect(!rpc.methods().contains { $0.hasPrefix("mcp.servers.oauth") })
     }
 
+    @Test func aDevelopmentBuildTellsTheGatewayWhichAppToReturnTo() async throws {
+        let rpc = googleGateway(statuses: [.connected])
+        let dev = ConnectAppsService(
+            rpc: rpc, profile: nil, browser: BlockingBrowser(), timing: consentTiming, urlScheme: .development)
+        try await dev.connect(app(google()))
+        #expect(rpc.params("connectors.oauth_client.connect").first?["app_scheme"]?.stringValue == "dev.tsnanh.hermes.bot.dev")
+    }
+
+    @Test func aReleaseBuildSendsNoSchemeSoOlderGatewaysKeepAccepting() async throws {
+        let rpc = googleGateway(statuses: [.connected])
+        let release = ConnectAppsService(
+            rpc: rpc, profile: nil, browser: BlockingBrowser(), timing: consentTiming, urlScheme: .release)
+        try await release.connect(app(google()))
+        #expect(rpc.params("connectors.oauth_client.connect").first?["app_scheme"] == nil)
+    }
+
     @Test func googleOnIPhoneUsesTheSameConsentFlowWithoutAPasteStep() async throws {
         let rpc = googleGateway(statuses: [.connected])
         guard case .connected = try await service(rpc, browser: BlockingBrowser()).connectOAuthClient(google(), route: .pasteAddress) else {

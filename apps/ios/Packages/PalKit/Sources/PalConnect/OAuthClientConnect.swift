@@ -226,7 +226,8 @@ extension ConnectAppsService {
     }
 
     func startOAuthClient(_ slug: String, redirect: String?, account: ConnectorAccountTarget? = nil) async throws -> OAuthClientStart {
-        var params: [String: JSONValue] = ["slug": .string(slug)]
+        var params = urlScheme.wireParameters
+        params["slug"] = .string(slug)
         if let redirect { params["client_redirect_uri"] = .string(redirect) }
         if let account { params = account.scoping(params, create: true) }
         let result = try await oauthClientCall("connectors.oauth_client.connect", params)
