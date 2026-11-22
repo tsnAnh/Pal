@@ -446,6 +446,19 @@ def _mirror_voice_sections(path: Path) -> bool:
     return bool(missing)
 
 
+def _is_auto_provider(provider: Any) -> bool:
+    return str(provider or "").strip().lower() == "auto"
+
+
+def _launch_auto_provider() -> Optional[str]:
+    from hermes_cli.auth import AuthError, resolve_provider
+    try:
+        resolved = resolve_provider("auto")
+    except AuthError:
+        return None
+    return None if _is_auto_provider(resolved) else resolved
+
+
 def inherit_launch_model(path: Path) -> bool:
     """Copy the launch model seed without revalidating it; keep an existing explicit pin."""
     from hermes_cli.config import load_config_readonly, read_user_config_raw, save_config
@@ -458,7 +471,7 @@ def inherit_launch_model(path: Path) -> bool:
         with profile_config_scope(path):
             cfg = _normalize_root_model_keys(read_user_config_raw() or {})
         dst_model = cfg.get("model") or {}
-        if dst_model.get("provider") and dst_model.get("default"):
+        if dst_model.get("provider") and dst_model.get("default") and not _is_auto_provider(dst_model["provider"]):
             return False
         model_cfg = (load_config_readonly() or {}).get("model") or {}
         if not (model_cfg.get("provider") and model_cfg.get("default")):
@@ -466,13 +479,21 @@ def inherit_launch_model(path: Path) -> bool:
         # Canonicalize raw routing without resolving credentials. Selection identity is pinned
         # to the launch scope; URL/key refs intentionally bind the destination's secrets.
         provider, model = str(model_cfg["provider"]), str(model_cfg["default"])
+        routing: dict[str, Any] = {}
+        if _is_auto_provider(provider):
+            resolved = _launch_auto_provider()
+            if resolved is None:
+                return False
+            provider = resolved
+            routing = {"base_url": None, "api_mode": None} if not provider.startswith("custom") else {}
         # Only the model-name repair: the provider stays the one the source runs (the provider
         # recovery can resolve a bare ``custom`` to some other declared endpoint).
         normalized_provider, normalized_model = normalize_main_model_assignment(provider, model)
         if normalized_provider == provider:
             model = normalized_model
         raw = _normalize_root_model_keys(read_user_config_raw() or {})
-        raw["model"] = {**(raw.get("model") or {}), "provider": provider, "default": model}
+        inherited = {**(raw.get("model") or {}), "provider": provider, "default": model, **routing}
+        raw["model"] = {k: v for k, v in inherited.items() if v is not None}
         seed, claimed = prepare_inherited_endpoint_seed(raw)
         with profile_config_scope(path):
             cfg = merge_endpoint_seed(cfg, seed, claimed=claimed)
