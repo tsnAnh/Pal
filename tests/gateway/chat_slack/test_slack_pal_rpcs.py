@@ -82,14 +82,14 @@ def _desk_ask(r, conversation: str = "C1") -> str:
     return reservation.item.id
 
 
-def test_new_install_is_mention_only_open_to_the_workspace_and_reports_to_the_owner_dm(rig):
+def test_new_install_follows_its_threads_opens_to_the_workspace_and_reports_to_the_owner_dm(rig):
     r = rig()
     r.install()
     config = _config(BOT)
     assert config["platforms"]["slack"]["audience"]["policy"] == "workspace"
     assert config["platforms"]["slack"]["home_channel"] == {
         "platform": "slack", "chat_id": f"D{OWNER}", "name": "Direct messages", "user_id": OWNER, "scope_id": TEAM}
-    assert config["slack"]["strict_mention"] is True
+    assert config["slack"] == {"thread_followup_silence": True}
     assert "audience" not in _config("default").get("platforms", {}).get("slack", {})
 
 
@@ -97,11 +97,11 @@ def test_install_defaults_keep_what_the_owner_already_chose(rig):
     r = rig()
     path = get_profile_dir(BOT) / "config.yaml"
     atomic_yaml_write(path, {"platforms": {"slack": {"audience": {"policy": "listed", "members": ["U0AMY0001"]}}},
-                             "slack": {"strict_mention": False}})
+                             "slack": {"thread_followup_silence": False}})
     r.install()
     config = _config(BOT)
     assert config["platforms"]["slack"]["audience"] == {"policy": "listed", "members": ["U0AMY0001"]}
-    assert config["slack"]["strict_mention"] is False
+    assert config["slack"]["thread_followup_silence"] is False
     assert config["platforms"]["slack"]["home_channel"]["chat_id"] == f"D{OWNER}"
 
 

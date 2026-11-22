@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from PIL import Image
 
@@ -123,7 +124,7 @@ class SlackProvider(ChatProvider):
         self._identity, self._clock = identity, clock
 
     def capabilities(self, workspace: str | None = None) -> Capabilities:
-        stored = self.records.workspace(workspace).get("capabilities", {}) if workspace else {}
+        stored = self.records.workspace(workspace).get("capabilities", {}) if workspace is not None else {}
         entries = [CapabilityEntry(capability=e.capability, mode=CapabilityMode(stored.get(e.capability.value, e.mode.value)))
                    for e in SLACK_CAPABILITIES.capabilities]
         return SLACK_CAPABILITIES.model_copy(update={"capabilities": entries})
@@ -157,7 +158,14 @@ class SlackProvider(ChatProvider):
             app_id = self._create(bot, workspace, token, manifest)
         self.records.update_app(bot, workspace, invite_handle=projection.display_name)
         self._finish_app(bot, workspace, token, app_id, source)
-        return AppCreated(app_id=app_id, authorize_link=self.records.app(bot, workspace)["authorize_link"])
+        return AppCreated(app_id=app_id, authorize_link=self._with_redirect(self.records.app(bot, workspace)["authorize_link"]))
+
+    def _with_redirect(self, link: str) -> str:
+        if not self.redirect_url:
+            return link
+        parts = urlsplit(link)
+        query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "redirect_uri"]
+        return urlunsplit(parts._replace(query=urlencode([*query, ("redirect_uri", self.redirect_url)])))
 
     def _manifest(self, workspace: str, source: BotIdentitySource) -> tuple[IdentityProjection, str]:
         projection = self.identity_projection(source)
@@ -319,7 +327,7 @@ class SlackProvider(ChatProvider):
         home = HomeChannel(platform=Platform.SLACK, chat_id=self.open_owner_dm(installation, owner),
                            name=OWNER_DM_HOME_NAME, user_id=owner, scope_id=installation.workspace_id)
         return {"platforms": {self.provider_id: {"audience": {"policy": "workspace"}, "home_channel": home.to_dict()}},
-                "slack": {"strict_mention": True}}
+                "slack": {"thread_followup_silence": True}}
 
     def open_owner_dm(self, installation: Installation, owner: str) -> str:
         token = self._secret(self._record_for(installation)[1]["bot_token_item_id"])
