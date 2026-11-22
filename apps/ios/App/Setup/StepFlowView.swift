@@ -130,10 +130,6 @@ struct StepFlowView<Accessory: View>: View {
             ForEach(Array(open.copies.enumerated()), id: \.offset) { offset, copy in
                 StepCopyCard(label: copy.label, value: copy.value, identifier: "stepFlowCopy-\(offset)")
             }
-        case .action(_, _, let copies):
-            ForEach(Array(copies.enumerated()), id: \.offset) { offset, copy in
-                StepCopyCard(label: copy.label, value: copy.value, identifier: "stepFlowCopy-\(offset)")
-            }
         case .switches(let groups):
             StepSwitchGroups(model: model, groups: groups)
         default:
@@ -151,7 +147,7 @@ struct StepFlowView<Accessory: View>: View {
         case .success(let title, let body): StepFlowCalmCopy(mark: .success, title: title, body: body)
         case .browserRoundTrip(let title, let body) where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: title, body: body)
-        case .action(let title, let body, _) where engine.phase == .working:
+        case .action(let title, let body) where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: title, body: body)
         case .openAndCheck(let open) where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: open.waitingTitle, body: open.waitingBody)
