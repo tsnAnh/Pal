@@ -42,11 +42,11 @@ public enum PreviewClassifier {
 
     public static func classify(_ preview: String?, senders: [PreviewSender] = []) -> ClassifiedPreview {
         let text = (preview ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let captured = capturedSender(in: text) else { return ClassifiedPreview(kind: .plain, text: text) }
+        guard let captured = capturedSender(in: text) else { return ClassifiedPreview(kind: .plain, text: PreviewPlainText.strip(text)) }
         let profile = profileName(forHandle: captured.token, known: senders)
         let known = senders.first { $0.name == profile }?.displayName
         let display = known ?? captured.statedName ?? captured.token
-        let body = text.replacing(deliveryPrefix, with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = PreviewPlainText.strip(text.replacing(deliveryPrefix, with: ""))
         let hasPrefix = text.firstMatch(of: deliveryPrefix) != nil
         let shown = hasPrefix ? (body.isEmpty ? emptyBody : body) : text
         return ClassifiedPreview(
