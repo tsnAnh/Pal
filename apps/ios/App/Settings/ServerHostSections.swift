@@ -12,17 +12,17 @@ struct ServerHealthSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
-            SectionCaption("Health", accessibilityIdentifier: "serverHealthCaption")
+            SettingsCaption("Health", identifier: "serverHealthCaption")
             switch host.health {
             case .loading:
-                GroupedCard(accessibilityIdentifier: "serverHealthCard") {
+                SettingsCard(identifier: "serverHealthCard") {
                     LoadingRow(title: "Health", identifier: "serverHealthLoading")
                 }
             case .unsupported:
-                GroupedCard(accessibilityIdentifier: "serverHealthCard") {
-                    SettingsRow.value("Health", value: "Not supported yet", accessibilityIdentifier: "serverHealthUnsupported")
+                SettingsCard(identifier: "serverHealthCard") {
+                    SettingsValueRow("Health", value: "Not supported yet", identifier: "serverHealthUnsupported")
                 }
-                CardFootnote(ServerHostCopy.unsupported, accessibilityIdentifier: "serverHealthFootnote")
+                SettingsFootnote(ServerHostCopy.unsupported, identifier: "serverHealthFootnote")
             case .failed:
                 FailureCard(
                     message: "Couldn't read this computer's health.", identifier: "serverHealthFailure",
@@ -35,28 +35,28 @@ struct ServerHealthSection: View {
     }
 
     private func facts(_ health: HostHealth) -> some View {
-        GroupedCard(accessibilityIdentifier: "serverHealthCard") {
-            SettingsRow.value("Version", value: version(health), accessibilityIdentifier: "serverHealthVersion")
-            SettingsRow.value("Python", value: health.pythonVersion ?? ServerHostCopy.unknown, accessibilityIdentifier: "serverHealthPython")
-            SettingsRow.value("System", value: health.platform ?? ServerHostCopy.unknown, accessibilityIdentifier: "serverHealthSystem")
-            SettingsRow.value("Free disk space", value: disk(health), accessibilityIdentifier: "serverHealthDisk")
-            SettingsRow.value("Computer uptime", value: uptime(health.hostUptimeSeconds), accessibilityIdentifier: "serverHealthUptime")
-            SettingsRow.value("Profiles", value: count(health.profileCount), accessibilityIdentifier: "serverHealthProfiles")
-            SettingsRow.value("Running gateways", value: count(health.runningGatewayCount), accessibilityIdentifier: "serverHealthGateways")
+        SettingsCard(identifier: "serverHealthCard") {
+            SettingsValueRow("Version", value: version(health), identifier: "serverHealthVersion")
+            SettingsValueRow("Python", value: health.pythonVersion ?? ServerHostCopy.unknown, identifier: "serverHealthPython")
+            SettingsValueRow("System", value: health.platform ?? ServerHostCopy.unknown, identifier: "serverHealthSystem")
+            SettingsValueRow("Free disk space", value: disk(health), identifier: "serverHealthDisk")
+            SettingsValueRow("Computer uptime", value: uptime(health.hostUptimeSeconds), identifier: "serverHealthUptime")
+            SettingsValueRow("Profiles", value: count(health.profileCount), identifier: "serverHealthProfiles")
+            SettingsValueRow("Running gateways", value: count(health.runningGatewayCount), identifier: "serverHealthGateways")
         }
     }
 
     private func checks(_ health: HostHealth) -> some View {
-        GroupedCard(accessibilityIdentifier: "serverHealthChecksCard") {
+        SettingsCard(identifier: "serverHealthChecksCard") {
             if !health.doctorRan {
-                SettingsRow.value("Checks", value: "Couldn't run", accessibilityIdentifier: "serverHealthChecks")
+                SettingsValueRow("Checks", value: "Couldn't run", identifier: "serverHealthChecks")
             } else if health.problems.isEmpty {
-                SettingsRow.value("Checks", value: "No problems found", accessibilityIdentifier: "serverHealthChecks")
+                SettingsValueRow("Checks", value: "No problems found", identifier: "serverHealthChecks")
             } else {
                 ForEach(Array(health.problems.enumerated()), id: \.offset) { index, problem in
-                    SettingsRow(
-                        title: problem.severity == .error ? "Needs attention" : "Warning", subtitle: problem.message,
-                        accessibilityIdentifier: "serverHealthProblem\(index)")
+                    SettingsValueRow(
+                        problem.severity == .error ? "Needs attention" : "Warning", value: nil, subtitle: problem.message,
+                        identifier: "serverHealthProblem\(index)")
                 }
             }
         }
@@ -100,76 +100,88 @@ struct ServerLogSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
-            SectionCaption("Log", accessibilityIdentifier: "serverLogCaption")
-            GroupedCard(accessibilityIdentifier: "serverLogPickerCard") {
-                Picker(
-                    "Log",
-                    selection: Binding(get: { host.logName }, set: { name in Task { await host.selectLog(name) } })
-                ) {
-                    ForEach(HostLogName.allCases) { name in Text(name.title).tag(name) }
-                }
-                .pickerStyle(.menu)
-                .padding(.horizontal, PalMetrics.rowInset)
-                .frame(minHeight: PalMetrics.rowMinimumHeight)
-                .accessibilityIdentifier("serverLogPicker")
-            }
+            SettingsCaption("Log", identifier: "serverLogCaption")
+            SettingsCard(identifier: "serverLogPickerCard") { logPicker }
             content
         }
+    }
+
+    private var logSelection: Binding<HostLogName> {
+        Binding(get: { host.logName }, set: { name in Task { await host.selectLog(name) } })
+    }
+
+    @ViewBuilder
+    private var logPicker: some View {
+        #if os(macOS)
+        MacRow(title: String(localized: "Log"), identifier: "serverLogPickerRow") {
+            MacMenuValue(current: host.logName.title, selection: logSelection, identifier: "serverLogPicker") {
+                ForEach(HostLogName.allCases) { name in Text(name.title).tag(name) }
+            }
+        }
+        #else
+        Picker("Log", selection: logSelection) {
+            ForEach(HostLogName.allCases) { name in Text(name.title).tag(name) }
+        }
+        .pickerStyle(.menu)
+        .padding(.horizontal, PalMetrics.rowInset)
+        .frame(minHeight: PalMetrics.rowMinimumHeight)
+        .accessibilityIdentifier("serverLogPicker")
+        #endif
     }
 
     @ViewBuilder
     private var content: some View {
         switch host.logState {
         case .loading:
-            GroupedCard(accessibilityIdentifier: "serverLogCard") {
+            SettingsCard(identifier: "serverLogCard") {
                 LoadingRow(title: "Log", identifier: "serverLogLoading")
             }
         case .unsupported:
-            GroupedCard(accessibilityIdentifier: "serverLogCard") {
-                SettingsRow.value("Log", value: "Not supported yet", accessibilityIdentifier: "serverLogUnsupported")
+            SettingsCard(identifier: "serverLogCard") {
+                SettingsValueRow("Log", value: "Not supported yet", identifier: "serverLogUnsupported")
             }
-            CardFootnote(ServerHostCopy.unsupported, accessibilityIdentifier: "serverLogFootnote")
+            SettingsFootnote(ServerHostCopy.unsupported, identifier: "serverLogFootnote")
         case .failed:
             FailureCard(
                 message: "Couldn't read the log.", identifier: "serverLogFailure",
                 retry: { Task { await host.loadLogs() } })
         case .loaded(let page):
-            GroupedCard(accessibilityIdentifier: "serverLogCard") {
+            SettingsCard(identifier: "serverLogCard") {
                 if !page.available {
-                    SettingsRow.value("Log", value: "Nothing logged yet", accessibilityIdentifier: "serverLogEmpty")
+                    SettingsValueRow("Log", value: "Nothing logged yet", identifier: "serverLogEmpty")
                 } else {
                     logText
                     if host.hasOlderLines {
-                        SettingsRow(
-                            title: host.isLoadingOlder ? "Loading…" : "Show older lines", trailing: .none,
-                            accessibilityIdentifier: "serverLogOlder", action: { Task { await host.loadOlder() } }
+                        SettingsActionRow(
+                            host.isLoadingOlder ? "Loading…" : "Show older lines",
+                            identifier: "serverLogOlder", action: { Task { await host.loadOlder() } }
                         )
                         .disabled(host.isLoadingOlder)
                     }
                 }
-                SettingsRow(
-                    title: "Refresh", trailing: .none, accessibilityIdentifier: "serverLogRefresh",
+                SettingsActionRow(
+                    "Refresh", identifier: "serverLogRefresh",
                     action: { Task { await host.loadLogs() } })
                 if page.available, !host.logLines.isEmpty {
-                    SettingsRow(
-                        title: copied ? "Copied" : "Copy log", trailing: .none, accessibilityIdentifier: "serverLogCopy",
+                    SettingsActionRow(
+                        copied ? "Copied" : "Copy log", identifier: "serverLogCopy",
                         action: copy)
                 }
             }
-            CardFootnote(
-                "Secrets are hidden before the log leaves this computer.", accessibilityIdentifier: "serverLogFootnote")
+            SettingsFootnote(
+                "Secrets are hidden before the log leaves this computer.", identifier: "serverLogFootnote")
         }
     }
 
     private var logText: some View {
         ScrollView {
             Text(host.logText)
-                .hermesText(.rowSubtitle).monospaced()
+                .settingsText(.rowSubtitle).monospaced()
                 .foregroundStyle(Color(theme.palette.textPrimary))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, PalMetrics.rowInset)
-                .padding(.vertical, PalMetrics.rowVerticalPadding)
+                .padding(.horizontal, SettingsSurface.rowInset)
+                .padding(.vertical, SettingsSurface.rowVerticalPadding)
         }
         .frame(maxHeight: 320)
         .defaultScrollAnchor(.bottom)

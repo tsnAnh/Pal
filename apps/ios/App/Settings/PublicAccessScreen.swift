@@ -58,22 +58,22 @@ struct PublicAccessContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PalMetrics.cardGap) {
             VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
-                GroupedCard(accessibilityIdentifier: "publicAccessCard") {
-                    SettingsRow.value(
+                SettingsCard(identifier: "publicAccessCard") {
+                    SettingsValueRow(
                         "Public address", value: addressText, subtitle: model.list?.missingSettingHint,
-                        accessibilityIdentifier: "publicAccessAddress")
-                    SettingsRow(
-                        title: "Refresh", trailing: .none, accessibilityIdentifier: "publicAccessRefresh",
+                        identifier: "publicAccessAddress")
+                    SettingsActionRow(
+                        "Refresh", identifier: "publicAccessRefresh",
                         action: { Task { await model.refresh() } })
                 }
                 if let footnote = model.footnote {
-                    CardFootnote(footnote, accessibilityIdentifier: "publicAccessFootnote")
+                    SettingsFootnote(footnote, identifier: "publicAccessFootnote")
                 }
             }
             if model.canManage { routesSection }
             VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
-                SectionCaption("What the app can't see", accessibilityIdentifier: "publicAccessBlindSpotsCaption")
-                CardFootnote(PublicAccessCopy.blindSpots, accessibilityIdentifier: "publicAccessBlindSpots")
+                SettingsCaption("What the app can't see", identifier: "publicAccessBlindSpotsCaption")
+                SettingsFootnote(PublicAccessCopy.blindSpots, identifier: "publicAccessBlindSpots")
             }
         }
         .macSheet(isPresented: $adding, onDismiss: { model.clearIssuedSecret(); model.resetAdd() }, size: .form, content: {
@@ -109,10 +109,10 @@ struct PublicAccessContent: View {
     @ViewBuilder
     private var routesSection: some View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
-            SectionCaption("Addresses", accessibilityIdentifier: "publicAccessRoutesCaption")
+            SettingsCaption("Addresses", identifier: "publicAccessRoutesCaption")
             if model.routes.isEmpty {
-                GroupedCard(accessibilityIdentifier: "publicAccessEmptyCard") {
-                    PlaceholderRow("No public addresses yet", accessibilityIdentifier: "publicAccessEmptyRow")
+                SettingsCard(identifier: "publicAccessEmptyCard") {
+                    SettingsPlaceholderRow("No public addresses yet", identifier: "publicAccessEmptyRow")
                 }
             } else {
                 ForEach(model.routes) { route in routeCard(route) }
@@ -121,10 +121,10 @@ struct PublicAccessContent: View {
     }
 
     private func routeCard(_ route: WebhookRoute) -> some View {
-        GroupedCard(accessibilityIdentifier: "publicRoute-\(route.name)") {
-            SettingsRow.value(
+        SettingsCard(identifier: "publicRoute-\(route.name)") {
+            SettingsValueRow(
                 route.name, value: route.isEnabled ? "On" : "Off", subtitle: routeSubtitle(route),
-                accessibilityIdentifier: "publicRouteSummary-\(route.name)")
+                identifier: "publicRouteSummary-\(route.name)")
             HStack(spacing: 8) {
                 Button { copy(route) } label: {
                     Text(copiedRoute == route.name ? "Copied" : "Copy address")
@@ -145,7 +145,7 @@ struct PublicAccessContent: View {
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("publicRouteRemove-\(route.name)")
             }
-            .padding(.horizontal, PalMetrics.rowInset)
+            .padding(.horizontal, SettingsSurface.rowInset)
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             probeResult(route)
@@ -164,9 +164,9 @@ struct PublicAccessContent: View {
         case .finished(let probe)?: PublicProbeResultView(probe: probe, identifier: route.name)
         case .failed?:
             Text("We couldn't run the check. Please try again.")
-                .hermesText(.rowSubtitle)
+                .settingsText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textSecondary)
-                .padding(.horizontal, PalMetrics.rowInset)
+                .padding(.horizontal, SettingsSurface.rowInset)
                 .padding(.vertical, 8)
                 .accessibilityIdentifier("publicRouteProbeFailed-\(route.name)")
         case .running?, nil: EmptyView()
@@ -190,32 +190,32 @@ private struct PublicProbeResultView: View {
                 PalIcon(symbol, ink: .custom(tint))
                     .accessibilityHidden(true)
                 Text(probe.diagnosis.headline)
-                    .hermesText(.rowTitle)
+                    .settingsText(.rowTitle)
                     .foregroundStyle(PalTokens.textPrimary)
             }
             if !probe.diagnosis.message.isEmpty {
                 Text(probe.diagnosis.message)
-                    .hermesText(.rowSubtitle)
+                    .settingsText(.rowSubtitle)
                     .foregroundStyle(PalTokens.textSecondary)
             }
             Text("On your computer: \(probe.local.summary)")
-                .hermesText(.rowSubtitle)
+                .settingsText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textSecondary)
             Text("Public address: \(probe.publicHop.summary)")
-                .hermesText(.rowSubtitle)
+                .settingsText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textSecondary)
             if let resolves = probe.resolves {
                 Text(resolves ? "The address resolves." : "The address doesn't resolve.")
-                    .hermesText(.rowSubtitle)
+                    .settingsText(.rowSubtitle)
                     .foregroundStyle(PalTokens.textSecondary)
             }
             if let expires = probe.certificateExpiresAt {
                 Text("Certificate valid until \(expires)")
-                    .hermesText(.rowSubtitle)
+                    .settingsText(.rowSubtitle)
                     .foregroundStyle(PalTokens.textSecondary)
             }
         }
-        .padding(.horizontal, PalMetrics.rowInset)
+        .padding(.horizontal, SettingsSurface.rowInset)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
