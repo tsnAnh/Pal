@@ -3322,11 +3322,12 @@ export interface ProfileCanonicalSession {
 export interface BotAboutYouGetParams {
   profile?: string | null
 }
-/** ``timezone_auto``: the client keeps ``timezone`` in step with its device and pushes it on change. */
+/** ``timezone_auto``: the client keeps ``timezone`` in step with its device and pushes it on change. ``photo_version``: empty without an owner photo, else a short content hash that changes with it. */
 export interface BotAboutYouFacts {
   name?: string
   timezone?: string
   timezone_auto?: boolean
+  photo_version?: string
 }
 /** A key left out is unchanged; ``null`` or blank clears it (``timezone_auto`` null reads as off). */
 export interface BotAboutYouSetParams {
@@ -3334,6 +3335,17 @@ export interface BotAboutYouSetParams {
   name?: string | null
   timezone?: string | null
   timezone_auto?: boolean | null
+}
+/** ``data``: base64 PNG or JPEG, at most 2MB decoded; ``null`` or blank removes the photo. */
+export interface BotAboutYouSetPhotoParams {
+  profile?: string | null
+  data?: string | null
+}
+/** All three are empty strings when the owner has no photo. */
+export interface BotAboutYouPhotoResult {
+  data?: string
+  mime?: string
+  photo_version?: string
 }
 /** ``clone_from`` omitted = fresh profile + bundled skills (with ``clone_all``: a full copy of the active profile, no bundled skills); ``mirror_credentials`` and ``share_auth`` default on (the bot page's defaults) so a headless bot has a provider. */
 export interface ProfilesCreateParams {
@@ -8549,8 +8561,12 @@ export interface RpcMethods {
   'bot_keys.status': { params: ProfileParams; result: BotKeysStatusResult }
   /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
   'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
+  /** The owner photo as base64 with its mime type and version. */
+  'bot_mode.about_you.photo': { params: BotAboutYouGetParams; result: BotAboutYouPhotoResult }
   /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
   'bot_mode.about_you.set': { params: BotAboutYouSetParams; result: BotAboutYouFacts }
+  /** Save or remove the owner photo install-wide; validates the image and answers the facts. */
+  'bot_mode.about_you.set_photo': { params: BotAboutYouSetPhotoParams; result: BotAboutYouFacts }
   /** Deliver a relayed DM into a Bot Chat on this gateway and return the one-turn reply (blocking). */
   'bot_relay.deliver': { params: BotRelayDeliverParams; result: BotRelayDeliverResult }
   /** Atomically claim every pending cross-connection envelope queued on this gateway. */
@@ -9271,7 +9287,9 @@ export const RPC_METHODS = [
   'bot_keys.set',
   'bot_keys.status',
   'bot_mode.about_you.get',
+  'bot_mode.about_you.photo',
   'bot_mode.about_you.set',
+  'bot_mode.about_you.set_photo',
   'bot_relay.deliver',
   'bot_relay.outbox.drain',
   'bot_relay.reply',
@@ -9650,8 +9668,12 @@ export interface CanonicalRpcMethods {
   'bot.thread.read': { params: BotThreadReadParams; result: BotThreadReadResult }
   /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
   'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
+  /** The owner photo as base64 with its mime type and version. */
+  'bot_mode.about_you.photo': { params: BotAboutYouGetParams; result: BotAboutYouPhotoResult }
   /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
   'bot_mode.about_you.set': { params: BotAboutYouSetParams; result: BotAboutYouFacts }
+  /** Save or remove the owner photo install-wide; validates the image and answers the facts. */
+  'bot_mode.about_you.set_photo': { params: BotAboutYouSetPhotoParams; result: BotAboutYouFacts }
   'bot_relay.cancel': { params: CanonicalBotCancelParams; result: CanonicalBotCancelResult }
   'bot_relay.deliver': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.settle': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
@@ -9949,7 +9971,9 @@ export const CANONICAL_RPC_METHODS = [
   'bot.thread.list',
   'bot.thread.read',
   'bot_mode.about_you.get',
+  'bot_mode.about_you.photo',
   'bot_mode.about_you.set',
+  'bot_mode.about_you.set_photo',
   'bot_relay.cancel',
   'bot_relay.deliver',
   'bot_relay.settle',

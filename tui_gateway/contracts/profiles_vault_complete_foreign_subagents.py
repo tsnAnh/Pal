@@ -196,11 +196,13 @@ method("profiles.list", params=ProfilesListParams, result=ProfilesListResult,
 
 
 class BotAboutYouFacts(Result):
-    """``timezone_auto``: the client keeps ``timezone`` in step with its device and pushes it on change."""
+    """``timezone_auto``: the client keeps ``timezone`` in step with its device and pushes it on change.
+    ``photo_version``: empty without an owner photo, else a short content hash that changes with it."""
 
     name: str = ""
     timezone: str = ""
     timezone_auto: bool = False
+    photo_version: str = ""
 
 
 class BotAboutYouGetParams(ProfileParams):
@@ -219,6 +221,26 @@ method("bot_mode.about_you.get", params=BotAboutYouGetParams, result=BotAboutYou
        doc="Owner facts (name, time zone) shared by every Bot Mode bot on this install.")
 method("bot_mode.about_you.set", params=BotAboutYouSetParams, result=BotAboutYouFacts,
        doc="Save owner facts install-wide; validates the time zone and answers the normalized values.")
+
+
+class BotAboutYouSetPhotoParams(ProfileParams):
+    """``data``: base64 PNG or JPEG, at most 2MB decoded; ``null`` or blank removes the photo."""
+
+    data: str | None = None
+
+
+class BotAboutYouPhotoResult(Result):
+    """All three are empty strings when the owner has no photo."""
+
+    data: str = ""
+    mime: str = ""
+    photo_version: str = ""
+
+
+method("bot_mode.about_you.set_photo", params=BotAboutYouSetPhotoParams, result=BotAboutYouFacts,
+       doc="Save or remove the owner photo install-wide; validates the image and answers the facts.")
+method("bot_mode.about_you.photo", params=BotAboutYouGetParams, result=BotAboutYouPhotoResult,
+       doc="The owner photo as base64 with its mime type and version.")
 
 
 class ProfilesCreateParams(ProfileParams):

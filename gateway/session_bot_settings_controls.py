@@ -14,6 +14,8 @@ VERBS = {
     'messaging.settings.update': Verb('session:control'),
     'bot_mode.about_you.get': Verb('session:read'),
     'bot_mode.about_you.set': Verb('session:control'),
+    'bot_mode.about_you.set_photo': Verb('session:control'),
+    'bot_mode.about_you.photo': Verb('session:read'),
     'memory.import': Verb('session:control'),
     'chat.provider.list': Verb('session:read', owner_scoped=True),
     'chat.install.status': Verb('session:read', owner_scoped=True),
