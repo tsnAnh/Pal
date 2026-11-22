@@ -18,7 +18,7 @@ defaults:
 jobs:
   release:
     name: release
-    runs-on: macos-26
+    runs-on: xcode-27
     environment: mac-release
     timeout-minutes: 90
     steps:
