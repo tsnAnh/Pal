@@ -9,7 +9,7 @@ from hermes_cli.config import load_config, set_config_value
 from hermes_cli.mcp_config import mcp_command
 from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
 from hermes_cli.shared_catalog import effective_mcp_servers
-from tests.hermes_cli.test_shared_connectors import GITHUB_KEY, GITHUB_URL, cli_add, world
+from tests.hermes_cli.test_shared_connectors import GITHUB_KEY, GITHUB_URL, World, cli_add, make_world
 from tools.mcp_tool_config import _interpolate_env_vars, _require_rendered_remote
 
 SHELL_VALUE = "ghp_only_in_the_shell"
@@ -21,6 +21,11 @@ def header_entry(*keys: str) -> dict:
         "url": GITHUB_URL, "enabled": True,
         "headers": {f"X-Key-{i}": f"Bearer ${{{key}}}" for i, key in enumerate(keys)},
     }
+
+
+@pytest.fixture
+def world(tmp_path, monkeypatch) -> World:
+    return make_world(tmp_path, monkeypatch)
 
 
 @pytest.fixture(autouse=True)

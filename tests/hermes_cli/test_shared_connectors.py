@@ -71,8 +71,7 @@ class World:
         asyncio.run(storage.set_tokens(OAuthToken(access_token=token, token_type="Bearer", expires_in=3600)))
 
 
-@pytest.fixture
-def world(tmp_path, monkeypatch) -> World:
+def make_world(tmp_path, monkeypatch) -> World:
     root = tmp_path / ".hermes"
     root.mkdir()
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -87,6 +86,11 @@ def world(tmp_path, monkeypatch) -> World:
     (catalog / "mcp_servers.yaml").write_text(yaml.safe_dump({"upwork": {"url": URL}, "github": GITHUB}))
     w.write_servers(root, {"upwork": dict(ROOT_ENTRY)})
     return w
+
+
+@pytest.fixture
+def world(tmp_path, monkeypatch) -> World:
+    return make_world(tmp_path, monkeypatch)
 
 
 def effective(world: World, home: Path) -> dict:

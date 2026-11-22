@@ -808,8 +808,7 @@ def cmd_mcp_add(args):
             if saved:
                 _success(f"Saved '{name}' to config (disabled)")
                 _info("Fix the issue, then: hermes mcp test " + name)
-        if not saved:
-            _announce_missing_keys(name, server_config)
+        _announce_unsaved_missing_keys(saved, name, server_config)
         _record(saved, probe_failure_class(exc))
         return
 
@@ -1288,6 +1287,11 @@ def _announce_missing_keys(name: str, entry: Any) -> None:
 
     for line in missing_key_fixes(name, entry):
         _warning(line)
+
+
+def _announce_unsaved_missing_keys(saved: bool, name: str, entry: Any) -> None:
+    if not saved:
+        _announce_missing_keys(name, entry)
 
 
 def _with_shell_keys(action: str, name: str, run: Callable[[], Any]) -> Any:

@@ -116,16 +116,16 @@ async def test_skills_changes_are_never_served_over_the_socket(bots, action):
 
 
 @pytest.mark.asyncio
-async def test_a_control_grant_adds_and_removes_a_catalog_mcp_server_in_its_own_profile(bots):
+async def test_a_control_grant_adds_and_removes_a_catalog_mcp_server_for_every_bot(bots):
     connection = bots.connect('alpha')
     added = await call(connection, 'mcp.servers.add', {'name': 'airtable', 'preset': 'airtable'})
     assert 'error' not in added, added
     CANONICAL_METHODS['mcp.servers.add'].result.model_validate(added['result'])
-    assert 'airtable' in (config_of(get_profile_dir('alpha')).get('mcp_servers') or {})
-    assert 'airtable' not in (config_of(bots.root).get('mcp_servers') or {})
+    assert 'airtable' in (config_of(bots.root).get('mcp_servers') or {})
+    assert 'airtable' not in (config_of(get_profile_dir('alpha')).get('mcp_servers') or {})
     removed = await call(connection, 'mcp.servers.remove', {'name': 'airtable'})
     assert removed['result']['removed'] is True, removed
-    assert 'airtable' not in (config_of(get_profile_dir('alpha')).get('mcp_servers') or {})
+    assert 'airtable' not in (config_of(bots.root).get('mcp_servers') or {})
 
 
 @pytest.mark.asyncio
@@ -148,7 +148,7 @@ async def test_the_socket_never_adds_a_command_or_an_unvetted_custom_config(bots
 
 @pytest.mark.asyncio
 async def test_the_socket_adds_updates_and_removes_a_url_server_with_secret_headers_kept_out_of_config(bots):
-    connection, home = bots.connect('alpha'), get_profile_dir('alpha')
+    connection, home = bots.connect('alpha'), bots.root
     key = secrets.token_urlsafe(18)
     added = await call(connection, 'mcp.servers.add', {
         'name': 'notes', 'config': {'url': 'https://example.invalid/mcp', 'transport': 'http'},
@@ -159,7 +159,7 @@ async def test_the_socket_adds_updates_and_removes_a_url_server_with_secret_head
     assert saved['url'] == 'https://example.invalid/mcp' and saved['oauth'] == {'client_id': 'pal-client'}
     assert saved['headers'] == {'X-Api-Key': '${MCP_NOTES_HDR_X_API_KEY}'}
     assert key not in (home / 'config.yaml').read_text() and key not in str(added)
-    assert 'notes' not in (config_of(bots.root).get('mcp_servers') or {})
+    assert 'notes' not in (config_of(get_profile_dir('alpha')).get('mcp_servers') or {})
 
     updated = await call(connection, 'mcp.servers.update', {
         'name': 'notes', 'config': {'url': 'https://example.invalid/v2'}, 'headers': {'X-Api-Key': None}})
