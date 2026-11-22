@@ -53,6 +53,7 @@ final class SlackSetupModel {
     private(set) var finished = false
     private(set) var loaded = false
     @ObservationIgnored private var gatewayFailureShown = false
+    @ObservationIgnored private var backRefusedAtRevision: Int?
 
     init(botName: String, displayName: String, spec: BotAvatarSpec?, client: any ChatInstallClient, members: any ChatMemberClient) {
         self.displayName = displayName
@@ -72,6 +73,7 @@ final class SlackSetupModel {
         )
         bridge.perform = { [weak self] step, values in try await self?.run(step, values) }
         flow.recovery = { [weak self] failure in await self?.recover(failure) }
+        flow.rewind = { [weak self] _, target in await self?.rewind(to: target) ?? false }
     }
 
     var stage: Stage {
@@ -133,13 +135,23 @@ final class SlackSetupModel {
     private func sync(extraFailure: SetupStatus? = nil) {
         guard chat.provider != nil, chat.state != nil else { return }
         if chat.screen != .ready { finished = false }
-        let plan = SlackSetupPlan(displayName: displayName, provider: chat.provider, state: chat.state)
+        let refused = backRefusedAtRevision != nil && backRefusedAtRevision == chat.state?.revision
+        let plan = SlackSetupPlan(displayName: displayName, provider: chat.provider, state: chat.state, backUnavailable: refused)
         var target = plan.currentID
         let keepsBotToken = flow.engine.current.id == SlackSetupPlan.botTokenID && target == SlackSetupPlan.allowID
         if keepsBotToken, plan.steps.contains(where: { $0.id == SlackSetupPlan.botTokenID }) { target = SlackSetupPlan.botTokenID }
         let local = gatewayFailureShown ? nil : flow.engine.failure
         gatewayFailureShown = plan.failure != nil
         flow.follow(steps: plan.steps, at: target, failure: plan.failure ?? extraFailure ?? local)
+    }
+
+    private func rewind(to target: FlowStep) async -> Bool {
+        guard let task = SlackSetupPlan.reopening(back: target) else { return true }
+        let accepted = await chat.reopen(task)
+        chat.dismissNotice()
+        backRefusedAtRevision = accepted ? nil : chat.state?.revision
+        sync()
+        return accepted
     }
 
     private func recover(_ failure: SetupStatus) async {

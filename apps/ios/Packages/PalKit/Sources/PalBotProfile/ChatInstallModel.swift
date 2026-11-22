@@ -129,7 +129,7 @@ public final class ChatInstallModel {
 
     public let botName: String
     private let preferredProvider: String?
-    private let client: any ChatInstallClient
+    let client: any ChatInstallClient
 
     public init(botName: String, preferredProvider: String?, client: any ChatInstallClient) {
         self.botName = botName
@@ -361,7 +361,7 @@ public final class ChatInstallModel {
         notice = known.map { fixed ?? ($0.isUnreachable ? .offline : .notSaved) }
     }
 
-    private var scope: ChatInstallScope? {
+    var scope: ChatInstallScope? {
         provider.map { ChatInstallScope(provider: $0.providerId, workspace: state?.workspace ?? "") }
     }
 
@@ -375,7 +375,7 @@ public final class ChatInstallModel {
         snapshot = result
     }
 
-    private func mutate(_ work: @escaping @MainActor () async throws -> Void) async {
+    func mutate(_ work: @escaping @MainActor () async throws -> Void) async {
         isWorking = true
         setNotice()
         defer { isWorking = false }

@@ -217,4 +217,64 @@ struct SlackSetupPlanTests {
         #expect(other.currentID == SlackSetupPlan.credentialID)
         #expect(other.failure?.reason.contains("App-Level Tokens") == false)
     }
+
+    private static let everyGuidedTask = ["set_icon", "app_level_credential", "gateway_redirect"]
+
+    private func guidedEngine(_ step: String) throws -> StepFlowEngine {
+        let done = Array(Self.everyGuidedTask.prefix { $0 != step })
+        let state = step == "allow"
+            ? try chatState("needs_allow", 9, action: ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/oauth"], done: done)
+            : try chatState("needs_manual_step", 9, action: ["kind": "button", "action_id": step], done: done)
+        return try engine(try plan(state, guided: Self.everyGuidedTask))
+    }
+
+    @Test func backIsOfferedOnGuidedStepsAfterTheFirstAndOnAllowOnly() throws {
+        let guided = try plan(nil, guided: Self.everyGuidedTask)
+        let offered: [(String, Bool)] = [
+            (SlackSetupPlan.introID, false), (SlackSetupPlan.credentialID, false), (SlackSetupPlan.creatingID, false),
+            (SlackSetupPlan.manualID(.setIcon), false), (SlackSetupPlan.manualID(.appLevelCredential), true),
+            (SlackSetupPlan.manualID(.gatewayRedirect), true), (SlackSetupPlan.allowID, true),
+            (SlackSetupPlan.ownerID, false), (SlackSetupPlan.channelsID, false),
+        ]
+        for (id, back) in offered {
+            #expect(try #require(guided.steps.first { $0.id == id }).allowsBack == back, "\(id)")
+        }
+    }
+
+    @Test func allowHasNoBackWhenTheWorkspaceNeedsNoGuidedStep() throws {
+        let automatic = try plan(try chatState("needs_allow", 4), guided: [])
+        #expect(try #require(automatic.steps.first { $0.id == SlackSetupPlan.allowID }).allowsBack == false)
+        #expect(!(try engine(automatic)).canGoBack)
+    }
+
+    @Test func backFromAllowReopensTheLastGuidedStepAndBackFromEachGuidedStepReopensTheOneBefore() throws {
+        let cases: [(current: String, reopens: ChatProviderCapability?)] = [
+            ("allow", .gatewayRedirect), ("gateway_redirect", .appLevelCredential), ("app_level_credential", .setIcon), ("set_icon", nil),
+        ]
+        for (current, reopens) in cases {
+            let flow = try guidedEngine(current)
+            #expect(flow.canGoBack == (reopens != nil), "\(current)")
+            guard let reopens else { continue }
+            #expect(SlackSetupPlan.reopening(back: try #require(flow.previousStep)) == reopens, "\(current)")
+        }
+    }
+
+    @Test func backFromTheBotTokenStepToAllowSendsNothingToTheGateway() throws {
+        let fallback: [String: Any] = ["kind": "enter_text", "action_id": "bot_token"]
+        var flow = try engine(try plan(try chatState("needs_allow", 4, fallback: fallback), guided: Self.everyGuidedTask))
+        let skipped = flow.skip()
+        #expect(skipped && flow.current.id == SlackSetupPlan.botTokenID)
+        let target = try #require(flow.previousStep)
+        #expect(target.id == SlackSetupPlan.allowID)
+        #expect(SlackSetupPlan.reopening(back: target) == nil)
+    }
+
+    @Test func aRefusedBackLeavesANoteOnTheCurrentStepAndNowhereElse() throws {
+        let state = try chatState("needs_allow", 9, action: ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/oauth"])
+        let refused = SlackSetupPlan(displayName: "Pal", provider: try chatProvider(guided: Self.everyGuidedTask), state: state, backUnavailable: true)
+        let noted = refused.steps.filter { $0.note != nil }
+        #expect(noted.map(\.id) == [SlackSetupPlan.allowID])
+        #expect(noted.first?.note == "Can't go back right now. Updating Pal on your computer may help.")
+        #expect(try plan(state, guided: Self.everyGuidedTask).steps.allSatisfy { $0.note == nil })
+    }
 }

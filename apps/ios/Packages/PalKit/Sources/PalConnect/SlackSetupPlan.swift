@@ -24,11 +24,17 @@ public struct SlackSetupPlan: Sendable, Equatable {
 
     public static func manualID(_ task: ChatProviderCapability) -> String { "manual-\(task.rawValue)" }
 
+    public static func reopening(back target: FlowStep) -> ChatProviderCapability? {
+        guidedTasks.first { manualID($0) == target.id }
+    }
+
     public let steps: [FlowStep]
     public let currentID: String
     public let failure: SetupStatus?
 
-    public init(displayName name: String, provider: ChatCapabilitiesWire?, state: ChatSetupStateWire?) {
+    public init(
+        displayName name: String, provider: ChatCapabilitiesWire?, state: ChatSetupStateWire?, backUnavailable: Bool = false
+    ) {
         let requiresCredential = provider?.requiresConfigCredential ?? true
         let createsApp = provider?.createsApp ?? true
         let guided = Self.guidedTasks.filter { task in
@@ -40,15 +46,19 @@ public struct SlackSetupPlan: Sendable, Equatable {
         var steps = [Self.intro(name, again: again)]
         if requiresCredential { steps.append(Self.credential()) }
         if createsApp { steps.append(Self.creating(name)) }
-        steps += guided.map { Self.manual($0, name: name, state: state) }
-        steps.append(Self.allow(name, linked: Self.allowLink(state) != nil, offersBotToken: offersBotToken))
+        steps += guided.enumerated().map { offset, task in Self.manual(task, name: name, state: state, allowsBack: offset > 0) }
+        steps.append(Self.allow(name, linked: Self.allowLink(state) != nil, offersBotToken: offersBotToken, allowsBack: !guided.isEmpty))
         steps.append(Self.installing(name))
         if offersBotToken { steps.append(Self.botToken()) }
         steps += [Self.owner(name), Self.channels(name), Self.done(name)]
-        self.steps = steps
 
         let target = Self.target(state: state, guided: guided)
-        currentID = steps.contains { $0.id == target } ? target : Self.introID
+        let current = steps.contains { $0.id == target } ? target : Self.introID
+        if backUnavailable, let position = steps.firstIndex(where: { $0.id == current }) {
+            steps[position].note = String(localized: "Can't go back right now. Updating Pal on your computer may help.")
+        }
+        self.steps = steps
+        currentID = current
         failure = state?.step == .error
             ? state?.error.map { Self.failure($0.code, displayName: name, state: state, guided: guided) }
             : nil
@@ -166,7 +176,7 @@ public struct SlackSetupPlan: Sendable, Equatable {
         )
     }
 
-    private static func manual(_ task: ChatProviderCapability, name: String, state: ChatSetupStateWire?) -> FlowStep {
+    private static func manual(_ task: ChatProviderCapability, name: String, state: ChatSetupStateWire?, allowsBack: Bool) -> FlowStep {
         let link = state.flatMap { $0.nextAction.actionId == task.rawValue ? $0.nextAction.link : nil }
             .flatMap(URL.init(string:)).map { SetupLink(label: String(localized: "Open the Slack page"), url: $0) }
         let done = String(localized: "Done")
@@ -179,13 +189,13 @@ public struct SlackSetupPlan: Sendable, Equatable {
                     localized: "Open the Slack page, click Generate Token and Scopes under App-Level Tokens, add connections:write, then Copy and come back."
                 ),
                 kind: .paste(fields: [SetupField(id: appKeyField, label: String(localized: "App key"), secret: true, prefixes: ["xapp-"])]),
-                primaryTitle: done, pageLink: link, allowsBack: false
+                primaryTitle: done, pageLink: link, allowsBack: allowsBack
             )
         case .gatewayRedirect:
             return FlowStep(
                 id: manualID(task), title: String(localized: "Add Pal's return address"),
                 body: String(localized: "Open the Slack page, add this address under Redirect URLs, then click Save URLs."),
-                kind: saving, primaryTitle: done, pageLink: link, allowsBack: false
+                kind: saving, primaryTitle: done, pageLink: link, allowsBack: allowsBack
             )
         default:
             return FlowStep(
@@ -193,12 +203,12 @@ public struct SlackSetupPlan: Sendable, Equatable {
                 body: String(
                     localized: "Slack doesn't let apps set their own picture. Save it, open the Slack page, and upload it under Display Information."
                 ),
-                kind: saving, primaryTitle: done, pageLink: link, allowsBack: false
+                kind: saving, primaryTitle: done, pageLink: link, allowsBack: allowsBack
             )
         }
     }
 
-    private static func allow(_ name: String, linked: Bool, offersBotToken: Bool) -> FlowStep {
+    private static func allow(_ name: String, linked: Bool, offersBotToken: Bool, allowsBack: Bool) -> FlowStep {
         FlowStep(
             id: allowID, title: String(localized: "Click Allow"),
             body: String(localized: "A browser window opens with \(name)'s Slack app. Click Allow, and you come back here."),
@@ -211,7 +221,7 @@ public struct SlackSetupPlan: Sendable, Equatable {
             primaryTitle: linked ? String(localized: "Open Slack to allow") : String(localized: "Check again"),
             skipTitle: offersBotToken ? String(localized: "Paste a bot token instead") : nil,
             skipTarget: offersBotToken ? botTokenID : nil,
-            heading: String(localized: "Click Allow in Slack"), allowsBack: false
+            heading: String(localized: "Click Allow in Slack"), allowsBack: allowsBack
         )
     }
 
