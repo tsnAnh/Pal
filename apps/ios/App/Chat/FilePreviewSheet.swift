@@ -24,6 +24,25 @@ struct FilePreviewSheet: View {
     @State private var isSaving = false
 
     var body: some View {
+        chrome
+            .task(id: attempt) { await load() }
+            .onDisappear(perform: removeTemporaryCopy)
+            .accessibilityIdentifier("filePreview")
+    }
+
+    @ViewBuilder
+    private var chrome: some View {
+        #if os(macOS)
+        SheetChrome(
+            title: file.name,
+            titleAlignment: .afterLeadingButton,
+            surface: .canvas,
+            accessibilityIdentifier: "filePreview",
+            leadingAccessibilityIdentifier: "filePreviewClose",
+            onLeading: { dismiss() },
+            content: { content.frame(maxWidth: .infinity, maxHeight: .infinity) }
+        )
+        #else
         NavigationStack {
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -35,11 +54,9 @@ struct FilePreviewSheet: View {
                             .accessibilityIdentifier("filePreviewClose")
                     }
                 }
-                .iOSOnly { $0.toolbarTitleDisplayMode(.inline) }
+                .toolbarTitleDisplayMode(.inline)
         }
-        .task(id: attempt) { await load() }
-        .onDisappear(perform: removeTemporaryCopy)
-        .accessibilityIdentifier("filePreview")
+        #endif
     }
 
     @ViewBuilder

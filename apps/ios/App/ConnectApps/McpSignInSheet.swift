@@ -22,22 +22,21 @@ struct McpSignInSheet: View {
         }
     }
 
-    private var showsChecklist: Bool {
+    private var layout: StepFlowLayout {
         #if os(macOS)
-        true
+        .stepper
         #else
-        sizeClass == .regular
+        StepFlowLayout(sizeClass: sizeClass)
         #endif
     }
 
+    private var progress: StepFlowEngine? { showsProgress ? controller.engine : nil }
+
     var body: some View {
-        SheetChrome(
-            title: String(localized: "Connect \(controller.vendor)"),
-            accessibilityIdentifier: "mcpSignIn",
-            leadingAccessibilityIdentifier: "mcpSignInClose",
-            onLeading: close,
-            content: { flow }
-        )
+        SetupChrome(
+            title: String(localized: "Connect \(controller.vendor)"), app: controller.app, progress: progress,
+            accessibilityIdentifier: "mcpSignIn", closeIdentifier: "mcpSignInClose", close: close
+        ) { flow }
         .task { await controller.start() }
         .onChange(of: phase) { _, new in
             if new == .dismissed { close() }
@@ -50,9 +49,9 @@ struct McpSignInSheet: View {
 
     private var flow: some View {
         VStack(spacing: 0) {
-            if showsProgress, !showsChecklist, let engine = controller.engine { StepFlowSegments(engine: engine) }
+            if layout.showsSegments, let progress { StepFlowSegments(engine: progress, layout: layout) }
             HStack(spacing: 0) {
-                if showsProgress, showsChecklist, let engine = controller.engine { StepFlowChecklist(engine: engine, savedNote: nil) }
+                if layout.showsChecklist, let progress { StepFlowChecklist(engine: progress, savedNote: nil) }
                 screen.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             footer
@@ -91,7 +90,7 @@ struct McpSignInSheet: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
                 Text("Paste the address")
-                    .hermesText(.sheetTitle)
+                    .stepTitleStyle(layout)
                     .foregroundStyle(PalTokens.textPrimary)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier("mcpSignInPasteTitle")
@@ -100,6 +99,7 @@ struct McpSignInSheet: View {
                     .foregroundStyle(PalTokens.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("mcpSignInPasteInstructions")
+                if layout.keepsLinksInContent { secondary }
                 if !controller.platform.returnsAutomatically {
                     Text("Automatic return isn't available on this device, so this one step is manual.")
                         .hermesText(.rowSubtitle)
@@ -134,7 +134,7 @@ struct McpSignInSheet: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(PalMetrics.screenMargin)
+            .padding(layout.contentInsets)
         }
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
@@ -152,17 +152,30 @@ struct McpSignInSheet: View {
     @ViewBuilder
     private var footer: some View {
         if hasFooter {
-            let phone = !showsChecklist
-            let stack = phone ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
-            stack {
-                if phone { primary }
-                if !phone { Spacer(minLength: 0) }
-                secondary
-                quiet
-                if !phone { primary }
+            Group {
+                switch layout {
+                case .stacked:
+                    VStack(spacing: 10) {
+                        primary
+                        secondary
+                        quiet
+                    }
+                case .rail:
+                    HStack(spacing: 10) {
+                        Spacer(minLength: 0)
+                        secondary
+                        quiet
+                        primary
+                    }
+                case .stepper:
+                    HStack(spacing: 10) {
+                        Spacer(minLength: 0)
+                        quiet
+                        primary
+                    }
+                }
             }
-            .padding(.horizontal, PalMetrics.screenMargin)
-            .padding(.vertical, PalMetrics.screenMargin)
+            .padding(PalMetrics.screenMargin)
             .frame(maxWidth: .infinity)
             .overlay(alignment: .top) { PalHairline() }
         }
@@ -177,7 +190,7 @@ struct McpSignInSheet: View {
 
     @ViewBuilder
     private var primary: some View {
-        let phone = !showsChecklist
+        let phone = layout.fillsWidth
         switch phase {
         case .pasteAddress:
             SetupButton(
@@ -196,7 +209,7 @@ struct McpSignInSheet: View {
     private var secondary: some View {
         if phase == .pasteAddress {
             SetupButton(
-                title: String(localized: "Open the sign-in page again"), fillsWidth: !showsChecklist, identifier: "mcpSignInReopen"
+                title: String(localized: "Open the sign-in page again"), fillsWidth: layout.fillsWidth, identifier: "mcpSignInReopen"
             ) { controller.reopen() }
             .disabled(controller.isSubmitting)
         }

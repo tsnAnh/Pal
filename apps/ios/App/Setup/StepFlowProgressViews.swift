@@ -4,6 +4,7 @@ import SwiftUI
 
 struct StepFlowSegments: View {
     let engine: StepFlowEngine
+    let layout: StepFlowLayout
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -11,25 +12,35 @@ struct StepFlowSegments: View {
                 ForEach(engine.checklist) { row in segment(row) }
             }
             .accessibilityHidden(true)
-            Text(engine.positionLabel)
-                .hermesText(.rowSubtitle)
-                .foregroundStyle(PalTokens.textTertiary)
-                .accessibilityIdentifier("stepFlowPosition")
+            if layout == .stacked {
+                Text(engine.positionLabel)
+                    .hermesText(.rowSubtitle)
+                    .foregroundStyle(PalTokens.textTertiary)
+                    .accessibilityIdentifier("stepFlowPosition")
+            }
         }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.bottom, PalMetrics.captionToCardGap)
+        .padding(.horizontal, layout == .stepper ? StepperMetrics.barMargin : PalMetrics.screenMargin)
+        .padding(.bottom, layout == .stepper ? 0 : PalMetrics.captionToCardGap)
     }
 
     private func segment(_ row: StepFlowEngine.Row) -> some View {
         Capsule()
-            .fill(row.state == .upcoming ? PalTokens.control : PalTokens.toggleOn)
-            .opacity(row.state == .current ? 0.55 : 1)
+            .fill(fill(row.state))
+            .opacity(layout != .stepper && row.state == .current ? 0.55 : 1)
             .overlay {
                 if row.isAutomatic {
                     Capsule().strokeBorder(PalTokens.textTertiary, style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
                 }
             }
             .frame(height: 4)
+    }
+
+    private func fill(_ state: StepFlowEngine.RowState) -> Color {
+        switch state {
+        case .done: PalTokens.toggleOn
+        case .current: layout == .stepper ? PalTokens.textPrimary : PalTokens.toggleOn
+        case .upcoming: PalTokens.control
+        }
     }
 }
 
@@ -169,30 +180,90 @@ struct StepFlowCalmView: View {
 
 struct SetupChrome<Content: View>: View {
     let title: String
+    let app: ConnectApp?
+    let progress: StepFlowEngine?
     let accessibilityIdentifier: String
+    let closeIdentifier: String
     let close: () -> Void
     private let content: Content
 
     @Environment(\.sheetChromeHostedInNavigation) private var pushed
 
     init(
-        title: String, accessibilityIdentifier: String, close: @escaping () -> Void,
-        @ViewBuilder content: () -> Content
+        title: String, app: ConnectApp? = nil, progress: StepFlowEngine? = nil, accessibilityIdentifier: String,
+        closeIdentifier: String = "stepFlowClose", close: @escaping () -> Void, @ViewBuilder content: () -> Content
     ) {
         self.title = title
+        self.app = app
+        self.progress = progress
         self.accessibilityIdentifier = accessibilityIdentifier
+        self.closeIdentifier = closeIdentifier
         self.close = close
         self.content = content()
     }
 
     var body: some View {
+        #if os(macOS)
+        SheetChrome(
+            leading: pushed ? .back : .close,
+            headerStyle: .stepper,
+            accessibilityIdentifier: accessibilityIdentifier,
+            leadingAccessibilityIdentifier: pushed ? "stepFlowBack" : closeIdentifier,
+            onLeading: close,
+            trailing: { StepperHeaderTitle(title: title, app: app, progress: progress, identifier: "\(accessibilityIdentifier)-title") },
+            content: { content }
+        )
+        #else
         SheetChrome(
             title: title,
             leading: pushed ? .back : .close,
             accessibilityIdentifier: accessibilityIdentifier,
-            leadingAccessibilityIdentifier: pushed ? "stepFlowBack" : "stepFlowClose",
+            leadingAccessibilityIdentifier: pushed ? "stepFlowBack" : closeIdentifier,
             onLeading: close,
             content: { content }
         )
+        #endif
+    }
+}
+
+private struct StepperHeaderTitle: View {
+    let title: String
+    let app: ConnectApp?
+    let progress: StepFlowEngine?
+    let identifier: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let app {
+                ConnectorLogoTile(app: app)
+                    .scaleEffect(StepperMetrics.logoSize / ConnectRowMetrics.tileSize)
+                    .frame(width: StepperMetrics.logoSize, height: StepperMetrics.logoSize)
+                    .accessibilityHidden(true)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .hermesText(.sheetTitle)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(PalTokens.textPrimary)
+                    .lineLimit(1)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityIdentifier(identifier)
+                if let progress { position(progress) }
+            }
+        }
+    }
+
+    private func position(_ engine: StepFlowEngine) -> some View {
+        HStack(spacing: 0) {
+            Text(engine.positionLabel)
+                .accessibilityIdentifier("stepFlowPosition")
+            if engine.current.isAutomatic {
+                Text(" · Pal does this part")
+                    .accessibilityIdentifier("stepFlowPositionAutomatic")
+            }
+        }
+        .hermesText(.rowSubtitle)
+        .foregroundStyle(PalTokens.textTertiary)
+        .lineLimit(1)
     }
 }

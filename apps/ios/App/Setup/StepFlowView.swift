@@ -5,6 +5,7 @@ import SwiftUI
 struct StepFlowView<Accessory: View>: View {
     let model: StepFlowModel
     let title: String
+    let app: ConnectApp?
     let savedNote: String?
     let close: () -> Void
     let accessory: (FlowStep) -> Accessory
@@ -14,11 +15,12 @@ struct StepFlowView<Accessory: View>: View {
     #endif
 
     init(
-        model: StepFlowModel, title: String, savedNote: String? = nil, close: @escaping () -> Void,
+        model: StepFlowModel, title: String, app: ConnectApp? = nil, savedNote: String? = nil, close: @escaping () -> Void,
         @ViewBuilder accessory: @escaping (FlowStep) -> Accessory
     ) {
         self.model = model
         self.title = title
+        self.app = app
         self.savedNote = savedNote
         self.close = close
         self.accessory = accessory
@@ -33,20 +35,20 @@ struct StepFlowView<Accessory: View>: View {
         return failure
     }
 
-    private var showsChecklist: Bool {
+    private var layout: StepFlowLayout {
         #if os(macOS)
-        true
+        .stepper
         #else
-        sizeClass == .regular
+        StepFlowLayout(sizeClass: sizeClass)
         #endif
     }
 
     var body: some View {
-        SetupChrome(title: title, accessibilityIdentifier: "stepFlow", close: close) {
+        SetupChrome(title: title, app: app, progress: engine, accessibilityIdentifier: "stepFlow", close: close) {
             VStack(spacing: 0) {
-                if !showsChecklist { StepFlowSegments(engine: engine) }
+                if layout.showsSegments { StepFlowSegments(engine: engine, layout: layout) }
                 HStack(spacing: 0) {
-                    if showsChecklist { StepFlowChecklist(engine: engine, savedNote: savedNote) }
+                    if layout.showsChecklist { StepFlowChecklist(engine: engine, savedNote: savedNote) }
                     screen.frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 footer
@@ -69,7 +71,7 @@ struct StepFlowView<Accessory: View>: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
                     Text(engine.current.screenTitle)
-                        .hermesText(.sheetTitle)
+                        .stepTitleStyle(layout)
                         .foregroundStyle(PalTokens.textPrimary)
                         .accessibilityAddTraits(.isHeader)
                         .accessibilityIdentifier("stepFlowStepTitle")
@@ -80,6 +82,7 @@ struct StepFlowView<Accessory: View>: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("stepFlowStepBody")
                     }
+                    if layout.keepsLinksInContent { pageLink }
                     if let continuation = model.continuation, continuation.stepID == engine.current.id {
                         SetupBanner(title: continuation.title, detail: continuation.detail, identifier: "stepFlowContinued")
                     }
@@ -93,9 +96,16 @@ struct StepFlowView<Accessory: View>: View {
                     stepContent
                     if !engine.current.links.isEmpty { StepFlowLinks(links: engine.current.links) }
                     accessory(engine.current)
+                    if layout.keepsLinksInContent, let savedNote {
+                        Text(savedNote)
+                            .hermesText(.rowSubtitle)
+                            .foregroundStyle(PalTokens.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("stepFlowSavedNote")
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(PalMetrics.screenMargin)
+                .padding(layout.contentInsets)
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.interactively)
@@ -147,26 +157,45 @@ struct StepFlowView<Accessory: View>: View {
         }
     }
 
-    @ViewBuilder
     private var footer: some View {
-        let phone = !showsChecklist
-        let stack = phone ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
-        stack {
-            if phone { primary }
-            if !phone { Spacer(minLength: 0) }
-            if engine.canGoBack, engine.phase != .working {
-                SetupButton(title: String(localized: "Back"), fillsWidth: phone, identifier: "stepFlowBack") {
-                    Task { await model.back() }
+        Group {
+            switch layout {
+            case .stacked:
+                VStack(spacing: 10) {
+                    primary
+                    back
+                    quiet
+                    pageLink
+                }
+            case .rail:
+                HStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    back
+                    quiet
+                    pageLink
+                    primary
+                }
+            case .stepper:
+                HStack(spacing: 10) {
+                    back
+                    Spacer(minLength: 0)
+                    quiet
+                    primary
                 }
             }
-            quiet
-            pageLink
-            if !phone { primary }
         }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.vertical, PalMetrics.screenMargin)
+        .padding(PalMetrics.screenMargin)
         .frame(maxWidth: .infinity)
         .overlay(alignment: .top) { PalHairline() }
+    }
+
+    @ViewBuilder
+    private var back: some View {
+        if engine.canGoBack, engine.phase != .working {
+            SetupButton(title: String(localized: "Back"), fillsWidth: layout.fillsWidth, identifier: "stepFlowBack") {
+                Task { await model.back() }
+            }
+        }
     }
 
     @ViewBuilder
@@ -185,14 +214,14 @@ struct StepFlowView<Accessory: View>: View {
     @ViewBuilder
     private var pageLink: some View {
         if let link = engine.current.pageLink, engine.failure == nil, engine.phase != .working {
-            SetupButton(title: link.label, fillsWidth: !showsChecklist, identifier: "stepFlowPage") { model.openPage(link.url) }
+            SetupButton(title: link.label, fillsWidth: layout.fillsWidth, identifier: "stepFlowPage") { model.openPage(link.url) }
         }
     }
 
     @ViewBuilder
     private var primary: some View {
         if engine.failure == nil || inlineRefusal != nil, engine.phase != .working, engine.phase != .preparing, engine.primaryAction != .none {
-            SetupButton(title: primaryTitle, kind: .primary, fillsWidth: !showsChecklist, identifier: "stepFlowPrimary") {
+            SetupButton(title: primaryTitle, kind: .primary, fillsWidth: layout.fillsWidth, identifier: "stepFlowPrimary") {
                 if engine.primaryAction == .finish { close() } else { Task { await model.performPrimary() } }
             }
             .disabled(!engine.isPrimaryEnabled || inlineRefusal != nil)
@@ -228,8 +257,8 @@ struct StepFlowView<Accessory: View>: View {
 }
 
 extension StepFlowView where Accessory == EmptyView {
-    init(model: StepFlowModel, title: String, savedNote: String? = nil, close: @escaping () -> Void) {
-        self.init(model: model, title: title, savedNote: savedNote, close: close) { _ in EmptyView() }
+    init(model: StepFlowModel, title: String, app: ConnectApp? = nil, savedNote: String? = nil, close: @escaping () -> Void) {
+        self.init(model: model, title: title, app: app, savedNote: savedNote, close: close) { _ in EmptyView() }
     }
 }
 

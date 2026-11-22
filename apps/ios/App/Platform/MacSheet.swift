@@ -139,3 +139,25 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
         }
     }
 }
+
+extension View {
+    func macModalFullHeight(_ size: MacModalSize) -> some View {
+        #if os(macOS)
+        modifier(MacModalFullHeight(size: size))
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(macOS)
+private struct MacModalFullHeight: ViewModifier {
+    let size: MacModalSize
+
+    @Environment(\.macWindowSize) private var windowSize
+
+    func body(content: Content) -> some View {
+        content.frame(idealHeight: size.frame(in: windowSize?.size ?? .zero).maxHeight)
+    }
+}
+#endif

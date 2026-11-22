@@ -134,8 +134,8 @@ final class McpSignInE2ETests: ConnectAppsTestCase {
         let app = openSignIn(mode: "wait")
         waitFor(element(app, "stepFlowWaiting"), timeout: 30, "waiting for the browser")
         waitLabel(element(app, "stepFlowCalmTitle"), equals: "Waiting for you in the browser", timeout: 10)
-        waitFor(element(app, "stepFlowChecklist"), timeout: 10, "checklist")
-        waitFor(element(app, "stepFlowRow-signin"), timeout: 10, "sign-in row")
+        waitLabel(element(app, "stepFlowPosition"), equals: "Step 2 of 3", timeout: 10)
+        XCTAssertFalse(element(app, "stepFlowChecklist").exists, "Mac shows the progress bar, not the checklist rail")
         #else
         let app = openSignIn(mode: "connect")
         waitFor(element(app, "mcpSignInPasteTitle"), timeout: 30, "paste screen")

@@ -109,12 +109,27 @@ public enum SheetTitleAlignment: Sendable {
 public enum SheetHeaderStyle: Sendable {
     case standard
     case toolbarRow
+    case stepper
 
-    public var topPadding: CGFloat { self == .standard ? PalMetrics.sheetHeaderTopPadding : 0 }
-    public var bottomGap: CGFloat { self == .standard ? PalMetrics.sheetHeaderBottomGap : 0 }
+    public var topPadding: CGFloat {
+        switch self {
+        case .standard: PalMetrics.sheetHeaderTopPadding
+        case .toolbarRow: 0
+        case .stepper: PalMetrics.stepperHeaderTopPadding
+        }
+    }
+
+    public var bottomGap: CGFloat {
+        switch self {
+        case .standard: PalMetrics.sheetHeaderBottomGap
+        case .toolbarRow: 0
+        case .stepper: PalMetrics.stepperHeaderBottomGap
+        }
+    }
+
     public var rowHeight: CGFloat? { self == .toolbarRow ? PalMetrics.sheetCloseControlSize : nil }
-    public var titleFollowsLeadingButton: Bool { self == .toolbarRow }
-    public var trailingFollowsTitle: Bool { self == .toolbarRow }
+    public var titleFollowsLeadingButton: Bool { self != .standard }
+    public var trailingFollowsTitle: Bool { self != .standard }
 }
 
 public enum SheetSurface: Sendable {

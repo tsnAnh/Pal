@@ -4,6 +4,7 @@ import SwiftUI
 
 struct DiscordFlowSession: Identifiable {
     let id = UUID()
+    let app: ConnectApp
     let model: StepFlowModel
 }
 
@@ -14,6 +15,7 @@ extension ConnectAppsModel {
         else { return false }
         let flow = DiscordFlowRunner(service: service, entry: entry)
         discordFlow = DiscordFlowSession(
+            app: app,
             model: StepFlowModel(
                 engine: engine, store: GatewayStepFlowProgressStore(service: service, device: .current, gatewaySaved: entry.setupProgress?.saved ?? []),
                 runner: { step, values in try await flow.run(step, values: values) },
@@ -35,10 +37,10 @@ struct DiscordFlowSheet: ViewModifier {
         content.macSheet(
             item: $model.discordFlow,
             onDismiss: { Task { await model.reload() } },
-            size: .flow,
+            size: .stepper,
             content: { session in
                 StepFlowView(
-                    model: session.model, title: "Discord",
+                    model: session.model, title: "Discord", app: session.app,
                     savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."), close: { model.closeDiscordFlow() },
                     accessory: { _ in EmptyView() }
                 )

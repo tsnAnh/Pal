@@ -32,7 +32,7 @@ struct MacModalHost: View {
             if shell.showsShortcuts {
                 MacModalScrim { shell.showsShortcuts = false }
                 MacModalPanel(
-                    size: .flow, identifier: "shortcutsSheet", closeIdentifier: "shortcutsClose", close: { shell.showsShortcuts = false },
+                    size: .wide, identifier: "shortcutsSheet", closeIdentifier: "shortcutsClose", close: { shell.showsShortcuts = false },
                     content: { MacShortcutsSheet() }
                 )
             } else if router.sheet == .kanban {

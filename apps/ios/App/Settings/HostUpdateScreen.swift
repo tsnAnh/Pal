@@ -101,9 +101,17 @@ private struct HostUpdateProgressSheet: View {
         .frame(maxWidth: .infinity)
         .padding(24)
         .background(PalTokens.elevated)
+        .macOnly { $0.overlay(alignment: .topLeading) { macClose } }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hostUpdateSheet")
         .iOSOnly { $0.presentationDetents([.medium, .large]) }
+    }
+
+    private var macClose: some View {
+        SheetGlassButton(escapes: false, accessibilityIdentifier: "hostUpdateSheetClose", action: close)
+            .disabled(model.isUpdating)
+            .padding(.top, PalMetrics.macPanelCloseTopInset)
+            .padding(.leading, PalMetrics.macPanelCloseLeadingInset)
     }
 
     @ViewBuilder

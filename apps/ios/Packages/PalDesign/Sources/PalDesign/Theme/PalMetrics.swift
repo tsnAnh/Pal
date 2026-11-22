@@ -27,6 +27,8 @@ public enum PalMetrics {
     public static let sheetHeaderBottomGap: CGFloat = 34
     public static let sheetCloseControlSize: CGFloat = 32
     public static let sheetGlassButtonSize: CGFloat = 33
+    public static let stepperHeaderTopPadding: CGFloat = 16
+    public static let stepperHeaderBottomGap: CGFloat = 12
     public static let sheetBottomInset: CGFloat = screenMargin
     public static let macPanelCloseTopInset: CGFloat = 8
     public static let macPanelCloseLeadingInset: CGFloat = 13

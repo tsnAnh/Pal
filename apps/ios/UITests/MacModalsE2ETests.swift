@@ -170,7 +170,7 @@ final class MacModalsE2ETests: BotProfileTestCase {
         closeModal(app, "connectApps-close", gone: "connectApps")
     }
 
-    func test5bGoogleSetupOpensAsAChecklistWindowThatClosesCleanly() throws {
+    func test5bGoogleSetupOpensAsAStepperWindowThatClosesCleanly() throws {
         let app = signedInApp(extraArguments: ["-hermes-test-oauth-client"])
         app.typeKey("m", modifierFlags: [.command, .shift])
         waitFor(element(app, "connectApps"), timeout: 15, "connect apps modal")
@@ -184,10 +184,11 @@ final class MacModalsE2ETests: BotProfileTestCase {
         XCTAssertEqual(action.label, "Set up")
         action.hit()
         waitFor(element(app, "ownerSetup"), timeout: 20, "owner setup")
-        assertSizeClass(.flow, element(app, "macSheet"), "owner setup sheet", window: app.windows.firstMatch.frame)
-        waitFor(element(app, "stepFlowChecklist"), timeout: 20, "checklist beside the step on Mac")
-        XCTAssertFalse(element(app, "stepFlowPosition").exists, "Mac shows the checklist, not the segments")
-        waitFor(element(app, "stepFlowRow-console"), timeout: 10, "first checklist row")
+        assertSizeClass(.stepper, element(app, "macSheet"), "owner setup sheet", window: app.windows.firstMatch.frame)
+        let position = element(app, "stepFlowPosition")
+        waitFor(position, timeout: 20, "step position under the title on Mac")
+        waitUntil(10, "position reads step 1") { position.label.hasPrefix("Step 1 of") }
+        XCTAssertFalse(element(app, "stepFlowChecklist").exists, "Mac shows the progress bar, not the checklist rail")
         let heading = element(app, "stepFlowStepTitle")
         waitFor(heading, timeout: 20, "intro title")
         XCTAssertEqual(heading.label, "Set up Google Workspace")

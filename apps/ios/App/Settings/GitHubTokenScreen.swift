@@ -103,6 +103,13 @@ private struct GitHubSignInCodeSheet: View {
     let close: () -> Void
 
     var body: some View {
+        #if os(macOS)
+        SheetChrome(title: "Sign in to GitHub", accessibilityIdentifier: "githubSignInSheet", onLeading: close) {
+            VStack(spacing: 16) { content }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+        }
+        #else
         VStack(spacing: 16) {
             Text("Sign in to GitHub")
                 .hermesText(.sheetTitle)
@@ -114,7 +121,8 @@ private struct GitHubSignInCodeSheet: View {
         .background(PalTokens.elevated)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("githubSignInSheet")
-        .iOSOnly { $0.presentationDetents([.medium, .large]) }
+        .presentationDetents([.medium, .large])
+        #endif
     }
 
     @ViewBuilder
