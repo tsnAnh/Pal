@@ -5,8 +5,8 @@ Same mechanism as ``check_swift_glass.py`` (text only, no Swift toolchain; its b
 ``Source`` scanner and baseline helpers are reused). Findings already on main sit in
 ``apps/ios/.perf-lint-baseline.json`` (matched by rule, file and line text); only a NEW finding
 fails, and a fix that removes one leaves a stale entry that is reported and harmless
-(``--write-baseline`` rewrites the file). Files that may use ``TimelineView``, ``onContinuousHover`` or a
-single-instance ``NSEvent`` monitor are listed with a reason in ``apps/ios/.perf-lint-allowlist.json``. A justified
+(``--write-baseline`` rewrites the file). Files that may use ``TimelineView``, ``onContinuousHover``, a
+single-instance ``NSEvent`` monitor or an observed still image are listed with a reason in ``apps/ios/.perf-lint-allowlist.json``. A justified
 exception carries ``perf-lint: ok`` on the flagged line.
 
 Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-read, perf-main-json,
@@ -52,7 +52,7 @@ BASELINE_NAME = ".perf-lint-baseline.json"
 ALLOWLIST_NAME = ".perf-lint-allowlist.json"
 SKIP = SKIP_DIRS | {"Tools"}
 TEST_DIR = "Tests"
-ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-monitor-per-view")
+ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-monitor-per-view", "perf-observed-frame-image")
 SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
@@ -267,6 +267,8 @@ LINE_RULES = (
         "a decoded frame (CGImage or pixel buffer) held in a property the @Observable macro tracks: every frame invalidates "
         "each view that reads the model. Submit frames to a plain-class sink the surface drains on its display link and shows "
         "as layer.contents (ComputerFrameSink, ComputerFrameDelivery), or mark the property @ObservationIgnored",
+        skip=re.compile(r"(?:CGImage|CVPixelBuffer|CVImageBuffer)\??\s*\{"),
+        allowlisted=True,
     ),
     LineRule(
         "perf-frame-cpu-draw",

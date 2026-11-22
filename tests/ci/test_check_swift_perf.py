@@ -809,3 +809,15 @@ def test_test_files_get_only_the_test_rules(tmp_path: Path) -> None:
         "Tests/Fixtures/Cache.swift": "let s = SolidFrame.cache.statistics\n",
     })
     assert csp.scan(root) == []
+
+
+def test_a_computed_image_property_is_not_an_observed_frame(tmp_path: Path) -> None:
+    body = "@MainActor\n@Observable\nfinal class Intro {\n    var photo: CGImage? { draft?.preview }\n}\n"
+    assert "perf-observed-frame-image" not in _rules(tmp_path, "App/Mac/Intro.swift", body)
+
+
+def test_an_allowlisted_still_image_passes_and_other_files_still_fail(tmp_path: Path) -> None:
+    body = "@MainActor\n@Observable\nfinal class Profile {\n    private(set) var photo: CGImage?\n}\n"
+    allow = csp.Allowlist(frozenset({("perf-observed-frame-image", "App/Settings/Profile.swift")}))
+    assert csp.violations(Path("App/Settings/Profile.swift"), body, allow) == []
+    assert [f.rule for f in csp.violations(Path("App/Settings/Other.swift"), body, allow)] == ["perf-observed-frame-image"]
