@@ -2,7 +2,7 @@ import Foundation
 import PalBotProfile
 import PalProtocol
 
-actor ScriptedChatInstallGateway: ChatInstallClient {
+actor ScriptedChatInstallGateway: ChatInstallClient, ChatMemberClient {
     static let shared = ScriptedChatInstallGateway()
     static let resetArgument = "-hermes-test-chat-install-reset"
     static let failArgument = "-hermes-test-chat-install-fail"
@@ -16,10 +16,23 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
         var joined: [String] = []
         var live: [String] = []
         var invited: [String] = []
+        var policy = "owner_only"
+        var members: [String] = []
+        var includeRestricted = false
+        var audienceRevision = 0
+        var reportSpace: String?
+        var deskState = "open"
+        var deskRevision = 0
     }
+
+    static let people: [(id: String, name: String)] = [
+        ("U1", "Minh Pham"), ("U2", "Linh Nguyen"), ("U3", "Sarah Chen"), ("U4", "Duc Tran"), ("U5", "An Le"), ("U6", "Priya Raman"),
+    ]
+    static let redirectAddress = "https://pal.example.test/webapp/chat-install/callback"
 
     private var snapshot: Snapshot
     private var listeners: [AsyncStream<ChatInstallChangedPayload>.Continuation] = []
+    private var deskListeners: [AsyncStream<ChatDeskChangedPayload>.Continuation] = []
 
     private init() {
         let defaults = UserDefaults.standard
@@ -30,20 +43,30 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
     }
 
     nonisolated var source: ChatInstallSource {
-        ChatInstallSource(client: self) {
-            AsyncStream { continuation in Task { await self.listen(continuation) } }
-        }
+        ChatInstallSource(
+            client: self, members: self,
+            events: { AsyncStream { continuation in Task { await self.listen(continuation) } } },
+            deskEvents: { AsyncStream { continuation in Task { await self.listenDesk(continuation) } } }
+        )
+    }
+
+    private func listenDesk(_ continuation: AsyncStream<ChatDeskChangedPayload>.Continuation) {
+        deskListeners.append(continuation)
     }
 
     private func listen(_ continuation: AsyncStream<ChatInstallChangedPayload>.Continuation) {
         listeners.append(continuation)
     }
 
+    private func persist() {
+        UserDefaults.standard.set(try? JSONEncoder().encode(snapshot), forKey: Self.defaultsKey) // perf-lint: ok UI-test-only actor, never on the main actor
+    }
+
     private func move(_ step: String, done: String? = nil) {
         snapshot.step = step
         snapshot.revision += 1
         if let done { snapshot.done.append(done) }
-        UserDefaults.standard.set(try? JSONEncoder().encode(snapshot), forKey: Self.defaultsKey) // perf-lint: ok UI-test-only actor, never on the main actor
+        persist()
         guard let payload = try? decode(ChatInstallChangedPayload.self, ["state": stateJSON()]) else { return }
         for listener in listeners { listener.yield(payload) }
     }
@@ -60,8 +83,10 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
         case "needs_credential": ["kind": "paste_credential", "action_id": "config_credential", "link": NSNull(), "copy_text": NSNull()]
         case "needs_manual_step" where !snapshot.done.contains("set_icon"):
             ["kind": "button", "action_id": "set_icon", "link": "https://api.slack.com/apps/A1/general", "copy_text": NSNull()]
-        case "needs_manual_step":
+        case "needs_manual_step" where !snapshot.done.contains("app_level_credential"):
             ["kind": "button", "action_id": "app_level_credential", "link": "https://api.slack.com/apps/A1/general", "copy_text": NSNull()]
+        case "needs_manual_step":
+            ["kind": "button", "action_id": "gateway_redirect", "link": "https://api.slack.com/apps/A1/oauth", "copy_text": Self.redirectAddress]
         case "needs_allow": ["kind": "open_link", "action_id": "allow", "link": Self.allowLink, "copy_text": NSNull()]
         default: ["kind": "none", "action_id": "none", "link": NSNull(), "copy_text": NSNull()]
         }
@@ -88,6 +113,7 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
             "provider_id": "slack", "requires_config_credential": true, "creates_app": true,
             "capabilities": [
                 ["capability": "set_icon", "mode": "guided"], ["capability": "app_level_credential", "mode": "guided"],
+                ["capability": "gateway_redirect", "mode": "guided"],
                 ["capability": "join_public_space", "mode": "automatic"], ["capability": "join_private_space", "mode": "guided"],
             ],
             "identity_policy": ["app_name_max": 35, "display_name_max": 35, "username_max": 21, "avatar_max_bytes": 1_000_000, "avatar_min_px": 512],
@@ -128,7 +154,7 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
         case ("needs_manual_step", .manualStepDone):
             guard let step = advance.manualStep?.rawValue else { throw ChatInstallClientError.failed(.gateway) }
             if step == "app_level_credential", advance.vaultItemId == nil { throw ChatInstallClientError.failed(.gateway) }
-            let remaining = ["set_icon", "app_level_credential"].filter { !snapshot.done.contains($0) && $0 != step }
+            let remaining = ["set_icon", "app_level_credential", "gateway_redirect"].filter { !snapshot.done.contains($0) && $0 != step }
             move(remaining.isEmpty ? "needs_allow" : "needs_manual_step", done: step)
         default:
             throw ChatInstallClientError.failed(.gateway)
@@ -184,5 +210,82 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
 
     func storeSecret(label: String, value: String) async throws -> String {
         "vault-scripted-\(snapshot.revision)"
+    }
+}
+
+extension ScriptedChatInstallGateway {
+    func audience(_ scope: ChatInstallScope) async throws -> ChatAudienceWire { audienceWire() }
+
+    func setAudience(_ scope: ChatInstallScope, _ change: ChatAudienceChange) async throws -> ChatAudienceWire {
+        guard change.expectedRevision == snapshot.audienceRevision else { throw ChatInstallClientError.staleRevision }
+        snapshot.policy = change.policy.rawValue
+        if let members = change.members { snapshot.members = members }
+        if let include = change.includeRestricted { snapshot.includeRestricted = include }
+        snapshot.audienceRevision += 1
+        persist()
+        return audienceWire()
+    }
+
+    func people(_ scope: ChatInstallScope, query: String, cursor: String?) async throws -> ChatPeoplePageWire {
+        let wanted = query.trimmingCharacters(in: .whitespaces)
+        let matches = Self.people.filter { wanted.isEmpty || $0.name.localizedCaseInsensitiveContains(wanted) }
+        return ChatPeoplePageWire(
+            people: matches.map { ChatPersonWire(id: $0.id, name: $0.name.lowercased().replacingOccurrences(of: " ", with: "."), displayName: $0.name) },
+            nextCursor: nil
+        )
+    }
+
+    func report(_ scope: ChatInstallScope) async throws -> ChatReportDestinationWire { reportWire() }
+
+    func setReport(_ scope: ChatInstallScope, _ destination: ChatReportDestinationWire) async throws -> ChatReportDestinationWire {
+        if let spaceId = destination.spaceId, !snapshot.live.contains(spaceId) { throw ChatInstallClientError.notJoined }
+        snapshot.reportSpace = destination.spaceId
+        persist()
+        return reportWire()
+    }
+
+    func leave(_ scope: ChatInstallScope, spaceId: String) async throws -> ChatSpaceLeaveOutcome {
+        snapshot.joined.removeAll { $0 == spaceId }
+        snapshot.live.removeAll { $0 == spaceId }
+        if snapshot.reportSpace == spaceId { snapshot.reportSpace = nil }
+        persist()
+        return .left
+    }
+
+    func desk() async throws -> [ChatDeskItemWire] {
+        snapshot.deskState == "open" ? [deskItem()] : []
+    }
+
+    func decide(itemId: String, choice: ChatDeskChoice, expectedRevision: Int) async throws -> ChatDeskItemWire {
+        guard expectedRevision == snapshot.deskRevision, snapshot.deskState == "open" else { throw ChatInstallClientError.staleRevision }
+        snapshot.deskState = choice == .approve ? "done" : "declined"
+        snapshot.deskRevision += 1
+        persist()
+        return deskItem()
+    }
+
+    private func audienceWire() -> ChatAudienceWire {
+        let members = snapshot.members.compactMap { id in
+            Self.people.first { $0.id == id }.map { ChatAudienceMemberWire(id: $0.id, name: $0.name) }
+        }
+        return ChatAudienceWire(
+            policy: ChatAudiencePolicy(rawValue: snapshot.policy) ?? .ownerOnly, members: members,
+            includeRestricted: snapshot.includeRestricted, memberTurnsPerHour: 30, revision: snapshot.audienceRevision
+        )
+    }
+
+    private func reportWire() -> ChatReportDestinationWire {
+        guard let id = snapshot.reportSpace else { return .ownerDirectMessages }
+        let names = ["C1": "general", "C2": "design-crit", "G1": "launch-plans"]
+        return .space(id: id, name: names[id] ?? id)
+    }
+
+    private func deskItem() -> ChatDeskItemWire {
+        ChatDeskItemWire(
+            id: "D1", kind: .handoff, state: ChatDeskItemState(rawValue: snapshot.deskState) ?? .open, revision: snapshot.deskRevision,
+            createdAt: 1_700_000_000, expiresAt: 1_700_086_400, requester: ChatDeskPersonWire(id: "U1", name: "Minh Pham"),
+            place: ChatDeskPlaceWire(conversationId: "C9", label: "#announcements"),
+            text: "Post the 4.2 release notes draft in #announcements", why: "Minh asked in a direct message"
+        )
     }
 }

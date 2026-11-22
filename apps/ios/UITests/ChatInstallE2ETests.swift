@@ -78,9 +78,19 @@ final class ChatInstallE2ETests: BotProfileTestCase {
     private func resumeThroughAllow(_ app: XCUIApplication) {
         waitFor(app.secureTextFields["stepFlowField-app_key"], timeout: 30, "resumed on the app key step")
         let position = element(app, "stepFlowPosition")
-        if position.exists { XCTAssertEqual(position.label, "Step 4 of 7", "the step bar shows where you are") }
+        if position.exists { XCTAssertEqual(position.label, "Step 4 of 8", "the step bar shows where you are") }
         type(app, "app_key", Self.appKey)
         shot(app, "slack-setup-app-key")
+        primary(app, "Done")
+
+        let address = element(app, "slackReturnAddressValue")
+        waitFor(address, timeout: 20, "return address step shows the address")
+        XCTAssertEqual(address.label, "https://pal.example.test/webapp/chat-install/callback")
+        XCTAssertTrue(element(app, "slackReturnAddressButton").exists, "copy button beside the address")
+        shot(app, "slack-setup-return-address")
+        element(app, "stepFlowPage").hit()
+        let redirectPage = element(app, "externalLinkProbe")
+        waitUntil(20, "this app's Slack redirect page opened") { redirectPage.label == "https://api.slack.com/apps/A1/oauth" }
         primary(app, "Done")
 
         waitFor(element(app, "slackCopyAdminMessage"), timeout: 20, "allow step")

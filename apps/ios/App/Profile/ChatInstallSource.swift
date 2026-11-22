@@ -7,7 +7,9 @@ import PalTransport
 
 struct ChatInstallSource: Sendable {
     let client: any ChatInstallClient
+    let members: any ChatMemberClient
     let events: @Sendable () -> AsyncStream<ChatInstallChangedPayload>
+    let deskEvents: @Sendable () -> AsyncStream<ChatDeskChangedPayload>
 
     static let scriptedArgument = "-hermes-test-chat-install"
 
@@ -19,24 +21,30 @@ struct ChatInstallSource: Sendable {
         let call: @Sendable (String, JSONValue?) async throws -> JSONValue = { method, params in try await connection.rpc(method, params) }
         let client = GatewayChatInstallClient(bot: botName, call: call, vault: SettingsAPI(profile: botName, call: call))
         let connect = connection.client
-        return ChatInstallSource(client: client) {
-            AsyncStream { continuation in
-                let task = Task {
-                    while !Task.isCancelled {
-                        if let connect, let gateway = try? await connect.connect(profile: botName) {
-                            for await event in gateway.events where event.type == "chat.install.changed" {
-                                if let payload = try? event.payload?.decoded(as: ChatInstallChangedPayload.self) {
-                                    continuation.yield(payload)
-                                }
-                            }
-                            await gateway.close()
+        return ChatInstallSource(
+            client: client, members: client,
+            events: { Self.stream(botName: botName, connect: connect, eventType: "chat.install.changed") },
+            deskEvents: { Self.stream(botName: botName, connect: connect, eventType: "chat.desk.changed") }
+        )
+    }
+
+    private static func stream<Payload: Decodable & Sendable>(
+        botName: String, connect: PalClient?, eventType: String
+    ) -> AsyncStream<Payload> {
+        AsyncStream { continuation in
+            let task = Task {
+                while !Task.isCancelled {
+                    if let connect, let gateway = try? await connect.connect(profile: botName) {
+                        for await event in gateway.events where event.type == eventType {
+                            if let payload = try? event.payload?.decoded(as: Payload.self) { continuation.yield(payload) }
                         }
-                        try? await Task.sleep(for: .seconds(3))
+                        await gateway.close()
                     }
-                    continuation.finish()
+                    try? await Task.sleep(for: .seconds(3))
                 }
-                continuation.onTermination = { _ in task.cancel() }
+                continuation.finish()
             }
+            continuation.onTermination = { _ in task.cancel() }
         }
     }
 }
@@ -46,7 +54,7 @@ struct GatewayChatInstallClient: ChatInstallClient {
     let call: @Sendable (String, JSONValue?) async throws -> JSONValue
     let vault: SettingsAPI
 
-    private func perform(_ method: String, _ scope: ChatInstallScope?, _ extra: [String: JSONValue] = [:]) async throws -> JSONValue {
+    func perform(_ method: String, _ scope: ChatInstallScope?, _ extra: [String: JSONValue] = [:]) async throws -> JSONValue {
         var params = extra
         params["profile"] = .string(bot)
         if let scope {
@@ -62,7 +70,7 @@ struct GatewayChatInstallClient: ChatInstallClient {
         }
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
         do { return try value.decoded(as: type) } catch {
             let failure = ChatInstallClientError.decode(method: method)
             if let fault = failure.fault { Task { await FaultStore.shared.record(fault) } }

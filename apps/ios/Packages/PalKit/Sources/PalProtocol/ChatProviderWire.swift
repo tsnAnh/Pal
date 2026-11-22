@@ -94,7 +94,7 @@ public enum ChatDeskChoice: String, ChatWireEnum {
 
 public enum ChatRpcErrorReason: String, ChatWireEnum {
     case providerUnknown = "provider_unknown", notImplemented = "not_implemented"
-    case staleRevision = "stale_revision", noInstallation = "no_installation", unknown
+    case staleRevision = "stale_revision", noInstallation = "no_installation", notJoined = "not_joined", unknown
 }
 
 public struct ChatCapabilityEntryWire: Decodable, Sendable, Hashable {

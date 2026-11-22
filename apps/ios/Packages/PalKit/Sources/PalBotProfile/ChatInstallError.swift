@@ -14,6 +14,7 @@ public enum ChatFailureReason: String, Sendable, Equatable, CaseIterable {
 public enum ChatInstallClientError: Error, Sendable, Equatable {
     case unsupported
     case staleRevision
+    case notJoined
     case offline
     case timedOut
     case failed(ChatFailureReason)
@@ -26,7 +27,7 @@ public enum ChatInstallClientError: Error, Sendable, Equatable {
         case .offline: .offline
         case .timedOut: .timedOut
         case .failed(let reason), .faulted(let reason, _): reason
-        case .unsupported, .staleRevision: .gateway
+        case .unsupported, .staleRevision, .notJoined: .gateway
         }
     }
 
@@ -72,6 +73,8 @@ public enum ChatInstallClientError: Error, Sendable, Equatable {
             self = .unsupported
         } else if reason == ChatRpcErrorReason.staleRevision.rawValue {
             self = .staleRevision
+        } else if reason == ChatRpcErrorReason.notJoined.rawValue {
+            self = .notJoined
         } else if rpc.code == 4403 || reason == "owner_only" || reason == "permission_denied" {
             self = .failed(.forbidden)
         } else if rpc.code == 4001 || rpc.code == -32602 {
