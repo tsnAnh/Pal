@@ -23,7 +23,6 @@ from gateway.platforms.base_log_safety import _log_safe_path, describe_proxy_err
 from gateway.platforms.base_image_sniff import _looks_like_image
 from gateway.platforms.base_media_flags import pad_inline_flags
 from gateway.platforms.base_kanban_media import _kanban_attachment_roots, _kanban_board_db_paths
-from gateway.audience.model import Audience
 from gateway.runtime_footer import footer_onto_photo_caption, send_footer_unless_captioned
 from gateway.platforms.sender_admission import SenderAdmissionMixin
 from gateway.platforms.session_model import _SessionModelSettingsMixin
@@ -449,7 +448,7 @@ from gateway.platforms.base_exec_approval import (
 from gateway.platforms.base_streaming_tts import (
     AudioFormat, StreamingTTSHandle, streaming_tts_should_skip_whole_file, streaming_tts_turn_key)
 from gateway.platforms.event import MessageEvent, MessageType, ProcessingOutcome
-from gateway.warning_notifications import diagnostic_wake_muted
+from gateway.warning_notifications import diagnostic_wake_muted, turn_error_text
 from hermes_cli.observability.shared_metrics_gateway import records_delivery, stop_reply_clock
 from hermes_cli.home_data_layout import CREDENTIAL_STORE_DIRS, HOME_ENV_FILES, SECRET_CACHE_STORES
 from agent.file_safety import deny_path_under
@@ -4177,7 +4176,7 @@ class BasePlatformAdapter(_SessionModelSettingsMixin, SenderAdmissionMixin, ABC)
             # as before, so delivery bookkeeping keeps landing where boot-time recovery reads it.
             with self._media_delivery_scope(event.source):
                 content = None if diagnostic_wake_muted(event) else self.warning_text(
-                    t("gateway.errors.member_failed" if getattr(event.source, "audience", None) is Audience.MEMBER else "gateway.errors.generic_failed"),  # raw exception text can carry credentials (logged above)
+                    turn_error_text(event.source),  # raw exception text can carry credentials (logged above)
                     t("gateway.notify.turn_error"),
                     logical_platform=event.source.platform, chat_id=event.source.chat_id, metadata=_thread_metadata)
             if content is None:
