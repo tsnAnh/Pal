@@ -47,7 +47,7 @@ struct MacAboutYouCard: View {
         .onChange(of: nameFocused) { _, focused in
             if !focused { commitName() }
         }
-        .macSheet(item: $cropping) { model in
+        .macSheet(item: $cropping, size: .full) { model in
             OwnerPhotoCropSheet(model: model, done: { cropping = nil }, cancel: { cropping = nil })
         }
     }

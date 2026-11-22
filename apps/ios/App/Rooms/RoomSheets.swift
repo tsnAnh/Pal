@@ -97,7 +97,6 @@ struct CreateRoomSheet: View {
             }
         )
         .macSheetDismissDisabled(model.isCreating)
-        .macOnly { $0.frame(minWidth: 380, minHeight: 460) }
     }
 
     private var rowFill: Color { Color(theme.palette.groupedCard) }
@@ -190,7 +189,6 @@ struct RoomDetailsSheet: View {
             }
         )
         .onAppear { name = model.room.name }
-        .macOnly { $0.frame(minWidth: 380, minHeight: 360) }
     }
 
     private func save() {

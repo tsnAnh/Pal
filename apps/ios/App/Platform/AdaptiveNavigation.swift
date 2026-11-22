@@ -148,9 +148,9 @@ extension View {
 }
 
 extension View {
-    func macSheetFrame(readable: Bool = false) -> some View {
+    func macSheetFrame(size: MacModalSize) -> some View {
         #if os(macOS)
-        modifier(MacSheetFrame(readable: readable))
+        modifier(MacSheetFrame(size: size))
         #else
         self
         #endif

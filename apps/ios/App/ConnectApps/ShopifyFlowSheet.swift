@@ -14,7 +14,7 @@ struct ShopifySheet: ViewModifier {
     @Bindable var model: ConnectAppsModel
 
     func body(content: Content) -> some View {
-        content.macSheet(item: $model.shopifyFlow, onDismiss: { Task { await model.reload() } }, content: { flow in
+        content.macSheet(item: $model.shopifyFlow, onDismiss: { Task { await model.reload() } }, size: .flow, content: { flow in
             ShopifyFlowSheet(flow: flow) { model.shopifyFlow = nil }
         })
     }

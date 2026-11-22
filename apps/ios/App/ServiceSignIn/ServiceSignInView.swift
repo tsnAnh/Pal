@@ -196,7 +196,7 @@ struct ServiceSignInDialogView: View {
             content(dialog)
                 .frame(maxWidth: .infinity)
                 .padding(24)
-                .macOnly { $0.frame(width: 400) }
+                .macOnly { view in ScrollView { view }.scrollBounceBehavior(.basedOnSize) }
                 .background(PalTokens.elevated)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("service-signin-dialog")
@@ -425,7 +425,7 @@ private struct ServiceSignInPresentation: ViewModifier {
         content
             .onAppear { context.hosts.enter(id) }
             .onDisappear { context.hosts.leave(id) }
-            .macSheet(isPresented: Binding(get: { context.center.current != nil && context.hosts.presents(id) }, set: { _ in })) {
+            .macSheet(isPresented: Binding(get: { context.center.current != nil && context.hosts.presents(id) }, set: { _ in }), size: .compact) {
                 ServiceSignInDialogView(center: context.center, botName: context.botName)
                     .macSheetDismissDisabled(true)
                     .iOSOnly { $0.presentationDetents([.medium, .large]) }

@@ -29,7 +29,8 @@ struct SpeechMemoryScreen: View {
         .task { await model.load() }
         .refreshable { await model.load() }
         .macSheet(
-            item: Binding(get: { model.keyEntry }, set: { if $0 == nil { model.cancelKeyEntry() } })
+            item: Binding(get: { model.keyEntry }, set: { if $0 == nil { model.cancelKeyEntry() } }),
+            size: .compact
         ) { target in
             keyEntrySheet(target)
         }

@@ -12,6 +12,7 @@ struct LocalEngineSetupHost: View {
             if engine.isPresentingSetup {
                 MacModalScrim { engine.dismissSetup() }
                 MacModalPanel(
+                    size: .full,
                     closeDisabled: engine.isInstalling || engine.isSigningIn,
                     identifier: "localEngineSetupPanel",
                     closeIdentifier: "localEngineSetupClose",

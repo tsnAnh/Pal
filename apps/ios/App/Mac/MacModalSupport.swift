@@ -35,13 +35,34 @@ enum MacPanelClosePlacement {
     var alignment: Alignment { self == .leading ? .topLeading : .topTrailing }
 }
 
-enum MacModalFit {
-    case window
-    case content
+struct MacModalHugging: Layout {
+    let frame: MacModalFrame
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let ideal = subviews.first?.sizeThatFits(ProposedViewSize(width: frame.width, height: nil)).height ?? 0
+        let line = "DEBUGHUG ideal=\(ideal) max=\(frame.maxHeight) subs=\(subviews.count) proposal=\(proposal)\n"
+        if let h = FileHandle(forWritingAtPath: "/tmp/sheet-sizes/hug.log") { h.seekToEndOfFile(); h.write(Data(line.utf8)) } else { try? line.write(toFile: "/tmp/sheet-sizes/hug.log", atomically: true, encoding: .utf8) }
+        return CGSize(width: frame.width, height: min(ideal, frame.maxHeight))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func macModalFrame(_ frame: MacModalFrame) -> some View {
+        if frame.hugs {
+            MacModalHugging(frame: frame) { self }
+        } else {
+            self.frame(width: frame.width, height: frame.maxHeight)
+        }
+    }
 }
 
 struct MacModalPanel<Content: View>: View {
-    var fit = MacModalFit.window
+    let size: MacModalSize
     var clearClose = false
     var closePlacement = MacPanelClosePlacement.leading
     var closeDisabled = false
@@ -54,17 +75,10 @@ struct MacModalPanel<Content: View>: View {
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 12, style: .continuous) }
 
-    @ViewBuilder
-    private var sized: some View {
-        let cap = MacModalSizing.sheetSize(window: windowSize?.size ?? .zero)
-        switch fit {
-        case .window: content.frame(width: cap.width, height: cap.height)
-        case .content: content.frame(maxWidth: cap.width, maxHeight: cap.height)
-        }
-    }
-
     var body: some View {
-        sized
+        let frame = size.frame(in: windowSize?.size ?? .zero)
+        content
+            .macModalFrame(frame)
             .paneOverflowProbe(identifier)
             .background(PalTokens.content, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
@@ -80,6 +94,8 @@ struct MacModalPanel<Content: View>: View {
             .shadow(color: .black.opacity(0.35), radius: 40, y: 18)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(identifier)
+            .padding(.top, frame.topAnchor ?? 0)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frame.topAnchor == nil ? .center : .top)
             .transition(.scale(scale: 0.97).combined(with: .opacity))
     }
 }

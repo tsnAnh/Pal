@@ -16,7 +16,6 @@ struct MacCreateBot: View {
             layout(scrolls: false)
             layout(scrolls: true)
         }
-        .frame(width: MacModalSizing.createBotWidth)
         .task {
             for _ in 0..<10 where focus != .name {
                 focus = .name

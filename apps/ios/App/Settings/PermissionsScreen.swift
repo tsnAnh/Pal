@@ -88,7 +88,7 @@ struct PermissionsScreen: View {
             }
         }
         .task { await model.load(hub: hub) }
-        .macSheet(item: $addingTo) { list in
+        .macSheet(item: $addingTo, size: .compact) { list in
             AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
                 .presentationDetents([.medium])
         }

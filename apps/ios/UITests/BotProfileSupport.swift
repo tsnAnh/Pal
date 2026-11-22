@@ -73,3 +73,24 @@ class BotProfileTestCase: E2ETestCase {
             .element(boundBy: 0)
     }
 }
+
+#if os(macOS)
+extension BotProfileTestCase {
+    static let tolerance: CGFloat = 2
+
+    func assertSizeClass(_ size: MacModalSize, _ panel: XCUIElement, _ identifier: String, window: CGRect) {
+        let frame = panel.frame
+        let expected = size.frame(in: window.size)
+        XCTAssertEqual(frame.width, expected.width, accuracy: Self.tolerance, "\(identifier) is \(size) wide")
+        XCTAssertLessThanOrEqual(frame.height, expected.maxHeight + Self.tolerance, "\(identifier) is at most \(size) tall")
+        if expected.hugs {
+            XCTAssertGreaterThan(frame.height, 0, "\(identifier) hugs a non-empty content")
+        } else {
+            XCTAssertEqual(frame.height, expected.maxHeight, accuracy: Self.tolerance, "\(identifier) is \(size) tall")
+        }
+        if let anchor = expected.topAnchor {
+            XCTAssertEqual(frame.minY - window.minY, anchor, accuracy: Self.tolerance, "\(identifier) is pinned \(anchor) pt from the top")
+        }
+    }
+}
+#endif

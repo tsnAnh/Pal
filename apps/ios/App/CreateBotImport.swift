@@ -64,7 +64,7 @@ struct CreateBotImportRow: View {
         .macSheet(isPresented: Binding(
             get: { importer.phase == .reviewing || importer.phase == .importing },
             set: { if !$0 { importer.reset() } }
-        )) {
+        ), size: .form) {
             TemplateReviewSheet(importer: importer) {
                 guard await importer.confirm() != nil else { return }
                 roster.nudge()

@@ -32,7 +32,7 @@ struct MacModalHost: View {
             if shell.showsShortcuts {
                 MacModalScrim { shell.showsShortcuts = false }
                 MacModalPanel(
-                    identifier: "shortcutsSheet", closeIdentifier: "shortcutsClose", close: { shell.showsShortcuts = false },
+                    size: .flow, identifier: "shortcutsSheet", closeIdentifier: "shortcutsClose", close: { shell.showsShortcuts = false },
                     content: { MacShortcutsSheet() }
                 )
             } else if router.sheet == .kanban {
@@ -49,14 +49,14 @@ struct MacModalHost: View {
             } else if let bot = router.renamingBot.flatMap({ roster.bot(named: $0) }) {
                 MacModalScrim { router.renamingBot = nil }
                 MacModalPanel(
-                    fit: .content, identifier: "renameBotSheet", closeIdentifier: "renameBotClose", close: { router.renamingBot = nil },
+                    size: .compact, identifier: "renameBotSheet", closeIdentifier: "renameBotClose", close: { router.renamingBot = nil },
                     content: { MacRenameBot(bot: bot, roster: roster, router: router) }
                 )
                 .id(bot.name)
             } else if router.isSearching {
                 MacModalScrim { router.closeSearch() }
                 MacModalPanel(
-                    identifier: "searchPanel", closeIdentifier: "searchPanelClose", close: { router.closeSearch() },
+                    size: .palette, identifier: "searchPanel", closeIdentifier: "searchPanelClose", close: { router.closeSearch() },
                     content: { MacPalette(roster: roster, router: router) }
                 )
                 .transition(.scale(scale: 0.98).combined(with: .opacity))
@@ -120,12 +120,12 @@ struct MacModalHost: View {
         switch sheet {
         case .settings:
             MacModalPanel(
-                identifier: "settingsSheetPanel", closeIdentifier: "settingsClose", close: { router.dismissSheet() },
+                size: .full, identifier: "settingsSheetPanel", closeIdentifier: "settingsClose", close: { router.dismissSheet() },
                 content: { MacSettingsModal(hub: hub, connection: connection, section: Bindable(shell).settingsSection) }
             )
         case .createBot:
             MacModalPanel(
-                fit: .content,
+                size: .form,
                 closePlacement: .trailing,
                 closeDisabled: createBot.isCreating,
                 identifier: "createBotSheet",
@@ -135,7 +135,7 @@ struct MacModalHost: View {
             )
         case .connectApps:
             MacModalPanel(
-                clearClose: true, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close",
+                size: .full, clearClose: true, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close",
                 close: { router.dismissSheet() },
                 content: {
                     MacConnectAppsPanel(connection: connection, hostPool: hostPool, roster: roster, profile: router.connectAppsProfile) {

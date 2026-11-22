@@ -5,7 +5,6 @@ import XCTest
 @MainActor
 final class MacModalVisibleE2ETests: BotProfileTestCase {
     private static let windowWidth: CGFloat = 1280
-    private static let tolerance: CGFloat = 2
 
     private func any(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]
@@ -25,18 +24,17 @@ final class MacModalVisibleE2ETests: BotProfileTestCase {
         let panel: String
         let label: String?
         let inside: String
+        let size: MacModalSize
     }
 
-    private func assertPanelVisible(_ app: XCUIApplication, _ identifier: String, label: String?, inside: String) {
+    private func assertPanelVisible(_ app: XCUIApplication, _ identifier: String, size: MacModalSize, label: String?, inside: String) {
         let panel = any(app, identifier)
         waitFor(panel, timeout: 30, "\(identifier) on screen")
         let window = app.windows.firstMatch.frame
         let frame = panel.frame
-        let expected = MacModalSizing.frame(window: window.size)
         XCTAssertGreaterThan(frame.width * frame.height, 0, "\(identifier) has a non-zero frame")
         XCTAssertTrue(window.insetBy(dx: -Self.tolerance, dy: -Self.tolerance).contains(frame), "\(identifier) \(frame) sits inside the window \(window)")
-        XCTAssertLessThanOrEqual(frame.width, expected.width + Self.tolerance, "\(identifier) is at most the shared panel width")
-        XCTAssertLessThanOrEqual(frame.height, expected.height + Self.tolerance, "\(identifier) is at most the shared panel height")
+        assertSizeClass(size, panel, identifier, window: window)
         waitFor(any(app, inside), timeout: 30, "\(inside) inside \(identifier)")
         if let label {
             waitFor(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", label)).firstMatch, timeout: 30, "\(label) in the accessibility tree")
@@ -44,11 +42,13 @@ final class MacModalVisibleE2ETests: BotProfileTestCase {
     }
 
     func test1ConnectAppsOpensAsAVisiblePanelInsideA1280Window() throws {
-        let app = signedInApp(extraArguments: ["-hermes-open-connect-apps"])
+        let app = signedInApp()
         resizeWindow(app, toWidth: Self.windowWidth)
-        assertPanelVisible(app, "connectAppsPanel", label: "Connect Apps", inside: "connectAppsSearch")
+        app.typeKey("m", modifierFlags: [.command, .shift])
+        assertPanelVisible(app, "connectAppsPanel", size: .full, label: "Connect Apps", inside: "connectAppsSearch")
         let expected = MacModalSizing.frame(window: app.windows.firstMatch.frame.size).width
         XCTAssertGreaterThan(any(app, "connectAppsPanel").frame.width, expected - Self.tolerance - 1, "Connect Apps takes the shared panel width")
+        shot(app, "mac-size-full-connect-apps")
         app.typeKey(.escape, modifierFlags: [])
         waitGone(any(app, "connectAppsPanel"), timeout: 10, "Connect Apps closes")
     }
@@ -56,19 +56,85 @@ final class MacModalVisibleE2ETests: BotProfileTestCase {
     func test2SettingsShortcutsAndSearchOpenAsVisiblePanels() throws {
         let app = signedInApp()
         let cases = [
-            PanelCase(key: ",", panel: "settingsSheetPanel", label: "General", inside: "settingsSheet"),
-            PanelCase(key: "/", panel: "shortcutsSheet", label: "Keyboard shortcuts", inside: "shortcut-compactSidebar"),
-            PanelCase(key: "k", panel: "searchPanel", label: nil, inside: "searchField"),
+            PanelCase(key: ",", panel: "settingsSheetPanel", label: nil, inside: "settingsSheet", size: .full),
+            PanelCase(key: "/", panel: "shortcutsSheet", label: "Keyboard shortcuts", inside: "shortcut-compactSidebar", size: .flow),
+            PanelCase(key: "k", panel: "searchPanel", label: nil, inside: "searchField", size: .palette),
         ]
         for width in [Self.windowWidth, MacLayoutMetrics.windowMin] {
             resizeWindow(app, toWidth: width)
             for entry in cases {
                 app.typeKey(entry.key, modifierFlags: .command)
-                assertPanelVisible(app, entry.panel, label: entry.label, inside: entry.inside)
+                assertPanelVisible(app, entry.panel, size: entry.size, label: entry.label, inside: entry.inside)
+                if width == Self.windowWidth { shot(app, "mac-size-\(entry.size)-\(entry.panel)") }
                 app.typeKey(.escape, modifierFlags: [])
                 waitGone(any(app, entry.panel), timeout: 10, "\(entry.panel) closes")
             }
         }
+    }
+
+    func test3CreateBotIsAFormAndRenameIsCompact() throws {
+        let app = signedInApp()
+        resizeWindow(app, toWidth: Self.windowWidth)
+        let window = app.windows.firstMatch.frame
+        app.typeKey("n", modifierFlags: .command)
+        let create = any(app, "createBotSheet")
+        waitFor(create, timeout: 15, "create bot modal")
+        waitFor(any(app, "botNameField"), timeout: 10, "name field")
+        assertSizeClass(.form, create, "createBotSheet", window: window)
+        shot(app, "mac-size-form-create-bot")
+        app.buttons["createBotCancel"].hit()
+        waitGone(create, timeout: 10, "create bot closes")
+
+        let row = app.buttons["botRow-bot-alpha"]
+        waitFor(row, timeout: 20, "bot row")
+        row.rightClick()
+        let rename = app.menuItems["renameBotAction"]
+        waitFor(rename, timeout: 10, "rename in the context menu")
+        rename.hit()
+        let panel = any(app, "renameBotSheet")
+        waitFor(panel, timeout: 10, "rename panel")
+        waitFor(any(app, "renameBotField"), timeout: 10, "rename field")
+        assertSizeClass(.compact, panel, "renameBotSheet", window: window)
+        XCTAssertLessThan(panel.frame.height, MacModalSize.compact.frame(in: window.size).maxHeight / 2, "compact hugs a short form")
+        shot(app, "mac-size-compact-rename-bot")
+        app.buttons["renameBotCancel"].hit()
+        waitGone(panel, timeout: 10, "rename closes")
+    }
+
+    func test4SheetsTakeTheirClassFromTheCallSite() throws {
+        let app = signedInApp()
+        resizeWindow(app, toWidth: Self.windowWidth)
+        let window = app.windows.firstMatch.frame
+        app.typeKey(",", modifierFlags: .command)
+        waitFor(any(app, "settingsSheet"), timeout: 15, "settings modal")
+        let vault = app.buttons["macSettingsSection-vault"]
+        waitFor(vault, timeout: 10, "vault section")
+        vault.hit()
+        let add = app.buttons["vaultAddButton"]
+        waitFor(add, timeout: 10, "new item button")
+        add.hit()
+        let sheet = any(app, "macSheet")
+        waitFor(sheet, timeout: 10, "vault add sheet")
+        waitFor(any(app, "vaultAddSheet"), timeout: 10, "vault add content")
+        Thread.sleep(forTimeInterval: 1)
+        shot(app, "mac-size-form-vault-add")
+        assertSizeClass(.form, sheet, "vault add sheet", window: window)
+        app.typeKey(.escape, modifierFlags: [])
+        waitGone(sheet, timeout: 10, "vault add closes")
+
+        let permissions = app.buttons["macSettingsSection-permissions"]
+        permissions.hit()
+        let addRule = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "permissionsAddRule-")).firstMatch
+        waitFor(addRule, timeout: 15, "add rule button")
+        addRule.hit()
+        let ruleSheet = any(app, "macSheet")
+        waitFor(ruleSheet, timeout: 10, "add rule sheet")
+        waitFor(any(app, "permissionsAddSheet"), timeout: 10, "add rule content")
+        Thread.sleep(forTimeInterval: 1)
+        assertSizeClass(.compact, ruleSheet, "add rule sheet", window: window)
+        shot(app, "mac-size-compact-add-rule")
+        app.typeKey(.escape, modifierFlags: [])
+        waitGone(ruleSheet, timeout: 10, "add rule closes")
     }
 }
 #endif

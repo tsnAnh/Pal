@@ -63,10 +63,10 @@ private struct InspectorPresentations: ViewModifier {
             .task { await profile.load() }
             .task(id: profile.row?.conversationID) { await autoApprove.load(sessionID: profile.row?.conversationID) }
             .toast(Bindable(profile).toast)
-            .macSheet(item: $creation) { created in
+            .macSheet(item: $creation, size: .form) { created in
                 NewRoutineSheet(model: created) { creation = nil }
             }
-            .macSheet(item: Binding(get: { profile.editing }, set: { if $0 == nil { profile.endEditing() } })) { editing in
+            .macSheet(item: Binding(get: { profile.editing }, set: { if $0 == nil { profile.endEditing() } }), size: .form) { editing in
                 EditBotSheet(model: editing) { profile.endEditing() }
             }
             .macConfirm(isPresented: Bindable(profile).confirmsReplacePrimary) {
