@@ -33,28 +33,20 @@ struct SignInDiscoveryTests {
         #expect(result == .noMethods)
     }
 
-    @Test func missingDisplayNameFallsBackToName() async throws {
+    @Test func browserOnlyProvidersOfferNoPalAccount() async throws {
         let result = try await discover(
-            #"{"providers":[{"name":"nous","supports_password":false},"#
-                + #"{"name":"corp","display_name":"","supports_password":false}]}"#
+            #"{"providers":[{"name":"nous","display_name":"Nous Research","supports_password":false},"#
+                + #"{"name":"corp","display_name":"Corp SSO"}]}"#
         )
-        #expect(result == .ready([
-            SignInOption(id: "nous", displayName: "nous", kind: .browser),
-            SignInOption(id: "corp", displayName: "corp", kind: .browser),
-        ]))
+        #expect(result == .noMethods)
     }
 
-    @Test func mixedMethodsKeepServerOrderAndKind() async throws {
+    @Test func thePasswordProviderIsThePalAccount() async throws {
         let result = try await discover(
-            #"{"providers":[{"name":"nous","display_name":"Nous Portal","supports_password":false},"#
-                + #"{"name":"local","display_name":"Password","supports_password":true},"#
-                + #"{"name":"github","display_name":"GitHub"}]}"#
+            #"{"providers":[{"name":"nous","display_name":"Nous Research","supports_password":false},"#
+                + #"{"name":"basic","display_name":"Username & Password","supports_password":true}]}"#
         )
-        #expect(result == .ready([
-            SignInOption(id: "nous", displayName: "Nous Portal", kind: .browser),
-            SignInOption(id: "local", displayName: "Password", kind: .password),
-            SignInOption(id: "github", displayName: "GitHub", kind: .browser),
-        ]))
+        #expect(result == .ready(SignInOption(id: "basic")))
     }
 
     @Test func httpFailureIsUnreachable() async throws {

@@ -12,14 +12,6 @@ struct ConnectionView: View {
 
     var tone: SignInTone { colorScheme == .dark ? .dark : .light }
 
-    private var primaryOption: SignInOption? {
-        model.passwordOption ?? model.browserOptions.first
-    }
-
-    private var secondaryOptions: [SignInOption] {
-        model.browserOptions.filter { $0.id != primaryOption?.id }
-    }
-
     private var isCompact: Bool {
         #if os(iOS)
         focus != nil
@@ -32,7 +24,7 @@ struct ConnectionView: View {
         if case .failed(let message) = model.phase { return message }
         switch model.discovery {
         case .unreachable: return String(localized: "Pal couldn't reach this server. Check the address and that the server is running.")
-        case .noMethods: return String(localized: "This server has no sign-in method Pal can use.")
+        case .noMethods: return String(localized: "This server has no Pal account sign-in. Set up a username and password on it first.")
         default: return nil
         }
     }
@@ -58,7 +50,7 @@ struct ConnectionView: View {
         .animation(reduceMotion ? nil : .snappy, value: isCompact)
         .animation(.snappy, value: model.discovery)
         .onChange(of: model.phase) { _, phase in
-            guard case .failed = phase, model.passwordOption != nil else { return }
+            guard case .failed = phase, model.account != nil else { return }
             focus = .password
         }
         .localEngineSetup(model)
@@ -97,25 +89,13 @@ struct ConnectionView: View {
             }
             primaryButton
                 .padding(.top, SignInMetrics.messageToButton)
-            if let primaryOption, primaryOption.kind == .browser {
-                Text("Opens your server's sign-in page, then returns to Pal.")
-                    .font(.system(size: SignInMetrics.footnoteSize + 1))
-                    .foregroundStyle(tone.secondaryText)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, SignInMetrics.cardToMessage)
-            }
-            if !secondaryOptions.isEmpty || showsLocalEngineSetup {
+            if showsLocalEngineSetup {
                 orDivider
-                VStack(spacing: SignInMetrics.secondarySpacing) {
-                    ForEach(secondaryOptions) { option in
-                        browserButton(option)
-                    }
-                    localEngineSetupButton
-                }
+                localEngineSetupButton
                 localEngineHelper
             }
             if !isCompact {
-                Text("By continuing, you connect Pal to your own server and sign in with your account.")
+                Text("By continuing, you connect Pal to your own server and sign in with your Pal account.")
                     .font(.system(size: SignInMetrics.footnoteSize))
                     .foregroundStyle(tone.footnoteText)
                     .multilineTextAlignment(.center)
@@ -128,7 +108,7 @@ struct ConnectionView: View {
     private var card: some View {
         VStack(spacing: 0) {
             addressRow
-            if model.passwordOption != nil {
+            if model.account != nil {
                 rowDivider
                 usernameRow
                 rowDivider
@@ -169,9 +149,9 @@ struct ConnectionView: View {
             addressField
                 .urlEntry()
                 .focused($focus, equals: .address)
-                .submitLabel(model.passwordOption == nil ? .go : .next)
+                .submitLabel(model.account == nil ? .go : .next)
                 .onSubmit {
-                    if model.passwordOption != nil { focus = .username } else { submit() }
+                    if model.account != nil { focus = .username } else { submit() }
                 }
                 .accessibilityIdentifier("baseURLField")
         } trailing: {
@@ -240,11 +220,7 @@ extension ConnectionView {
         switch model.discovery {
         case .unknown, .checking: return String(localized: "Continue")
         case .unreachable, .noMethods: return String(localized: "Try again")
-        case .ready:
-            guard let primaryOption else { return String(localized: "Continue") }
-            return primaryOption.kind == .password
-                ? String(localized: "Sign in")
-                : String(localized: "Continue with \(primaryOption.displayName)")
+        case .ready: return String(localized: "Sign in")
         }
     }
 
@@ -260,9 +236,9 @@ extension ConnectionView {
         guard primaryEnabled else { return }
         switch model.discovery {
         case .ready:
-            guard let primaryOption else { return }
+            guard let account = model.account else { return }
             focus = nil
-            Task { await model.signIn(with: primaryOption) }
+            Task { await model.signIn(with: account) }
         case .unreachable, .noMethods:
             model.retryDiscovery()
         default:
@@ -285,22 +261,7 @@ extension ConnectionView {
     private var primaryLeading: some View {
         if model.isBusy {
             ProgressView().controlSize(.small).tint(tone.background)
-        } else if case .ready = model.discovery, primaryOption?.kind == .browser {
-            PalIcon("arrow.up.right", ink: .custom(tone.background))
         }
-    }
-
-    private func browserButton(_ option: SignInOption) -> some View {
-        Button {
-            focus = nil
-            Task { await model.signIn(with: option) }
-        } label: {
-            capsuleLabel(String(localized: "Continue with \(option.displayName)"), leading: PalIcon("arrow.up.right"))
-        }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.capsule)
-        .disabled(model.isBusy)
-        .accessibilityIdentifier("signInOption-\(option.id)")
     }
 
     func capsuleLabel<Leading: View>(_ title: String, leading: Leading) -> some View {
