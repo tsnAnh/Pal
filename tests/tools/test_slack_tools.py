@@ -18,6 +18,8 @@ from gateway.chat_install_store import ChatInstallStore
 from gateway.chat_slack.api import SlackApi
 from gateway.chat_slack.provider import bot_manifest
 from gateway.chat_slack.records import SlackRecords
+from hermes_cli.profiles import create_profile, get_profile_dir
+from hermes_constants import get_hermes_home, reset_hermes_home_override, set_hermes_home_override
 from tools import approval, mcp_action_gate, slack_tools
 from tui_gateway.contracts.chat_provider import IdentityProjection, Installation, InstallationStatus
 
@@ -246,16 +248,34 @@ def _install(home: Path, bot: str, installation_id: str) -> ChatInstallStore:
     return store
 
 
-def test_tools_exist_only_for_the_bot_with_an_active_install_and_vanish_on_revoke(tmp_path, monkeypatch):
-    monkeypatch.setattr(slack_tools, "_install_home", lambda: tmp_path)
+def test_tools_exist_only_for_the_bot_with_an_active_install_and_vanish_on_revoke(monkeypatch):
+    home = get_hermes_home()
     assert slack_tools.active_install("default") is None
-    store = _install(tmp_path, "scout", "inst-1")
+    store = _install(home, "scout", "inst-1")
     assert slack_tools.active_install("scout") == INSTALL
     assert slack_tools.active_install("other") is None
     monkeypatch.setattr(slack_tools, "_served_bot", lambda: "scout")
     assert slack_tools.check_slack_tools() is True
     store.mark_revoked("inst-1", 2.0)
     assert slack_tools.check_slack_tools() is False
+
+
+def test_a_secondary_bots_install_is_read_from_the_active_profile_scope(tmp_path, monkeypatch):
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    create_profile("scout", no_alias=True, no_skills=True)
+    scout = get_profile_dir("scout")
+    _install(scout, "scout", "inst-1")
+    assert slack_tools.active_install("scout") is None
+    token = set_hermes_home_override(str(scout))
+    try:
+        assert slack_tools.active_install("scout") == INSTALL
+        assert slack_tools.active_install() == INSTALL
+    finally:
+        reset_hermes_home_override(token)
+    assert slack_tools.active_install("scout") is None
 
 
 def test_a_bot_without_an_install_gets_a_typed_refusal_and_no_call(monkeypatch):

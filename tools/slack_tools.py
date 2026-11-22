@@ -51,16 +51,12 @@ def _served_bot() -> str:
     return profile_name_for_home(get_hermes_home()) or "default"
 
 
-def _install_home() -> Path:
-    from hermes_constants import get_process_hermes_home
-    return Path(get_process_hermes_home())
-
-
 def active_install(bot: str | None = None) -> SlackInstall | None:
     from gateway.chat_install_store import ChatInstallStore
     from gateway.chat_slack.records import SlackRecords
+    from hermes_constants import get_hermes_home
     from tui_gateway.contracts.chat_provider import InstallationStatus
-    home = _install_home()
+    home = Path(get_hermes_home())
     records_path = home / "chat_slack" / "records.json"
     if not records_path.exists():
         return None
@@ -86,8 +82,8 @@ def check_slack_tools() -> bool:
 
 
 def _bot_token(install: SlackInstall) -> str:
-    from agent.vault_store import VaultStore
-    return str(VaultStore(_install_home() / "vault").resolve_secret(install.bot_token_item_id).get("api_key") or "")
+    from agent.vault_store import get_vault_store
+    return str(get_vault_store().resolve_secret(install.bot_token_item_id).get("api_key") or "")
 
 
 def _api():
