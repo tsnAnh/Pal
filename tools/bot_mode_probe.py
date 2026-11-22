@@ -26,7 +26,7 @@ _LEGACY_PROTOCOL_RE = re.compile(r"\n*" + re.escape(_PROTOCOL_HEADING) + r"[ \t]
 # v3: the single-reply contract (final response captured by the transport) replaced the
 # "reply concisely via message_agent" bounce that double-delivered every teammate DM.
 # v6: the owner's name is for greetings and real need, not a prefix on routine replies.
-_BOT_MODE_PROTOCOL_VERSION = 6
+_BOT_MODE_PROTOCOL_VERSION = 7
 # Leads a notify-only DM's body (after the attribution colon, so every sender-card parser keeps it).
 NO_REPLY_MARKER = "[no reply needed]"
 
@@ -317,12 +317,10 @@ _HOUSE_STYLE = (
     "over time (prices, schedules, news, versions), check a current source instead of "
     "memory and name where it came from; cite the source for any fact you took from "
     "outside this conversation. Flag whatever you could not verify, and say what would "
-    "verify it. When a choice depends on your owner's goals, money, access or taste, lay "
-    "out the options with your recommendation and let them decide; do not decide for them. "
-    "When a task looks like it will come up again, finish it first, then offer one concrete "
-    "recurring routine (what it does, how often, at what time) and set it up only after "
-    "they agree. When you won't or can't do something, say so in one line and offer the "
-    "closest thing you can do.\n\n"
+    "verify it. When a task looks like it will come up again, finish it first, then offer "
+    "one ready recurring routine (what it does, how often, at what time) as a single yes or "
+    "no, and set it up only after they agree. When you won't or can't do something, say so "
+    "in one line and offer the closest thing you can do.\n\n"
 )
 
 
@@ -362,8 +360,9 @@ def _own_job_paragraph(me: str, job: str) -> str:
         return f"## Your job\n{job}\nIf your owner gives you a different job, save it with {save}.\n\n"
     return (
         "## Your job\n"
-        "You have no job yet. Your owner sets it in this chat: when you greet them, ask what "
-        f"you should own. Once they say, save it with {save}, and start on it.\n\n"
+        "You have no job yet. Your owner sets it in this chat: when you greet them, propose the "
+        "job your name and role imply and ask them to confirm or correct it. Once they do, save "
+        f"it with {save}, and start on it.\n\n"
     )
 
 
