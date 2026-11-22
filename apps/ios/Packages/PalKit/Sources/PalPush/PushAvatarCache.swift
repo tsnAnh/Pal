@@ -1,7 +1,7 @@
 import Foundation
 
 public struct PushAvatarCache: Sendable {
-    public static let groupIdentifier = "group.dev.tsnanh.hermes.bot"
+    public static let groupIdentifier = "group.dev.tsnanh.pal"
     private static let directoryName = "PushAvatars"
     public static let maximumFileBytes = 512 * 1024
 

@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class ChatOpenPerfE2ETests: E2ETestCase {
-    private static let bundleID = "dev.tsnanh.hermes.bot"
+    private static let bundleID = "dev.tsnanh.pal"
     private static let reapSeconds: TimeInterval = 26
     private static let dwellSeconds: TimeInterval = 8
 

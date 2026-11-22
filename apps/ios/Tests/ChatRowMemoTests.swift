@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 @MainActor
 @Suite("Chat row memos")

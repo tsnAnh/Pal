@@ -47,8 +47,8 @@ OWNER="${HERMES_UI_E2E_OWNER:-ios-roster-chat}"
 UDID="${HERMES_IOS_SIM_UDID:-1447BE57-ADEB-41D7-94AC-D106E772CBCD}"
 PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
 LEDGER="$HOME/.claude/hooks/device-ledger.sh"
-BUNDLE_ID="dev.tsnanh.hermes.bot"
-RUNNER_ID="dev.tsnanh.hermes.bot.uitests.xctrunner"
+BUNDLE_ID="dev.tsnanh.pal"
+RUNNER_ID="dev.tsnanh.pal.uitests.xctrunner"
 BASE_URL="$HERMES_IOS_TEST_BASE_URL"
 PORT="${BASE_URL##*:}"
 RUNNER_CONTAINER_TMP="$HOME/Library/Containers/$RUNNER_ID/Data/tmp"
@@ -243,7 +243,7 @@ run_macos() {
   if [ "${HERMES_UI_E2E_MAC_OPTIMIZED:-0}" = 1 ]; then
     optimization=(SWIFT_OPTIMIZATION_LEVEL=-O SWIFT_COMPILATION_MODE=wholemodule GCC_OPTIMIZATION_LEVEL=s ENABLE_DEBUG_DYLIB=NO)
   fi
-  ( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  ( cd "$IOS_DIR" && xcodebuild -project Pal.xcodeproj -scheme Pal \
     -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" -allowProvisioningUpdates \
     ${optimization[@]+"${optimization[@]}"} build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
 
@@ -256,7 +256,7 @@ run_macos() {
     only=("-only-testing:$HERMES_UI_E2E_ONLY")
   else
     local suite
-    for suite in "${MAC_TESTS[@]}"; do only+=("-only-testing:HermesBotsUITests/$suite"); done
+    for suite in "${MAC_TESTS[@]}"; do only+=("-only-testing:PalUITests/$suite"); done
   fi
 
   local kanban_seeded=0
@@ -282,7 +282,7 @@ run_macos() {
     TEST_RUNNER_HERMES_UITEST_TOUR_PHASES="${HERMES_UI_E2E_TOUR_PHASES:-}" \
     TEST_RUNNER_HERMES_UITEST_COMPUTER_SLUG=bot-alpha \
     TEST_RUNNER_HERMES_UITEST_RFB_LOG="$RFB_STATE/input.log" \
-    xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+    xcodebuild -project Pal.xcodeproj -scheme Pal \
       -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
       "${only[@]}" -resultBundlePath "$ART/ui-e2e.xcresult" \
       -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 \
@@ -325,7 +325,7 @@ xcrun simctl list devices | grep -E "Booted|hermes-ios" | tee "$ART/devices-befo
 
 echo "== xcodegen + build"
 ( cd "$IOS_DIR" && xcodegen generate >/dev/null )
-( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+( cd "$IOS_DIR" && xcodebuild -project Pal.xcodeproj -scheme Pal \
   -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
   build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
 
@@ -359,7 +359,7 @@ set +e
   TEST_RUNNER_HERMES_UITEST_SEED="${HERMES_UI_E2E_SEED:-}" \
   TEST_RUNNER_HERMES_UITEST_PERF_MANIFEST="${HERMES_IOS_E2E_PERF_MANIFEST:-}" \
   TEST_RUNNER_HERMES_UITEST_HOME="$HERMES_IOS_E2E_HOME" \
-  xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  xcodebuild -project Pal.xcodeproj -scheme Pal \
     -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
     ${HERMES_UI_E2E_ONLY:+-only-testing:"$HERMES_UI_E2E_ONLY"} \
     -resultBundlePath "$ART/ui-e2e.xcresult" -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 \

@@ -8,7 +8,7 @@ import PalREST
 import PalRoster
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 private struct OfflineTransport: HTTPTransport {
     func send(_ request: URLRequest) async throws -> HTTPResult { throw URLError(.cannotConnectToHost) }

@@ -44,7 +44,7 @@ extension ConnectionModel {
         )
     }
 
-    private static let keychainService = Bundle.main.bundleIdentifier ?? "dev.tsnanh.hermes.bot"
+    private static let keychainService = Bundle.main.bundleIdentifier ?? "dev.tsnanh.pal"
 
     static func credentialStore() -> KeychainCredentialStore {
         KeychainCredentialStore(service: KeychainNamespace.qualified("\(keychainService).credentials"))

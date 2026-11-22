@@ -28,8 +28,8 @@ UDID="${HERMES_IOS_SIM_UDID:?set HERMES_IOS_SIM_UDID to an existing simulator}"
 PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
 TOOL="$IOS_DIR/Tools/presence-e2e/presence_e2e.py"
 LEDGER="$HOME/.claude/hooks/device-ledger.sh"
-BUNDLE_ID="dev.tsnanh.hermes.bot"
-RUNNER_ID="dev.tsnanh.hermes.bot.uitests.xctrunner"
+BUNDLE_ID="dev.tsnanh.pal"
+RUNNER_ID="dev.tsnanh.pal.uitests.xctrunner"
 CTL_DIR="$(mktemp -d /tmp/hermes-presence-e2e-ctl.XXXXXX)"
 BOT="bot-alpha"
 BOOTED_BY_US=0
@@ -108,7 +108,7 @@ fi
 
 echo "== xcodegen + build"
 ( cd "$IOS_DIR" && xcodegen generate >/dev/null )
-( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+( cd "$IOS_DIR" && xcodebuild -project Pal.xcodeproj -scheme Pal \
   -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
   build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
 
@@ -163,9 +163,9 @@ set +e
   TEST_RUNNER_HERMES_UITEST_PRESENCE_RUN="$RUN_ID" \
   TEST_RUNNER_HERMES_UITEST_PRESENCE_BOT="$BOT" \
   TEST_RUNNER_HERMES_UITEST_PRESENCE_TITLE_1="presence-job-1-$RUN_ID" \
-  xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  xcodebuild -project Pal.xcodeproj -scheme Pal \
     -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
-    -only-testing:HermesBotsUITests/PresenceCrossClientE2ETests \
+    -only-testing:PalUITests/PresenceCrossClientE2ETests \
     -resultBundlePath "$ART/presence-e2e.xcresult" -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 \
     test-without-building ) >"$ART/xcodebuild-test.log" 2>&1
 IOS_STATUS=$?

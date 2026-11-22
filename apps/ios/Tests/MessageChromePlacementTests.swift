@@ -1,7 +1,7 @@
 import CoreGraphics
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 @Suite("Message chrome placement")
 struct MessageChromePlacementTests {

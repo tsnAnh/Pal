@@ -2,7 +2,7 @@
 import Foundation
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 @MainActor
 @Suite("Mac chat bench", .serialized, .enabled(if: MacChatBench.output != nil))

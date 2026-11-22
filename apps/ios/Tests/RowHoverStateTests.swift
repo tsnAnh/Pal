@@ -2,7 +2,7 @@ import Observation
 import Synchronization
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 private struct GateState {
     var waiting: [CheckedContinuation<Void, Never>] = []

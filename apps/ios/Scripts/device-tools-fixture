@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_BUNDLE="dev.tsnanh.hermes.bot"
-RUNNER_BUNDLE="dev.tsnanh.hermes.bot.uitests.xctrunner"
+APP_BUNDLE="dev.tsnanh.pal"
+RUNNER_BUNDLE="dev.tsnanh.pal.uitests.xctrunner"
 APP_SERVICES=(calendar reminders contacts)
 RUNNER_SERVICES=(calendar)
 

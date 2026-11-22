@@ -18,7 +18,7 @@ import perf_tour
 
 ROOT = IOS_DIR / "Artifacts" / "perf-mac-tour"
 RUN_SCRIPT = IOS_DIR / "Scripts" / "run-ui-e2e"
-TEST_SELECTOR = "HermesBotsUITests/MacPerfTourTests"
+TEST_SELECTOR = "PalUITests/MacPerfTourTests"
 CPU_INTERVAL_SECONDS = 0.5
 RUN_TIMEOUT_SECONDS = 5400
 INTERRUPT_SETTLE_SECONDS = 300

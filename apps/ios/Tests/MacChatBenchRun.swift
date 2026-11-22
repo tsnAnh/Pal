@@ -4,7 +4,7 @@ import Foundation
 import PalChat
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 enum MacChatBench {
     static let outputKey = "HERMES_MAC_BENCH_OUT"

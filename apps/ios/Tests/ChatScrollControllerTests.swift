@@ -3,7 +3,7 @@ import SwiftUI
 import Synchronization
 import Testing
 
-@testable import HermesBots
+@testable import Pal
 
 @MainActor
 @Suite("Chat scroll position writes")

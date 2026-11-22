@@ -1,6 +1,6 @@
 ---
 name: verify-ios
-description: Drive and prove the Pal iOS app (apps/ios, native Bot Mode client, bundle dev.tsnanh.hermes.bot) on an iOS Simulator against an isolated local Hermes gateway with a fake LLM. Use after any change under apps/ios (App/, Packages/PalKit, Packages/PalDesign, UITests/) to sign in, list bots, chat, and check avatars with real XCUITest runs, video, screenshots, and logs.
+description: Drive and prove the Pal iOS app (apps/ios, native Bot Mode client, bundle dev.tsnanh.pal) on an iOS Simulator against an isolated local Hermes gateway with a fake LLM. Use after any change under apps/ios (App/, Packages/PalKit, Packages/PalDesign, UITests/) to sign in, list bots, chat, and check avatars with real XCUITest runs, video, screenshots, and logs.
 ---
 
 # verify-ios
@@ -115,7 +115,7 @@ Proof standards:
 $S/cleanup
 ```
 
-Run it after every drive session, pass or fail, and after any failed attempt. It only touches what this run started: uninstalls the app and `dev.tsnanh.hermes.bot.uitests.xctrunner` unless they were installed beforehand; runs `device-ledger.sh cleanup --owner <owner>` (shuts down only the simulator this run claimed); stops the gateway wrapper, gateway and fake LLM by recorded pid (never by process name) and verifies the port is free; verifies `~/.hermes/profiles` is unchanged; removes XCTestDevices clones created during the run only when no other `xcodebuild` is running; prints disk against baseline. It never deletes baseline simulators and never deletes evidence. If it exits 1, fix the named problem and rerun. Simulator.app is never opened by this skill; if you opened it for a visual check and nothing else is booted, quit it with `osascript -e 'quit app "Simulator"'`.
+Run it after every drive session, pass or fail, and after any failed attempt. It only touches what this run started: uninstalls the app and `dev.tsnanh.pal.uitests.xctrunner` unless they were installed beforehand; runs `device-ledger.sh cleanup --owner <owner>` (shuts down only the simulator this run claimed); stops the gateway wrapper, gateway and fake LLM by recorded pid (never by process name) and verifies the port is free; verifies `~/.hermes/profiles` is unchanged; removes XCTestDevices clones created during the run only when no other `xcodebuild` is running; prints disk against baseline. It never deletes baseline simulators and never deletes evidence. If it exits 1, fix the named problem and rerun. Simulator.app is never opened by this skill; if you opened it for a visual check and nothing else is booted, quit it with `osascript -e 'quit app "Simulator"'`.
 
 ## Helpers
 

@@ -6,7 +6,7 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-@testable import HermesBots
+@testable import Pal
 
 @MainActor
 @Observable

@@ -4,7 +4,7 @@ set -euo pipefail
 IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(cd "$IOS_DIR/../.." && pwd)"
 PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
-BUNDLE_ID="dev.tsnanh.hermes.bot"
+BUNDLE_ID="dev.tsnanh.pal"
 
 usage() {
   cat <<USAGE

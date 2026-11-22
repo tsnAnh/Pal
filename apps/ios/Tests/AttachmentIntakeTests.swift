@@ -6,7 +6,7 @@ import SwiftUI
 import Testing
 import UniformTypeIdentifiers
 
-@testable import HermesBots
+@testable import Pal
 
 @MainActor
 private final class IntakeCalls {

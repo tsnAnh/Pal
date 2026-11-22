@@ -82,7 +82,7 @@ class E2ETestCase: XCTestCase {
     }
 
     #if os(macOS)
-    private static let macAppBundleID = "dev.tsnanh.hermes.bot.development"
+    private static let macAppBundleID = "dev.tsnanh.pal.development"
 
     private func presentMainWindow(_ app: XCUIApplication) {
         guard !app.windows.firstMatch.waitForExistence(timeout: 3) else { return }
