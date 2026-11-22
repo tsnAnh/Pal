@@ -229,24 +229,20 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitLabel(connect, equals: "Connect")
     }
 
-    func test4TheSlackRowOpensTheBotPickerAndTheWizardForTheChosenBot() throws {
+    func test4TheSlackRowOpensThisBotsOwnSlackSetupWithoutABotList() throws {
         let app = launchConnectApps(extraArguments: ["-hermes-test-chat-install", "-hermes-test-chat-install-reset"])
         waitForCatalog(app)
         search(app, "Slack")
         let row = app.descendants(matching: .any)["connectApp-connector:slack"]
         waitFor(row, timeout: 30, "Slack row")
-        waitFor(app.staticTexts["Per bot · one-time setup"], timeout: 30, "Slack row status")
+        waitFor(app.staticTexts.containing(NSPredicate(format: "label ENDSWITH %@", " to Slack")).firstMatch, timeout: 30, "Slack row names the bot")
         XCTAssertFalse(app.staticTexts["Needs setup on your Pal before it can connect."].exists, "no Client ID sheet copy")
         let open = action(app, "slack")
         waitFor(open, timeout: 10, "Slack action")
         XCTAssertEqual(open.label, "Set up")
         open.hit()
-        waitFor(app.descendants(matching: .any)["slackBotPicker"], timeout: 20, "bot picker")
-        let bot = app.descendants(matching: .any)["slackBot-default"]
-        waitFor(bot, timeout: 30, "default bot in the picker")
-        XCTAssertTrue(app.staticTexts["Not installed"].exists, "the bot reads not installed")
-        bot.hit()
-        waitFor(app.descendants(matching: .any)["stepFlow"], timeout: 30, "Slack setup for the chosen bot")
+        waitFor(app.descendants(matching: .any)["stepFlow"], timeout: 30, "this bot's Slack setup")
+        XCTAssertFalse(app.descendants(matching: .any)["slackBotPicker"].exists, "no bot list")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
     }
 
