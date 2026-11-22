@@ -331,6 +331,11 @@ def read_identity(home: Path) -> Identity:
     return Identity(_read_soul(home), meta["description"], bool(meta["description_auto"]), meta["display_name"])
 
 
+def has_section(home: Path, heading: str) -> bool:
+    key = _fold(heading)
+    return any(_fold(title) == key for title in _titles(_lines_of(_read_soul(home))))
+
+
 def _write_soul(home: Path, soul: Optional[str]) -> None:
     path = soul_path(home)
     if soul is None:

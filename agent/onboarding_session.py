@@ -4,7 +4,7 @@ and the per-turn note. Pure over the agent and the run record (``agent.onboardin
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterable, Iterator, Sequence
 
 
 def builds_onboarding(agent) -> bool:
@@ -75,6 +75,13 @@ def onboarding_prelude(agent, history: Iterable[dict]) -> Iterator[tuple[str, st
     def opening():
         yield ("" if said else hello), "setup_beat", {"beat": "name"}
     return opening()
+
+
+def opening_prelude(agent, history: Sequence[dict], *, hidden: bool) -> Iterator[tuple[str, str, dict]] | None:
+    if builds_onboarding(agent):
+        return onboarding_prelude(agent, history)
+    from agent.bot_opening import bot_opening_prelude
+    return bot_opening_prelude(agent, history, hidden=hidden)
 
 
 def onboarding_turn_note(agent, *, history_empty: bool, card_waiting: bool) -> str:

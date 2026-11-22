@@ -181,13 +181,15 @@ class ProfilesListParams(ProfileParams):
 class ProfilesListResult(Result):
     """``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself;
     ``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this
-    backend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``."""
+    backend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``; ``bot_opening``
+    says a new bot's first hidden turn plays the scripted greeting card and clears that flag on an answer."""
 
     profiles: list[ProfileRow] = Field(default_factory=list)
     bot_mode_protocol: bool = True
     bot_birth_notice: bool = False
     bot_about_you: bool = False
     bot_onboarding: bool = False
+    bot_opening: bool = False
     install_id: str = ""
 
 

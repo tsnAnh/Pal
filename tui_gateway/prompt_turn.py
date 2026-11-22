@@ -845,8 +845,8 @@ def _invoke_agent(
         run_kwargs["typed_message"] = text
         run_kwargs["context_expanded"] = _claim_expanded_send(session, text) or st.context_expanded
     if "prelude" in run_params:
-        from agent.onboarding_session import onboarding_prelude
-        prelude = onboarding_prelude(agent, st.history)
+        from agent.onboarding_session import opening_prelude
+        prelude = opening_prelude(agent, st.history, hidden=display_kind == "hidden")
         if prelude is not None:
             run_kwargs["prelude"] = prelude
     _adopt_submit_user_row(session, agent, run_kwargs["persist_user_message"], text)

@@ -514,7 +514,7 @@ def _profiles(authority, actor, home, params, siblings=()):
     # None for an unreadable root.
     from hermes_cli.install_identity import get_install_id
     return {'profiles': profiles, 'bot_mode_protocol': True, 'bot_birth_notice': True, 'bot_about_you': True,
-            'bot_onboarding': True, 'install_id': get_install_id() or ''}
+            'bot_onboarding': True, 'bot_opening': True, 'install_id': get_install_id() or ''}
 
 
 def _enabled_routines(profile_dir):

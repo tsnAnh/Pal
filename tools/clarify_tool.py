@@ -25,6 +25,12 @@ def mark_recommended(choices: list[str]) -> list[str]:
     return [f"{first} {RECOMMENDED_LABEL}"] + list(choices[1:])
 
 
+def display_choices(choices: Optional[list[str]], recommend: bool) -> Optional[list[str]]:
+    if not choices:
+        return None
+    return mark_recommended(list(choices)) if recommend else list(choices)
+
+
 def strip_recommended(text: str) -> str:
     """Remove the recommendation label so presentation never leaks into ``user_response``."""
     stripped = str(text).strip()
@@ -63,6 +69,7 @@ def _normalize_questions(questions) -> tuple:
         if not text:
             return None, f"questions[{index}].question must be non-empty text."
         choices = item.get("choices")
+        recommend = item.get("recommend") is not False
         if choices is not None:
             if not isinstance(choices, list) or not all(isinstance(c, str) for c in choices):
                 return None, f"questions[{index}].choices must be a list of strings."
@@ -78,9 +85,10 @@ def _normalize_questions(questions) -> tuple:
             choices = cleaned or None
         normalized.append({
             "qid": f"q{index}", "question": text,
-            "choices": mark_recommended(list(choices)) if choices else None,
+            "choices": display_choices(choices, recommend),
             "choices_offered": list(choices) if choices else None,
-            "multi_select": bool(item.get("multi_select")) and bool(choices)})
+            "multi_select": bool(item.get("multi_select")) and bool(choices),
+            "recommend": recommend})
     return normalized, None
 
 
@@ -139,7 +147,7 @@ def clarify_tool(questions, callback: Optional[Callable] = None) -> str:
     for q in normalized:
         offered = prose(q["choices_offered"])
         shown.append({**q, "question": prose([q["question"]])[0], "choices_offered": offered,
-                      "choices": mark_recommended(list(offered)) if offered else None})
+                      "choices": display_choices(offered, q["recommend"])})
     # Observers see the questions only; the answers stay in the tool result.
     with human_input_request("clarify", prompt="\n".join(q["question"] for q in shown)) as human:
         try:
