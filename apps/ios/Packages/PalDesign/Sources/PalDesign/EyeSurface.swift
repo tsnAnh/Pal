@@ -18,11 +18,33 @@ struct EyeSurface: Sendable {
     static let walkSteps = 12
     static let bulge = 1.3
 
-    private static let built = Mutex<[String: EyeSurface]>([:])
+    private struct Key: Hashable, Sendable {
+        let values: [Double]
+
+        init(_ mask: [AvatarDrawing.Element]) {
+            var values: [Double] = []
+            for element in mask {
+                values.append(contentsOf: [6, element.fill == nil ? 0 : 1, element.stroke?.width ?? 0])
+                element.path.forEach { step in
+                    switch step {
+                    case .move(let to): values.append(contentsOf: [1, to.x, to.y])
+                    case .line(let to): values.append(contentsOf: [2, to.x, to.y])
+                    case .quadCurve(let to, let control): values.append(contentsOf: [3, to.x, to.y, control.x, control.y])
+                    case .curve(let to, let first, let second):
+                        values.append(contentsOf: [4, to.x, to.y, first.x, first.y, second.x, second.y])
+                    case .closeSubpath: values.append(5)
+                    }
+                }
+            }
+            self.values = values
+        }
+    }
+
+    private static let built = Mutex<[Key: EyeSurface]>([:])
     private static let remembered = 64
 
     static func shared(mask: [AvatarDrawing.Element]) -> EyeSurface {
-        let key = mask.map { "\($0.fill != nil) \($0.stroke?.width ?? 0) \($0.path.description)" }.joined(separator: "|")
+        let key = Key(mask)
         if let known = built.withLock({ $0[key] }) { return known }
         let surface = EyeSurface(mask: mask)
         built.withLock { cache in

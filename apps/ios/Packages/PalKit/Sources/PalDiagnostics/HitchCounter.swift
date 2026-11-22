@@ -32,6 +32,7 @@ public struct HitchReport: Codable, Sendable, Equatable {
     public var severeHitches: Int
     public var worstFrameMs: Double
     public var hitchMs: Double
+    public var budgetMs: Double
     public var thresholdsMs: Thresholds
     public var longHitchThresholdMs: Double
     public var longHitchCount: Int
@@ -45,29 +46,33 @@ public struct HitchReport: Codable, Sendable, Equatable {
 }
 
 public struct HitchCounter: Sendable, Equatable {
-    public static let hitchThresholdMs = 16.7
+    public static let hitchBudgetFactor = 1.5
+    public static let defaultBudgetMs = 1000.0 / 60
     public static let severeThresholdMs = 33.0
     public static let longThresholdMs = 100.0
     public static let longestKept = 10
-    public static let reportSchema = 1
+    public static let reportSchema = 2
 
     public private(set) var frames = 0
     public private(set) var hitches = 0
     public private(set) var severeHitches = 0
     public private(set) var worstFrameMs = 0.0
     public private(set) var hitchMs = 0.0
+    public private(set) var budgetMs: Double?
     public private(set) var longHitchCount = 0
     public private(set) var longest: [LongHitch] = []
 
     public init() {}
 
     @discardableResult
-    public mutating func record(frameMs: Double, atSeconds: Double = 0) -> FrameClass {
+    public mutating func record(frameMs: Double, budgetMs: Double, atSeconds: Double = 0) -> FrameClass {
+        let budget = budgetMs > 0 ? budgetMs : Self.defaultBudgetMs
+        self.budgetMs = min(self.budgetMs ?? budget, budget)
         frames += 1
         worstFrameMs = max(worstFrameMs, frameMs)
-        guard frameMs > Self.hitchThresholdMs else { return .smooth }
+        guard frameMs > budget * Self.hitchBudgetFactor else { return .smooth }
         hitches += 1
-        hitchMs += frameMs - Self.hitchThresholdMs
+        hitchMs += frameMs - budget
         guard frameMs > Self.severeThresholdMs else { return .hitch }
         severeHitches += 1
         guard frameMs > Self.longThresholdMs else { return .severe }
@@ -79,7 +84,8 @@ public struct HitchCounter: Sendable, Equatable {
     }
 
     public func report(platform: String, startedAt: Date, durationSeconds: Double) -> HitchReport {
-        HitchReport(
+        let budget = budgetMs ?? Self.defaultBudgetMs
+        return HitchReport(
             schema: Self.reportSchema,
             platform: platform,
             startedAt: startedAt.formatted(.iso8601),
@@ -89,7 +95,8 @@ public struct HitchCounter: Sendable, Equatable {
             severeHitches: severeHitches,
             worstFrameMs: worstFrameMs,
             hitchMs: hitchMs,
-            thresholdsMs: .init(hitch: Self.hitchThresholdMs, severe: Self.severeThresholdMs),
+            budgetMs: budget,
+            thresholdsMs: .init(hitch: budget * Self.hitchBudgetFactor, severe: Self.severeThresholdMs),
             longHitchThresholdMs: Self.longThresholdMs,
             longHitchCount: longHitchCount,
             longHitches: longest

@@ -1,9 +1,10 @@
 import Foundation
+import PalProtocol
 
 enum T3AddressSuggestion {
-    static func current() -> String? {
+    static func current() async -> String? {
         #if os(macOS)
-        guard let port = runtimePort(), let host = tailnetAddress() else { return nil }
+        guard let port = await runtimePort(), let host = tailnetAddress() else { return nil }
         return "\(host):\(port)"
         #else
         return nil
@@ -11,11 +12,10 @@ enum T3AddressSuggestion {
     }
 
     #if os(macOS)
-    private static func runtimePort() -> Int? {
+    private static func runtimePort() async -> Int? {
         let file = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".t3/userdata/server-runtime.json")
-        guard let data = try? Data(contentsOf: file),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let origin = object["origin"] as? String,
+        guard let object = try? await DiskRead.json(contentsOf: file),
+              let origin = object["origin"]?.stringValue,
               let port = URLComponents(string: origin)?.port, (1...65535).contains(port)
         else { return nil }
         return port

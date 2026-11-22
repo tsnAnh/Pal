@@ -156,11 +156,15 @@ final class ChatModel {
     private var outbox: Outbox?
     var snapshot: TimelineSnapshot?
     private var outboxEntries: [OutboxEntry] = []
-    private var arrivals: [String: Date] = [:]
+    var arrivals: [String: Date] = [:]
     private var aliases: [RowKey: String] = [:]
     private var outboxRowIDs: Set<String> = []
-    private var built: [String: BuiltRow] = [:]
-    private var hasBaseline = false
+    var built: [String: BuiltRow] = [:]
+    var hasBaseline = false
+    @ObservationIgnored var builtOffline = true
+    @ObservationIgnored var builtWithBaseline = false
+    @ObservationIgnored var generatedImageIDs: Set<String> = []
+    @ObservationIgnored private(set) var rebuilds = RebuildCounts()
     private var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
@@ -179,7 +183,7 @@ final class ChatModel {
         let prompting: Bool
     }
 
-    private struct BuiltRow {
+    struct BuiltRow {
         let item: TranscriptItem
         let kind: ChatRow.Kind?
         let images: [ImageReference]
@@ -188,52 +192,13 @@ final class ChatModel {
 
     var isOpenWindow: Bool { opening.isWindowOpen }
     var pendingDraft: String? { roster.drafts[bot.name] }
-    var avatars: ParticipantAvatars { ParticipantAvatars(roster: roster) }
-    var activity: BotActivity { roster.activity(for: bot.name) }
     var avatarMood: AvatarMood { roster.avatarMood(for: bot.name) }
-
-    var isCatchingUp: Bool {
-        switch connection {
-        case .connecting: true
-        case .reconnecting, .live: false
-        }
-    }
-
     var canSendAttachments: Bool {
         !attachments.contains { $0.state == .uploading }
     }
 
     var currentFindRowID: String? {
         findMatches.indices.contains(findPosition) ? findMatches[findPosition] : nil
-    }
-
-    private var timelineItems: [TranscriptItem] { snapshot?.rows.map(\.item) ?? [] }
-
-    var voiceTurn: Int {
-        timelineItems.count { item in
-            if case .user = item.content { item.inbound.isPerson } else { false }
-        }
-    }
-
-    var voiceReply: VoiceReply {
-        var parts: [String] = []
-        for item in timelineItems.reversed() {
-            switch item.content {
-            case .user where item.inbound.isPerson:
-                break
-            case .assistant(let text, _, _) where !text.isEmpty:
-                parts.append(text)
-                continue
-            default:
-                continue
-            }
-            break
-        }
-        var text = parts.reversed().joined(separator: "\n\n")
-        if let streaming = snapshot?.streamingText, !streaming.isEmpty {
-            text = text.isEmpty ? streaming : text + "\n\n" + streaming
-        }
-        return VoiceReply(text: text, isComplete: !(snapshot?.isRunning ?? false), turn: voiceTurn)
     }
 
     init(bot: BotRow, links: BotLinks, roster: RosterModel, lastSeenStore: ChatLastSeenStore = ChatLastSeenStore()) {
@@ -514,13 +479,13 @@ final class ChatModel {
 
     func findNext() {
         guard !findMatches.isEmpty else { return }
-        findPosition = (findPosition + 1) % findMatches.count
+        assignIfChanged(\.findPosition, (findPosition + 1) % findMatches.count)
     }
 
     func findPrevious() {
         guard !findMatches.isEmpty else { return }
         guard findPosition == 0, olderHistory.canLoad else {
-            findPosition = (findPosition - 1 + findMatches.count) % findMatches.count
+            assignIfChanged(\.findPosition, (findPosition - 1 + findMatches.count) % findMatches.count)
             return
         }
         searchOlder(excluding: Set(findMatches))
@@ -658,21 +623,25 @@ final class ChatModel {
     }
 
     private func noteDisconnected() {
-        connection = hasBeenLive ? .reconnecting : .connecting
+        assignIfChanged(\.connection, hasBeenLive ? .reconnecting : .connecting)
     }
 
     private func noteLive() {
         if !hasBeenLive { LaunchClock.mark("chat \(openedBot.name) live", on: .osLog()) }
         hasBeenLive = true
-        connection = .live
+        assignIfChanged(\.connection, .live)
     }
 
     private func consumePhases(_ session: ChatSession) async {
         for await update in session.updates {
             guard case .phase(let phase) = update else { continue }
-            if case .live = phase { noteLive() } else { noteDisconnected() }
-            rebuild()
+            applyPhase(phase)
         }
+    }
+
+    func applyPhase(_ phase: ChatPhase) {
+        if case .live = phase { noteLive() } else { noteDisconnected() }
+        if builtOffline != isOffline { rebuild() }
     }
 
     private func consumeTimeline(_ session: ChatSession) async {
@@ -687,11 +656,12 @@ final class ChatModel {
         if next.sessionID != nil { scheduleCacheSave() }
     }
 
-    private func apply(_ next: TimelineSnapshot) {
+    func apply(_ next: TimelineSnapshot) {
         if let snapshot, next.version <= snapshot.version { return }
+        let previous = snapshot
         snapshot = next
-        olderHistory = OlderHistory(next.older)
-        rebuild()
+        assignIfChanged(\.olderHistory, OlderHistory(next.older))
+        rebuild(patching: previous)
         observeActivityChange()
         resolvePendingReveal()
     }
@@ -747,7 +717,7 @@ final class ChatModel {
         return entry.attachments.isEmpty ? "" : String(localized: "Photo")
     }
 
-    private func rowID(for row: ChatTimelineRow) -> String {
+    func rowID(for row: ChatTimelineRow) -> String {
         if let alias = aliases[row.id] { return alias }
         if outboxRowIDs.contains(row.item.id) {
             aliases[row.id] = row.item.id
@@ -781,9 +751,22 @@ final class ChatModel {
         return sources
     }
 
-    private func rebuild() {
+    func rebuild(patching previous: TimelineSnapshot? = nil) {
         let perf = PalPerf.begin("chat.rebuild"); defer { perf.end() }
+        if let previous, let snapshot, let patch = streamingPatch(from: previous, to: snapshot) {
+            rebuilds.patched += 1
+            commit(patch)
+        } else {
+            rebuilds.full += 1
+            publish(builtRows())
+        }
+        builtOffline = isOffline
+        publishActivity()
+    }
+
+    private func builtRows() -> [ChatRow] {
         let now = Date()
+        builtWithBaseline = hasBaseline
         let sources = sourceItems()
         for source in sources where hasBaseline && source.item.timestamp == nil && arrivals[source.item.id] == nil {
             arrivals[source.item.id] = now
@@ -792,6 +775,7 @@ final class ChatModel {
             guard case .tool(let call) = source.item.content, case .ready(let image)? = call.imageGeneration else { return nil }
             return image.id
         })
+        generatedImageIDs = generated
         let entries = ChatTimeline.entries(
             items: sources.map(\.item),
             date: { [arrivals] item in item.timestamp ?? arrivals[item.id] },
@@ -821,18 +805,34 @@ final class ChatModel {
             next[index].gap = Self.gap(for: next[index], after: index > 0 ? next[index - 1] : nil)
         }
         Self.flagDuplicateIDs(in: next)
-        if next != rows { rows = next; rowsNewestFirst = Array(next.reversed()); rowIDs = next.map(\.id) }
-        isRunning = snapshot?.isRunning ?? false
-        workingStatus = snapshot?.runningToolName.map(ToolActivity.label(for:))
-        hasPendingClarify = pendingClarify != nil
-        hasPendingPrompt = !(snapshot?.pendingPrompts.isEmpty ?? true) || snapshot?.hasPendingConnection == true
+        return next
+    }
+
+    private func publish(_ next: [ChatRow]) {
+        guard assignIfChanged(\.rows, next) else { return }
+        assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
+        assignIfChanged(\.rowIDs, next.map(\.id))
+    }
+
+    private func commit(_ patch: StreamingRowPatch) {
+        built[patch.sourceID] = patch.built
+        guard let last = rows.indices.last, rows[last] != patch.row else { return }
+        rows[last] = patch.row
+        rowsNewestFirst[0] = patch.row
+    }
+
+    private func publishActivity() {
+        assignIfChanged(\.isRunning, snapshot?.isRunning ?? false)
+        assignIfChanged(\.workingStatus, snapshot?.runningToolName.map(ToolActivity.label(for:)))
+        assignIfChanged(\.hasPendingClarify, pendingClarify != nil)
+        assignIfChanged(\.hasPendingPrompt, !(snapshot?.pendingPrompts.isEmpty ?? true) || snapshot?.hasPendingConnection == true)
         if !hasBaseline, snapshot?.sessionID != nil { hasBaseline = true }
-        if isOpening, !next.isEmpty || snapshot?.sessionID != nil { isOpening = false; opening.firstPaint() }
+        if isOpening, !rows.isEmpty || snapshot?.sessionID != nil { isOpening = false; opening.firstPaint() }
         opening.rowsChanged()
         recomputeFind(resetPosition: false)
     }
 
-    private func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
+    func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
         if let reuse, reuse.item == item, !Self.dependsOnConnection(item) {
             if case .assistant = item.content, !generated.isEmpty {
                 return BuiltRow(item: item, kind: reuse.kind, images: reuse.images.filter { !generated.contains($0.id) }, files: reuse.files)
@@ -875,7 +875,7 @@ final class ChatModel {
             if case .assistant(let parsed)? = previous?.kind, parsed.source == content.text {
                 return (.assistant(parsed), images, content.files)
             }
-            return (.assistant(ParsedMarkdown(deferring: content.text)), images, content.files)
+            return (.assistant(.deferringWarm(content.text, isStreaming: streaming)), images, content.files)
         case .tool(let call):
             guard let generation = call.imageGeneration else { return nil }
             return (.imageGeneration(generation), [], [])
@@ -922,7 +922,7 @@ final class ChatModel {
         pendingReveal = nil
         let id = rowID(for: row)
         recomputeFind(resetPosition: false)
-        if let index = findMatches.firstIndex(of: id) { findPosition = index }
+        if let index = findMatches.firstIndex(of: id) { assignIfChanged(\.findPosition, index) }
     }
 
     nonisolated private static func occurrences(of needle: String, in text: String) -> Int {
@@ -946,22 +946,22 @@ final class ChatModel {
     }
 
     private func recomputeFind(resetPosition: Bool) {
-        let needle = findQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        let previous = currentFindRowID
-        guard isFinding || !needle.isEmpty else {
-            findMatches = []
-            findPosition = 0
+        guard isFinding || !findQuery.isEmpty else {
+            assignIfChanged(\.findMatches, [])
+            assignIfChanged(\.findPosition, 0)
             return
         }
-        findMatches = needle.isEmpty ? [] : rows.flatMap { row in
+        let needle = findQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = currentFindRowID
+        assignIfChanged(\.findMatches, needle.isEmpty ? [] : rows.flatMap { row in
             Array(repeating: row.id, count: row.searchableText.map { Self.occurrences(of: needle, in: $0) } ?? 0)
-        }
+        })
         if resetPosition {
-            findPosition = max(0, findMatches.count - 1)
+            assignIfChanged(\.findPosition, max(0, findMatches.count - 1))
         } else if let previous, let index = findMatches.firstIndex(of: previous) {
-            findPosition = index
+            assignIfChanged(\.findPosition, index)
         } else {
-            findPosition = min(findPosition, max(0, findMatches.count - 1))
+            assignIfChanged(\.findPosition, min(findPosition, max(0, findMatches.count - 1)))
         }
     }
 }

@@ -6,14 +6,14 @@ struct HostUpdateScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: HostUpdateModel
+    @LazyState private var model: HostUpdateModel
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: HostUpdateModel(client: HostUpdateClient(gateway: gateway), surfaces: connection.surfaces))
+        _model = LazyState { HostUpdateModel(client: HostUpdateClient(gateway: gateway), surfaces: connection.surfaces) }
     }
 
     var body: some View {

@@ -42,7 +42,7 @@ struct ChatRowView: View {
     }
 
     private func timeSeparator(_ date: Date) -> some View {
-        ChatTimeSeparator(text: ChatTimestamp.label(for: date))
+        ChatTimeSeparator(text: ChatTimestampCache.shared.label(for: date))
     }
 
     @ViewBuilder
@@ -60,7 +60,7 @@ struct ChatRowView: View {
             let actions = messageActions(for: parsed.source, tables: { parsed.document.tables })
             AssistantBubble(
                 text: parsed.source, parsed: parsed, images: row.images, files: row.files, filesPending: row.isStreaming,
-                highlight: findQuery, isCurrentMatch: isCurrentMatch, wholeBubbleSelection: !row.isStreaming
+                highlight: findQuery, isCurrentMatch: isCurrentMatch, isStreaming: row.isStreaming, wholeBubbleSelection: !row.isStreaming
             )
                 .environment(\.messageActions, actions)
                 .environment(\.chatImageLoader, model.imageLoader)
@@ -126,9 +126,8 @@ struct UserBubble: View {
         (BubblePalette.userText, BubblePalette.userFill(accent: accent, isDark: colorScheme == .dark))
     }
 
-    private var message: UserMessageParts { UserMessageParts(text) }
-
     var body: some View {
+        let message = UserMessageParts.cached(text)
         VStack(alignment: .trailing, spacing: 4) {
             if !images.isEmpty {
                 HStack(spacing: 0) {
@@ -147,7 +146,7 @@ struct UserBubble: View {
                             }
                             if !message.body.isEmpty {
                                 InlineText(
-                                    text: AttributedString(message.body),
+                                    text: message.attributedBody,
                                     highlight: highlight,
                                     isCurrentMatch: isCurrentMatch,
                                     foreground: paint.foreground
@@ -267,25 +266,47 @@ struct BotThreadLinkRow: View {
 struct UserMessageParts: Equatable {
     let quote: String?
     let body: String
+    let attributedBody: AttributedString
+    let spoken: String
 
-    init(_ text: String) {
-        guard text.hasPrefix(">"), let split = text.range(of: "\n\n") else {
-            quote = nil
-            body = text
-            return
-        }
-        let head = text[..<split.lowerBound]
-        let lines = head.split(separator: "\n", omittingEmptySubsequences: false)
-        guard lines.allSatisfy({ $0.hasPrefix(">") }) else {
-            quote = nil
-            body = text
-            return
-        }
-        quote = lines.map { $0.dropFirst().drop(while: { $0 == " " }) }.joined(separator: " ")
-        body = String(text[split.upperBound...])
+    nonisolated(unsafe) private static let cache: NSCache<NSString, UserMessagePartsBox> = {
+        let cache = NSCache<NSString, UserMessagePartsBox>()
+        cache.countLimit = 512
+        return cache
+    }()
+
+    static func cached(_ text: String) -> UserMessageParts {
+        let key = text as NSString
+        if let hit = cache.object(forKey: key) { return hit.value }
+        let parts = UserMessageParts(text)
+        cache.setObject(UserMessagePartsBox(parts), forKey: key)
+        return parts
     }
 
-    var spoken: String { [quote, body.isEmpty ? nil : body].compactMap { $0 }.joined(separator: "\n") }
+    init(_ text: String) {
+        let (quote, body) = Self.split(text)
+        self.quote = quote
+        self.body = body
+        attributedBody = AttributedString(body)
+        spoken = [quote, body.isEmpty ? nil : body].compactMap { $0 }.joined(separator: "\n")
+    }
+
+    private static func split(_ text: String) -> (quote: String?, body: String) {
+        guard text.hasPrefix(">"), let split = text.range(of: "\n\n") else { return (nil, text) }
+        let head = text[..<split.lowerBound]
+        let lines = head.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.allSatisfy({ $0.hasPrefix(">") }) else { return (nil, text) }
+        let quote = lines.map { $0.dropFirst().drop(while: { $0 == " " }) }.joined(separator: " ")
+        return (quote, String(text[split.upperBound...]))
+    }
+}
+
+private final class UserMessagePartsBox {
+    let value: UserMessageParts
+
+    init(_ value: UserMessageParts) {
+        self.value = value
+    }
 }
 
 struct UserQuoteBlock: View {

@@ -13,12 +13,13 @@ struct MacRail: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                VStack(spacing: 3) {
+                LazyVStack(spacing: 3) {
                     ForEach(Array(MacShell.ordered(roster).enumerated()), id: \.element.id) { index, bot in
                         MacRailItem(bot: bot, roster: roster, router: router)
                             .padding(.bottom, index == 0 ? 21 : 0)
                     }
                 }
+                .boundedToColumn()
                 .frame(maxWidth: .infinity)
                 .padding(.top, 44)
                 .padding(.bottom, 8)

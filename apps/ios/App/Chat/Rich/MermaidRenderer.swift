@@ -1,4 +1,5 @@
 import Foundation
+import PalProtocol
 import WebKit
 
 typealias MermaidImage = PlatformImage
@@ -164,7 +165,8 @@ final class MermaidRenderer: NSObject {
 
     private func loadedWebView() async throws -> WKWebView {
         if let webView, loadWaiter == nil { return webView }
-        guard let script = Self.mermaidScript() else { throw MermaidRenderError.unavailable }
+        guard let script = await Self.mermaidScript() else { throw MermaidRenderError.unavailable }
+        try Task.checkCancellation()
         let web = makeWebView(mermaidScript: script)
         webView = web
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -191,9 +193,9 @@ final class MermaidRenderer: NSObject {
         return web
     }
 
-    private static func mermaidScript() -> String? {
+    private static func mermaidScript() async -> String? {
         guard let url = Bundle.main.url(forResource: "mermaid.min", withExtension: "js") else { return nil }
-        return try? String(contentsOf: url, encoding: .utf8)
+        return try? await DiskRead.text(contentsOf: url)
     }
 
     private func discardWebView() {

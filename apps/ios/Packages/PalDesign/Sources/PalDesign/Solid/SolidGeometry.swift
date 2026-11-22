@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import PalDiagnostics
 import Synchronization
 import SwiftUI
 
@@ -21,19 +22,49 @@ struct SolidGeometry: Sendable {
     static let walkSteps = 12
     static let slopeReach = 0.01
 
+    struct Signature: Hashable, Sendable {
+        let values: [Double]
+
+        init(_ rig: AvatarRig) {
+            var values: [Double] = [rig.restTilt, rig.pivot.x, rig.pivot.y]
+            for element in rig.body {
+                values.append(contentsOf: [6, element.fill == nil ? 0 : 1, element.stroke?.width ?? -1, element.stroke?.round == true ? 1 : 0])
+                element.path.forEach { step in
+                    switch step {
+                    case .move(let to): values.append(contentsOf: [1, to.x, to.y])
+                    case .line(let to): values.append(contentsOf: [2, to.x, to.y])
+                    case .quadCurve(let to, let control): values.append(contentsOf: [3, to.x, to.y, control.x, control.y])
+                    case .curve(let to, let first, let second):
+                        values.append(contentsOf: [4, to.x, to.y, first.x, first.y, second.x, second.y])
+                    case .closeSubpath: values.append(5)
+                    }
+                }
+            }
+            self.values = values
+        }
+    }
+
+    private struct Key: Hashable, Sendable {
+        let detail: Detail
+        let signature: Signature
+    }
+
+    private static let nextIdentity = Atomic<UInt64>(0)
+
+    let identity: UInt64
     let centre: CGPoint
     let radius: Double
     let surface: SolidSurface
     let vertices: [SIMD3<Double>]
     let triangles: [Int32]
 
-    private static let built = Mutex<[String: SolidGeometry]>([:])
+    private static let built = Mutex<[Key: SolidGeometry]>([:])
     private static let remembered = 64
 
-    static func shared(for rig: AvatarRig, detail: Detail = .standard) -> SolidGeometry {
-        let body = rig.body.map { "\($0.fill != nil) \($0.stroke?.width ?? 0) \($0.stroke?.round ?? false) \($0.path.description)" }
-        let key = "\(detail)|\(rig.restTilt)|" + body.joined(separator: "|")
+    static func shared(for rig: AvatarRig, signature: Signature, detail: Detail = .standard) -> SolidGeometry {
+        let key = Key(detail: detail, signature: signature)
         if let known = built.withLock({ $0[key] }) { return known }
+        PalPerf.event("avatar.solid.geometry.build")
         let geometry = SolidGeometry(rig: rig, detail: detail)
         built.withLock { cache in
             if cache.count >= remembered { cache.removeAll() }
@@ -52,6 +83,7 @@ struct SolidGeometry: Sendable {
         let canonical = Self.measure(probe, from: centre, reach: reach, turn: -rig.restTilt * Double.pi / 180, count: detail.rim)
         let radius = Self.inscribedRadius(of: canonical)
         let rim = Self.smoothed(canonical).map { $0 / radius }
+        identity = Self.nextIdentity.add(1, ordering: .relaxed).newValue
         self.centre = centre
         self.radius = radius
         surface = SolidSurface(rim: rim)

@@ -2,6 +2,7 @@
 import AppKit
 import PalChat
 import PalDesign
+import PalDiagnostics
 import SwiftUI
 
 struct SelectableMarkdownText: View {
@@ -22,13 +23,15 @@ struct SelectableMarkdownText: View {
         let mark = FindMark(ink: chatInk, surfaceText: nil, isCurrent: isCurrentMatch)
         return SelectableTextSpec(
             text: text,
-            highlight: highlight,
-            isCurrentMatch: isCurrentMatch,
-            isDark: colorScheme == .dark,
-            ink: PalTokens.textPrimary,
-            secondaryInk: Color(theme.palette.textSecondary),
-            highlightFill: mark.fill,
-            highlightInk: mark.text
+            style: SelectableTextStyle(
+                highlight: highlight,
+                isCurrentMatch: isCurrentMatch,
+                isDark: colorScheme == .dark,
+                ink: PalTokens.textPrimary,
+                secondaryInk: Color(theme.palette.textSecondary),
+                highlightFill: mark.fill,
+                highlightInk: mark.text
+            )
         )
     }
 }
@@ -42,6 +45,26 @@ enum SelectableAttributedBuilder {
         let ink: NSColor
         let secondaryInk: NSColor
         let codeBackground: NSColor
+        let fonts = FontMemo()
+    }
+
+    private struct FontKey: Hashable {
+        let size: CGFloat
+        let bold: Bool
+        let italic: Bool
+        let monospaced: Bool
+    }
+
+    private final class FontMemo {
+        private var fonts: [FontKey: NSFont] = [:]
+
+        func font(size: CGFloat, bold: Bool, italic: Bool, monospaced: Bool) -> NSFont {
+            let key = FontKey(size: size, bold: bold, italic: italic, monospaced: monospaced)
+            if let font = fonts[key] { return font }
+            let made = SelectableAttributedBuilder.font(size: size, bold: bold, italic: italic, monospaced: monospaced)
+            fonts[key] = made
+            return made
+        }
     }
 
     struct Palette {
@@ -71,10 +94,10 @@ enum SelectableAttributedBuilder {
     private static func append(_ paragraph: SelectableParagraph, isLast: Bool, inks: Inks, to result: NSMutableAttributedString) -> NSRange {
         let sizing = metrics(for: paragraph.style)
         let style = paragraphStyle(for: paragraph, isLast: isLast)
-        let baseFont = font(size: sizing.size, bold: sizing.bold, italic: false, monospaced: false)
+        let baseFont = inks.fonts.font(size: sizing.size, bold: sizing.bold, italic: false, monospaced: false)
         if !paragraph.marker.isEmpty {
             let markerAttributes: [NSAttributedString.Key: Any] = [
-                .font: font(size: PalTextStyle.chatBody.size, bold: false, italic: false, monospaced: false),
+                .font: inks.fonts.font(size: PalTextStyle.chatBody.size, bold: false, italic: false, monospaced: false),
                 .foregroundColor: inks.secondaryInk,
                 .paragraphStyle: style,
             ]
@@ -108,7 +131,7 @@ enum SelectableAttributedBuilder {
         let intent = run.inlinePresentationIntent ?? []
         let isCode = intent.contains(.code)
         var attributes: [NSAttributedString.Key: Any] = [
-            .font: font(
+            .font: inks.fonts.font(
                 size: isCode ? PalTextStyle.chatCode.size : metrics.size,
                 bold: metrics.bold || intent.contains(.stronglyEmphasized),
                 italic: intent.contains(.emphasized),
@@ -165,15 +188,12 @@ enum SelectableAttributedBuilder {
     }
 }
 
-private struct SelectableTextSpec: Equatable {
-    let text: SelectableText
-    let highlight: String
-    let isCurrentMatch: Bool
-    let isDark: Bool
-    let ink: Color
-    let secondaryInk: Color
-    let highlightFill: Color
-    let highlightInk: Color?
+private extension NSAppearance {
+    func resolve<Value>(_ make: () -> Value) -> Value {
+        var value: Value?
+        performAsCurrentDrawingAppearance { value = make() }
+        return value!
+    }
 }
 
 private struct SelectableTextRepresentable: NSViewRepresentable {
@@ -200,6 +220,7 @@ private struct SelectableTextRepresentable: NSViewRepresentable {
         view.textContainer?.lineFragmentPadding = 0
         view.textContainer?.widthTracksTextView = false
         view.textContainer?.heightTracksTextView = false
+        view.layoutManager?.allowsNonContiguousLayout = true
         view.delegate = context.coordinator
         return view
     }
@@ -218,44 +239,37 @@ private struct SelectableTextRepresentable: NSViewRepresentable {
 private final class SelectableTextCoordinator: NSObject, NSTextViewDelegate {
     var openURL: OpenURLAction?
 
-    private static let idealWidth: CGFloat = 10_000
-    private static let cacheLimit = 8
-
-    private let measureStorage = NSTextStorage()
-    private let measureLayout = NSLayoutManager()
-    private let measureContainer = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
     private var appliedSpec: SelectableTextSpec?
-    private var sizeCache: [CGFloat: CGSize] = [:]
-
-    override init() {
-        super.init()
-        measureContainer.lineFragmentPadding = 0
-        measureStorage.addLayoutManager(measureLayout)
-        measureLayout.addTextContainer(measureContainer)
-    }
+    private var appliedAttributed: NSAttributedString?
 
     func apply(_ spec: SelectableTextSpec, to view: PassiveTextView) {
         guard spec != appliedSpec else { return }
         appliedSpec = spec
-        let appearance = NSAppearance(named: spec.isDark ? .darkAqua : .aqua) ?? view.effectiveAppearance
+        let style = spec.style
+        let appearance = NSAppearance(named: style.isDark ? .darkAqua : .aqua) ?? view.effectiveAppearance
         view.appearance = appearance
-        var attributed = NSAttributedString()
-        var linkInk = NSColor.labelColor
-        appearance.performAsCurrentDrawingAppearance {
-            let inks = (NSColor(spec.ink), NSColor(spec.secondaryInk), NSColor(spec.highlightFill), spec.highlightInk.map { NSColor($0) })
-            linkInk = inks.0
-            attributed = SelectableAttributedBuilder.build(
-                spec.text,
-                highlight: spec.highlight,
-                isCurrent: spec.isCurrentMatch,
-                palette: .init(ink: inks.0, secondaryInk: inks.1, highlightFill: inks.2, highlightInk: inks.3, isDark: spec.isDark)
+        let palette = appearance.resolve {
+            SelectableAttributedBuilder.Palette(
+                ink: NSColor(style.ink),
+                secondaryInk: NSColor(style.secondaryInk),
+                highlightFill: NSColor(style.highlightFill),
+                highlightInk: style.highlightInk.map { NSColor($0) },
+                isDark: style.isDark
             )
         }
+        let attributed = SelectableTextCache.shared.attributed(for: spec) {
+            PalPerf.interval("selectable.build") {
+                appearance.resolve {
+                    SelectableAttributedBuilder.build(spec.text, highlight: style.highlight, isCurrent: style.isCurrentMatch, palette: palette)
+                }
+            }
+        }
         view.linkTextAttributes = [
-            .foregroundColor: linkInk,
+            .foregroundColor: palette.ink,
             .underlineStyle: NSUnderlineStyle.single.rawValue,
             .cursor: NSCursor.pointingHand,
         ]
+        appliedAttributed = attributed
         replaceText(in: view, with: attributed)
         view.setAccessibilityValue(spec.text.plainText)
     }
@@ -266,20 +280,16 @@ private final class SelectableTextCoordinator: NSObject, NSTextViewDelegate {
         if previous.length > 0, NSMaxRange(previous) <= attributed.length {
             view.setSelectedRange(previous)
         }
-        measureStorage.setAttributedString(attributed)
-        sizeCache.removeAll()
     }
 
     func size(forProposedWidth proposed: CGFloat?) -> CGSize {
-        let width = min(max(proposed ?? Self.idealWidth, 1), Self.idealWidth)
-        if let cached = sizeCache[width] { return cached }
-        measureContainer.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
-        measureLayout.ensureLayout(for: measureContainer)
-        let used = measureLayout.usedRect(for: measureContainer)
-        let size = CGSize(width: min(width, ceil(used.width)), height: ceil(used.height))
-        if sizeCache.count >= Self.cacheLimit { sizeCache.removeAll() }
-        sizeCache[width] = size
-        return size
+        guard let text = appliedSpec?.text, let attributed = appliedAttributed else { return .zero }
+        let width = SelectableTextLayout.clamp(proposed)
+        let sizes = SelectableSizeCache.shared
+        if sizes.noteRequested(width: width) { SelectableTextPrefetcher.shared.widthsChanged() }
+        if let cached = sizes.size(for: text, width: width) { return cached }
+        PalPerf.event("selectable.layout.main")
+        return PalPerf.interval("selectable.layout") { sizes.fill(text, widths: [width]) { attributed } }[0]
     }
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
@@ -289,7 +299,7 @@ private final class SelectableTextCoordinator: NSObject, NSTextViewDelegate {
     }
 }
 
-private final class PassiveTextView: NSTextView {
+final class PassiveTextView: NSTextView {
     override var writablePasteboardTypes: [NSPasteboard.PasteboardType] { [.string] }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -304,10 +314,25 @@ private final class PassiveTextView: NSTextView {
         nextResponder?.scrollWheel(with: event)
     }
 
+    override func scroll(_ point: NSPoint) {
+        guard window?.firstResponder === self else { return }
+        super.scroll(point)
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        guard newSize.width > 0, let container = textContainer, container.size.width != newSize.width else { return }
-        container.size = NSSize(width: newSize.width, height: CGFloat.greatestFiniteMagnitude)
+        matchContainerToFrame()
+    }
+
+    override func viewWillDraw() {
+        matchContainerToFrame()
+        super.viewWillDraw()
+    }
+
+    private func matchContainerToFrame() {
+        let width = frame.width
+        guard width > 0, let container = textContainer, container.size.width != width else { return }
+        container.size = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
     }
 }
 #endif

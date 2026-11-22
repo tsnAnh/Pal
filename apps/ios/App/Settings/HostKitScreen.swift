@@ -12,7 +12,7 @@ struct HostKitScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: KitModel
+    @LazyState private var model: KitModel
     @State private var confirmingGatewayReload = false
     @State private var confirmingRotate = false
 
@@ -21,7 +21,7 @@ struct HostKitScreen: View {
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: KitModel(client: KitClient(gateway: gateway), surfaces: connection.surfaces))
+        _model = LazyState { KitModel(client: KitClient(gateway: gateway), surfaces: connection.surfaces) }
     }
 
     var body: some View {

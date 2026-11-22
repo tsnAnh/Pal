@@ -139,7 +139,7 @@ struct BotThreadView: View {
         .frame(height: ChatMetrics.headerButtonDiameter)
         .palGlass(Capsule(), interactive: false)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(participants.map(\.displayName).formatted(.list(type: .and))))
+        .accessibilityLabel(Text(FormattedLabel.list(participants.map(\.displayName))))
         .accessibilityIdentifier("threadTitle")
     }
 }
@@ -160,7 +160,7 @@ private struct BotThreadMessageRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let separator = row.separator {
-                ChatTimeSeparator(text: ChatTimestamp.label(for: separator))
+                ChatTimeSeparator(text: ChatTimestampCache.shared.label(for: separator))
                     .accessibilityIdentifier("timeSeparator")
             }
             if row.showsName, let sender {

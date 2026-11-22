@@ -42,11 +42,13 @@ struct MarkdownView: View {
             case .items(let items):
                 ForEach(items) { item in
                     MarkdownItemView(item: item, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+                        .equatable()
                 }
             #if os(macOS)
             case .runs(let runs):
                 ForEach(runs) { run in
                     MarkdownRunView(run: run, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+                        .equatable()
                 }
             #endif
             }
@@ -56,11 +58,15 @@ struct MarkdownView: View {
 
 }
 
-struct MarkdownItemView: View {
+struct MarkdownItemView: View, Equatable {
     let item: MarkdownLayoutItem
     var highlight = ""
     var isCurrentMatch = false
     var isStreaming = false
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.item == rhs.item && lhs.highlight == rhs.highlight && lhs.isCurrentMatch == rhs.isCurrentMatch && lhs.isStreaming == rhs.isStreaming
+    }
 
     var body: some View {
         switch item {
@@ -69,6 +75,7 @@ struct MarkdownItemView: View {
         case .quote(let blocks):
             MarkdownQuote(content: ForEach(blocks) { block in
                 MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+                    .equatable()
             })
         }
     }
@@ -101,11 +108,15 @@ struct MarkdownQuote<Inner: View>: View {
 }
 
 #if os(macOS)
-private struct MarkdownRunView: View {
+private struct MarkdownRunView: View, Equatable {
     let run: MarkdownRun
     let highlight: String
     let isCurrentMatch: Bool
     let isStreaming: Bool
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.run == rhs.run && lhs.highlight == rhs.highlight && lhs.isCurrentMatch == rhs.isCurrentMatch && lhs.isStreaming == rhs.isStreaming
+    }
 
     var body: some View {
         switch run {
@@ -116,13 +127,14 @@ private struct MarkdownRunView: View {
         case .quote(_, let runs):
             MarkdownQuote(content: ForEach(runs) { inner in
                 MarkdownRunView(run: inner, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+                    .equatable()
             })
         }
     }
 }
 #endif
 
-struct MarkdownBlockView: View {
+struct MarkdownBlockView: View, Equatable {
     let block: MarkdownBlock
     let highlight: String
     let isCurrentMatch: Bool
@@ -130,6 +142,10 @@ struct MarkdownBlockView: View {
 
     @Environment(\.hermesTheme) private var theme
     @ScaledMetric(relativeTo: .body) private var indentStep: CGFloat = 25.7
+
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.block == rhs.block && lhs.highlight == rhs.highlight && lhs.isCurrentMatch == rhs.isCurrentMatch && lhs.isStreaming == rhs.isStreaming
+    }
 
     var body: some View {
         switch block.kind {

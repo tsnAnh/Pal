@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import PalDiagnostics
+import Synchronization
 
 public final class CacheStore: Sendable {
     public static let formatVersion = 1
@@ -10,6 +11,38 @@ public final class CacheStore: Sendable {
     private let maxFileBytes: Int
     private let diagnostics: Diagnostics
     private let queue = DispatchQueue(label: "dev.tsnanh.hermes.cache", qos: .utility)
+    private let fileLock = NSLock()
+    private let queued = Mutex(QueuedWrites())
+
+    private enum Target {
+        case file(String)
+        case everything
+    }
+
+    private struct QueuedWrites {
+        var files: [String: Int] = [:]
+        var everything = 0
+
+        mutating func begin(_ target: Target) {
+            switch target {
+            case .file(let path): files[path, default: 0] += 1
+            case .everything: everything += 1
+            }
+        }
+
+        mutating func end(_ target: Target) {
+            switch target {
+            case .file(let path):
+                let remaining = (files[path] ?? 1) - 1
+                files[path] = remaining > 0 ? remaining : nil
+            case .everything: everything -= 1
+            }
+        }
+
+        func blocksReading(_ path: String) -> Bool {
+            everything > 0 || files[path] != nil
+        }
+    }
 
     private struct Envelope<Payload: Codable>: Codable {
         var version: Int
@@ -34,7 +67,17 @@ public final class CacheStore: Sendable {
     }
 
     public func load<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) -> Value? {
-        queue.sync { PalPerf.interval("disk.cache.load") { read(type, name: name, account: account) } }
+        let path = fileURL(name: name, account: account).path
+        if queued.withLock({ $0.blocksReading(path) }) { drain() }
+        return PalPerf.interval("disk.cache.load") { fileLock.withLock { read(type, name: name, account: account) } }
+    }
+
+    private func enqueue(_ target: Target, _ work: @escaping @Sendable () -> Void) {
+        queued.withLock { $0.begin(target) }
+        queue.async { [self] in
+            work()
+            queued.withLock { $0.end(target) }
+        }
     }
 
     private func read<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) -> Value? {
@@ -57,64 +100,71 @@ public final class CacheStore: Sendable {
     public func loadDetached<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) async -> Value? {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
-                continuation.resume(returning: read(type, name: name, account: account))
+                continuation.resume(returning: fileLock.withLock { read(type, name: name, account: account) })
             }
         }
     }
 
     public func save<Value: Codable & Sendable>(_ value: Value, name: String, account: String) {
-        queue.async { [self] in
+        let url = fileURL(name: name, account: account)
+        enqueue(.file(url.path)) { [self] in
             guard let data = try? JSONEncoder().encode(Envelope(version: Self.formatVersion, payload: value)) else { return }
             guard data.count <= maxFileBytes else {
                 diagnostics.info("cache", "skipped \(name): \(data.count) bytes exceeds the bound")
                 return
             }
-            let directory = accountDirectory(account)
-            do {
-                try prepare(directory)
-                try data.write(to: fileURL(name: name, account: account), options: .protectedAtomic)
-            } catch {
-                diagnostics.warning("cache", "write failed: \(Diagnostics.describe(error))")
+            fileLock.withLock {
+                do {
+                    try prepare(accountDirectory(account))
+                    try data.write(to: url, options: .protectedAtomic)
+                } catch {
+                    diagnostics.warning("cache", "write failed: \(Diagnostics.describe(error))")
+                }
             }
         }
     }
 
     public func remove(name: String, account: String) {
-        queue.async { [self] in
-            try? FileManager.default.removeItem(at: fileURL(name: name, account: account))
+        let url = fileURL(name: name, account: account)
+        enqueue(.file(url.path)) { [self] in
+            fileLock.withLock { try? FileManager.default.removeItem(at: url) }
         }
     }
 
     public func removeAll() {
-        queue.async { [self] in
-            try? FileManager.default.removeItem(at: root)
+        enqueue(.everything) { [self] in
+            fileLock.withLock { try? FileManager.default.removeItem(at: root) }
         }
     }
 
     public func removeAll(except account: String) {
-        queue.async { [self] in
-            let keep = Self.accountDigest(account)
-            let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
-            for entry in entries where entry.lastPathComponent != keep {
-                try? FileManager.default.removeItem(at: entry)
+        enqueue(.everything) { [self] in
+            fileLock.withLock {
+                let keep = Self.accountDigest(account)
+                let entries = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+                for entry in entries where entry.lastPathComponent != keep {
+                    try? FileManager.default.removeItem(at: entry)
+                }
             }
         }
     }
 
     public func prune(account: String, prefix: String, keeping names: Set<String>) {
-        queue.async { [self] in
-            let directory = accountDirectory(account)
-            let keep = Set(names.map(Self.fileName(for:)))
-            let entries = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
-            let marker = Self.encoded(prefix)
-            for entry in entries where entry.lastPathComponent.hasPrefix(marker) && !keep.contains(entry.lastPathComponent) {
-                try? FileManager.default.removeItem(at: entry)
+        enqueue(.everything) { [self] in
+            fileLock.withLock {
+                let directory = accountDirectory(account)
+                let keep = Set(names.map(Self.fileName(for:)))
+                let entries = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+                let marker = Self.encoded(prefix)
+                for entry in entries where entry.lastPathComponent.hasPrefix(marker) && !keep.contains(entry.lastPathComponent) {
+                    try? FileManager.default.removeItem(at: entry)
+                }
             }
         }
     }
 
     public func drain() {
-        queue.sync {}
+        queue.sync {} // perf-lint: ok test and teardown barrier; load reaches it only when a write to the same file is still queued
     }
 
     static func fileName(for name: String) -> String {

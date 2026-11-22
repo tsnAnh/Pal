@@ -69,6 +69,10 @@ public enum MarkdownLayoutItem: Sendable, Equatable, Identifiable {
 public struct MarkdownDocument: Sendable, Equatable {
     public private(set) var blocks: [MarkdownBlock]
 
+    init(blocks: [MarkdownBlock]) {
+        self.blocks = blocks
+    }
+
     public init(parsing source: String, isStreaming: Bool = false) {
         let perf = PalPerf.begin("markdown.parse"); defer { perf.end() }
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -115,14 +119,16 @@ public struct MarkdownDocument: Sendable, Equatable {
     }
 
     private static func parsedBlocks(_ source: String) -> [MarkdownBlock] {
+        parsedGroup(source) ?? [fallbackBlock(source)]
+    }
+
+    static func parsedGroup(_ source: String) -> [MarkdownBlock]? {
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .full,
             failurePolicy: .returnPartiallyParsedIfPossible
         )
-        guard let attributed = try? AttributedString(markdown: source, options: options) else {
-            return [fallbackBlock(source)]
-        }
+        guard let attributed = try? AttributedString(markdown: source, options: options) else { return nil }
         return blocks(from: attributed)
     }
 
@@ -178,7 +184,17 @@ public struct MarkdownDocument: Sendable, Equatable {
                 quoteIdentity: context.quoteIdentity
             ))
         }
+        canonicalizeQuoteIdentities(&built)
         return built
+    }
+
+    private static func canonicalizeQuoteIdentities(_ built: inout [MarkdownBlock]) {
+        var firstIndex: [Int: Int] = [:]
+        for index in built.indices {
+            guard let raw = built[index].quoteIdentity else { continue }
+            if firstIndex[raw] == nil { firstIndex[raw] = index }
+            built[index].quoteIdentity = firstIndex[raw]
+        }
     }
 
     private static func tableBlock(id: Int, builder: TableBuilder, components: [PresentationIntent.IntentType], seenItems: inout Set<Int>) -> MarkdownBlock {

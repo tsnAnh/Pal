@@ -23,7 +23,7 @@ private struct PaletteSection: Identifiable {
 }
 
 struct MacPalette: View {
-    @State private var model: SearchModel
+    @LazyState private var model: SearchModel
     @State private var selection = 0
     @FocusState private var focused: Bool
 
@@ -32,7 +32,7 @@ struct MacPalette: View {
 
     @Environment(MacShell.self) private var shell
     init(roster: RosterModel, router: AppRouter) {
-        _model = State(initialValue: SearchModel(roster: roster, supported: router.searchScopes))
+        _model = LazyState { SearchModel(roster: roster, supported: router.searchScopes) }
         self.roster = roster
         self.router = router
     }
@@ -110,7 +110,7 @@ struct MacPalette: View {
         HStack(spacing: 12) {
             PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 14))
-            TextField("", text: $model.query, prompt: Text("Search Bots, Chats, Settings…").foregroundStyle(PalTokens.textTertiary))
+            TextField("", text: Bindable(model).query, prompt: Text("Search Bots, Chats, Settings…").foregroundStyle(PalTokens.textTertiary))
                 .textFieldStyle(.plain)
                 .font(.system(size: 17))
                 .foregroundStyle(PalTokens.textPrimary)

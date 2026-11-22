@@ -15,6 +15,7 @@ struct AssistantBubble: View {
     var wholeBubbleSelection = false
 
     @Environment(\.chatFileOpener) private var openFile
+    @State private var links = FileLinkRouter()
 
     var body: some View {
         let segments = parsed.segments
@@ -36,12 +37,7 @@ struct AssistantBubble: View {
             if !files.isEmpty { ChatFileStack(files: files, isStreaming: filesPending).bubbleWidth(.leading) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .environment(\.openURL, OpenURLAction { url in
-            let path = url.isFileURL ? url.path : (url.scheme == nil ? url.path : nil)
-            guard let path, let file = files.first(where: { $0.path == path }), let openFile else { return .systemAction }
-            openFile(file)
-            return .handled
-        })
+        .environment(\.openURL, links.action(files: files, open: openFile))
     }
 
     private func isText(_ segment: MessageSegment) -> Bool {
@@ -88,6 +84,37 @@ struct AssistantBubble: View {
     }
 }
 
+@MainActor
+private final class FileLinkRouter {
+    private var files: [FileReference] = []
+    private var open: (@MainActor (FileReference) -> Void)?
+    private lazy var routing = OpenURLAction { [weak self] url in self?.route(url) ?? .systemAction }
+
+    func action(files: [FileReference], open: (@MainActor (FileReference) -> Void)?) -> OpenURLAction {
+        self.files = files
+        self.open = open
+        return routing
+    }
+
+    private func route(_ url: URL) -> OpenURLAction.Result {
+        let path = url.isFileURL ? url.path : (url.scheme == nil ? url.path : nil)
+        guard let path, let file = files.first(where: { $0.path == path }), let open else { return .systemAction }
+        open(file)
+        return .handled
+    }
+}
+
 extension ParsedMarkdown {
+    static func deferringWarm(_ source: String, isStreaming: Bool) -> ParsedMarkdown {
+        let parsed = ParsedMarkdown(deferring: source)
+        if !isStreaming {
+            MarkdownWarmer.shared.enqueue(parsed.deferred)
+            #if os(macOS)
+            SelectableTextPrefetcher.shared.enqueue(parsed.deferred)
+            #endif
+        }
+        return parsed
+    }
+
     var segments: [MessageSegment] { deferred.segments }
 }

@@ -28,7 +28,6 @@ final class ComputerModel {
     private(set) var hasControl = false
     private(set) var isTakingControl = false
     private(set) var attempt = 0
-    private(set) var frame: CGImage?
     private(set) var remoteSize: RFBSize?
     private(set) var pointerRemote: CGPoint?
     var trackpad = false
@@ -39,6 +38,7 @@ final class ComputerModel {
     var toast: String?
 
     let botName: String
+    let frames = ComputerFrameSink()
     private let service: ComputerService
     private let openStream: @Sendable (ComputerObservation) async throws -> any RFBTransport
     private var session: RFBSession?
@@ -300,7 +300,7 @@ final class ComputerModel {
 
     private func render(_ framebuffer: RFBFramebuffer) async {
         let image = await Task.detached(priority: .userInitiated) { framebuffer.makeImage() }.value
-        if let image { frame = image }
+        if let image { frames.submit(image) }
     }
 
     private func closeSession() async {

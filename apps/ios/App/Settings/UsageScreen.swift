@@ -53,13 +53,13 @@ struct UsageScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: UsageModel
+    @LazyState private var model: UsageModel
     @Environment(\.hermesTheme) private var theme
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
-        _model = State(initialValue: UsageModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { UsageModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {

@@ -182,15 +182,19 @@ struct CreateBotPreview: View {
 private struct EnteringDot: View {
     let color: Color
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let orbits = [(r: 34.0, size: 4.5, speed: 5.0), (r: 30.0, size: 6.5, speed: -4.0)]
+
     var body: some View {
-        TimelineView(.animation) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             Canvas { canvas, size in
                 let center = CGPoint(x: size.width / 2, y: size.height / 2)
                 let pulse = 1 + 0.08 * sin(t * 9)
                 let radius = 15.0 * pulse
                 canvas.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)), with: .color(color))
-                for (index, orbit) in [(r: 34.0, size: 4.5, speed: 5.0), (r: 30.0, size: 6.5, speed: -4.0)].enumerated() {
+                for (index, orbit) in Self.orbits.enumerated() {
                     let angle = t * orbit.speed + Double(index) * 2.4
                     let point = CGPoint(x: center.x + cos(angle) * orbit.r, y: center.y + sin(angle) * orbit.r * 0.8)
                     canvas.fill(

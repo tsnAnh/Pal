@@ -107,7 +107,7 @@ struct RoomView: View {
     private var workingLine: some View {
         let names = model.room.members.filter { model.busyMemberIDs().contains($0.memberID) }.map(\.displayName)
         if !names.isEmpty {
-            ChatWorkingRow(status: String(localized: "\(names.formatted(.list(type: .and))) working"), ink: BubblePalette.ink(accent: nil))
+            ChatWorkingRow(status: String(localized: "\(FormattedLabel.list(names)) working"), ink: BubblePalette.ink(accent: nil))
                 .padding(.top, 12)
         } else if model.isBusy {
             ChatWorkingRow(status: nil, ink: BubblePalette.ink(accent: nil)).padding(.top, 12)

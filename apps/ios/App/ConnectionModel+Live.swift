@@ -14,7 +14,7 @@ extension ConnectionModel {
         }
         let transport = URLSessionHTTPTransport()
         let identity = DeviceIdentity.resolve(
-            store: KeychainDeviceIDStore(service: KeychainNamespace.qualified("dev.tsnanh.hermes.bot.device")),
+            store: KeychainDeviceIDStore(service: KeychainNamespace.qualified("\(keychainService).device")),
             formFactor: DeviceInfo.formFactor,
             appVersion: DeviceIdentity.appVersion(of: .main),
             model: DeviceInfo.hardwareIdentifier,
@@ -44,8 +44,10 @@ extension ConnectionModel {
         )
     }
 
+    private static let keychainService = Bundle.main.bundleIdentifier ?? "dev.tsnanh.hermes.bot"
+
     static func credentialStore() -> KeychainCredentialStore {
-        KeychainCredentialStore(service: KeychainNamespace.qualified("dev.tsnanh.hermes.bot.credentials"))
+        KeychainCredentialStore(service: KeychainNamespace.qualified("\(keychainService).credentials"))
     }
 
     private static func keychainSession(

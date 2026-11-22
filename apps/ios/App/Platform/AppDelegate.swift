@@ -45,6 +45,14 @@ enum PlatformApplication {
     }
 }
 
+enum TestHostMode {
+    static let isActive: Bool = {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["XCTestConfigurationFilePath"] != nil
+            && environment["XCTestBundlePath"].map { URL(filePath: $0).lastPathComponent == "HermesBotsTests.xctest" } == true
+    }()
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let push: PushNotifications
@@ -53,7 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     override init() {
         let push = PushNotifications()
         self.push = push
-        updater = AppUpdater.make(notices: push)
+        updater = TestHostMode.isActive ? nil : AppUpdater.make(notices: push)
+        if TestHostMode.isActive { NSApplication.shared.setActivationPolicy(.prohibited) }
         super.init()
     }
 

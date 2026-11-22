@@ -1,8 +1,9 @@
 import PalChat
 
 extension ChatRow {
-    static func mergingClarifyAnswers(_ rows: [ChatRow], sources: [(id: String, itemID: String)]) -> [ChatRow] {
-        let calls = Dictionary(sources.map { ($0.id, ClarifyRecord.callID(ofItemID: $0.itemID)) }, uniquingKeysWith: { first, _ in first })
+    static func mergingClarifyAnswers(_ rows: [ChatRow], sources: @autoclosure () -> [(id: String, itemID: String)]) -> [ChatRow] {
+        guard rows.contains(where: { if case .clarifyAnswered = $0.kind { true } else { false } }) else { return rows }
+        let calls = Dictionary(sources().map { ($0.id, ClarifyRecord.callID(ofItemID: $0.itemID)) }, uniquingKeysWith: { first, _ in first })
         var merged: [ChatRow] = []
         var openCall: String?
         for row in rows {

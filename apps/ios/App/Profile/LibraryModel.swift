@@ -1,6 +1,8 @@
 import Foundation
 import PalBotProfile
+import PalDiagnostics
 import PalProtocol
+import PalRoster
 import Observation
 
 @MainActor
@@ -34,7 +36,9 @@ final class LibraryModel {
     }
 
     private(set) var phase: Phase = .loading
-    private(set) var entries: [LibraryEntry] = []
+    private(set) var entries: [LibraryEntry] = [] {
+        didSet { macItemsVersion &+= 1 }
+    }
     private(set) var pagination: Pagination = .end
     private(set) var isIndexing = false
     private(set) var previewFailed = false
@@ -54,6 +58,9 @@ final class LibraryModel {
     private var pollTask: Task<Void, Never>?
     private var generation = 0
     private var previewDirectory: URL?
+    @ObservationIgnored private var macItemsVersion = 0
+    @ObservationIgnored private var macItemsCache: MacItemsCache?
+    @ObservationIgnored private var subtitleCache: [String: String] = [:]
 
     static let defaultPollInterval: Duration = .seconds(1.5)
     static let pollLimit = 10
@@ -70,6 +77,23 @@ final class LibraryModel {
     }
 
     var sections: [LibrarySection] { LibraryGrouping.sections(entries) }
+
+    var macItems: [MacLibraryItem] {
+        let current = entries
+        let day = Calendar.current.startOfDay(for: Date())
+        if let cache = macItemsCache, cache.version == macItemsVersion, cache.day == day { return cache.items }
+        PalPerf.event("library.mac-items.build", count: current.count)
+        let items = MacLibraryItems.make(current, subtitle: { cachedSubtitle(for: $0) })
+        macItemsCache = MacItemsCache(version: macItemsVersion, day: day, items: items)
+        return items
+    }
+
+    private func cachedSubtitle(for entry: LibraryEntry) -> String {
+        if let cached = subtitleCache[entry.id] { return cached }
+        let text = entry.subtitle()
+        subtitleCache[entry.id] = text
+        return text
+    }
 
     var hasMore: Bool { pagination != .end }
 
@@ -101,10 +125,11 @@ final class LibraryModel {
         loadMoreTask?.cancel()
         pollTask?.cancel()
         loadMoreTask = nil
-        phase = .loading
-        entries = []
-        pagination = .end
-        isIndexing = false
+        subtitleCache = [:]
+        assignIfChanged(\.phase, .loading)
+        assignIfChanged(\.entries, [])
+        assignIfChanged(\.pagination, .end)
+        assignIfChanged(\.isIndexing, false)
         loadTask = Task { await loadFirstPage(generation: current) }
     }
 
@@ -116,7 +141,7 @@ final class LibraryModel {
         let key = SurfaceKey.screen("library-\(filter.rawValue)", bot: botName)
         if let cached = await surfaces.value(LibraryPage.self, key), current == generation, phase == .loading {
             apply(cached, replacing: true)
-            phase = .ready
+            assignIfChanged(\.phase, .ready)
         }
         do {
             let page = try await library.page(profile: botName, filter: filter)
@@ -124,7 +149,7 @@ final class LibraryModel {
             loadMoreTask?.cancel()
             loadMoreTask = nil
             apply(page, replacing: true)
-            phase = .ready
+            assignIfChanged(\.phase, .ready)
             surfaces.persist(page, key)
             if !page.indexComplete { startPolling(generation: current) }
         } catch is CancellationError {
@@ -136,13 +161,14 @@ final class LibraryModel {
 
     private func apply(_ page: LibraryPage, replacing: Bool) {
         if replacing {
-            entries = page.entries
+            assignIfChanged(\.entries, page.entries)
         } else {
             let known = Set(entries.map(\.id))
-            entries += page.entries.filter { !known.contains($0.id) }
+            let fresh = page.entries.filter { !known.contains($0.id) }
+            if !fresh.isEmpty { entries += fresh }
         }
-        pagination = Pagination(page)
-        isIndexing = !page.indexComplete
+        assignIfChanged(\.pagination, Pagination(page))
+        assignIfChanged(\.isIndexing, !page.indexComplete)
     }
 
     private func refreshHead(with page: LibraryPage) {
@@ -152,9 +178,9 @@ final class LibraryModel {
         }
         let headIDs = Set(page.entries.map(\.id))
         let tail = entries.filter { $0.occurredAt < boundary && !headIDs.contains($0.id) }
-        entries = page.entries + tail
-        if tail.isEmpty, !isLoadingMore { pagination = pagination.following(page) }
-        isIndexing = !page.indexComplete
+        assignIfChanged(\.entries, page.entries + tail)
+        if tail.isEmpty, !isLoadingMore { assignIfChanged(\.pagination, pagination.following(page)) }
+        assignIfChanged(\.isIndexing, !page.indexComplete)
     }
 
     private func startPolling(generation current: Int) {
@@ -169,7 +195,7 @@ final class LibraryModel {
                 if page.indexComplete { return }
             }
             guard let self, current == generation else { return }
-            isIndexing = false
+            assignIfChanged(\.isIndexing, false)
         }
     }
 

@@ -12,7 +12,7 @@ struct RoutineMessage: Equatable {
         let rest = failure?.rest ?? body
         text = body
         failureLead = failure?.lead
-        self.body = ParsedMarkdown(source: rest, document: MarkdownDocument(parsing: rest))
+        self.body = ParsedMarkdown.cached(rest)
     }
 }
 
@@ -38,7 +38,7 @@ struct FailureLead: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        if let block = MarkdownDocument(parsing: text).blocks.first {
+        if let block = ParsedMarkdown.cached(text).document.blocks.first {
             InlineText(text: block.text, highlight: highlight, isCurrentMatch: isCurrentMatch, foreground: Color(theme.palette.destructive))
         }
     }

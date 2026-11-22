@@ -64,14 +64,14 @@ struct PermissionsScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: PermissionsModel
+    @LazyState private var model: PermissionsModel
     @State private var addingTo: PermissionList?
     @State private var removing: PermissionRuleEntry?
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
-        _model = State(initialValue: PermissionsModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { PermissionsModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {

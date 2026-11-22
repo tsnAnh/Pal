@@ -3,31 +3,27 @@ import PalBotProfile
 import SwiftUI
 
 struct MacConnectAppsPanel: View {
-    let connection: ConnectionModel
-    let hostPool: DeviceHostPool
-    let roster: RosterModel
-    let profile: String?
     let close: () -> Void
 
-    @State private var model: ConnectAppsModel?
+    @LazyState private var model: ConnectAppsModel
 
-    var body: some View {
-        Group {
-            if let model { ConnectAppsScreen(model: model, close: close) }
+    init(connection: ConnectionModel, hostPool: DeviceHostPool, roster: RosterModel, profile: String?, close: @escaping () -> Void) {
+        self.close = close
+        _model = LazyState {
+            ConnectAppsModel(
+                connection: connection,
+                pool: hostPool,
+                profile: profile,
+                botName: roster.displayName(forProfile: profile),
+                browser: WebAuthenticationBrowser(),
+                bots: roster.customConnectorBots,
+                currentBot: roster.currentBotName(forProfile: profile)
+            )
         }
-        .onAppear { if model == nil { model = makeModel() } }
     }
 
-    private func makeModel() -> ConnectAppsModel {
-        ConnectAppsModel(
-            connection: connection,
-            pool: hostPool,
-            profile: profile,
-            botName: roster.displayName(forProfile: profile),
-            browser: WebAuthenticationBrowser(),
-            bots: roster.customConnectorBots,
-            currentBot: roster.currentBotName(forProfile: profile)
-        )
+    var body: some View {
+        ConnectAppsScreen(model: model, close: close)
     }
 }
 #endif

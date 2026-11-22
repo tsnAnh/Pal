@@ -116,7 +116,19 @@ public enum MessageImages {
         return inlineReference(in: line) ?? remoteImageReference(in: line)
     }
 
+    private static let assistantMarkers = ["MEDIA:", "::preview{", "data:image/"].map { Array($0.utf8) }
+
+    private static func mayCarryMedia(_ text: String) -> Bool {
+        let scanned = text.utf8.withContiguousStorageIfAvailable { haystack in
+            assistantMarkers.contains { needle in
+                memmem(haystack.baseAddress, haystack.count, needle, needle.count) != nil
+            }
+        }
+        return scanned ?? true
+    }
+
     private static func extractFromAssistant(_ text: String, isStreaming: Bool) -> MessageContent {
+        guard mayCarryMedia(text) else { return MessageContent(text: text, images: []) }
         let split = MessageFiles.extract(from: text, isStreaming: isStreaming)
         var body = split.text
         var images: [ImageReference] = []

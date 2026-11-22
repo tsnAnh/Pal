@@ -4,7 +4,7 @@ import SwiftUI
 import UIKit
 
 struct ComputerSurface: UIViewRepresentable {
-    let image: CGImage?
+    let frames: ComputerFrameSink
     let remoteSize: RFBSize?
     let canControl: Bool
     let trackpad: Bool
@@ -22,7 +22,8 @@ struct ComputerSurface: UIViewRepresentable {
 
     func updateUIView(_ view: ScreenSurfaceView, context: Context) {
         view.model = model
-        view.apply(image: image, remoteSize: remoteSize)
+        view.imageView.bind(frames)
+        view.apply(remoteSize: remoteSize)
         view.canControl = canControl
         view.trackpad = trackpad && canControl
         view.recenter(token: recenterToken)
@@ -42,10 +43,9 @@ final class ScreenSurfaceView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
     }
 
     private var dragHoldRecognizer: UILongPressGestureRecognizer?
-    private let imageLayer = CALayer()
+    let imageView = FrameImageView(frame: .zero)
     private let cursorLayer = CAShapeLayer()
     private var viewport = RFBViewport(container: .zero, remote: RFBSize(width: 1, height: 1))
-    private var hasImage = false
     private var trackpadPoint: CGPoint?
     private var scrollRemainder: CGFloat = 0
     private var dragLastLocation: CGPoint?
@@ -56,11 +56,8 @@ final class ScreenSurfaceView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
         super.init(frame: frame)
         backgroundColor = .black
         isMultipleTouchEnabled = true
-        imageLayer.magnificationFilter = .linear
-        imageLayer.minificationFilter = .trilinear
-        imageLayer.contentsGravity = .resize
-        imageLayer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        layer.addSublayer(imageLayer)
+        imageView.onFirstImage = { [weak self] in self?.updateCursor() }
+        addSubview(imageView)
         cursorLayer.path = Self.cursorPath()
         cursorLayer.fillColor = UIColor.white.cgColor
         cursorLayer.strokeColor = UIColor.black.cgColor
@@ -87,14 +84,10 @@ final class ScreenSurfaceView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
         return path
     }
 
-    func apply(image: CGImage?, remoteSize: RFBSize?) {
+    func apply(remoteSize: RFBSize?) {
         if let remoteSize, remoteSize != viewport.remote {
             viewport.update(container: bounds.size, remote: remoteSize)
             trackpadPoint = nil
-        }
-        if let image {
-            imageLayer.contents = image
-            hasImage = true
         }
         layoutViewport()
     }
@@ -106,13 +99,12 @@ final class ScreenSurfaceView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
     }
 
     private func layoutViewport() {
-        imageLayer.isHidden = !hasImage
-        imageLayer.frame = viewport.displayedFrame
+        UIView.performWithoutAnimation { imageView.frame = viewport.displayedFrame }
         updateCursor()
     }
 
     private func updateCursor() {
-        guard trackpad, hasImage else {
+        guard trackpad, !imageView.isHidden else {
             cursorLayer.isHidden = true
             return
         }

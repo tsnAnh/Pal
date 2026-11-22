@@ -22,13 +22,13 @@ struct PublicAccessScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: WebhookRoutesModel
+    @LazyState private var model: WebhookRoutesModel
     @State private var adding = false
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
-        _model = State(initialValue: WebhookRoutesModel.make(hub: hub))
+        _model = LazyState { WebhookRoutesModel.make(hub: hub) }
     }
 
     var body: some View {

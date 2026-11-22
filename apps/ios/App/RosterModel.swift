@@ -501,8 +501,8 @@ final class RosterModel {
     }
 
     private nonisolated static func dictionary(from value: JSONValue) -> [String: Any]? {
-        guard let data = try? JSONEncoder().encode(value) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        guard let fields = value.objectValue else { return nil }
+        return fields.mapValues(\.foundationObject)
     }
 }
 

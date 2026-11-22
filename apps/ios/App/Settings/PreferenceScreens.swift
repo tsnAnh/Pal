@@ -118,12 +118,12 @@ struct DataSharingScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: DataSharingModel
+    @LazyState private var model: DataSharingModel
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
-        _model = State(initialValue: DataSharingModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { DataSharingModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {
@@ -349,12 +349,12 @@ struct BotNotificationsScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model: BotNotificationsModel
+    @LazyState private var model: BotNotificationsModel
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
-        _model = State(initialValue: BotNotificationsModel(surfaces: hub.connection.surfaces))
+        _model = LazyState { BotNotificationsModel(surfaces: hub.connection.surfaces) }
     }
 
     var body: some View {
