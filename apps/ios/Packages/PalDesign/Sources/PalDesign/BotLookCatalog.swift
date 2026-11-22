@@ -11,7 +11,7 @@ public enum BotLookCatalog {
     public static let shapes: [BlobKind] = [
         .round, .cloud, .boxy, .spark, .clover,
         .nub, .sun, .droplet, .capsule, .triangle,
-        .gem, .burst, .hexagon,
+        .gem, .burst, .hexagon, .heart,
     ]
 
     public static let shapeRows: [[BlobKind]] = [
@@ -43,23 +43,14 @@ public enum BotLookCatalog {
         "blobatar:\(seed):\(kind.rawValue)"
     }
 
+    private static let displayNames: [BlobKind: String.LocalizationValue] = [
+        .round: "Round", .organic: "Organic", .boxy: "Squircle", .capsule: "Pill", .nub: "Bean",
+        .cloud: "Cloud", .droplet: "Drop", .hexagon: "Hexagon", .sun: "Flower", .triangle: "Triangle",
+        .spark: "Spark", .clover: "Clover", .burst: "Burst", .gem: "Gem", .heart: "Heart",
+    ]
+
     public static func displayName(of kind: BlobKind) -> String {
-        switch kind {
-        case .round: String(localized: "Round")
-        case .organic: String(localized: "Organic")
-        case .boxy: String(localized: "Squircle")
-        case .capsule: String(localized: "Pill")
-        case .nub: String(localized: "Bean")
-        case .cloud: String(localized: "Cloud")
-        case .droplet: String(localized: "Drop")
-        case .hexagon: String(localized: "Hexagon")
-        case .sun: String(localized: "Flower")
-        case .triangle: String(localized: "Triangle")
-        case .spark: String(localized: "Spark")
-        case .clover: String(localized: "Clover")
-        case .burst: String(localized: "Burst")
-        case .gem: String(localized: "Gem")
-        }
+        String(localized: displayNames[kind] ?? String.LocalizationValue(kind.rawValue))
     }
 }
 

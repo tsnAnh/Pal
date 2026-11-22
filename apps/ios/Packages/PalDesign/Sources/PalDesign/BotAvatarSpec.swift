@@ -131,14 +131,14 @@ extension BotAvatarSpec {
     }
 
     static func resolvedColor(name: String, meta: BotAvatarMeta) -> AvatarColor {
-        if isPrimary(name), !meta.custom { return .primary }
+        if isPrimary(name), !meta.custom { return .primaryBot }
         return AvatarNaming.avatarColor(AvatarColor(css: meta.color), name: name)
     }
 
     static func shapeAvatar(name: String, meta: BotAvatarMeta) -> ShapeAvatar {
         let usesPrimaryLook = isPrimary(name) && !meta.custom
         let storedShape = usesPrimaryLook
-            ? ClassicShape.squircle.rawValue
+            ? BotLookCatalog.shapeString(seed: primaryName, kind: .heart)
             : meta.shape ?? AvatarNaming.defaultShape(for: name).rawValue
         let color = resolvedColor(name: name, meta: meta)
 

@@ -5,6 +5,7 @@ enum SolidTuning {
     static let turn = 41.0
     static let restLook = (x: 0.7, y: 0.51)
     static let restEyeSlant = 11.0
+    static let restTurns: [BlobKind: RestTurn] = [.heart: RestTurn(look: 0.12, tilt: 0)]
     static let eyeReach = 1.1
     static let eye = (width: 0.23, height: 0.53, gap: 0.54, y: 0.14)
     static let eyeLift = 0.02
@@ -42,6 +43,7 @@ struct AvatarSolid {
     var bodyFill: AvatarColor? { rig.bodyColor }
     var eyeFill: AvatarColor { rig.eyes.fill }
     var restTilt: Double { rig.restTilt }
+    var restTurn: RestTurn { rig.restTurn }
 
 
     func toned(for scheme: ColorScheme) -> AvatarSolid {

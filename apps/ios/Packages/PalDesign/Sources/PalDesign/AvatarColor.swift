@@ -13,6 +13,7 @@ public struct AvatarColor: Equatable, Hashable, Sendable {
     public static let lightEyeFillCSS = "#f3f4fd"
     public static let darkEyeFillCSS = "#1b1b1b"
     public static let primary = AvatarColor(unchecked: "#8b5cf6", red: 139, green: 92, blue: 246, alpha: 1)
+    public static let primaryBot = AvatarColor(unchecked: "#93dcf7", red: 147, green: 220, blue: 247, alpha: 1)
 
     private init(unchecked css: String, red: Double, green: Double, blue: Double, alpha: Double) {
         self.css = css

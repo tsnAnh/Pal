@@ -138,27 +138,32 @@ struct SpecParsingTests {
     }
 
     @Test("a custom flag given as a non-boolean does not unlock the primary bot")
-    func primaryBotStaysSquircle() {
+    func primaryBotStaysHeart() {
         for flag in [true, false] {
             let meta: [String: Any] = ["hermes-bots": ["custom": flag, "shape": "circle", "color": "#e5484d"]]
             let spec = BotAvatarSpec(name: "  Default ", uiMeta: meta, photo: nil)
-            guard case .shape(.classic(let classic)) = spec else {
-                Issue.record("expected classic")
-                continue
-            }
-            #expect((classic.shape == .circle) == flag)
-            #expect((classic.color.css == "#e5484d") == flag)
-            if !flag {
-                #expect(classic.shape == .squircle)
-                #expect(classic.color.css == "#8b5cf6")
+            if flag {
+                guard case .shape(.classic(let classic)) = spec else {
+                    Issue.record("a customised primary bot keeps the owner's classic shape")
+                    continue
+                }
+                #expect(classic.shape == .circle)
+                #expect(classic.color.css == "#e5484d")
+            } else {
+                guard case .shape(.blob(let blob)) = spec else {
+                    Issue.record("the primary bot is the heart blob")
+                    continue
+                }
+                #expect(blob.kind == .heart)
+                #expect(blob.headFillCSS == "#93dcf7")
             }
         }
         let stringFlag: [String: Any] = ["hermes-bots": ["custom": "true", "shape": "circle"]]
-        guard case .shape(.classic(let classic)) = BotAvatarSpec(name: "default", uiMeta: stringFlag, photo: nil) else {
-            Issue.record("expected classic")
+        guard case .shape(.blob(let blob)) = BotAvatarSpec(name: "default", uiMeta: stringFlag, photo: nil) else {
+            Issue.record("expected the heart blob")
             return
         }
-        #expect(classic.shape == .squircle)
+        #expect(blob.kind == .heart)
     }
 
     @Test("sigil seeds follow Number() semantics for integers and degrade to zero otherwise")
