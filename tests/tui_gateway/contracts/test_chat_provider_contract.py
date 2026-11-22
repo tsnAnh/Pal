@@ -200,7 +200,7 @@ def test_abstract_provider_raises_typed_not_implemented():
     }
     assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity",
                                                                                   "accept_config_credential", "parse_owner_identity",
-                                                                                  "new_install_config", "is_direct_space"}
+                                                                                  "new_install_config", "is_direct_space", "manual_step_action"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()
