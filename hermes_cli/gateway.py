@@ -3866,14 +3866,12 @@ from hermes_cli.gateway_launchd import (
     launchd_restart,
     LAUNCHD_SUPERVISION_VERIFY_TIMEOUT,
     wait_for_launchd_gateway_supervision,
-    launchd_status,
+    launchd_status, print_launchd_status_json,
 )
 from datetime import UTC
 
-
 # Cached launchd domain — probe once per process invocation.
 _resolved_launchd_domain: str | None = None
-
 
 
 def _wait_for_gateway_exit(timeout: float = 10.0, force_after: float | None = 5.0) -> bool:
@@ -5116,7 +5114,7 @@ def _cmd_install(args):
         _install_systemd_from_cli(args, force=force, system=system, run_as_user=run_as_user)
     elif backend == "launchd":
         launchd_install(force, start_now=getattr(args, "start_now", None) is not False,
-                        force_unit_path=getattr(args, "force_unit_path", False))
+                        force_unit_path=getattr(args, "force_unit_path", False), start_on_login=getattr(args, "start_on_login", None))
     elif backend == "windows":
         _gw_windows().install(
             force=force,
@@ -5476,6 +5474,8 @@ def _status_host_kind() -> str:
 
 
 def _cmd_status(args):
+    if getattr(args, "json", False):
+        return print_launchd_status_json(_service_backend())
     from hermes_cli.gateway_profile_lifecycle import print_parked_status
     from hermes_cli.gateway_status_notes import print_standalone_by_config, report_incompatible_owner
     deep = getattr(args, "deep", False)

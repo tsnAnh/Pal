@@ -371,7 +371,17 @@ def service_path_prefix_entries() -> list[str]:
     return list(dict.fromkeys(entries))
 
 
-def generate_launchd_plist() -> str:
+def installed_start_on_login(plist_path: Path) -> bool:
+    import plistlib
+    from xml.parsers.expat import ExpatError
+    try:
+        definition = plistlib.loads(plist_path.read_bytes())
+    except (OSError, ValueError, ExpatError):
+        return True
+    return bool(definition.get("RunAtLoad", True)) if isinstance(definition, dict) else True
+
+
+def generate_launchd_plist(start_on_login: bool | None = None) -> str:
     from html import escape
     # Stable cwd anchor — never the volatile source checkout (same rot risk as systemd's WorkingDirectory).
     working_dir = _gw()._stable_service_working_dir()
@@ -379,6 +389,12 @@ def generate_launchd_plist() -> str:
     log_dir = _gw().get_hermes_home() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     label = _gw().get_launchd_label()
+    if start_on_login is None:
+        start_on_login = installed_start_on_login(_gw().get_launchd_plist_path())
+    run_at_load = "true" if start_on_login else "false"
+    keep_alive_after_demand = "" if start_on_login else """
+        <key>AfterInitialDemand</key>
+        <true/>"""
 
     # launchd's default PATH misses Homebrew, nvm, cargo…; prepend venv/bin + node dirs (as in the
     # systemd unit) so node stays resolvable even if the shell PATH changes, then the shell PATH.
@@ -449,12 +465,12 @@ def generate_launchd_plist() -> str:
     </array>
     
     <key>RunAtLoad</key>
-    <true/>
+    <{run_at_load}/>
     
     <key>KeepAlive</key>
     <dict>
         <key>SuccessfulExit</key>
-        <false/>
+        <false/>{keep_alive_after_demand}
     </dict>
 
     <!-- SuccessfulExit=false parks a clean stop (exit 0), including gateway
@@ -693,9 +709,20 @@ def refresh_launchd_plist_if_needed() -> bool:
     return True
 
 
-def launchd_install(force: bool = False, *, start_now: bool = True, force_unit_path: bool = False):
+def _apply_start_on_login(plist_path: Path, requested: bool | None) -> bool:
+    if requested is None or installed_start_on_login(plist_path) == requested:
+        return False
+    plist_path.write_text(_gw().generate_launchd_plist(requested), encoding="utf-8")
+    print(f"✓ Start at login {'on' if requested else 'off'}")
+    return True
+
+
+def launchd_install(
+    force: bool = False, *, start_now: bool = True, force_unit_path: bool = False, start_on_login: bool | None = None
+):
     plist_path = _gw().get_launchd_plist_path()
     label = _gw().get_launchd_label()
+    runs_at_load = installed_start_on_login(plist_path) if start_on_login is None else start_on_login
     # A plist pinning another home is another install's gateway, --force included; --force-unit-path repoints.
     from hermes_cli.gateway_service_owner import definition_belongs_to_home
     if not force_unit_path and not definition_belongs_to_home(plist_path, _gw().get_hermes_home(), "overwrite"):
@@ -711,13 +738,15 @@ def launchd_install(force: bool = False, *, start_now: bool = True, force_unit_p
 
     if plist_path.exists() and not (force or force_unit_path):
         if _gw().launchd_plist_is_current():
-            print(f"Service already installed at: {plist_path}")
-            print("Use --force to reinstall")
+            if not _apply_start_on_login(plist_path, start_on_login):
+                print(f"Service already installed at: {plist_path}")
+                print("Use --force to reinstall")
             return
         if load:
             print(f"↻ Repairing outdated launchd service at: {plist_path}")
             if _gw().refresh_launchd_plist_if_needed():
                 print("✓ Service definition updated")
+                _apply_start_on_login(plist_path, start_on_login)
             else:
                 # The plist was rewritten but launchd never registered it (or the write was refused):
                 # a success line here would hide an unloaded service with no KeepAlive.
@@ -730,7 +759,7 @@ def launchd_install(force: bool = False, *, start_now: bool = True, force_unit_p
             return
 
     plist_path.parent.mkdir(parents=True, exist_ok=True)
-    new_plist = _gw().generate_launchd_plist()
+    new_plist = _gw().generate_launchd_plist(runs_at_load)
     if gateway_service_owner.refuse_temp_home_service_write(new_plist, "launchd plist"):
         return
     print(f"Installing launchd service to: {plist_path}")
@@ -744,7 +773,7 @@ def launchd_install(force: bool = False, *, start_now: bool = True, force_unit_p
             ["launchctl", "bootout", f"{_gw()._launchd_domain()}/{label}"],
             check=False, timeout=90, **_gw()._CAPTURE_TEXT)
         print()
-        print("✓ Service installed, not started (launchd starts it at your next login)")
+        print("✓ Service installed, not started" + (" (launchd starts it at your next login)" if runs_at_load else ""))
         print()
         print("Next steps:")
         print("  hermes gateway start              # Start it now")
@@ -770,6 +799,13 @@ def launchd_install(force: bool = False, *, start_now: bool = True, force_unit_p
             _gw()._launchctl_bootstrap(_gw()._launchd_domain(), plist_path, label, timeout=30)
         except subprocess.CalledProcessError as e:
             _gw()._launchd_degrade_or_raise(e, "launchctl bootstrap")
+            return
+
+    if not runs_at_load:
+        try:
+            _launchctl_kickstart_current(label)
+        except subprocess.CalledProcessError as e:
+            _gw()._launchd_degrade_or_raise(e, "launchctl kickstart")
             return
 
     print()
@@ -1010,6 +1046,33 @@ def wait_for_launchd_gateway_supervision(
         return pid is not None and pid != old_pid
 
     return poll_until(_supervised, max(timeout, 0.0), max(poll_interval, 0.01))
+
+
+def launchd_status_report() -> dict:
+    plist_path = _gw().get_launchd_plist_path()
+    label = _gw().get_launchd_label()
+    try:
+        result = subprocess.run(["launchctl", "list", label], timeout=10, **_gw()._CAPTURE_TEXT, check=False)
+        loaded = result.returncode == 0
+        pid = _gw()._parse_launchd_pid_from_list_output(result.stdout) if loaded else None
+    except subprocess.TimeoutExpired:
+        loaded, pid = False, None
+    installed = plist_path.exists()
+    return {
+        "installed": installed,
+        "loaded": loaded,
+        "running": pid is not None,
+        "pid": pid,
+        "start_on_login": installed_start_on_login(plist_path) if installed else True,
+        "label": label,
+    }
+
+
+def print_launchd_status_json(backend: str | None) -> None:
+    if backend != "launchd":
+        print(json.dumps({"error": {"code": "unsupported_platform"}}))
+        sys.exit(1)
+    print(json.dumps(launchd_status_report()))
 
 
 def launchd_status(deep: bool = False):
