@@ -34,10 +34,15 @@ class Kit:
         self.sleeps: list[float] = []
         avatar = tmp_path / "avatar.png"
         Image.new("RGBA", (800, 600), (10, 200, 30, 0)).save(avatar)
+        records = SlackRecords(tmp_path / "records.json")
         self.provider = SlackProvider(
             redirect_url=REDIRECT, vault=self.vault, api=SlackApi(self.slack.transport, sleep=self.sleeps.append),
-            records=SlackRecords(tmp_path / "records.json"), clock=lambda: self.slack.now,
-            identity=lambda bot: ci.BotIdentitySource(bot, name, str(avatar)))
+            records=records, workspace_vault=self.vault, workspace_records=records, clock=lambda: self.slack.now,
+            identity=self.identity)
+        self.avatar, self.name = avatar, name
+
+    def identity(self, bot):
+        return ci.BotIdentitySource(bot, self.name, str(self.avatar))
 
     def state(self, app_id=None):
         return ci.initial_state("pal", "slack", "w1", FIXED_NOW).model_copy(update={"app_id": app_id})
@@ -322,8 +327,9 @@ class _Installs:
 
 
 def test_registry_returns_slack_provider(tmp_path):
-    provider = provider_for("slack", redirect_url=REDIRECT, records=SlackRecords(tmp_path / "r.json"),
-                            vault=VaultStore(tmp_path / "v"))
+    records, vault = SlackRecords(tmp_path / "r.json"), VaultStore(tmp_path / "v")
+    provider = provider_for("slack", redirect_url=REDIRECT, records=records, vault=vault,
+                            workspace_records=records, workspace_vault=vault)
     assert isinstance(provider, SlackProvider) and provider.provider_id == "slack"
     with pytest.raises(ci.ChatProviderError):
         provider_for("nope")
@@ -352,7 +358,7 @@ def test_both_config_tokens_are_joined_into_one_renewable_pair(tmp_path):
     kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
     assert refresh_id not in {m.id for m in kit.vault.list_items()}
     assert _modes(kit.provider.capabilities("w1"))[CAP.unattended_refresh] is wire.CapabilityMode.automatic
-    created = kit.provider.begin_install(kit.state(), access_id)
+    created = kit.provider.begin_install(kit.state(), None)
     assert created.app_id in kit.slack.apps and kit.slack.rotations == 1
 
 
@@ -362,11 +368,11 @@ def test_access_token_alone_works_but_is_reported_as_not_renewing(tmp_path):
     kit.slack.access = {ACCESS}
     kit.provider.accept_config_credential(kit.state(), access_id, None)
     assert _modes(kit.provider.capabilities("w1"))[CAP.unattended_refresh] is wire.CapabilityMode.guided
-    assert kit.provider.begin_install(kit.state(), access_id).app_id in kit.slack.apps
+    assert kit.provider.begin_install(kit.state(), None).app_id in kit.slack.apps
     assert kit.slack.rotations == 0
     kit.slack.now += 13 * 3600
     with pytest.raises(SlackSetupError) as info:
-        kit.provider.begin_install(kit.state(), access_id)
+        kit.provider.begin_install(kit.state(), None)
     assert info.value.code is wire.SetupErrorCode.credential_expired and info.value.fix is wire.FixAction.reenter_credential
     assert kit.slack.rotations == 0
 
@@ -377,6 +383,59 @@ def test_a_refresh_item_that_is_not_a_refresh_token_is_rejected(tmp_path):
     with pytest.raises(SlackSetupError) as info:
         kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
     assert info.value.code is wire.SetupErrorCode.credential_rejected
+
+
+def test_a_stored_credential_is_known_without_touching_slack(tmp_path):
+    kit = Kit(tmp_path)
+    assert kit.provider.has_config_credential("w1") is False
+    access_id, refresh_id = _config_items(kit)
+    kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
+    mark = len(kit.slack.calls)
+    assert kit.provider.has_config_credential("w1") is True
+    assert kit.provider.has_config_credential("w2") is False
+    assert kit.slack.calls[mark:] == []
+
+
+def test_a_stored_credential_that_cannot_renew_stops_counting_once_it_is_stale(tmp_path):
+    kit = Kit(tmp_path)
+    access_id, _ = _config_items(kit, refresh=None)
+    kit.provider.accept_config_credential(kit.state(), access_id, None)
+    assert kit.provider.has_config_credential("w1") is True
+    kit.slack.now += 13 * 3600
+    assert kit.provider.has_config_credential("w1") is False
+
+
+def test_a_stored_credential_whose_vault_item_is_gone_does_not_count(tmp_path):
+    kit = Kit(tmp_path)
+    access_id, refresh_id = _config_items(kit)
+    held = kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
+    kit.vault.remove_item(held)
+    assert kit.provider.has_config_credential("w1") is False
+
+
+def test_the_configuration_credential_belongs_to_the_workspace_and_not_to_one_bots_vault(tmp_path):
+    kit = Kit(tmp_path)
+    access_id, refresh_id = _config_items(kit)
+    held = kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
+    assert {m.id for m in kit.vault.list_items()} == {held, kit.config_item}
+    other = SlackProvider(
+        redirect_url=REDIRECT, vault=VaultStore(tmp_path / "other-vault"), records=SlackRecords(tmp_path / "other.json"),
+        workspace_vault=kit.vault, workspace_records=kit.provider.workspace_records,
+        api=SlackApi(kit.slack.transport, sleep=kit.sleeps.append), clock=lambda: kit.slack.now, identity=kit.identity)
+    assert other.has_config_credential("w1") is True
+    created = other.begin_install(ci.initial_state("other", "slack", "w1", FIXED_NOW), None)
+    assert created.app_id in kit.slack.apps
+
+
+def test_a_new_credential_replaces_the_workspaces_one_under_the_same_vault_item(tmp_path):
+    kit = Kit(tmp_path)
+    access_id, refresh_id = _config_items(kit)
+    first = kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
+    fresh = f"xoxe-1-fresh-{FAKE_TOKEN}"
+    kit.slack.refresh = {fresh}
+    access_id, refresh_id = _config_items(kit, refresh=fresh)
+    assert kit.provider.accept_config_credential(kit.state(), access_id, refresh_id) == first
+    assert {m.id for m in kit.vault.list_items()} == {first, kit.config_item}
 
 
 def _bot_token_item(kit: Kit, token: str = BOT_TOKEN) -> str:

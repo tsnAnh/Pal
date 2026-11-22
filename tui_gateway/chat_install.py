@@ -117,7 +117,10 @@ class ChatProvider(abc.ABC):
     def adopt_token(self, state: SetupState, vault_item_id: str) -> Installation:
         raise self._missing("adopt_token")
 
-    def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> None:
+    def has_config_credential(self, workspace: str) -> bool:
+        return False
+
+    def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> str | None:
         return None
 
     def accept_app_level_credential(self, state: SetupState, vault_item_id: str) -> None:
@@ -236,7 +239,7 @@ def _after_app(caps: Capabilities, done: list[ProviderCapability]) -> SetupStep:
     return SetupStep.needs_manual_step if _pending_manual(caps, done) else SetupStep.needs_allow
 
 
-def _target(state: SetupState, event: SetupEvent, caps: Capabilities) -> tuple[SetupStep, dict] | None:
+def _target(state: SetupState, event: SetupEvent, caps: Capabilities, credential_on_file: bool) -> tuple[SetupStep, dict] | None:
     step, kind = state.step, event.kind
     if kind is SetupEventKind.revoked:
         return SetupStep.revoked, {
@@ -251,7 +254,7 @@ def _target(state: SetupState, event: SetupEvent, caps: Capabilities) -> tuple[S
             resume = SetupStep.needs_credential
         return resume, {"resume_step": None, "error": None}
     if kind is SetupEventKind.begin and step in (SetupStep.not_started, SetupStep.revoked):
-        if caps.requires_config_credential:
+        if caps.requires_config_credential and not credential_on_file:
             return SetupStep.needs_credential, {}
         return (SetupStep.creating_app if caps.creates_app else SetupStep.needs_allow), {}
     if kind is SetupEventKind.credential_saved and step is SetupStep.needs_credential:
@@ -273,8 +276,9 @@ def _target(state: SetupState, event: SetupEvent, caps: Capabilities) -> tuple[S
     return None
 
 
-def advance(state: SetupState, event: SetupEvent, caps: Capabilities, now: float) -> SetupState:
-    target = _target(state, event, caps)
+def advance(state: SetupState, event: SetupEvent, caps: Capabilities, now: float, *,
+            credential_on_file: bool = False) -> SetupState:
+    target = _target(state, event, caps, credential_on_file)
     if target is None:
         return state
     step, changes = target
