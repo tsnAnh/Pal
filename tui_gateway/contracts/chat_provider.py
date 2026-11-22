@@ -255,7 +255,8 @@ method("chat.install.begin", params=ChatInstallParams, result=ChatInstallStatusR
 method("chat.install.advance", params=ChatInstallAdvanceParams, result=ChatInstallStatusResult,
        doc="Send one setup event with the revision the client last saw. stale_revision when another client moved first; "
            "invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. "
-           "credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.")
+           "credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential "
+           "requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.")
 method("chat.spaces.list", params=ChatInstallParams, result=ChatSpacesListResult,
        doc="Channels the installed bot can see, with whether it has joined.")
 method("chat.space.join", params=ChatSpaceJoinParams, result=ChatSpaceJoinResult,
@@ -266,7 +267,8 @@ method("chat.install.update_identity", params=ChatInstallParams, result=ChatIden
        doc="Send the bot's current name and display name to the chat app, and its picture when the provider can set it. "
            "needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only.")
 method("chat.install.revoke", params=ChatInstallParams, result=ChatInstallStatusResult,
-       doc="Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.")
+       doc="Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, "
+           "so a reinstall starts from a fresh one and the revoked state carries no app id.")
 event("chat.install.changed", ChatInstallChangedPayload,
       doc="A chat setup state moved, or a binding went live or not live. Exactly one per setup revision.")
 

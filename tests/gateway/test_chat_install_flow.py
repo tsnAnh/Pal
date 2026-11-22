@@ -171,7 +171,8 @@ def test_provider_failure_becomes_install_failed_with_no_provider_text(env, capl
 
     provider.complete_install = boom
     state = drive_to_allow("fake-authorize")
-    assert allow(env, state).status_code == 200
+    page = allow(env, state)
+    assert page.status_code == 500 and "Done" not in page.text
     failed = state_of(call("chat.install.status", provider_id="fake-authorize"))
     assert failed.error.code is wire.SetupErrorCode.install_failed
     assert forbidden_in(own_log(caplog) + failed.model_dump_json()) == [] and "invalid_auth" not in caplog.text
@@ -267,7 +268,7 @@ def test_provider_list_spaces_join_and_bindings(env):
     assert row.hello_requested is True and row.hello_sent_at is None
 
 
-def test_revoke_clears_env_bindings_and_keeps_the_app_for_reinstall(env):
+def test_revoke_clears_env_and_bindings_and_reinstall_creates_a_fresh_app(env):
     state = drive_to_allow("fake-credential")
     allow(env, state)
     call("chat.space.join", provider_id="fake-credential", space_id="s-public")
@@ -276,12 +277,15 @@ def test_revoke_clears_env_bindings_and_keeps_the_app_for_reinstall(env):
     assert env.control.applied[-1] == (BOT, "fake-credential", {}, ["FAKE_ALLOWED_USERS", "FAKE_BOT_TOKEN"])
     assert env.control.reloads == [BOT, BOT]
     assert call("chat.binding.list", provider_id="fake-credential")["result"]["bindings"] == []
+    first_app = env.providers["fake-credential"].apps_created[0]
+    assert state_of(revoked).app_id is None
     again = state_of(call("chat.install.begin", provider_id="fake-credential"))
-    assert again.step is wire.SetupStep.needs_credential and again.app_id == state_of(revoked).app_id
-    assert env.providers["fake-credential"].apps_created == [again.app_id]
+    assert again.step is wire.SetupStep.needs_credential and again.app_id is None
     reinstall = state_of(call("chat.install.advance", provider_id="fake-credential", event="credential_saved",
                               expected_revision=again.revision, vault_item_id="vault-config"))
-    assert reinstall.app_id == again.app_id and env.providers["fake-credential"].apps_created == [again.app_id]
+    fresh = env.providers["fake-credential"].apps_created
+    assert len(fresh) == 2 and reinstall.app_id == fresh[1] != first_app
+    assert ChatInstallStore(env.home).authorize_link((BOT, "fake-credential", "w1")).endswith(fresh[1])
 
 
 def test_store_state_survives_a_restart_and_events_are_one_per_revision(env):

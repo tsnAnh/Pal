@@ -150,7 +150,7 @@ class ChatInstallStore:
                                key).fetchone()
         return row[column] if row else None
 
-    def _set_aux(self, column: str, key: SetupKey, value: str) -> None:
+    def _set_aux(self, column: str, key: SetupKey, value: str | None) -> None:
         with self._write() as conn:
             conn.execute(f"UPDATE setup_states SET {column}=? WHERE bot=? AND provider_id=? AND workspace=?",
                          (value, *key))
@@ -166,6 +166,14 @@ class ChatInstallStore:
 
     def set_authorize_link(self, key: SetupKey, link: str) -> None:
         self._set_aux("authorize_link", key, link)
+
+    def clear_authorize_link(self, key: SetupKey) -> None:
+        self._set_aux("authorize_link", key, None)
+
+    def state_for_installation(self, installation_id: str) -> SetupState | None:
+        with self._read() as conn:
+            row = conn.execute("SELECT state_json FROM setup_states WHERE installation_id=?", (installation_id,)).fetchone()
+        return SetupState.model_validate_json(row["state_json"]) if row else None
 
     def events_after(self, seq: int) -> list[tuple[int, SetupState]]:
         if not self._path.exists():

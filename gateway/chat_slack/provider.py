@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 from PIL import Image
 
-from agent.vault_store import VaultStore, get_vault_store
+from agent.vault_store import VaultError, VaultStore, get_vault_store
 from hermes_cli.slack_cli import _build_full_manifest
 from tui_gateway.chat_install import (
     SLACK_CAPABILITIES,
@@ -54,6 +54,8 @@ NEEDS_INVITE_ERRORS = {"method_not_supported_for_channel_type", "channel_not_fou
 GONE_ERRORS = {"app_not_found", "token_revoked", "invalid_auth"}
 REFRESH_LIFETIME_UNKNOWN = "unknown"
 BOT_TOKEN_PREFIX = "xoxb-"
+APP_TOKEN_PREFIX = "xapp-"
+PROBE_ABORTING = (SetupErrorCode.credential_rejected, SetupErrorCode.credential_expired)
 MEMBER_ID = re.compile(r"[UW][A-Z0-9]{6,20}")
 AVATAR_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 PROBED = (ProviderCapability.set_icon, ProviderCapability.app_level_credential,
@@ -210,9 +212,29 @@ class SlackProvider(ChatProvider):
         self.records.update_workspace(workspace, capabilities=stored)
         if refresh_vault_item_id:
             self.vault.remove_item(refresh_vault_item_id)
+        if renewable:
+            self._probe_after_credential(workspace)
 
-    def accept_app_level_credential(self, bot: str, workspace: str, vault_item_id: str) -> None:
+    def _probe_after_credential(self, workspace: str) -> None:
+        try:
+            self.probe_workspace(workspace)
+        except SlackSetupError as exc:
+            if exc.code in PROBE_ABORTING:
+                raise
+            logger.warning("slack workspace probe skipped, setup stays guided: %s", exc.code.value)
+
+    def accept_app_level_credential(self, state: SetupState, vault_item_id: str) -> None:
+        bot, workspace = state.bot, state.workspace
+        try:
+            key = self._secret(vault_item_id)
+        except VaultError:
+            raise SlackSetupError(SetupErrorCode.credential_rejected) from None
+        if not key.startswith(APP_TOKEN_PREFIX):
+            raise SlackSetupError(SetupErrorCode.credential_rejected)
+        previous = self.records.app(bot, workspace).get("app_token_item_id")
         self.records.update_app(bot, workspace, app_token_item_id=vault_item_id)
+        if previous and previous != vault_item_id:
+            self.vault.remove_item(previous)
 
     def complete_install(self, state: SetupState, authorization_code: str) -> Installation:
         bot, workspace = state.bot, state.workspace

@@ -78,7 +78,7 @@ class ChatProvider(abc.ABC):
     def _missing(self, operation: str) -> ProviderNotImplemented:
         return ProviderNotImplemented(self.provider_id, operation)
 
-    def capabilities(self) -> Capabilities:
+    def capabilities(self, workspace: str | None = None) -> Capabilities:
         raise self._missing("capabilities")
 
     def begin_install(self, state: SetupState, config_vault_item_id: str | None) -> AppCreated:
@@ -111,6 +111,9 @@ class ChatProvider(abc.ABC):
     def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> None:
         return None
 
+    def accept_app_level_credential(self, state: SetupState, vault_item_id: str) -> None:
+        raise self._missing("accept_app_level_credential")
+
     def parse_owner_identity(self, raw: str) -> str | None:
         return raw.strip() or None
 
@@ -123,6 +126,8 @@ SETUP_CAPABILITIES = (
     ProviderCapability.app_level_credential,
     ProviderCapability.gateway_redirect,
 )
+
+CREDENTIAL_STEPS = frozenset({ProviderCapability.app_level_credential})
 
 FIX_FOR_ERROR: dict[SetupErrorCode, FixAction] = {
     SetupErrorCode.credential_rejected: FixAction.reenter_credential,
@@ -201,12 +206,15 @@ def _after_app(caps: Capabilities, done: list[ProviderCapability]) -> SetupStep:
 def _target(state: SetupState, event: SetupEvent, caps: Capabilities) -> tuple[SetupStep, dict] | None:
     step, kind = state.step, event.kind
     if kind is SetupEventKind.revoked:
-        return SetupStep.revoked, {}
+        return SetupStep.revoked, {
+            "app_id": None, "installation_id": None, "manual_steps_done": [], "resume_step": None, "error": None}
     if kind is SetupEventKind.failed and event.error is not None and step not in (SetupStep.ready, SetupStep.revoked):
         return SetupStep.error, {"resume_step": step, "error": SetupError(code=event.error, fix=FIX_FOR_ERROR[event.error])}
     if kind is SetupEventKind.retry and step is SetupStep.error:
         resume = state.resume_step or SetupStep.not_started
-        if state.error and state.error.fix is FixAction.reenter_credential and caps.requires_config_credential:
+        config_credential_failed = state.error and state.error.fix is FixAction.reenter_credential \
+            and state.resume_step is not SetupStep.needs_manual_step
+        if config_credential_failed and caps.requires_config_credential:
             resume = SetupStep.needs_credential
         return resume, {"resume_step": None, "error": None}
     if kind is SetupEventKind.begin and step in (SetupStep.not_started, SetupStep.revoked):

@@ -620,7 +620,7 @@
     },
     {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.",
       "params": [
         {
           "name": "params",
@@ -656,7 +656,7 @@
     },
     {
       "name": "chat.install.revoke",
-      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id.",
       "params": [
         {
           "name": "params",
@@ -67626,7 +67626,7 @@
     },
     {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.",
       "params": [
         {
           "name": "params",
@@ -67662,7 +67662,7 @@
     },
     {
       "name": "chat.install.revoke",
-      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id.",
       "params": [
         {
           "name": "params",

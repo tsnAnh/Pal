@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from gateway.chat_install_service import ChatInstallService
+from gateway.chat_install_service import ChatInstallService, ReloadOutcome
 from gateway.chat_install_store import ChatInstallStore
 from gateway.oauth_client_setup import GOOGLE_REDIRECT_PATH
 from tools.connectors.mcp_oauth_redirect import GATEWAY_CALLBACK_PATH as MCP_OAUTH_REDIRECT_PATH
@@ -19,21 +19,29 @@ class RedactInstallCallbackQuery(logging.Filter):
         return True
 
 
-class MessagingAdapterControl:
-    @staticmethod
-    def _scope_name(profile: str) -> str | None:
-        return None if profile in ("", "default") else profile
+def _scope_name(profile: str) -> str | None:
+    return None if profile in ("", "default") else profile
 
+
+class MessagingAdapterControl:
     def apply_env(self, profile: str, platform_id: str, env: dict[str, str], clear: list[str]) -> None:
         from hermes_cli.web_routers import messaging
         entry = messaging._require_platform(platform_id)
-        with messaging._profile_scope(self._scope_name(profile)):
+        with messaging._profile_scope(_scope_name(profile)):
             messaging._apply_platform_update(platform_id, entry, messaging._env_value_rules(platform_id),
                                              env, clear, bool(env))
 
-    def reload(self, profile: str) -> None:
+    def reload(self, profile: str) -> ReloadOutcome:
         from tui_gateway.methods_messaging_slack import _slack_reload
-        _slack_reload(self._scope_name(profile))
+        result = _slack_reload(_scope_name(profile))
+        if result.get("hot_served"):
+            return ReloadOutcome.live
+        return ReloadOutcome.restarting if result.get("restart_started") else ReloadOutcome.not_started
+
+
+def bot_profile_scope(bot: str):
+    from hermes_cli.web_routers import messaging
+    return messaging._profile_scope(_scope_name(bot))
 
 
 def public_url_for(home) -> str | None:
@@ -53,4 +61,4 @@ def build_service(home) -> ChatInstallService:
     return ChatInstallService(
         store=ChatInstallStore(home),
         provider_for=lambda provider_id: provider_for(provider_id, redirect_url=redirect_url_for(home)),
-        control=MessagingAdapterControl(), public_url=lambda: public_url_for(home))
+        control=MessagingAdapterControl(), public_url=lambda: public_url_for(home), bot_scope=bot_profile_scope)

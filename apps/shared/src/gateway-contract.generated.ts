@@ -8585,11 +8585,11 @@ export interface RpcMethods {
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Channels this bot is bound to and whether it is live in each. */
   'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
-  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id. */
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
-  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall. */
+  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
@@ -9684,11 +9684,11 @@ export interface CanonicalRpcMethods {
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Channels this bot is bound to and whether it is live in each. */
   'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
-  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id. */
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
-  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall. */
+  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }

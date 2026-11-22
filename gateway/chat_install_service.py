@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from enum import Enum
 from typing import Protocol
@@ -10,6 +11,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from gateway.chat_install_store import ChatInstallStore
 from tui_gateway.chat_install import (
+    CREDENTIAL_STEPS,
     ChatProvider,
     ChatProviderError,
     IdentityUpdate,
@@ -44,13 +46,20 @@ CLIENT_EVENTS = frozenset({
     SetupEventKind.credential_saved, SetupEventKind.manual_step_done, SetupEventKind.allow_granted,
     SetupEventKind.owner_confirmed, SetupEventKind.retry,
 })
+SETTLE_ATTEMPTS = 3
 SET_PUBLIC_URL_ACTION = NextAction(kind=NextActionKind.button, action_id="set_public_url")
+
+
+class ReloadOutcome(Enum):
+    live = "live"
+    restarting = "restarting"
+    not_started = "not_started"
 
 
 class AdapterControl(Protocol):
     def apply_env(self, profile: str, platform_id: str, env: dict[str, str], clear: list[str]) -> None: ...
 
-    def reload(self, profile: str) -> None: ...
+    def reload(self, profile: str) -> ReloadOutcome: ...
 
 
 class GatewayReason(Enum):
@@ -70,6 +79,7 @@ class RedirectOutcome(Enum):
     completed = "completed"
     denied = "denied"
     rejected = "rejected"
+    failed = "failed"
 
 
 @dataclass(frozen=True)
@@ -78,6 +88,7 @@ class ChatInstallService:
     provider_for: Callable[[str], ChatProvider]
     control: AdapterControl
     public_url: Callable[[], str | None]
+    bot_scope: Callable[[str], AbstractContextManager[object]]
     clock: Callable[[], float] = time.time
 
     def _provider(self, provider_id: str) -> ChatProvider:
@@ -90,7 +101,7 @@ class ChatInstallService:
         return self.store.load((bot, provider_id, workspace)) or initial_state(bot, provider_id, workspace, self.clock())
 
     def _apply(self, provider: ChatProvider, state: SetupState, event: SetupEvent) -> SetupState:
-        new = pure_advance(state, event, provider.capabilities(), self.clock())
+        new = pure_advance(state, event, provider.capabilities(state.workspace), self.clock())
         if new is not state:
             self.store.save(new, state.revision)
         return new
@@ -202,6 +213,8 @@ class ChatInstallService:
         if event is SetupEventKind.manual_step_done and manual_step is None and state.step is SetupStep.needs_manual_step:
             from tui_gateway.contracts.chat_provider import ProviderCapability
             manual_step = ProviderCapability(state.next_action.action_id)
+        if event is SetupEventKind.manual_step_done and manual_step in CREDENTIAL_STEPS:
+            return self._credential_step(provider, state, manual_step, vault_item_id)
         new = self._apply(provider, state, SetupEvent(kind=event, manual_step=manual_step))
         if new is state:
             return state
@@ -210,9 +223,26 @@ class ChatInstallService:
                 provider.accept_config_credential(new, vault_item_id, refresh_vault_item_id)
             except Exception as exc:  # health: allow BLE001 -- provider errors carry provider text, so only the exception type is logged
                 logger.warning("chat install credential rejected provider=%s error=%s", state.provider_id, type(exc).__name__)
-                code = getattr(exc, "code", None)
-                return self._fail(provider, new, code if isinstance(code, SetupErrorCode) else SetupErrorCode.credential_rejected)
+                return self._fail(provider, new, self._error_code(exc))
             self.store.set_config_item(setup_key(new), vault_item_id)
+        return self._drive(provider, new)
+
+    @staticmethod
+    def _error_code(exc: Exception) -> SetupErrorCode:
+        code = getattr(exc, "code", None)
+        return code if isinstance(code, SetupErrorCode) else SetupErrorCode.credential_rejected
+
+    def _credential_step(self, provider: ChatProvider, state: SetupState, step, vault_item_id: str | None) -> SetupState:
+        if state.step is not SetupStep.needs_manual_step:
+            return state
+        if not vault_item_id:
+            raise ChatServiceError(GatewayReason.invalid_event, state)
+        try:
+            provider.accept_app_level_credential(state, vault_item_id)
+        except Exception as exc:  # health: allow BLE001 -- provider errors carry provider text, so only the exception type is logged
+            logger.warning("chat install app credential rejected provider=%s error=%s", state.provider_id, type(exc).__name__)
+            return self._fail(provider, state, self._error_code(exc))
+        new = self._apply(provider, state, SetupEvent(kind=SetupEventKind.manual_step_done, manual_step=step))
         return self._drive(provider, new)
 
     def _adopt(self, provider: ChatProvider, state: SetupState, vault_item_id: str | None) -> SetupState:
@@ -260,9 +290,12 @@ class ChatInstallService:
             if provider.allowed_users_env:
                 env[provider.allowed_users_env] = owner
             self.control.apply_env(state.bot, provider.provider_id, env, [])
-            self.control.reload(state.bot)
+            outcome = self.control.reload(state.bot)
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat install adapter start failed provider=%s error=%s", state.provider_id, type(exc).__name__)
+            return self._fail(provider, state, SetupErrorCode.install_failed)
+        if outcome is ReloadOutcome.not_started:
+            logger.warning("chat install adapter not started provider=%s", state.provider_id)
             return self._fail(provider, state, SetupErrorCode.install_failed)
         return self._apply(provider, state, SetupEvent(kind=SetupEventKind.installed))
 
@@ -271,29 +304,33 @@ class ChatInstallService:
         if key is None:
             return RedirectOutcome.rejected
         try:
-            provider = self._provider(key[1])
-            state = self.store.load(key)
-            if state is None:
-                return RedirectOutcome.rejected
-            if state.step is SetupStep.ready and self._installation_of(state) is not None:
-                return RedirectOutcome.completed
-            if state.step is not SetupStep.needs_allow:
-                return RedirectOutcome.rejected
-            if error:
-                self._fail(provider, state, SetupErrorCode.allow_denied)
-                return RedirectOutcome.denied
-            if not code:
-                return RedirectOutcome.rejected
-            try:
-                installation = provider.complete_install(state, code)
-            except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
-                logger.warning("chat install redirect failed provider=%s error=%s", key[1], type(exc).__name__)
-                self._fail(provider, state, SetupErrorCode.install_failed)
-                return RedirectOutcome.completed
-            self._complete(provider, state, installation)
-            return RedirectOutcome.completed
+            with self.bot_scope(key[0]):
+                return self._finish_redirect(key, code, error)
         except (StaleRevision, ChatServiceError):
             return RedirectOutcome.rejected
+
+    def _finish_redirect(self, key: SetupKey, code: str | None, error: str | None) -> RedirectOutcome:
+        provider = self._provider(key[1])
+        state = self.store.load(key)
+        if state is None:
+            return RedirectOutcome.rejected
+        if state.step is SetupStep.ready and self._installation_of(state) is not None:
+            return RedirectOutcome.completed
+        if state.step is not SetupStep.needs_allow:
+            return RedirectOutcome.rejected
+        if error:
+            self._fail(provider, state, SetupErrorCode.allow_denied)
+            return RedirectOutcome.denied
+        if not code:
+            return RedirectOutcome.rejected
+        try:
+            installation = provider.complete_install(state, code)
+        except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
+            logger.warning("chat install redirect failed provider=%s error=%s", key[1], type(exc).__name__)
+            self._fail(provider, state, SetupErrorCode.install_failed)
+            return RedirectOutcome.failed
+        done = self._complete(provider, state, installation)
+        return RedirectOutcome.failed if done.step is SetupStep.error else RedirectOutcome.completed
 
     def _installed(self, bot: str, provider_id: str, workspace: str) -> tuple[ChatProvider, SetupState, Installation]:
         provider = self._provider(provider_id)
@@ -349,7 +386,43 @@ class ChatInstallService:
             state = self._apply(provider, state, SetupEvent(kind=SetupEventKind.revoked))
         except StaleRevision:
             raise ChatServiceError(ChatRpcErrorReason.stale_revision, self._current(bot, provider_id, workspace)) from None
+        self.store.clear_authorize_link(setup_key(state))
         return state, None
+
+    def installation_lost(self, bot: str, provider_id: str, workspace_id: str) -> None:
+        installation = self.store.installation_for_workspace(provider_id, workspace_id, bot)
+        if installation is None:
+            return
+        state = self.store.state_for_installation(installation.id)
+        keys = self.store.env_keys(installation.id)
+        self.store.delete_bindings(installation.id)
+        self.store.mark_revoked(installation.id, self.clock())
+        try:
+            with self.bot_scope(bot):
+                self._release_provider_side(self._provider(provider_id), installation)
+                self.control.apply_env(bot, provider_id, {}, keys)
+        finally:
+            if state is not None:
+                self._settle_revoked(self._provider(provider_id), state)
+
+    @staticmethod
+    def _release_provider_side(provider: ChatProvider, installation: Installation) -> None:
+        try:
+            provider.revoke(installation)
+        except Exception as exc:  # health: allow BLE001 -- provider errors carry provider text, so only the exception type is logged
+            logger.warning("chat install cleanup after provider uninstall failed provider=%s error=%s",
+                           installation.provider_id, type(exc).__name__)
+
+    def _settle_revoked(self, provider: ChatProvider, state: SetupState) -> None:
+        for _ in range(SETTLE_ATTEMPTS):
+            try:
+                settled = self._apply(provider, state, SetupEvent(kind=SetupEventKind.revoked))
+            except StaleRevision:
+                state = self.store.load(setup_key(state)) or state
+                continue
+            self.store.clear_authorize_link(setup_key(settled))
+            return
+        logger.warning("chat install state not settled after provider uninstall provider=%s", state.provider_id)
 
 
 @dataclass(frozen=True)
