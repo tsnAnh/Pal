@@ -36,6 +36,12 @@ SKILL_SOURCES = [
 # We leave these alone (they get first-class sidebar treatment separately).
 HAND_WRITTEN = {"google-workspace.md"}
 
+BRAND_WORDS = {"github": "GitHub", "gitlab": "GitLab"}
+
+
+def display_title(name: str) -> str:
+    return " ".join(BRAND_WORDS.get(w, w.title()) for w in re.split(r"[-_ ]", name))
+
 
 _FENCE_RE = re.compile(r"^(?P<indent>\s*)(?P<fence>```+|~~~+)", re.MULTILINE)
 
@@ -349,8 +355,7 @@ def render_skill_page(
     if len(short_desc) > 160:
         short_desc = short_desc[:157] + "..."
 
-    # Heuristic nicer title from name
-    display_name = name.replace("-", " ").replace("_", " ").title()
+    display_name = display_title(name)
 
     hermes_meta = (fm.get("metadata") or {}).get("hermes") or {}
     tags = hermes_meta.get("tags") or []
