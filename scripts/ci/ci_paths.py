@@ -18,9 +18,15 @@ Rule = tuple[str, bool]
 
 _RUN_EVERYTHING: tuple[Rule, ...] = ((".github/*", True), ("scripts/check", True))
 _OUTSIDE_IOS: tuple[Rule, ...] = (("*", True), ("apps/ios/*", False))
+_PROVIDER_LOGOS: tuple[Rule, ...] = (("apps/ios/Design/ProviderLogos/*", True),
+                                     ("apps/ios/App/Assets.xcassets/ProviderLogos/*", True))
+_CONNECTOR_LOGOS: tuple[Rule, ...] = (("apps/ios/Design/ConnectorLogos/*", True),
+                                      ("apps/ios/App/Assets.xcassets/ConnectorLogos/*", True),
+                                      ("apps/ios/App/ConnectApps/*.swift", True),
+                                      ("hermes_cli/data/pal_connectors.yaml", True))
 
 JOB_RULES: dict[str, tuple[Rule, ...]] = {
-    "python": (*_OUTSIDE_IOS, ("apps/ios/*.py", True), *_RUN_EVERYTHING),
+    "python": (*_OUTSIDE_IOS, ("apps/ios/*.py", True), *_PROVIDER_LOGOS, *_CONNECTOR_LOGOS, *_RUN_EVERYTHING),
     "tooling-tests": (*_OUTSIDE_IOS, *_RUN_EVERYTHING),
     "ios-guards": (("apps/ios/*", True), *_RUN_EVERYTHING),
     "swift": (("apps/ios/*", True), (".github/workflows/python.yml", True)),
@@ -34,7 +40,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
         "footguns", "detached-spawns", "install-root", "config-writers", "config-readers",
         "os-marker-fakes", "lazy-deps", "ruff", "health",
         # Upstream guards merged by the sync that read Python sources only.
-        "backend-imports", "tool-discovery", "profile-create-entry")},
+        "backend-imports", "tool-discovery", "profile-create-entry", "commitment-writers")},
     "packaged-imports": (*((g, True) for g in _PY), ("pyproject.toml", True)),
     "shims": (*((g, True) for g in _PY), ("pyproject.toml", True), (".gitattributes", True)),
     "line-endings": (("*", True),),
@@ -47,11 +53,15 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "case-collisions": (("*", True),),
     "profile-archives": (("*", True),),
     "blob-size": (("*", True),),
+    "provider-logos": (*((g, True) for g in _PY), *_PROVIDER_LOGOS),
+    "connector-logos": (*((g, True) for g in _PY), *_CONNECTOR_LOGOS),
     "swift-brand": (("apps/ios/*.swift", True),),
     "swift-nav-chrome": (("apps/ios/*.swift", True),),
     "swift-bot-tint": (("apps/ios/*.swift", True),),
     "swift-chat-drop": (("apps/ios/*.swift", True),),
     "swift-chat-scroll": (("apps/ios/*.swift", True),),
+    "chat-scroll-single-writer": (("apps/ios/*.swift", True), ("scripts/ci/check_swift_chat_scroll_writer.py", True),
+                                  ("scripts/ci/chat_scroll_single_writer_allowlist.txt", True)),
     "swift-scroll-gesture": (("apps/ios/*.swift", True),),
     "swift-chat-row-alignment": (("apps/ios/*.swift", True),),
     "swift-mac-layout": (("apps/ios/*.swift", True),),
@@ -80,7 +90,7 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "python": ALL_CHECKS,
     "tooling-tests": ("tooling-tests",),
     "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives", "line-endings",
-                   "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-scroll-gesture", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-esc-dismiss", "swift-glass",
+                   "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "chat-scroll-single-writer", "swift-scroll-gesture", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-esc-dismiss", "swift-glass",
                    "swift-icon-tint", "swift-connect-palette", "swift-glass-input", "swift-image-viewer", "swift-media-preview", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint",
                    "pal-nous-boundary"),
     "swift": (),

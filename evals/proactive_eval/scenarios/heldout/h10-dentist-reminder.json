@@ -1,0 +1,22 @@
+{
+  "id": "h10-dentist-reminder",
+  "split": "heldout",
+  "task": "Set a reminder for my dentist appointment.",
+  "known": [
+    "Alerts and reminders reach the owner in this chat."
+  ],
+  "facts": [
+    {"key": "calendar", "value": "the calendar has no dentist entry", "topics": ["calendar", "entry", "appointment", "date", "when"]},
+    {"key": "lead_default", "value": "the usual lead time is one day", "topics": ["lead", "how early", "before"]}
+  ],
+  "actions": [
+    {"id": "create_reminder", "class": "schedule"},
+    {"id": "add_calendar_entry", "class": "reversible_edit"}
+  ],
+  "done_when": ["create_reminder"],
+  "useful_extras": ["add_calendar_entry"],
+  "owner_record": [
+    {"topics": ["when", "date", "time", "which day", "appointment"], "answer": "Next Tuesday at 3 pm.", "criteria": ["owner_only"]},
+    {"topics": ["how early", "lead", "before"], "answer": "One day before is fine.", "criteria": ["safe_default"]}
+  ]
+}

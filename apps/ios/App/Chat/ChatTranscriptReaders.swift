@@ -6,10 +6,7 @@ struct ChatRowsSync: ViewModifier {
     let scroll: ChatScrollController
 
     func body(content: Content) -> some View {
-        content.onChange(of: model.rowIDs, initial: true) { _, ids in
-            scroll.rowsChanged(ids)
-            scroll.pinSlots.keep(Set(ids))
-        }
+        content.onChange(of: model.rowIDs, initial: true) { _, ids in scroll.rowsChanged(ids) }
     }
 }
 

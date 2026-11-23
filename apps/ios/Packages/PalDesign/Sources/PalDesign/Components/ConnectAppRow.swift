@@ -32,7 +32,6 @@ public struct AppTile<Content: View>: View {
         content
             .frame(width: ConnectRowMetrics.tileSize, height: ConnectRowMetrics.tileSize)
             .background(fill, in: shape)
-            .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .clipShape(shape)
             .accessibilityHidden(true)
     }
@@ -46,15 +45,12 @@ public struct AppTile<Content: View>: View {
 }
 
 public struct PluginGlyphTile: View {
-    @Environment(\.hermesTheme) private var theme
+    public static let symbol = "puzzlepiece.extension"
 
     public init() {}
 
     public var body: some View {
-        AppTile {
-            PalIcon("puzzlepiece.extension")
-                .font(.system(size: 20, weight: .regular))
-        }
+        BrandLogoTile(symbol: Self.symbol, size: .connector)
     }
 }
 

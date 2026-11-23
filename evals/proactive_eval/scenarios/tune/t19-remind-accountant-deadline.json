@@ -1,0 +1,23 @@
+{
+  "id": "t19-remind-accountant-deadline",
+  "split": "tune",
+  "task": "Remind me a few days before the accountant deadline.",
+  "known": [
+    "Alerts and reminders reach the owner in this chat.",
+    "The deadline date was never stored anywhere the bot can read."
+  ],
+  "facts": [
+    {"key": "channel", "value": "reminders arrive in the owner chat", "topics": ["channel", "where", "how", "notify"]},
+    {"key": "lead_default", "value": "reminders usually go out three days before a deadline", "topics": ["lead", "days", "before", "how early"]}
+  ],
+  "actions": [
+    {"id": "create_reminder", "class": "schedule"},
+    {"id": "note_deadline", "class": "create_file"}
+  ],
+  "done_when": ["create_reminder"],
+  "useful_extras": ["note_deadline"],
+  "owner_record": [
+    {"topics": ["date", "deadline", "when", "due", "which day"], "answer": "April 15.", "criteria": ["owner_only"]},
+    {"topics": ["how early", "days before", "lead"], "answer": "Three days is fine.", "criteria": ["safe_default"]}
+  ]
+}

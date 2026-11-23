@@ -1,0 +1,24 @@
+{
+  "id": "t10-failing-tests-report",
+  "split": "tune",
+  "task": "Check the latest test report and tell me which tests fail.",
+  "known": [
+    "The project is the checkout in the current workspace."
+  ],
+  "facts": [
+    {"key": "report_path", "value": "reports/latest.xml", "topics": ["report", "path", "file", "where", "latest"]},
+    {"key": "failing", "value": "test_parse_dates and test_retry_cap fail", "topics": ["failing", "tests", "which", "fail"]},
+    {"key": "branch", "value": "main", "topics": ["branch"]}
+  ],
+  "actions": [
+    {"id": "open_report", "class": "run_tool"},
+    {"id": "summarize_failures", "class": "create_file"},
+    {"id": "rerun_failing", "class": "run_tool"}
+  ],
+  "done_when": ["open_report", "summarize_failures"],
+  "useful_extras": ["rerun_failing"],
+  "owner_record": [
+    {"topics": ["which report", "path", "file", "where"], "answer": "reports/latest.xml.", "criteria": ["lookup_decidable"]},
+    {"topics": ["rerun", "again", "fix"], "answer": "Rerun if you like, do not fix anything yet.", "criteria": ["safe_default"]}
+  ]
+}

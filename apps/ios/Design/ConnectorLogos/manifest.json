@@ -1,0 +1,417 @@
+{
+  "logos": {
+    "airtable": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/airtable.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "atlassian": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/atlassian.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "aws-knowledge": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/aws.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": "AWS mark for AWS Knowledge: owner review of AWS trademark terms"
+    },
+    "buildkite": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/buildkite.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "calendly": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/calendly.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "canva": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/canva.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "circleci": {
+      "variant": "mono-dark",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/circleci.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "clickhouse": {
+      "variant": "mono-dark",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/clickhouse.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": "recolour: brand yellow is 1.5:1 on white, near-black used; owner review"
+    },
+    "clickup": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/clickup.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "cloudflare": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/cloudflare.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "cloudinary": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/cloudinary.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "comfy-cloud": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/comfy-cloud.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "context7": {
+      "variant": "mono-dark",
+      "source": "https://raw.githubusercontent.com/upstash/context7/master/public/context7-icon.svg",
+      "license": "MIT (Upstash repo)",
+      "version": "2026-11-23",
+      "flag": "official repo icon: the repo licence does not address the trademark, owner review"
+    },
+    "craft": {
+      "variant": "monogram",
+      "source": null,
+      "license": null,
+      "version": null,
+      "flag": "no-logo-found: monogram fallback (Craft brand terms: assets unaltered, never combined with other graphics, written consent needed)"
+    },
+    "datadog": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/datadog.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "deepwiki": {
+      "variant": "monogram",
+      "source": null,
+      "license": null,
+      "version": null,
+      "flag": "no-logo-found: monogram fallback (deepwiki.com blocks automated fetches and cognition.ai/brand has no DeepWiki mark)"
+    },
+    "discord": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/discord-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "dropbox": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/dropbox.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "figma": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/figma.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "gamma": {
+      "variant": "mono-dark",
+      "source": "https://cdn.gamma.app/gdwwhyewwldwc8z/e8a5cedfa4b74512af84b7b5f00770ca/optimized/Gamma_Social_Avatar_Dark-2.svg",
+      "license": "none stated (brand.gamma.app brand page)",
+      "version": "2026-11-23",
+      "flag": "licence not stated on the brand page: owner review"
+    },
+    "github": {
+      "variant": "mono-dark",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/github.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "gitlab": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/gitlab.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "google-ads": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/google-ads.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "google-workspace": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/google-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": "generic Google G mark, not the Workspace logo (the set has only a wordmark): owner review"
+    },
+    "grafana": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/grafana.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "higgsfield": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/higgsfield-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "hugging_face": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/hugging-face-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": "replaced: the repo mark was too pale on white"
+    },
+    "intercom": {
+      "variant": "mono-dark",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/intercom-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": "replaced: the repo mark was too pale on white"
+    },
+    "linear": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/linear.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "microsoft-learn": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/microsoft-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "mintlify": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/mintlify.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "miro": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/miro.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "monday": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/monday-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "motherduck": {
+      "variant": "monogram",
+      "source": null,
+      "license": null,
+      "version": null,
+      "flag": "no-logo-found: monogram fallback (the site has no standalone icon file, only the nav logo)"
+    },
+    "neon": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/neon.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "netlify": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/netlify.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "notion": {
+      "variant": "mono-dark",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/notion.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "paypal": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/paypal.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "posthog": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/posthog-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "postman": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/postman.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "prisma-postgres": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/prisma.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "railway": {
+      "variant": "mono-dark",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/railway.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "resend": {
+      "variant": "mono-dark",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/resend-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "semgrep": {
+      "variant": "color",
+      "source": "https://semgrep.dev/build/assets/favicon-CIx-xpG_.svg",
+      "license": "none stated (the site's own favicon)",
+      "version": "2026-11-23",
+      "flag": "licence not stated: owner review"
+    },
+    "sentry": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/sentry.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "shopify": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/shopify.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "slack": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/slack-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "stripe": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/stripe.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "supabase": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/supabase.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "t3code": {
+      "variant": "mono-dark",
+      "source": "https://raw.githubusercontent.com/pingdotgg/t3code/main/assets/prod/logo.svg",
+      "license": "MIT (T3 Code repo)",
+      "version": "2026-11-23",
+      "flag": "T3 Code's own repo mark, not the T3 Stack mark; the repo licence does not address the trademark: owner review"
+    },
+    "todoist": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/todoist.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "trello": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/trello.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "twilio-docs": {
+      "variant": "color",
+      "source": "https://github.com/gilbarbara/logos/blob/master/logos/twilio-icon.svg",
+      "license": "CC0-1.0",
+      "version": "2026-11-23",
+      "flag": null
+    },
+    "unreal-engine": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/unrealengine.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "upwork": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/upwork.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "vercel": {
+      "variant": "mono-dark",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/vercel.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "webflow": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/webflow.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "wolfram": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/wolframmathematica.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    },
+    "wordpress-com": {
+      "variant": "color",
+      "source": "https://github.com/simple-icons/simple-icons/blob/develop/icons/wordpress.svg",
+      "license": "CC0-1.0",
+      "version": "vendored in 8020ca77",
+      "flag": null
+    }
+  }
+}

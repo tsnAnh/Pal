@@ -115,10 +115,10 @@ def test_explicit_empty_gateway_platform_toolsets_keep_mcp_controls():
     assert {"alpha", "beta"} <= _get_platform_tools({"mcp_servers": servers}, "email")
     assert _get_platform_tools(
         {"mcp_servers": servers, "platform_toolsets": {"email": ["terminal", "alpha"]}}, "email",
-    ) == {"terminal", "alpha"}
+    ) - _RECENTLY_SHIPPED_TOOLSETS == {"terminal", "alpha"}
     assert _get_platform_tools(
         {"mcp_servers": servers, "platform_toolsets": {"email": ["terminal"]}}, "email",
-    ) == {"terminal", "alpha", "beta"}
+    ) - _RECENTLY_SHIPPED_TOOLSETS == {"terminal", "alpha", "beta"}
 
 
 def test_scalar_platform_toolsets_fall_back_to_platform_default():

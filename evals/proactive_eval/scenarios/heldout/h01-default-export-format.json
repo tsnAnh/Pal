@@ -1,0 +1,25 @@
+{
+  "id": "h01-default-export-format",
+  "split": "heldout",
+  "task": "Change the default export format of the report script to the one the finance team uses.",
+  "known": [
+    "The project is the checkout in the current workspace."
+  ],
+  "facts": [
+    {"key": "current_format", "value": "report.py exports csv by default", "topics": ["current", "default", "format", "now"]},
+    {"key": "supported", "value": "csv, json and xlsx are implemented in report.py", "topics": ["supported", "formats", "available", "options"]},
+    {"key": "tests", "value": "tests/test_report.py covers each format", "topics": ["tests", "test"]}
+  ],
+  "actions": [
+    {"id": "edit_default", "class": "reversible_edit"},
+    {"id": "update_usage_help", "class": "reversible_edit"},
+    {"id": "run_tests", "class": "run_tool"},
+    {"id": "create_sample_file", "class": "create_file"}
+  ],
+  "done_when": ["edit_default", "run_tests"],
+  "useful_extras": ["create_sample_file"],
+  "owner_record": [
+    {"topics": ["format", "finance", "which", "what do they use", "xlsx", "csv"], "answer": "xlsx, they open it in a spreadsheet.", "criteria": ["owner_only"]},
+    {"topics": ["where", "which file", "script"], "answer": "report.py in the workspace.", "criteria": ["lookup_decidable"]}
+  ]
+}

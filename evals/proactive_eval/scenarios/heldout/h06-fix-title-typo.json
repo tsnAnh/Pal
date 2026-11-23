@@ -1,0 +1,23 @@
+{
+  "id": "h06-fix-title-typo",
+  "split": "heldout",
+  "task": "Fix the typo in the README title and the same typo in the page header.",
+  "known": [
+    "The project is the checkout in the current workspace."
+  ],
+  "facts": [
+    {"key": "typo", "value": "Recieve appears in README.md line 1 and header.html line 12", "topics": ["typo", "where", "which", "line", "file"]},
+    {"key": "correct", "value": "the right spelling is Receive", "topics": ["spelling", "correct", "right"]}
+  ],
+  "actions": [
+    {"id": "edit_readme", "class": "reversible_edit"},
+    {"id": "edit_header", "class": "reversible_edit"},
+    {"id": "run_link_check", "class": "run_tool"}
+  ],
+  "done_when": ["edit_readme", "edit_header"],
+  "useful_extras": ["run_link_check"],
+  "owner_record": [
+    {"topics": ["where", "which file", "typo"], "answer": "Search for it.", "criteria": ["lookup_decidable"]},
+    {"topics": ["other places", "elsewhere", "docs"], "answer": "Fix any others you find.", "criteria": ["safe_default"]}
+  ]
+}

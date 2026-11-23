@@ -67,9 +67,7 @@ struct ChatView: View {
             .background(PlatformVariant.pick(mac: PalTokens.content, iOS: Color(theme.palette.canvas)))
             .messageMenuPresenter().composerActivity(focused: composerFocused)
             .task { model.start() }
-            .onAppear { scroll.setVisible(true, rowIDs: model.rowIDs) }
             .onDisappear {
-                scroll.setVisible(false, rowIDs: model.rowIDs)
                 dictation.stop()
                 model.stop()
             }
