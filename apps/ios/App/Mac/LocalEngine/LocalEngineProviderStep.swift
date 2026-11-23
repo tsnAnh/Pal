@@ -323,7 +323,6 @@ private struct ProviderKeyEntry: View {
                     String(localized: "\(name) key"), prompt: String(localized: "Paste your \(name) key"), text: $text,
                     identifier: "\(identifier)-field"
                 )
-                .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .foregroundStyle(PalTokens.textPrimary)
                 .disabled(!entry.acceptsInput)

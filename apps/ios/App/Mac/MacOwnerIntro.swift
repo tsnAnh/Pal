@@ -261,8 +261,7 @@ struct OwnerIntroSheet: View {
 
     private var nameField: some View {
         @Bindable var model = model
-        return TextField("Your name", text: $model.name)
-            .textFieldStyle(.plain)
+        return PalTextField("Your name", text: $model.name)
             .font(.system(size: 14))
             .foregroundStyle(PalTokens.textPrimary)
             .focused($nameFocused)
