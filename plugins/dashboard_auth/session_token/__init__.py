@@ -24,6 +24,7 @@ import hmac
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Optional
 
 from hermes_cli.dashboard_auth import (
@@ -87,7 +88,23 @@ def _settings() -> dict:
             "%s: the provisioned session token is short (%d chars); use a "
             "`secrets.token_urlsafe(32)`-shaped value for a deployment credential.",
             _TAG, len(token))
-    return {"token": token}
+    source = os.environ["HERMES_DASHBOARD_SESSION_TOKEN"].strip()
+    return {"token": token, "path": Path(source[len("file:"):]) if source.startswith("file:") else None}
+
+
+def _file_stamp(path: Path) -> Optional[tuple[int, int, int]]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size, stat.st_ino
+
+
+def _read_token_file(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig").strip()
+    except (OSError, UnicodeError):
+        return ""
 
 
 class SessionTokenProvider(NonInteractiveMixin, DashboardAuthProvider):
@@ -108,16 +125,27 @@ class SessionTokenProvider(NonInteractiveMixin, DashboardAuthProvider):
         "token directly (Authorization: Bearer, or ?token= on the /api/ws upgrade).")
     _NO_START_LOGIN = _NOT_INTERACTIVE
 
-    def __init__(self, *, token: str) -> None:
+    def __init__(self, *, token: str, path: Optional[Path] = None) -> None:
         if not token:
             raise ValueError("token must be non-empty")
-        self._token = token
+        self._path = path
+        self._cached = (_file_stamp(path) if path else None, token)
+
+    def _current_token(self) -> str:
+        if self._path is None:
+            return self._cached[1]
+        stamp = _file_stamp(self._path)
+        if stamp is None:
+            return ""
+        if stamp != self._cached[0]:
+            self._cached = (stamp, _read_token_file(self._path))
+        return self._cached[1]
 
     # ---- session verification (the one capability) --------------------------
 
     def matches_token(self, token: str) -> bool:
-        """Whether *token* is the credential this provider read at startup (constant time)."""
-        return bool(token) and hmac.compare_digest(token.encode("utf-8"), self._token.encode("utf-8"))
+        current = self._current_token()
+        return bool(token) and bool(current) and hmac.compare_digest(token.encode("utf-8"), current.encode("utf-8"))
 
     def verify_session(self, *, access_token: str) -> Optional[Session]:
         if not self.matches_token(access_token):

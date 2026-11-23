@@ -43,10 +43,10 @@ struct LocalEngineTailnetRows: View {
                 ) {
                     HStack(spacing: 8) {
                         Button(String(localized: "Copy")) { Pasteboard.string = password }
-                            .buttonStyle(.glass)
+                            .glassButtonStyle()
                             .accessibilityIdentifier("localEngineTailnetPasswordCopy")
                         Button(String(localized: "Done")) { engine.dismissTailnetPassword() }
-                            .buttonStyle(.glass)
+                            .glassButtonStyle()
                             .accessibilityIdentifier("localEngineTailnetPasswordDone")
                     }
                 }
@@ -75,7 +75,7 @@ struct LocalEngineTailnetRows: View {
     private func copyRow(title: String, value: String, identifier: String, copyIdentifier: String) -> some View {
         MacRow(title: title, subtitle: value, identifier: identifier) {
             Button(String(localized: "Copy")) { Pasteboard.string = value }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .accessibilityIdentifier(copyIdentifier)
         }
     }

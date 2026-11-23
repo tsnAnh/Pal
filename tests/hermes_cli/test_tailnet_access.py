@@ -9,11 +9,12 @@ import pytest
 
 from gateway import public_address
 from hermes_cli import tailnet_access as tn
-from hermes_cli.config import get_env_path, load_config, save_config
+from hermes_cli.config import get_env_path, get_env_value, load_config, save_config, save_env_value
 from hermes_cli.subcommands.tailnet import build_tailnet_parser
 from hermes_constants import get_hermes_home
 
 SECRET_ENV = "HERMES_DASHBOARD_BASIC_AUTH_SECRET"
+SESSION_ENV = "HERMES_DASHBOARD_SESSION_TOKEN"
 URL = "https://pal-host.tail1234.ts.net"
 PASSWORD_MARKER = "PASSWORD-MARKER-0123456789"
 
@@ -27,7 +28,9 @@ def _status(**overrides):
 
 class FakeTailscale:
     def __init__(self, *, status=None, serve_config=None, serve_stderr="", serve_returncode=0, present=True,
-                 status_returncode=0):
+                 status_returncode=0, off_returncode=0, serve_times_out=False):
+        self.off_returncode = off_returncode
+        self.serve_times_out = serve_times_out
         self.status = status if status is not None else _status()
         self.status_returncode = status_returncode
         self.serve_config = serve_config or {}
@@ -38,7 +41,7 @@ class FakeTailscale:
 
     def install(self, monkeypatch):
         from hermes_platform import resolver
-        monkeypatch.setattr(resolver, "locate_command", lambda name: types.SimpleNamespace(
+        monkeypatch.setattr(resolver, "locate_command", lambda name, ctx=None, known_dirs=(): types.SimpleNamespace(
             command=("/usr/bin/tailscale",) if self.present else ()))
 
     def serve_calls(self, *, off=None):
@@ -53,12 +56,16 @@ class FakeTailscale:
         if sub == ["serve", "status", "--json"]:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.serve_config) if self.serve_config else "{}", "")
         if sub[0] == "serve" and sub[-1] == "off":
+            if self.off_returncode:
+                return subprocess.CompletedProcess(argv, self.off_returncode, "", "off failed")
             self.serve_config = {}
             return subprocess.CompletedProcess(argv, 0, "", "")
         if sub[0] == "serve":
             if self.serve_returncode:
                 return subprocess.CompletedProcess(argv, self.serve_returncode, "", self.serve_stderr)
             self.serve_config = serving(sub[-1])
+            if self.serve_times_out:
+                raise subprocess.TimeoutExpired(argv, 20)
             return subprocess.CompletedProcess(argv, 0, "", "")
         raise AssertionError(argv)
 
@@ -88,8 +95,9 @@ def unreachable(url):
 
 @pytest.fixture(autouse=True)
 def _clean_secret_env(monkeypatch):
-    monkeypatch.setenv(SECRET_ENV, "")
-    monkeypatch.delenv(SECRET_ENV)
+    for name in (SECRET_ENV, SESSION_ENV):
+        monkeypatch.setenv(name, "")
+        monkeypatch.delenv(name)
 
 
 @pytest.fixture
@@ -121,7 +129,8 @@ def nothing_written(home):
     config = load_config()
     assert not config["webapp"].get("public_url")
     assert not config.get("dashboard", {}).get("basic_auth", {}).get("username")
-    assert not (get_env_path().exists() and SECRET_ENV in get_env_path().read_text())
+    env_text = get_env_path().read_text() if get_env_path().exists() else ""
+    assert SECRET_ENV not in env_text and SESSION_ENV not in env_text
 
 
 def test_enable_writes_credentials_serves_and_records(home, tailscale):
@@ -137,7 +146,7 @@ def test_enable_writes_credentials_serves_and_records(home, tailscale):
     assert basic["username"] == "pal" and _verify_password(result["password"], basic["password_hash"])
     assert load_config()["webapp"]["public_url"] == URL
     record = json.loads(record_path(home).read_text())
-    assert record == {"url": URL, "port": 9120}
+    assert record == {"url": URL, "port": 9120, "added_session_token": True}
     assert stat.S_IMODE(record_path(home).stat().st_mode) == 0o600
 
 
@@ -269,7 +278,7 @@ def test_serve_failure_rolls_everything_back(home, monkeypatch):
         enable(home, fake, restart=restarts)
     nothing_written(home)
     assert restarts.count == 0
-    assert fake.serve_calls(off=True) == []
+    assert fake.serve_calls(off=True) == [["serve", "--https=443", "off"]]
 
 
 def test_restart_failure_rolls_everything_back_including_serve(home, tailscale):
@@ -313,13 +322,14 @@ def test_success_logs_do_not_contain_the_password(home, tailscale, monkeypatch, 
     assert PASSWORD_MARKER not in caplog.text
 
 
-def test_off_without_a_record_never_runs_serve_off(home, tailscale):
+def test_off_without_a_record_never_runs_serve_off_or_clears_the_address(home, tailscale):
     config = load_config()
     config["webapp"]["public_url"] = "https://elsewhere.example.com"
     save_config(config)
     result = tn.disable(home, run=tailscale, restart=Restarts(), sleep=lambda s: None)
     assert result == {"enabled": False, "url": None, "username": None, "reachable": None}
     assert tailscale.serve_calls() == []
+    assert load_config()["webapp"]["public_url"] == "https://elsewhere.example.com"
 
 
 def test_off_with_a_record_removes_only_the_443_entry_and_keeps_credentials(home, tailscale):
@@ -365,3 +375,180 @@ def test_parser_routes_each_subcommand_with_json_flag():
         args = parser.parse_args(["tailnet", name, "--json"])
         assert (args.tailnet_command, args.json) == (name, True)
     assert parser.parse_args(["tailnet", "status"]).json is False
+
+
+def session_env_line():
+    text = get_env_path().read_text() if get_env_path().exists() else ""
+    return next((line for line in text.splitlines() if line.startswith(SESSION_ENV)), None)
+
+
+def disable(home, tailscale, *, restart=None):
+    return tn.disable(home, run=tailscale, restart=restart or Restarts(), sleep=lambda s: None)
+
+
+def test_enable_points_the_session_token_provider_at_the_webapp_token_file(home, tailscale):
+    enable(home, tailscale)
+    token_file = home / "webapp" / "session-token"
+    assert token_file.read_text().strip()
+    assert get_env_value(SESSION_ENV) == f"file:{token_file}"
+    assert json.loads(record_path(home).read_text())["added_session_token"] is True
+
+
+def test_existing_session_token_setting_is_left_alone_on_enable_and_off(home, tailscale):
+    save_env_value(SESSION_ENV, "operator-chosen-token-value")
+    enable(home, tailscale)
+    assert get_env_value(SESSION_ENV) == "operator-chosen-token-value"
+    assert json.loads(record_path(home).read_text())["added_session_token"] is False
+    disable(home, tailscale)
+    assert get_env_value(SESSION_ENV) == "operator-chosen-token-value"
+
+
+def test_off_removes_the_session_token_setting_only_when_enable_added_it(home, tailscale):
+    enable(home, tailscale)
+    enable(home, tailscale)
+    assert json.loads(record_path(home).read_text())["added_session_token"] is True
+    disable(home, tailscale)
+    assert session_env_line() is None and not get_env_value(SESSION_ENV)
+
+
+def test_rollback_removes_the_session_token_setting_it_added(home, tailscale):
+    with pytest.raises(tn.TailnetError):
+        enable(home, tailscale, restart=Restarts(ok=False))
+    nothing_written(home)
+
+
+def test_a_different_public_url_is_refused_and_nothing_is_written(home, tailscale):
+    config = load_config()
+    config["webapp"]["public_url"] = "https://pal.example.com"
+    save_config(config)
+    with pytest.raises(tn.TailnetError) as caught:
+        enable(home, tailscale)
+    assert str(caught.value) == "Pal already uses a different web address. Remove it first, then try again."
+    assert tailscale.calls == []
+    assert load_config()["webapp"]["public_url"] == "https://pal.example.com"
+    assert not record_path(home).exists()
+    assert session_env_line() is None
+
+
+def test_off_keeps_a_public_url_that_is_no_longer_ours(home, tailscale):
+    enable(home, tailscale)
+    config = load_config()
+    config["webapp"]["public_url"] = "https://pal.example.com"
+    save_config(config)
+    disable(home, tailscale)
+    assert load_config()["webapp"]["public_url"] == "https://pal.example.com"
+    assert not record_path(home).exists()
+
+
+def test_tailscale_app_binary_is_found_when_not_on_path(home, monkeypatch, tmp_path):
+    binary = tmp_path / "tailscale"
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setattr(tn, "_TAILSCALE_KNOWN_DIRS", (str(tmp_path),))
+    fake = FakeTailscale()
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append(argv[0])
+        return fake(argv, **kwargs)
+
+    assert enable(home, run)["enabled"] is True
+    assert set(seen) == {str(binary)}
+
+
+def test_the_macos_app_directory_is_a_known_location():
+    assert "/Applications/Tailscale.app/Contents/MacOS" in tn._TAILSCALE_KNOWN_DIRS
+
+
+def test_serve_that_timed_out_after_applying_is_still_undone(home, monkeypatch):
+    fake = FakeTailscale(serve_times_out=True)
+    fake.install(monkeypatch)
+    with pytest.raises(tn.TailnetError):
+        enable(home, fake)
+    assert fake.serve_calls(off=True) == [["serve", "--https=443", "off"]]
+    assert fake.serve_config == {}
+    nothing_written(home)
+
+
+def test_serve_targets_the_configured_bind_host(home, tailscale):
+    config = load_config()
+    config["webapp"]["host"] = "::1"
+    save_config(config)
+    enable(home, tailscale)
+    assert tailscale.serve_calls(off=False) == [["serve", "--bg", "--https=443", "http://[::1]:9120"]]
+
+
+def test_serve_entry_for_an_older_port_is_not_ours(home, tailscale):
+    enable(home, tailscale)
+    config = load_config()
+    config["webapp"]["port"] = 9200
+    save_config(config)
+    with pytest.raises(tn.TailnetError) as caught:
+        enable(home, tailscale)
+    assert str(caught.value) == "Tailscale already serves something at this address. Turn it off first."
+    assert len(tailscale.serve_calls()) == 1
+
+
+def test_off_runs_in_order_and_a_failed_serve_off_keeps_the_record_for_a_retry(home, monkeypatch):
+    fake = FakeTailscale()
+    fake.install(monkeypatch)
+    enable(home, fake)
+    fake.off_returncode = 1
+    with pytest.raises(tn.TailnetError):
+        disable(home, fake)
+    assert record_path(home).exists()
+    assert not load_config()["webapp"].get("public_url")
+    assert session_env_line() is None
+    assert tn.status(home, check=reachable)["enabled"] is False
+    fake.off_returncode = 0
+    restarts = Restarts()
+    disable(home, fake, restart=restarts)
+    assert not record_path(home).exists() and fake.serve_config == {}
+    assert restarts.count == 1
+
+
+def test_off_never_removes_a_foreign_serve_entry(home, tailscale):
+    enable(home, tailscale)
+    tailscale.serve_config = serving("http://127.0.0.1:3000")
+    disable(home, tailscale)
+    assert tailscale.serve_calls(off=True) == []
+    assert tailscale.serve_config == serving("http://127.0.0.1:3000")
+    assert not record_path(home).exists()
+    assert not load_config()["webapp"].get("public_url")
+
+
+def test_restart_refused_for_a_live_chat_rolls_back_with_a_plain_message(home, tailscale, monkeypatch):
+    from hermes_cli import web_server_gateway
+    monkeypatch.setattr(web_server_gateway, "_restart_gateway_after", lambda *a, **k: {
+        "restart_started": False, "restart_error": "a chat is running", "restart_busy": True})
+    with pytest.raises(tn.TailnetError) as caught:
+        tn.enable(home, run=tailscale, check=reachable, restart=tn._restart_gateway, sleep=lambda s: None)
+    assert str(caught.value) == "Pal is busy with a chat right now. Try again when it finishes."
+    nothing_written(home)
+    assert tailscale.serve_config == {}
+
+
+def test_off_refused_restart_still_reports_that_access_is_off(home, tailscale, monkeypatch):
+    enable(home, tailscale)
+    from hermes_cli import web_server_gateway
+    monkeypatch.setattr(web_server_gateway, "_restart_gateway_after", lambda *a, **k: {
+        "restart_started": False, "restart_busy": True})
+    with pytest.raises(tn.TailnetError) as caught:
+        tn.disable(home, run=tailscale, restart=tn._restart_gateway, sleep=lambda s: None)
+    assert str(caught.value) == "Tailscale access is off, but Pal couldn't restart. Restart Pal to finish."
+
+
+def test_funnel_on_for_the_address_is_refused_by_enable_and_off(home, tailscale):
+    enable(home, tailscale)
+    tailscale.serve_config = {**tailscale.serve_config, "AllowFunnel": {"pal-host.tail1234.ts.net:443": True}}
+    expected = "Tailscale Funnel is on for this address. Turn it off first, then try again."
+    with pytest.raises(tn.TailnetError) as caught:
+        enable(home, tailscale)
+    assert str(caught.value) == expected
+    with pytest.raises(tn.TailnetError) as caught:
+        disable(home, tailscale)
+    assert str(caught.value) == expected
+    assert record_path(home).exists()
+    assert load_config()["webapp"]["public_url"] == URL
+    assert tailscale.serve_calls(off=True) == []
