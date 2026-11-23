@@ -292,9 +292,9 @@ public final class ChatInstallModel {
         guard let scope, let state, state.step == .needsManualStep, pendingTask == step else { return }
         let label = credentialLabel + " app key"
         await mutate {
-            var id: String?
-            if let secret { id = try await self.client.storeSecret(label: label, value: secret) }
-            try await self.client.advance(scope, ChatInstallAdvance(event: .manualStepDone, expectedRevision: state.revision, manualStep: step, vaultItemId: id))
+            let id: String? = if let secret { try await self.client.storeSecret(label: label, value: secret) } else { nil }
+            try await self.client.advance(scope, ChatInstallAdvance(event: .manualStepDone, expectedRevision: state.revision,
+                                                                    manualStep: step, vaultItemId: id))
         }
     }
 

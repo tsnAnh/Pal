@@ -25,7 +25,7 @@ struct ChatInstallStatusTests {
 
     @Test(arguments: [ChatFailureReason.forbidden, .invalidParams, .decode, .timedOut, .offline, .gateway])
     func unavailableScreenCarriesTheReasonAndRetryReloads(_ reason: ChatFailureReason) async throws {
-        let client = FakeChatInstallClient([try chatProvider()], try chatState("not_started", 0))
+        let client = try FakeChatInstallClient([try chatProvider()], try chatState("not_started", 0))
         await client.failProviders(.failed(reason))
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
@@ -55,7 +55,7 @@ struct ChatInstallStatusTests {
     }
 
     private func readyModel() async throws -> (ChatInstallModel, FakeChatInstallClient) {
-        let client = FakeChatInstallClient([try chatProvider()], try chatState("ready", 7))
+        let client = try FakeChatInstallClient([try chatProvider()], try chatState("ready", 7))
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
         return (model, client)

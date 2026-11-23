@@ -12,7 +12,7 @@ extension ChatWireEnum {
 }
 
 public enum ChatCapabilityMode: String, ChatWireEnum {
-    case automatic = "automatic", guided = "guided", unsupported = "unsupported", unknown
+    case automatic, guided, unsupported, unknown
 }
 
 public enum ChatProviderCapability: String, ChatWireEnum {

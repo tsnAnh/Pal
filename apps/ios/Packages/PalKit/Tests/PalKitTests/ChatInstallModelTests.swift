@@ -66,9 +66,9 @@ actor FakeChatInstallClient: ChatInstallClient {
     var identityError: ChatInstallClientError?
     var advanceError: ChatInstallClientError?
 
-    init(_ capabilities: [ChatCapabilitiesWire], _ state: ChatSetupStateWire) {
+    init(_ capabilities: [ChatCapabilitiesWire], _ state: ChatSetupStateWire) throws {
         self.capabilities = capabilities
-        var result = try! decode(ChatInstallStatusResult.self, ["state": stateJSON("not_started", 0)])
+        var result = try decode(ChatInstallStatusResult.self, ["state": stateJSON("not_started", 0)])
         result.state = state
         current = result
     }
@@ -129,7 +129,7 @@ struct ChatInstallModelTests {
         .appendingPathComponent("Fixtures/chat-provider/wire.json")
 
     private func model(_ initial: ChatSetupStateWire, caps: ChatCapabilitiesWire? = nil) async throws -> (ChatInstallModel, FakeChatInstallClient) {
-        let client = FakeChatInstallClient([try caps ?? chatProvider()], initial)
+        let client = try FakeChatInstallClient([try caps ?? chatProvider()], initial)
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
         return (model, client)
@@ -137,22 +137,32 @@ struct ChatInstallModelTests {
 
     @Test func eachStepMapsToItsScreenAndPrimaryAction() async throws {
         let allow = "https://slack.com/oauth/v2/authorize?client_id=1"
-        let cases: [(ChatSetupStateWire, ChatInstallScreen, ChatInstallAction?)] = [
-            (try chatState("not_started", 0), .intro(again: false), .begin),
-            (try chatState("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"]), .credential, .saveCredential),
-            (try chatState("creating_app", 2), .setup(task: nil), nil),
-            (try chatState("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]), .setup(task: .setIcon), .markDone(.setIcon)),
-            (try chatState("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow", "link": allow]), .allow(URL(string: allow)), .openAllow(URL(string: allow)!)),
-            (try chatState("installing", 6), .setup(task: nil), nil),
-            (try chatState("ready", 7), .ready, nil),
-            (try chatState("revoked", 8), .intro(again: true), .begin),
-            (try chatState("error", 4, action: ["kind": "button", "action_id": "retry"], error: ["code": "app_create_failed", "fix": "retry"]),
-             .error(.appCreateFailed, fix: .retry), .fix(.retry)),
+        struct StepCase {
+            var snapshot: ChatSetupStateWire
+            var screen: ChatInstallScreen
+            var action: ChatInstallAction?
+        }
+        let credential = ["kind": "paste_credential", "action_id": "config_credential"]
+        let allowAction = ["kind": "open_link", "action_id": "allow", "link": allow]
+        let cases: [StepCase] = [
+            StepCase(snapshot: try chatState("not_started", 0), screen: .intro(again: false), action: .begin),
+            StepCase(snapshot: try chatState("needs_credential", 1, action: credential), screen: .credential, action: .saveCredential),
+            StepCase(snapshot: try chatState("creating_app", 2), screen: .setup(task: nil), action: nil),
+            StepCase(snapshot: try chatState("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]),
+                     screen: .setup(task: .setIcon), action: .markDone(.setIcon)),
+            StepCase(snapshot: try chatState("needs_allow", 5, action: allowAction),
+                     screen: .allow(URL(string: allow)), action: .openAllow(URL(string: allow)!)),
+            StepCase(snapshot: try chatState("installing", 6), screen: .setup(task: nil), action: nil),
+            StepCase(snapshot: try chatState("ready", 7), screen: .ready, action: nil),
+            StepCase(snapshot: try chatState("revoked", 8), screen: .intro(again: true), action: .begin),
+            StepCase(snapshot: try chatState("error", 4, action: ["kind": "button", "action_id": "retry"],
+                                             error: ["code": "app_create_failed", "fix": "retry"]),
+                     screen: .error(.appCreateFailed, fix: .retry), action: .fix(.retry)),
         ]
-        for (snapshot, screen, action) in cases {
-            let (model, _) = try await model(snapshot)
-            #expect(model.screen == screen, "\(snapshot.step)")
-            #expect(model.primaryAction == action, "\(snapshot.step)")
+        for item in cases {
+            let (model, _) = try await model(item.snapshot)
+            #expect(model.screen == item.screen, "\(item.snapshot.step)")
+            #expect(model.primaryAction == item.action, "\(item.snapshot.step)")
         }
     }
 
@@ -187,10 +197,13 @@ struct ChatInstallModelTests {
     }
 
     @Test func pythonFixtureReadyStateLandsOnReady() async throws {
-        struct Shape: Decodable { var ChatInstallStatusResult: PalProtocol.ChatInstallStatusResult; var ChatProviderListResult: PalProtocol.ChatProviderListResult }
+        struct Shape: Decodable {
+            var ChatInstallStatusResult: PalProtocol.ChatInstallStatusResult
+            var ChatProviderListResult: PalProtocol.ChatProviderListResult
+        }
         let shapes = try JSONDecoder().decode([String: Shape].self, from: Data(contentsOf: Self.wireFixture))
         for (id, shape) in shapes {
-            let client = FakeChatInstallClient(shape.ChatProviderListResult.providers, shape.ChatInstallStatusResult.state)
+            let client = try FakeChatInstallClient(shape.ChatProviderListResult.providers, shape.ChatInstallStatusResult.state)
             let model = ChatInstallModel(botName: "pal", preferredProvider: id, client: client)
             await model.load()
             #expect(model.screen == .ready, "\(id)")
@@ -225,7 +238,8 @@ struct ChatInstallModelTests {
     }
 
     @Test func errorShowsItsFixAndFixSendsRetry() async throws {
-        let failed = try chatState("error", 3, action: ["kind": "button", "action_id": "reenter_credential"], error: ["code": "credential_expired", "fix": "reenter_credential"])
+        let failed = try chatState("error", 3, action: ["kind": "button", "action_id": "reenter_credential"],
+                                   error: ["code": "credential_expired", "fix": "reenter_credential"])
         let (model, client) = try await model(failed)
         #expect(model.primaryAction == .fix(.reenterCredential))
         await client.set(try chatState("needs_credential", 4, action: ["kind": "paste_credential", "action_id": "config_credential"]))
@@ -346,15 +360,6 @@ struct ChatInstallModelTests {
         #expect(model.notice == .offline)
     }
 
-    @Test func appLevelKeyIsStoredAndStepAdvances() async throws {
-        let (model, client) = try await model(try chatState("needs_manual_step", 4, action: ["kind": "button", "action_id": "app_level_credential"], done: ["set_icon"]))
-        await model.markDone(.appLevelCredential, secret: fakeAppKey)
-        let advance = try #require(await client.advances.first)
-        #expect(advance.manualStep == .appLevelCredential)
-        #expect(advance.vaultItemId != nil)
-        #expect(!String(reflecting: advance).contains("FAKE"))
-    }
-
     @Test func privateChannelGetsInviteGuidanceAndGoesLive() async throws {
         let (model, client) = try await model(try chatState("ready", 7))
         let spaces = try decode([ChatSpaceRefWire].self, [
@@ -374,10 +379,22 @@ struct ChatInstallModelTests {
     }
 
     @Test func gatewayWithoutChatInstallIsUnsupported() async throws {
-        let client = FakeChatInstallClient([try chatProvider()], try chatState("not_started", 0))
+        let client = try FakeChatInstallClient([try chatProvider()], try chatState("not_started", 0))
         await client.markUnsupported()
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
         #expect(model.screen == .unsupported)
+    }
+}
+
+extension ChatInstallModelTests {
+    @Test func appLevelKeyIsStoredAndStepAdvances() async throws {
+        let keyStep = ["kind": "button", "action_id": "app_level_credential"]
+        let (model, client) = try await model(try chatState("needs_manual_step", 4, action: keyStep, done: ["set_icon"]))
+        await model.markDone(.appLevelCredential, secret: fakeAppKey)
+        let advance = try #require(await client.advances.first)
+        #expect(advance.manualStep == .appLevelCredential)
+        #expect(advance.vaultItemId != nil)
+        #expect(!String(reflecting: advance).contains("FAKE"))
     }
 }
