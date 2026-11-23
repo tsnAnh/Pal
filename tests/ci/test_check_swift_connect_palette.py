@@ -18,6 +18,9 @@ LIST = "App/ConnectApps/ConnectAppsList.swift"
 SCREEN = "App/ConnectApps/ConnectAppsScreen.swift"
 BUTTONS = "App/Setup/SetupButtons.swift"
 OUTSIDE = "App/Chat/ChatView.swift"
+TOKENS = "App/Profile/SlackTokensView.swift"
+FIELDS = "App/Setup/StepFlowFields.swift"
+PROGRESS = "App/Setup/StepFlowProgressViews.swift"
 
 LIST_CADD1B77 = (
     "TextField(\"Search\", text: $query)\n"
@@ -52,6 +55,9 @@ CASES = [
     ("connect-accent", SCREEN, "Rectangle().fill(Color.accentColor)\n", "Rectangle().fill(PalTokens.textPrimary)\n"),
     ("connect-red", LIST, "view.foregroundStyle(bad ? Color.red : PalTokens.textSecondary)\n",
      "view.foregroundStyle(bad ? Color(theme.palette.destructive) : PalTokens.textSecondary)\n"),
+    ("connect-green", TOKENS, "view.strokeBorder(Color.green.opacity(0.5), lineWidth: 1.5)\n",
+     "view.strokeBorder(PalTokens.borderStrong, lineWidth: 1.5)\n"),
+    ("connect-toggle-blue", PROGRESS, "case .done: PalTokens.toggleOn\n", "case .done: PalTokens.inverseFill\n"),
     ("connect-hex", LIST, "let c = RGB(hex: 0x2d7cf6)\n", "let c = PalTokens.textPrimary\n"),
     ("connect-hex", LIST, "let c = Color(hex: \"#2d7cf6\")\n", "let c = PalTokens.textPrimary\n"),
     ("connect-hex", LIST, "let raw = 0x2d7cf6\n", "let raw = PalTokens.textPrimary\n"),
@@ -68,7 +74,24 @@ def test_violation_fails_and_clean_passes(tmp_path: Path, rule: str, rel: str, b
 
 
 def test_every_rule_has_a_fixture() -> None:
-    assert {rule for rule, _, _ in ccp.RULES} == {rule for rule, *_ in CASES}
+    assert {rule for rule, _, _ in ccp.RULES + ccp.SLACK_RULES} == {rule for rule, *_ in CASES}
+
+
+def test_the_slack_setup_files_are_scanned_with_every_rule(tmp_path: Path) -> None:
+    for rel in (TOKENS, FIELDS, PROGRESS):
+        assert "connect-red" in _rules(tmp_path / Path(rel).stem, rel, "let c = Color.red\n")
+    assert _rules(tmp_path / "other", "App/Profile/BotProfile.swift", "let c = Color.green\n") == []
+    assert _rules(tmp_path / "connect", LIST, "let c = Color.green\n") == []
+
+
+def test_main_f67f20e8_slack_token_field_lines_are_found(tmp_path: Path) -> None:
+    body = (
+        "                        .strokeBorder(shape.isValid ? Color.green.opacity(0.5) : (shape == .empty ? Color.clear : Color.red), lineWidth: 1.5)\n"
+        "                    .foregroundStyle(shape.isValid ? Color.green : Color.red)\n"
+    )
+    root = _tree(tmp_path, {TOKENS: body})
+    found = {(f.line, f.rule) for f in ccp.scan(root, {})}
+    assert found == {(1, "connect-green"), (1, "connect-red"), (2, "connect-green"), (2, "connect-red")}
 
 
 def test_cadd1b77_lines_are_found_with_their_line_numbers(tmp_path: Path) -> None:
@@ -108,7 +131,7 @@ def test_allowlist_entry_for_an_absent_file_is_not_stale(tmp_path: Path) -> None
 
 
 def test_repository_allowlist_has_a_reason_per_entry() -> None:
-    known = {rule for rule, _, _ in ccp.RULES}
+    known = {rule for rule, _, _ in ccp.RULES + ccp.SLACK_RULES}
     assert all(reason and rule in known for (_, rule), reason in ccp.ALLOWLIST.items())
 
 

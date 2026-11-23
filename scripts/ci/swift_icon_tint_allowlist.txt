@@ -8,4 +8,3 @@ App/HomeView.swift:icon-custom-ink: bot activity glyph is secondary or the orang
 App/Kanban/KanbanTileView.swift:icon-custom-ink: chip glyph matches the chip's tone text colour, a status colour the app already uses for state
 App/Platform/DropOverlay.swift:icon-custom-ink: drop glyph takes the bot-accent ink, or secondary for a neutral tint (chatAccent, allowed on small shapes)
 App/Settings/PublicAccessScreen.swift:icon-custom-ink: probe result glyph is green, orange or red by severity, status colours the app already uses for state
-App/Setup/StepFlowChoices.swift:icon-custom-ink: ticked checkbox keeps the selection colour (toggle on), which stays as it is

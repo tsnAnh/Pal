@@ -72,10 +72,10 @@ struct SlackChannelsView: View {
 
     private func checkbox(_ isOn: Bool) -> some View {
         RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(isOn ? PalTokens.toggleOn : Color.clear)
+            .fill(isOn ? PalTokens.inverseFill : Color.clear)
             .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(isOn ? PalTokens.toggleOn : PalTokens.borderStrong, lineWidth: 1.5)
-                if isOn { PalIcon("checkmark", ink: .onFill).font(.system(size: 11, weight: .bold)) }
+                RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(isOn ? PalTokens.inverseFill : PalTokens.borderStrong, lineWidth: 1.5)
+                if isOn { PalIcon("checkmark", ink: .onInverseFill).font(.system(size: 11, weight: .bold)) }
             }
             .frame(width: 20, height: 20)
             .accessibilityHidden(true)

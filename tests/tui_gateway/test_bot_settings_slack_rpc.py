@@ -155,3 +155,13 @@ def test_the_manifest_is_named_after_the_bot_and_opens_slacks_create_page(two_bo
 
     pilot = _ok("messaging.slack.manifest", {"profile": "pilot"})
     assert pilot["bot_name"] == "pilot" and pilot["manifest"]["display_information"]["name"] == "pilot"
+
+
+def test_a_configured_slack_with_no_running_gateway_reports_a_settled_reasoned_state(two_bots, gateway_reload):
+    _ok("messaging.slack.connect", {"profile": "scout", "bot_token": BOT_TOKEN, "app_token": APP_TOKEN})
+    status = _ok("messaging.slack.status", {"profile": "scout"})
+    assert status["configured"] is True and status["enabled"] is True
+    assert status["gateway_running"] is False
+    assert status["state"] == "gateway_stopped"
+    assert status["error_code"] is None
+    assert BOT_TOKEN not in json.dumps(status) and APP_TOKEN not in json.dumps(status)

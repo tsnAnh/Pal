@@ -37,8 +37,8 @@ struct StepFlowSegments: View {
 
     private func fill(_ state: StepFlowEngine.RowState) -> Color {
         switch state {
-        case .done: PalTokens.toggleOn
-        case .current: layout == .stepper ? PalTokens.textPrimary : PalTokens.toggleOn
+        case .done: PalTokens.textSecondary
+        case .current: PalTokens.textPrimary
         case .upcoming: PalTokens.control
         }
     }
@@ -97,15 +97,15 @@ struct StepFlowChecklist: View {
     private func marker(_ row: StepFlowEngine.Row) -> some View {
         ZStack {
             Circle()
-                .fill(row.state == .done ? PalTokens.toggleOn : Color.clear)
+                .fill(row.state == .done ? PalTokens.inverseFill : Color.clear)
                 .overlay {
                     Circle().strokeBorder(
-                        row.state == .done ? PalTokens.toggleOn : row.state == .current ? PalTokens.textPrimary : PalTokens.borderStrong,
+                        row.state == .done ? PalTokens.inverseFill : row.state == .current ? PalTokens.textPrimary : PalTokens.borderStrong,
                         style: StrokeStyle(lineWidth: 1.5, dash: row.isAutomatic ? [3, 2] : [])
                     )
                 }
             if row.state == .done {
-                PalIcon("checkmark", ink: .onFill).font(.system(size: 10, weight: .bold))
+                PalIcon("checkmark", ink: .onInverseFill).font(.system(size: 10, weight: .bold))
             } else {
                 Text("\(row.number)").font(.system(size: 11)).foregroundStyle(row.state == .current ? PalTokens.textPrimary : PalTokens.textTertiary)
             }
