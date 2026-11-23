@@ -150,7 +150,10 @@ class DiscordProvider(ChatProvider):
         avatar = avatar_data_uri(projection.avatar_ref)
         record = self.records.app(bot, guild_id)
         channel_id = self._ensure_channel(rest, bot, guild_id, record, projection)
+        self.records.update_app(bot, guild_id, guild_id=guild_id, guild_name=str(guild.get("name") or guild_id),
+                                channel_id=channel_id)
         webhook_id, item_id = self._ensure_webhook(rest, bot, channel_id, record, projection, avatar)
+        self.records.update_app(bot, guild_id, webhook_id=webhook_id, webhook_item_id=item_id)
         extras = [c for c in record.get("extra_channel_ids", []) if c != channel_id]
         self._route(bot, [channel_id, *extras], record.get("channel_id"))
         now = self._clock()

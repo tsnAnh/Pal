@@ -8,10 +8,13 @@ import hermes_yaml as yaml
 from PIL import Image
 
 from agent.vault_store import VaultStore
+from gateway.chat_install_service import ChatInstallService
+from gateway.chat_install_store import ChatInstallStore
 from gateway.chat_discord.api import DiscordApi
 from gateway.chat_discord.default_profile import OwnerAllowlist, ProfileRoutes
 from gateway.chat_discord.provider import DiscordProvider
 from gateway.chat_discord.records import DiscordRecords
+from tests.gateway.chat_install_harness import RecordingControl
 from tests.gateway.chat_discord.fake_discord import GUILD_ID, OWNER_ID, TOKEN, FakeDiscord
 from tui_gateway import chat_install as ci
 from tui_gateway.contracts import chat_provider as wire
@@ -45,6 +48,8 @@ class Kit:
             records=DiscordRecords(self.records_path), routes=ProfileRoutes(scope=contextlib.nullcontext),
             allowlist=OwnerAllowlist(scope=contextlib.nullcontext), identity=self.identity,
             token_source=lambda: self.token, clock=lambda: 1_700_000_000.0)
+        self.restarts: list[str] = []
+        self.control = RecordingControl()
         self._patch_live(monkeypatch)
 
     @staticmethod
@@ -62,8 +67,19 @@ class Kit:
             self.platform_reloads.append((Path(home), platform_id, list(env_keys)))
             return True
 
+        def restart(*args, **kwargs):
+            self.restarts.append("restart")
+            return {"restart_started": True}
+
+        monkeypatch.setattr("hermes_cli.web_routers.messaging._restart_gateway_after", restart)
+        monkeypatch.setattr("tui_gateway.methods_messaging_slack._slack_reload", restart)
         monkeypatch.setattr("gateway.control_socket.reload_gateway_routes", reload_routes)
         monkeypatch.setattr("hermes_cli.gateway_multiplex_served.reload_platform_live", reload_platform)
+
+    def service(self) -> ChatInstallService:
+        return ChatInstallService(
+            store=ChatInstallStore(self.home), provider_for=lambda _provider_id: self.provider, control=self.control,
+            public_url=lambda: None, bot_scope=lambda _bot: contextlib.nullcontext())
 
     def identity(self, bot: str) -> ci.BotIdentitySource:
         return ci.BotIdentitySource(bot, self.names.get(bot, DISPLAY_NAME), str(self.avatar) if self.avatar else None)
@@ -90,6 +106,12 @@ class Kit:
 
     def record(self, bot: str = BOT, guild: str = GUILD_ID) -> dict:
         return DiscordRecords(self.records_path).app(bot, guild)
+
+    def set_routes(self, routes: list[dict]) -> None:
+        from hermes_cli.config import load_config, save_config
+        config = load_config()
+        config["profile_routes"] = routes
+        save_config(config)
 
     def records_text(self) -> str:
         return self.records_path.read_text(encoding="utf-8")
