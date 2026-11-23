@@ -362,7 +362,7 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
         waitFor(pill, timeout: 5, "jump pill")
         pill.tap()
         waitFor(bubbles(app, "assistantBubble", containing: "hermes-stub-narrate").firstMatch, timeout: 30, "the reply is on screen after the jump")
-        let commentary = "Pal đã nhận việc 145 nhưng cần xem hàng đợi trước."
+        let commentary = "Pal took job 145 but needs to check the queue first."
         let watch = TurnWatch(app: app, prompt: prompt, replies: [commentary, "hermes-stub-narrate"])
         try watch.sample(for: 2)
         shot(app, "narrate-reading-2-at-newest")

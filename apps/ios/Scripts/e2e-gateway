@@ -18,7 +18,7 @@ for SIGINT when no command is given). Everything is torn down on exit. bot-alpha
 the disabled stdio MCP server fixture-tools (default seed only).
 
   --seed parity   instead of bot-alpha and bot-beta, create the 8-bot parity roster (default
-                  plus 7 bots, Vietnamese bot chats, avatar looks and recency spread) through
+                  plus 7 bots, English bot chats, avatar looks and recency spread) through
                   the real profile and session stores; HERMES_IOS_E2E_PROFILES lists its slugs,
                   default first. See Tools/seed-parity/seed_parity.py.
   --bots N        with --seed parity, grow the roster to N bots (default 8). Above 8 it adds stream-bot,
@@ -125,7 +125,6 @@ dashboard:
     password: $PASSWORD
     secret: $SECRET
 YAML
-[ "$SEED" = "parity" ] && printf 'timezone: Asia/Ho_Chi_Minh\n' >>"$HOME_DIR/config.yaml"
 chmod 600 "$HOME_DIR/config.yaml"
 
 hermes() {

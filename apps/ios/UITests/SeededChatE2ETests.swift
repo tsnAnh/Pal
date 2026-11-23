@@ -67,7 +67,7 @@ final class SeededChatE2ETests: E2ETestCase {
         let notice = any(app, "inboundNotice")
         waitFor(notice, timeout: 20, "system notice rows")
         let labels = app.descendants(matching: .any).matching(identifier: "inboundNotice").allElementsBoundByIndex.map(\.label)
-        XCTAssertTrue(labels.contains("Message from chó ai image gen"), "\(labels)")
+        XCTAssertTrue(labels.contains("Message from Designer"), "\(labels)")
         XCTAssertFalse(labels.contains { $0.contains("Background task") || $0.contains("background tasks") }, "\(labels)")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "Message from").count, 0, "bot-to-bot rows are not the human's bubbles")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "IMPORTANT: Background process").count, 0)
@@ -142,7 +142,7 @@ final class SeededChatE2ETests: E2ETestCase {
         let link = app.buttons["botThreadLink"].firstMatch
         waitFor(link, timeout: 30, "bot thread link row")
         XCTAssertEqual(link.label, "4 messages with Market Researcher")
-        XCTAssertEqual(bubbles(app, "userBubble", containing: "Final verification for Soully").count, 0, "covered rows are folded into the link")
+        XCTAssertEqual(bubbles(app, "userBubble", containing: "Final check on the journaling app").count, 0, "covered rows are folded into the link")
         shot(app, "thread-link-row")
         link.tap()
 
@@ -150,10 +150,10 @@ final class SeededChatE2ETests: E2ETestCase {
         waitFor(any(app, "threadReadOnlyPill"), timeout: 10, "read-only pill")
         XCTAssertFalse(any(app, "composerField").exists, "a thread has no composer")
         XCTAssertFalse(app.buttons["sendButton"].exists)
-        waitFor(bubbles(app, "threadMessage", containing: "Final verification for Soully").firstMatch, timeout: 20, "the tapped exchange's first message")
+        waitFor(bubbles(app, "threadMessage", containing: "Final check on the journaling app").firstMatch, timeout: 20, "the tapped exchange's first message")
         waitFor(bubbles(app, "threadMessage", containing: "7.1/10").firstMatch, timeout: 20, "the reply")
         XCTAssertGreaterThanOrEqual(app.descendants(matching: .any).matching(identifier: "threadSenderName").count, 2)
-        XCTAssertEqual(any(app, "threadTitle").label, "chó research app and Market Researcher")
+        XCTAssertEqual(any(app, "threadTitle").label, "App Research and Market Researcher")
         shot(app, "thread-open")
 
         app.navigationBars.buttons.firstMatch.tap()
@@ -164,7 +164,7 @@ final class SeededChatE2ETests: E2ETestCase {
         let app = openChat("market-researcher")
         let link = app.buttons["botThreadLink"].firstMatch
         waitFor(link, timeout: 30, "bot thread link row")
-        XCTAssertEqual(link.label, "4 messages with chó research app")
+        XCTAssertEqual(link.label, "4 messages with App Research")
         link.tap()
         waitFor(bubbles(app, "threadMessage", containing: "7.1/10").firstMatch, timeout: 20, "the reply read from the other side")
         shot(app, "thread-receiver-side")
