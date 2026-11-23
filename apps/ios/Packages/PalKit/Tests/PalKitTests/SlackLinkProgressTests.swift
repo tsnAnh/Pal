@@ -50,4 +50,12 @@ struct SlackLinkProgressTests {
             #expect(progress.status?.reason == SlackLinkProgress.fallbackReason)
         }
     }
+
+    @Test("connected finishes every step and carries no failure")
+    func connected() {
+        let progress = SlackLinkProgress(displayName: "Manifest Bot", phase: .connected, reason: nil)
+        #expect(progress.status == nil)
+        #expect(progress.engine.isFinished)
+        #expect(states(progress) == [.done, .done, .done, .done, .done])
+    }
 }

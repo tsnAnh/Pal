@@ -3,6 +3,7 @@ import Foundation
 public struct SlackLinkProgress: Sendable, Equatable {
     public enum Phase: Sendable, Equatable {
         case connecting
+        case connected
         case failed
         case stalled
     }
@@ -20,7 +21,7 @@ public struct SlackLinkProgress: Sendable, Equatable {
         }
         let text = reason.flatMap { $0.isEmpty ? nil : $0 } ?? Self.fallbackReason
         let status: SetupStatus? = switch phase {
-        case .connecting:
+        case .connecting, .connected:
             nil
         case .failed:
             SetupStatus(
@@ -33,9 +34,13 @@ public struct SlackLinkProgress: Sendable, Equatable {
                 actionTitle: String(localized: "Retry"), code: "slack_link_stalled"
             )
         }
-        guard let engine = base.following(steps: plan.steps, at: SlackSetupPlan.installingID, failure: status) else {
-            preconditionFailure("The Slack steps always contain the installing step")
+        let engine: StepFlowEngine?
+        if phase == .connected {
+            engine = StepFlowEngine(flowID: SlackSetupPlan.flowID, steps: plan.steps, finished: true)
+        } else {
+            engine = base.following(steps: plan.steps, at: SlackSetupPlan.installingID, failure: status)
         }
+        guard let engine else { preconditionFailure("The Slack steps always contain the installing and done steps") }
         self.phase = phase
         self.engine = engine
         self.status = status

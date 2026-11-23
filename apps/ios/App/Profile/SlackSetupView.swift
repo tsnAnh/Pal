@@ -52,6 +52,10 @@ struct SlackSetupScreen<Advanced: View>: View {
                 model: model.flow, title: String(localized: "Add \(model.displayName) to Slack"),
                 savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."), close: close
             ) { step in accessory(step) }
+            .header(SlackHeader(
+                spec: spec, title: SlackHeader.title(name: model.displayName, finished: model.flow.engine.isFinished),
+                value: SlackHeader.value(name: model.displayName, finished: model.flow.engine.isFinished)
+            ).padding(PalMetrics.screenMargin))
         case .settings:
             SlackSettingsView(model: model, close: close)
         case .status(let status):

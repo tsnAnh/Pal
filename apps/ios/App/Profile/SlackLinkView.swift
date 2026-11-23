@@ -19,6 +19,18 @@ struct SlackLinkView: View {
         content
             .task { await model.load() }
             .onDisappear { model.stop() }
+            .macConfirm(isPresented: $model.confirmsDisconnect) {
+                MacDialogContent(
+                    String(localized: "Disconnect Slack?"),
+                    message: String(localized: "\(model.displayName) stops responding in Slack."),
+                    actions: [
+                        MacDialogAction(String(localized: "Disconnect"), role: .destructive, identifier: "slackDisconnectConfirm") {
+                            Task { await model.disconnect() }
+                        },
+                        MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                    ]
+                )
+            }
     }
 
     @ViewBuilder

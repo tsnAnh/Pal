@@ -40,34 +40,11 @@ struct SlackLinkStatusView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 12) {
-            ZStack(alignment: .bottomTrailing) {
-                if let spec {
-                    BotAvatarView(spec: spec, size: 64, animated: false)
-                }
-                PalIcon("number", ink: .secondary)
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 26, height: 26)
-                    .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(PalTokens.borderStrong, lineWidth: PalMetrics.separatorThickness)
-                    }
-                    .accessibilityHidden(true)
-            }
-            Text("Add \(model.displayName) to Slack")
-                .hermesText(.sheetTitle)
-                .foregroundStyle(PalTokens.textPrimary)
-                .multilineTextAlignment(.center)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("slackTitle")
-            Text("DM or @mention \(model.displayName) in Slack. It answers with the same plugins, context and memories as here.")
-                .hermesText(.rowTitle)
-                .foregroundStyle(PalTokens.textSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("slackBody")
-        }
+        let finished = link.phase == .connected
+        return SlackHeader(
+            spec: spec, title: SlackHeader.title(name: model.displayName, finished: finished),
+            value: SlackHeader.value(name: model.displayName, finished: finished)
+        )
     }
 
     @ViewBuilder
@@ -97,6 +74,22 @@ struct SlackLinkStatusView: View {
                     .strokeBorder(Color(theme.palette.destructive), lineWidth: PalMetrics.separatorThickness)
             }
             .accessibilityElement(children: .combine)
+        } else if link.phase == .connected {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    PalIcon("checkmark", ink: .success).accessibilityHidden(true)
+                    Text("Connected")
+                        .hermesText(.rowTitle)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(PalTokens.textPrimary)
+                        .accessibilityIdentifier("slackStatusConnected")
+                }
+                notice
+            }
+            .padding(PalMetrics.screenMargin)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(PalTokens.chipFill, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+            .accessibilityElement(children: .combine)
         } else {
             HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
@@ -125,7 +118,20 @@ struct SlackLinkStatusView: View {
 
     private var footer: some View {
         VStack(spacing: 10) {
-            if link.status == nil {
+            if link.phase == .connected {
+                SetupButton(title: String(localized: "Done"), kind: .primary, fillsWidth: true, identifier: "slackDoneButton") { close() }
+                if model.checkFailed {
+                    SetupButton(title: String(localized: "Retry"), fillsWidth: true, identifier: "slackRetryButton") {
+                        Task { await model.recheck() }
+                    }
+                }
+                SetupButton(title: String(localized: "Update tokens"), fillsWidth: true, identifier: "slackUpdateTokensButton") {
+                    model.beginUpdateTokens()
+                }
+                SetupButton(title: String(localized: "Disconnect"), fillsWidth: true, identifier: "slackDisconnectButton") {
+                    model.confirmsDisconnect = true
+                }
+            } else if link.status == nil {
                 SetupButton(title: String(localized: "Working…"), kind: .primary, isBusy: true, fillsWidth: true, identifier: "slackBusy") {}
             } else {
                 SetupButton(title: String(localized: "Retry"), kind: .primary, fillsWidth: true, identifier: "slackRetryButton") {

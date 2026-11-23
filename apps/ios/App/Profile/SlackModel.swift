@@ -97,9 +97,11 @@ final class SlackModel {
         switch phase {
         case .ready(.starting):
             SlackLinkProgress(displayName: displayName, phase: .connecting, reason: nil)
+        case .ready(.connected):
+            SlackLinkProgress(displayName: displayName, phase: .connected, reason: nil)
         case .ready(.failed):
             SlackLinkProgress(displayName: displayName, phase: isRechecking ? .connecting : (stalled ? .stalled : .failed), reason: detail)
-        case .loading, .ready, .busy, .unavailable:
+        case .loading, .ready(.notConnected), .busy, .unavailable:
             nil
         }
     }
