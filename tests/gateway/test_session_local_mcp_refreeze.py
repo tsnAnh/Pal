@@ -13,6 +13,7 @@ import pytest
 
 from gateway.config import Platform
 from persistence.core.errors import AuthorityRefusal
+from tools.mcp_tool_rpc_gate import RpcGate
 from tests.gateway.test_session_authority_cancel_settlement import REF, _authority, _submit
 from tests.waiting import async_wait_until
 
@@ -101,7 +102,7 @@ def test_held_servers_are_relisted_together_under_one_bound(monkeypatch, mcp_loo
             await started[1 - i].wait()
             met.append(i)
             await asyncio.Event().wait()  # never answers
-        return SimpleNamespace(name=names[i], _rpc_lock=asyncio.Lock(), _tools=[],
+        return SimpleNamespace(name=names[i], _rpc_lock=RpcGate(), _tools=[],
                                session=SimpleNamespace(list_tools=list_tools))
     for i, name in names.items():
         monkeypatch.setitem(mcp_tool._servers, _server_key(name, scope), server(i))

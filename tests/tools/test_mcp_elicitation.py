@@ -9,6 +9,8 @@ optional dependency under the `[mcp]` extra).
 """
 
 import asyncio
+import contextvars
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -18,7 +20,12 @@ pytest.importorskip("mcp.types")
 
 from mcp.types import ElicitResult
 
+from tools.mcp_tool_rpc_gate import CallScope, InFlightCalls
 from tools.mcp_tool_sampling import ElicitationHandler
+
+
+def _calls(context=None, callbacks=()):
+    return SimpleNamespace(attribute=lambda: CallScope(context, callbacks))
 
 
 def _form_params(message="please confirm", schema=None):
@@ -28,7 +35,6 @@ def _form_params(message="please confirm", schema=None):
     couple to optional Pydantic validation -- the handler reads fields via
     getattr() and tolerates duck-typed inputs.
     """
-    from types import SimpleNamespace
     return SimpleNamespace(
         mode="form",
         message=message,
@@ -37,7 +43,6 @@ def _form_params(message="please confirm", schema=None):
 
 
 def _url_params(message="open this url", url="https://example.com/auth", elicitation_id="e1"):
-    from types import SimpleNamespace
     return SimpleNamespace(
         mode="url",
         message=message,
@@ -187,7 +192,7 @@ class TestElicitationHandlerFailureModes:
 class TestElicitationHandlerContextBridge:
     """The MCP recv-loop task that fires elicitation callbacks does NOT
     inherit the agent's contextvars (HERMES_SESSION_PLATFORM etc.). The
-    handler reads the ``call_context`` thunk's snapshot -- a snapshot captured
+    handler reads the in-flight call's snapshot -- a snapshot captured
     by the MCP tool wrapper around ``session.call_tool`` -- and replays
     it before invoking the approval router so gateway-session detection
     survives the task hop. Regression tests for that bridge."""
@@ -218,7 +223,7 @@ class TestElicitationHandlerContextBridge:
             "context, otherwise the test would pass even without replay."
         )
 
-        handler = ElicitationHandler("pay", {"timeout": 5}, call_context=lambda: captured)
+        handler = ElicitationHandler("pay", {"timeout": 5}, calls=_calls(captured))
         params = _form_params()
 
         with patch("tools.approval_prompt.request_elicitation_consent", side_effect=fake_consent):
@@ -231,7 +236,7 @@ class TestElicitationHandlerContextBridge:
         )
 
     def test_missing_captured_context_falls_back_to_direct_call(self):
-        """With the default call_context (or one whose task has not entered a tool
+        """With no in-flight call (a task that has not entered a tool
         call) the handler must still invoke the consent router -- just
         without the contextvar replay. Otherwise CLI/TUI sessions, which
         don't set HERMES_SESSION_PLATFORM, would break."""
@@ -246,9 +251,8 @@ class TestElicitationHandlerContextBridge:
 
 
     def test_pending_call_context_none_does_not_crash(self):
-        """The ``call_context`` thunk returns None between tool
-        calls. An elicitation arriving in that window must not crash."""
-        handler = ElicitationHandler("pay", {"timeout": 5}, call_context=lambda: None)
+        """No tool call is in flight between calls. An elicitation arriving in that window must not crash."""
+        handler = ElicitationHandler("pay", {"timeout": 5})
         params = _form_params()
 
         with patch("tools.approval_prompt.request_elicitation_consent", return_value="decline"):
@@ -303,3 +307,34 @@ class TestRequestedSchemaFieldName:
         # An empty schema renders the generic "Approval requested by ..."
         # fallback, so the field name is what proves the schema was read.
         assert "card_number" in (captured.get("description") or ""), captured
+
+
+class TestElicitationAcrossConcurrentCalls:
+
+    def _two_calls_in_flight(self, calls):
+        seen = []
+        first, second = contextvars.copy_context(), contextvars.copy_context()
+        return seen, calls.track(first, ((seen.append, "first-chat"),)), calls.track(second, ((seen.append, "second-chat"),))
+
+    def test_two_in_flight_calls_decline_without_asking_either_chat(self):
+        calls = InFlightCalls()
+        handler = ElicitationHandler("pay", {"timeout": 5}, calls)
+        installed, first, second = self._two_calls_in_flight(calls)
+
+        with first, second, patch("tools.approval_prompt.request_elicitation_consent") as consent:
+            result = asyncio.run(handler(context=None, params=_form_params()))
+
+        assert result.action == "decline"
+        assert consent.call_count == 0 and installed == []
+        assert handler.metrics["unattributed"] == 1 and handler.metrics["declined"] == 1
+
+    def test_one_in_flight_call_is_attributed(self):
+        calls = InFlightCalls()
+        handler = ElicitationHandler("pay", {"timeout": 5}, calls)
+        installed, first, _second = self._two_calls_in_flight(calls)
+
+        with first, patch("tools.approval_prompt.request_elicitation_consent", return_value="accept") as consent:
+            result = asyncio.run(handler(context=None, params=_form_params()))
+
+        assert result.action == "accept" and consent.call_count == 1
+        assert installed == ["first-chat", None]

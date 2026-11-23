@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 from tools.mcp_tool_common import _DEFAULT_TOOL_TIMEOUT, mcp_field
 from tools.mcp_tool_config import _npx_cached_bin, _packaged_npx_entry
+from tools import mcp_tool_rpc_gate as _rpc_gate
 from tools.mcp_tool_sampling import ElicitationHandler, SamplingHandler
 from tools.mcp_tool_transport import MCPServerTransportMixin
 from tools.mcp_tool_server_run import MCPServerRunMixin
@@ -342,7 +343,7 @@ _MCP_LIST_MAX_PAGES = 50
 async def _paginate_full_list(list_method, items_attr: str, server_name: str,
                               cache_meta_out: Optional[dict] = None):
     """Drain a paginated ``list_*`` call by following ``nextCursor``; ``cache_meta_out`` gets the
-    first page's SEP-2549 hints. Callers must hold the server's ``_rpc_lock``."""
+    first page's SEP-2549 hints. Callers must hold the server's exclusive ``_rpc_lock`` slot."""
     items: list = []
     cursor = None
     for _ in range(_MCP_LIST_MAX_PAGES):
@@ -462,16 +463,15 @@ class MCPServerTask(MCPServerRunMixin, MCPServerTransportMixin, MCPServerHealthM
         self._stdio_child_pids: set[int] = set()
         self._auth_type: str = ""
         self._refresh_lock = asyncio.Lock()
-        # A stdio session is one JSON-RPC stream (a concurrent list_tools can wedge a tool
-        # call): serialize client-initiated RPCs per server (HTTP too, for ordering).
-        self._rpc_lock = asyncio.Lock()
+        # A stdio session is one JSON-RPC stream (a concurrent list_tools can wedge a tool call), so
+        # every client RPC is exclusive there; HTTP/SSE calls share slots and only list/keepalive/teardown
+        # wait for quiet. See mcp_tool_rpc_gate.
+        self._rpc_lock = _rpc_gate.RpcGate(shared_allowed=self._is_http)
         self._pending_refresh_tasks: set[asyncio.Task] = set()
-        # contextvars snapshot inside session.call_tool(): the SDK runs elicitation/create on a
-        # task that does not inherit HERMES_SESSION_PLATFORM, so the callback replays this.
-        self._pending_call_context: Optional[contextvars.Context] = None
-        # Same-call threading.local prompt callbacks (approval/sudo/vault) for the elicitation
-        # consent hop — asyncio.to_thread carries neither contextvars nor thread locals.
-        self._pending_call_callbacks: tuple = ()
+        # Each running tool call's contextvars snapshot and threading.local prompt callbacks: the SDK
+        # runs elicitation/create on a task that does not inherit HERMES_SESSION_PLATFORM, so the
+        # callback replays the originating call's scope (declining when several calls make it ambiguous).
+        self._inflight_calls = _rpc_gate.InFlightCalls()
         self._lifecycle_started_at = self._last_tool_call_at = time.monotonic()
         self._idle_timeout_seconds = self._max_lifetime_seconds = self._recycled_reason = None
         # Handshake InitializeResult: the server's REAL advertised capabilities.

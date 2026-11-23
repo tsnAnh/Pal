@@ -514,7 +514,9 @@ def _connection_identity(config: dict) -> tuple:
     credentials so the schema cache survives a token rotation). Two profiles pointing at the same URL
     with different headers/env/auth/client certificates/TLS policy are two identities; borrowing
     across them would call tools as the other user, or under the other profile's ``ssl_verify`` /
-    ``strict_redirect_headers``."""
+    ``strict_redirect_headers``. An OAuth connection is shared only when both profiles resolve the
+    same token store (see ``connection_identity_digest``): a root-owned shared connector does, a
+    server whose tokens live in each bot's own store never does."""
     from tools.mcp_schema_cache import config_fingerprint
 
     def _frozen(value):
@@ -532,6 +534,14 @@ def _auth_type(config: dict) -> str:
 def _identity_digest(resolved: list) -> str:
     """Only the hash of a connection's resolved inputs is kept: they carry secrets."""
     return hashlib.sha256(json.dumps(resolved, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def connection_identity_digest(server_name: str, config: dict, inputs: list) -> str:
+    resolved = list(inputs)
+    if _auth_type(config) == "oauth":
+        from tools.mcp_oauth import HermesTokenStorage
+        resolved.append(str(HermesTokenStorage(server_name).tokens_path()))
+    return _identity_digest(resolved)
 
 
 def _adopter_identity_digest(server_name: str, config: dict) -> str | None:
@@ -555,13 +565,13 @@ def _adopter_identity_digest(server_name: str, config: dict) -> str | None:
         logger.warning("MCP server '%s': cannot resolve this profile's connection identity (%s); "
                        "not adopting another profile's connection", server_name, exc)
         return None
-    return _identity_digest(inputs)
+    return connection_identity_digest(server_name, config, inputs)
 
 
 def _same_server_route(server: Any, config: dict, *, cross_profile: bool = False,
                        resolved_identity: str | None = None) -> bool:
-    """Whether *server* matches *config*. Across profiles the static config is not enough: OAuth
-    tokens live in the owner's token store (never reusable), and secret-source env, the profile
+    """Whether *server* matches *config*. Across profiles the static config is not enough: the OAuth
+    token store (shared only by a root-owned connector), secret-source env, the profile
     identity header and the default cwd resolve per profile, so the adopter's resolution
     (*resolved_identity*, computed by the caller outside the registry lock; None refuses) must hash
     to what the owner connected with. Within one profile the connection is the profile's: its
@@ -570,10 +580,8 @@ def _same_server_route(server: Any, config: dict, *, cross_profile: bool = False
         return False
     if not cross_profile:
         return True
-    # Identities match, so both sides carry the same normalised auth type.
     recorded = getattr(server, "_resolved_identity", None)
-    return (_auth_type(config) != "oauth" and recorded is not None
-            and resolved_identity is not None and recorded == resolved_identity)
+    return recorded is not None and resolved_identity is not None and recorded == resolved_identity
 
 
 def register_connected_into_current_scope(servers: dict) -> int:

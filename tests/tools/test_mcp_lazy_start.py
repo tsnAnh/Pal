@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import tools.mcp_tool as mcp
+from tools.mcp_tool_rpc_gate import InFlightCalls, RpcGate
 from tools import mcp_tool_discovery as _mcp_discovery
 from tools import mcp_tool_handlers as _mcp_handlers
 from tools import mcp_tool_loop as _mcp_loop
@@ -132,11 +133,9 @@ class TestLazyFirstUseConnect:
         )
         connected = SimpleNamespace(
             session=mock_session,
-            _rpc_lock=MagicMock(),
-            _pending_call_context=None,
+            _rpc_lock=RpcGate(),
+            _inflight_calls=InFlightCalls(),
         )
-        connected._rpc_lock.__aenter__ = AsyncMock(return_value=None)
-        connected._rpc_lock.__aexit__ = AsyncMock(return_value=None)
         return connected
 
     @staticmethod

@@ -233,7 +233,7 @@ class TestKeepaliveInterval:
         task._idle_timeout_seconds = 0.01
         task._last_tool_call_at = task._lifecycle_started_at - 1.0
 
-        async with task._rpc_lock:
+        async with task._rpc_lock.exclusive():
             lifecycle = asyncio.create_task(task._wait_for_lifecycle_event())
             await asyncio.sleep(0)
             assert not lifecycle.done()

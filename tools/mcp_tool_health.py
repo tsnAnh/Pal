@@ -162,7 +162,7 @@ class MCPServerHealthMixin:
         if not self._advertises_tools():
             return  # tools/list would raise MCPError(-32601)
         async with self._refresh_lock:
-            async with self._rpc_lock:
+            async with self._rpc_lock.exclusive():
                 # Snapshot the session only once the RPC lock is held: run() resets self.session
                 # to None on every transport teardown (reconnect, backoff, park, cancel) outside
                 # both locks, so a refresh queued behind the lock can wake up mid-restart

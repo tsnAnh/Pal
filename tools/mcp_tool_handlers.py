@@ -979,7 +979,7 @@ def _make_connection_tool_handler(server_name: str, tool_name: str, tool_timeout
                     return error
         # Still cleared only as read-only: a reconnect (a recoverer's, or one whose tools/list is still running
         # when this call arrives) can rediscover the tool as write-capable before it runs. The grant is read on
-        # this thread (scope-bound); the hint is re-read under _rpc_lock, which every tools/list holds.
+        # this thread (scope-bound); the hint is re-read under its slot, and every tools/list holds the exclusive one.
         cleared_as_read_only = read_only and _untrusted(server_name)
         from tools.mcp_tool_scope import _resolve_server_key
         hint_key = _resolve_server_key(server_name)
@@ -998,17 +998,12 @@ def _make_connection_tool_handler(server_name: str, tool_name: str, tool_timeout
         turn_callbacks = capture_thread_callbacks()
 
         async def _call(still_cleared: bool):
-            async with server._rpc_lock, _track_inflight_rpc(server, server_name, op, retry_safe=read_only):
+            async with server._rpc_lock.shared(), _track_inflight_rpc(server, server_name, op, retry_safe=read_only):
                 if still_cleared and _core._tool_read_only_hints.get(hint_key, {}).get(tool_name) is not True:
                     return await _refuse_unconsented_write(server_name, tool_name)
-                server._pending_call_context = contextvars.copy_context()  # for the elicitation callback
-                server._pending_call_callbacks = turn_callbacks
-                try:
+                with server._inflight_calls.track(contextvars.copy_context(), turn_callbacks):
                     result = await _call_tool_racing_stdio_death(
                         server, server_name, tool_name, args, _on_progress if report is not None else None)
-                finally:
-                    server._pending_call_context = None
-                    server._pending_call_callbacks = ()
             if getattr(server, "_mark_session_proven", None) is not None:  # round-trip done: transport healthy
                 server._mark_session_proven()
             image_paths.clear()
@@ -1044,10 +1039,11 @@ def _make_connection_tool_handler(server_name: str, tool_name: str, tool_timeout
     return _handler
 
 
-def _make_utility_handler(op: str, log_label: str, rpc, render, required: Optional[str] = None):
+def _make_utility_handler(op: str, log_label: str, rpc, render, required: Optional[str] = None, *, shared: bool = False):
     """``(server_name, tool_timeout) -> sync handler`` for one utility tool: ``rpc(session, args,
-    server_name)`` awaited under ``_rpc_lock``, ``render(result, server_name)`` -> JSON-able
-    payload, ``required`` validated before any transport work."""
+    server_name)`` awaited under a ``_rpc_lock`` slot (``shared``: concurrent with other calls on an
+    HTTP/SSE connection; else exclusive), ``render(result, server_name)`` -> JSON-able payload,
+    ``required`` validated before any transport work."""
     def _factory(server_name: str, tool_timeout: float):
         def _handler(args: dict, **kwargs) -> str:
             from tools import mcp_tool_discovery as _discovery  # lazy: import cycle
@@ -1058,7 +1054,7 @@ def _make_utility_handler(op: str, log_label: str, rpc, render, required: Option
                 return tool_error(f"Missing required parameter '{required}'")
 
             async def _call():
-                async with server._rpc_lock:
+                async with (server._rpc_lock.shared() if shared else server._rpc_lock.exclusive()):
                     result = await rpc(server.session, args, server_name)
                 return json.dumps(render(result, server_name), ensure_ascii=False)
             return _dispatch(
@@ -1137,14 +1133,14 @@ _make_list_resources_handler = _make_utility_handler(
     lambda session, args, sn: _core._paginate_full_list(session.list_resources, "resources", sn), _render_resource_list)
 _make_read_resource_handler = _make_utility_handler(
     "resources/read", "read_resource",
-    lambda session, args, sn: session.read_resource(args["uri"]), _render_read_resource, required="uri")
+    lambda session, args, sn: session.read_resource(args["uri"]), _render_read_resource, required="uri", shared=True)
 _make_list_prompts_handler = _make_utility_handler(
     "prompts/list", "list_prompts",
     lambda session, args, sn: _core._paginate_full_list(session.list_prompts, "prompts", sn), _render_prompt_list)
 _make_get_prompt_handler = _make_utility_handler(
     "prompts/get", "get_prompt",
     lambda session, args, sn: session.get_prompt(args["name"], arguments=args.get("arguments", {})),
-    _render_get_prompt, required="name")
+    _render_get_prompt, required="name", shared=True)
 
 
 def _make_check_fn(server_name: str):

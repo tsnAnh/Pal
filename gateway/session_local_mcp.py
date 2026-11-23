@@ -361,7 +361,7 @@ def _live_tools_changed(scope, names):
             if server is not None]
 
     async def relist(server):
-        async with server._rpc_lock:
+        async with server._rpc_lock.exclusive():
             if server.session is None:
                 return None
             return await _paginate_full_list(server.session.list_tools, 'tools', server.name)

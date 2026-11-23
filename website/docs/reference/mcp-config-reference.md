@@ -349,7 +349,7 @@ Behavior:
 - Tokens are persisted to `~/.hermes/mcp-tokens/<server>.json` (a named profile uses `~/.hermes/profiles/<name>/mcp-tokens/`) and reused across sessions
 - Token refresh is automatic; re-authorization only happens when refresh fails
 - Only applies to HTTP/StreamableHTTP transport (`url`-based servers)
-- Under a [multiplexed gateway](../user-guide/multi-profile-gateways.md), an OAuth connection is never shared across profiles: each profile authenticates with its own token and opens its own connection, even when the `mcp_servers` entries are identical
+- Under a [multiplexed gateway](../user-guide/multi-profile-gateways.md), an OAuth connection is shared across profiles only when they resolve the same token file (a root-owned shared connector); a server each profile authorizes for itself keeps its own token and its own connection, even when the `mcp_servers` entries are identical
 
 ### Device-code login (RFC 8628)
 

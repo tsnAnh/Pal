@@ -7,10 +7,10 @@ import json
 import logging
 import threading
 import time
-from contextvars import Context
 from typing import TYPE_CHECKING, Callable, List, Optional
 from utils import is_truthy_value
 from tools.mcp_tool_common import _MISSING, _exc_str, _safe_numeric, _sanitize_error, exact_mcp_identifier, mcp_field, _core
+from tools.mcp_tool_rpc_gate import AmbiguousCall, CallScope, InFlightCalls
 from tools.mcp_tool_schema import _normalize_mcp_input_schema, strip_schema_annotations
 from tools.ansi_strip import strip_tool_metadata_text, strip_unicode_tags, strip_unicode_tags_deep
 
@@ -305,20 +305,14 @@ class ElicitationHandler:
     # answer -> (ElicitResult action, metric); anything else declines.
     _ANSWER_RESULTS = {"accept": ("accept", "accepted"), "cancel": ("cancel", "errors")}
 
-    def __init__(self, server_name: str, config: dict,
-                 call_context: Callable[[], Optional[Context]] = lambda: None,
-                 call_callbacks: Callable[[], tuple] = lambda: ()):
+    def __init__(self, server_name: str, config: dict, calls: Optional[InFlightCalls] = None):
         self.server_name = server_name
         # 5 min mirrors the gateway approval default so async surfaces (Telegram, Slack) can respond.
         self.timeout = _safe_numeric(config.get("timeout", 300), 300, float)
-        # Returns the owning MCPServerTask's contextvars snapshot for the in-flight tool call (None
-        # between calls). A thunk, not the task: mcp_tool_server_run imports this module, so
-        # MCPServerTask cannot be named here.
-        self._call_context = call_context
-        # Same-call ``(setter, callback)`` pairs for the turn thread's prompt callbacks
-        # (approval/sudo/vault) — ``asyncio.to_thread`` does not carry ``threading.local``.
-        self._call_callbacks = call_callbacks
-        self.metrics = {"requests": 0, "accepted": 0, "declined": 0, "errors": 0}
+        # The owning connection's running tool calls: each carries its contextvars snapshot and the
+        # ``(setter, callback)`` pairs for the turn thread's prompt callbacks (approval/sudo/vault).
+        self._calls = calls if calls is not None else InFlightCalls()
+        self.metrics = {"requests": 0, "accepted": 0, "declined": 0, "errors": 0, "unattributed": 0}
 
     def session_kwargs(self) -> dict:
         """Kwargs to pass to ClientSession for elicitation support."""
@@ -329,13 +323,13 @@ class ElicitationHandler:
         self.metrics[metric] += 1
         return _core.ElicitResult(action=action, **({"content": content or {}} if action == "accept" else {}))
 
-    def _on_turn_thread(self, fn: Callable[[], object]) -> Callable[[], object]:
+    def _on_turn_thread(self, fn: Callable[[], object], scope: Optional[CallScope]) -> Callable[[], object]:
         """*fn* replaying the agent's contextvars snapshot when the owning task captured one (the
         recv-loop task does NOT inherit them; gateway-platform detection and the bound form asker need
         them) and installing the captured per-thread prompt callbacks for the duration (the executor
         thread has none of its own). ``Context.run`` runs a context once, so it is copied per call."""
-        # Outside a tool call (resources/read, prompts/get) nothing was captured: an empty slot.
-        captured, installs = self._call_context(), self._call_callbacks() or ()
+        # Outside a tool call (resources/read, prompts/get) nothing was captured: no scope.
+        captured, installs = (scope.context, scope.callbacks or ()) if scope is not None else (None, ())
 
         def _invoke():
             for setter, cb in installs:
@@ -379,6 +373,14 @@ class ElicitationHandler:
                         "(URL-mode elicitation not implemented)", self.server_name)
             return self._result("decline", "declined")
 
+        try:
+            scope = self._calls.attribute()
+        except AmbiguousCall as ambiguous:
+            logger.warning("MCP server '%s' sent an elicitation while %s tool calls are in flight on its "
+                           "connection and cannot be attributed to one chat; declining", self.server_name, ambiguous)
+            self.metrics["unattributed"] += 1
+            return self._result("decline", "declined")
+
         message = strip_unicode_tags(str(getattr(params, "message", "") or f"MCP server '{self.server_name}' is requesting your approval"))
         # ``requestedSchema`` on mcp 1.x, ``requested_schema`` on 2.0 (aliases don't apply to attribute
         # access) — read both or the user approves without seeing the fields.
@@ -387,7 +389,7 @@ class ElicitationHandler:
         # One deadline for the whole form: once this wait ends the worker (which cancellation cannot
         # stop) opens no further batch or re-ask, so the user is not asked after the server has its answer.
         ended = threading.Event()
-        ask = self._on_turn_thread(functools.partial(self._ask, message, schema, ended.is_set))
+        ask = self._on_turn_thread(functools.partial(self._ask, message, schema, ended.is_set), scope)
         try:  # off-thread: inline, the sync prompt would freeze the MCP loop and every RPC on it
             outcome = await asyncio.wait_for(
                 asyncio.to_thread(ask), timeout=self.timeout + self._OUTER_TIMEOUT_GRACE_SECONDS)

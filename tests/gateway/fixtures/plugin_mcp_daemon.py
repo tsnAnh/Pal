@@ -10,6 +10,7 @@ import runpy
 from types import SimpleNamespace
 
 from tools import mcp_tool
+from tools.mcp_tool_rpc_gate import RpcGate
 from tools.mcp_tool_loop import _ensure_mcp_loop
 
 
@@ -23,7 +24,7 @@ class _Session:
 class _Server:
     def __init__(self):
         self.session = _Session()
-        self._rpc_lock = asyncio.Lock()
+        self._rpc_lock = RpcGate()
 
 
 _ensure_mcp_loop()

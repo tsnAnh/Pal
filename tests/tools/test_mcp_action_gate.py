@@ -23,6 +23,7 @@ from gateway.session_context import clear_session_vars, set_session_vars
 from gateway.session_finite import finite_turn_scope
 from gateway.session_ingress import viewer_turn
 from hermes_cli import mcp_catalog
+from tools.mcp_tool_rpc_gate import InFlightCalls, RpcGate
 from tools import approval, mcp_action_gate, mcp_tool
 from tools import mcp_tool_handlers as handlers
 from tools import mcp_tool_registration as registration
@@ -42,7 +43,8 @@ def _run_on_loop(coro_or_factory, timeout=30):
         async def _run():
             for srv in list(mcp_tool._servers.values()):
                 if getattr(srv, "_rpc_lock", None) is None:
-                    srv._rpc_lock = asyncio.Lock()
+                    srv._rpc_lock = RpcGate()
+                    srv._inflight_calls = InFlightCalls()
             return await coro
         return loop.run_until_complete(_run())
     finally:

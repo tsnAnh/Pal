@@ -14,6 +14,7 @@ import pytest
 pytest.importorskip("mcp.types")
 
 from tools.mcp_elicitation_form import bound_form_asker
+from tools.mcp_tool_rpc_gate import CallScope
 from tools.mcp_tool_sampling import ElicitationHandler
 
 SCHEMA = {
@@ -26,6 +27,10 @@ SCHEMA = {
     },
     "required": ["project_name", "language"],
 }
+
+
+def _calls(context=None, callbacks=()):
+    return SimpleNamespace(attribute=lambda: CallScope(context, callbacks))
 
 
 def _call_context(asker):
@@ -54,7 +59,7 @@ def test_form_answers_reach_the_server_typed_and_validated():
         return {"outcome": "submitted", "answers": {"q0": "hermes-demo", "q1": "3"}}
 
     ctx = _call_context(asker)
-    handler = ElicitationHandler("formprobe", {"timeout": 5}, call_context=lambda: ctx)
+    handler = ElicitationHandler("formprobe", {"timeout": 5}, calls=_calls(ctx))
     result = asyncio.run(handler(context=None, params=_params(SCHEMA)))
 
     assert result.action == "accept"
@@ -70,7 +75,7 @@ def test_form_answers_reach_the_server_typed_and_validated():
 ])
 def test_dismissed_or_skipped_form_never_accepts(reply, action):
     ctx = _call_context(lambda _questions: reply)
-    handler = ElicitationHandler("formprobe", {"timeout": 5}, call_context=lambda: ctx)
+    handler = ElicitationHandler("formprobe", {"timeout": 5}, calls=_calls(ctx))
     result = asyncio.run(handler(context=None, params=_params(SCHEMA)))
     assert result.action == action
     assert result.content is None
@@ -80,7 +85,7 @@ def test_headless_session_declines_without_asking(monkeypatch):
     asked = []
     monkeypatch.setenv("HERMES_CRON_SESSION", "1")
     ctx = _call_context(lambda questions: asked.append(questions) or {"outcome": "submitted", "answers": {}})
-    handler = ElicitationHandler("formprobe", {"timeout": 5}, call_context=lambda: ctx)
+    handler = ElicitationHandler("formprobe", {"timeout": 5}, calls=_calls(ctx))
     result = asyncio.run(handler(context=None, params=_params(SCHEMA)))
     assert result.action == "decline"
     assert asked == []
@@ -134,7 +139,7 @@ def test_no_question_opens_after_the_elicitation_deadline(monkeypatch):
 
     monkeypatch.setattr(ElicitationHandler, "_OUTER_TIMEOUT_GRACE_SECONDS", 0)
     ctx = _call_context(asker)
-    handler = ElicitationHandler("formprobe", {"timeout": 1}, call_context=lambda: ctx)  # 1s: the floor
+    handler = ElicitationHandler("formprobe", {"timeout": 1}, calls=_calls(ctx))  # 1s: the floor
 
     async def _elicit():
         result = await handler(context=None, params=_params(schema))
@@ -160,6 +165,6 @@ def test_enum_pick_is_never_swapped_for_another_option(answer, outcome):
 def test_skipping_every_optional_field_declines():
     schema = {"type": "object", "properties": {"note": {"type": "string"}, "rating": {"type": "integer"}}}
     ctx = _call_context(lambda _questions: {"outcome": "submitted", "answers": {}})
-    handler = ElicitationHandler("formprobe", {"timeout": 5}, call_context=lambda: ctx)
+    handler = ElicitationHandler("formprobe", {"timeout": 5}, calls=_calls(ctx))
     result = asyncio.run(handler(context=None, params=_params(schema)))
     assert result.action == "decline"

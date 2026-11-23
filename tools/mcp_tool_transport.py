@@ -387,7 +387,7 @@ class MCPServerTransportMixin:
             raise ValueError(f"MCP server '{self.name}' has no 'command' in config")
         inputs, _ = _connect_inputs(self.name, config)
         # Hash the inputs this attempt spawns with, never a second resolution of them.
-        self._resolved_identity = _registration._identity_digest(inputs)
+        self._resolved_identity = _registration.connection_identity_digest(self.name, config, inputs)
         command, safe_env, stdio_cwd = inputs
         # OSV malware preflight, then the cached-npx swap (ordering enforced there).
         command, args = await _core._preflight_stdio_command(self.name, command, config.get("args", []))
@@ -626,7 +626,7 @@ class MCPServerTransportMixin:
         inputs, configured_header_names = _connect_inputs(self.name, config)
         # Hash the endpoint this attempt connects to: a second read of the runtime file could
         # publish another endpoint's identity alongside this session.
-        self._resolved_identity = _registration._identity_digest(inputs)
+        self._resolved_identity = _registration.connection_identity_digest(self.name, config, inputs)
         url, headers = inputs
         logger.debug("MCP server '%s': connecting to %s", self.name, url)
         self._http_rejection = {}  # last 4xx/5xx the owned client saw this attempt (recorder hook)
@@ -703,7 +703,7 @@ class MCPServerTransportMixin:
                         "skipping tools/list (prompts/resources remain available)", self.name)
             self._tools = []
         else:
-            async with self._rpc_lock:
+            async with self._rpc_lock.exclusive():
                 self._list_cache_meta = {}
                 self._tools = await _core._paginate_full_list(
                     self.session.list_tools, "tools", self.name, cache_meta_out=self._list_cache_meta)
