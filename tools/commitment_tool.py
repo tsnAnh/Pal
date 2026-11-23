@@ -3,7 +3,7 @@
 import hashlib
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from gateway import commitments as ledger
 from gateway.commitments import Actor, Details, Refused, RefusalCode, Route, State
@@ -108,7 +108,7 @@ def _event_key(action: str, commitment_id: str) -> str:
 
 
 def _iso(timestamp: float | None) -> str | None:
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat() if timestamp is not None else None
+    return datetime.fromtimestamp(timestamp, tz=UTC).isoformat() if timestamp is not None else None
 
 
 def _promise(args: dict, now: float) -> dict:
