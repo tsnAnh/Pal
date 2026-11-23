@@ -1,6 +1,7 @@
 import Foundation
 
 public struct MediaPreviewResolver: Sendable {
+    static let transientReasons: Set<String> = ["busy", "timed_out"]
     public static let posterPixels = Int(MediaTileMetrics.single * 3)
 
     public let source: any MediaAssetSource
@@ -40,10 +41,10 @@ public struct MediaPreviewResolver: Sendable {
         case .poster(let poster, let metadata):
             if let size = metadata.size, !MediaLimits.allowsDownload(size: size) { return .tooLarge(size: size) }
             return await remember(MediaPreview(poster: poster, metadata: metadata), key: key)
-        case .unavailable(_, let metadata):
+        case .unavailable(let reason, let metadata):
             if let size = metadata.size, !MediaLimits.allowsDownload(size: size) { return .tooLarge(size: size) }
             let fallback = try await devicePreview(reference, metadata: metadata)
-            guard fallback.cacheable else { return .ready(fallback.preview) }
+            guard fallback.cacheable, !Self.transientReasons.contains(reason) else { return .ready(fallback.preview) }
             return await remember(fallback.preview, key: key)
         }
     }

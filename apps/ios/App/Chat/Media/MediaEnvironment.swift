@@ -48,12 +48,6 @@ extension ChatModel {
     var mediaResolver: MediaPreviewResolver {
         MediaPreviewResolver(source: ChatModelMediaSource(model: self))
     }
-
-    static func stagedMedia(in entry: OutboxEntry?) -> [FileReference] {
-        (entry?.attachments ?? [])
-            .filter { $0.mime.hasPrefix("video/") || $0.mime.hasPrefix("audio/") }
-            .map { FileReference(path: $0.path, directive: "") }
-    }
 }
 
 enum MediaFilePhase: Equatable {

@@ -26,6 +26,7 @@ private struct ViewerPresentation: ViewModifier {
         let wired = content
             .environment(\.mediaPreviewResolver, resolver)
             .environment(\.mediaOpener) { reference, rowID in open(reference, inRow: rowID) }
+            .task { await Task.detached(priority: .utility) { MediaDownloads.sweepStale() }.value }
         #if os(iOS)
         wired
             .fullCover(isPresented: Binding(get: { media != nil }, set: { if !$0 { closeMedia() } })) {

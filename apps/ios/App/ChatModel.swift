@@ -862,7 +862,7 @@ final class ChatModel {
                     content.images = (staged + content.images).filter { seen.insert($0.id).inserted }
                     if entry.text.isEmpty, entry.files.isEmpty { content.text = "" }
                 }
-                return (.user(text: content.text, delivery: state), content.images, Self.stagedMedia(in: entry))
+                return (.user(text: content.text, delivery: state), content.images, [])
             case .botMessage(let sender, let body):
                 return (.notice(.botMessage(senderName: sender.name, body: body)), [], [])
             case .routineOutput(_, let body, let failed):

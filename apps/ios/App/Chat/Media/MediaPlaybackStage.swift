@@ -65,7 +65,9 @@ struct MediaPlaybackStage<Player: View>: View {
             return
         }
         phase = .fetching(nil)
-        let result = await MediaFetch.file(item.reference, from: source, limit: MediaLimits.downloadBytes) { phase = .fetching($0) }
+        let result = await MediaFetch.file(item.reference, from: source, limit: MediaLimits.downloadBytes) { fraction in
+            if case .fetching = phase { phase = .fetching(fraction) }
+        }
         guard !Task.isCancelled else {
             if case .ready(let url) = result { MediaDownloads.remove(url) }
             return

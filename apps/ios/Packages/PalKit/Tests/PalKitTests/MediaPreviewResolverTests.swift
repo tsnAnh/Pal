@@ -122,6 +122,18 @@ struct MediaPreviewResolverTests {
         #expect(bare == .ready(MediaPreview(poster: nil, size: 32_000_001)))
     }
 
+    @Test("a busy gateway answer is shown but not cached, so the next view asks again")
+    func busyAnswerIsNotCached() async throws {
+        let answer = MediaPreviewAnswer.unavailable(reason: "busy", MediaMetadata(size: 50_000_000))
+        let rig = ResolverRig(source: FakeMediaAssetSource(answer: answer, payload: MediaFixtures.payload(count: 4)))
+        defer { rig.cleanUp() }
+        let reference = MediaFixtures.reference()
+        _ = try await rig.resolver.resolve(reference)
+        _ = try await rig.resolver.resolve(reference)
+        #expect(rig.source.previewCalls == 2)
+        #expect(rig.resolver.cached(reference) == nil)
+    }
+
     @Test("a large unavailable video is ready without a poster and is never downloaded")
     func largeVideoStaysBare() async throws {
         let generator = FakePosterGenerator(poster: generatedPoster)

@@ -136,15 +136,28 @@ struct MediaTile: View {
 
     @ViewBuilder
     private var transferBadge: some View {
-        if case .fetching(let fraction) = transfer {
-            ProgressView(value: fraction)
-                .controlSize(.small)
-                .tint(PalTokens.textPrimary)
-                .padding(8)
-                .palClearGlass(Capsule(), interactive: false)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(6)
+        switch transfer {
+        case .fetching(let fraction):
+            badge { ProgressView(value: fraction).controlSize(.small).tint(PalTokens.textPrimary) }
+        case .failed(let message, _):
+            badge {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(PalTokens.textPrimary)
+                    .lineLimit(2)
+                    .accessibilityIdentifier("chatMediaTransferFailed")
+            }
+        case .idle, .ready:
+            EmptyView()
         }
+    }
+
+    private func badge<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(8)
+            .palClearGlass(Capsule(), interactive: false)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(6)
     }
 
     private func load() async {

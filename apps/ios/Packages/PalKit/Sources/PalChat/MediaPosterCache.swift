@@ -33,9 +33,11 @@ public final class MediaPosterCache: @unchecked Sendable {
         var width: Int?
         var height: Int?
         var hasPoster: Bool
+        var storedAt: Date?
     }
 
     public static let shared = MediaPosterCache()
+    static let maxAge: TimeInterval = 7 * 24 * 60 * 60
 
     private let memory = NSCache<NSString, Entry>()
     private let directory: URL
@@ -58,7 +60,7 @@ public final class MediaPosterCache: @unchecked Sendable {
         if let hit = cached(key) { return hit }
         let directory = directory
         let stem = key.stem
-        let preview = await Task.detached(priority: .utility) { Self.read(stem: stem, in: directory) }.value
+        let preview = await Task.detached(priority: .utility) { Self.read(stem: stem, in: directory, maxAge: Self.maxAge) }.value
         if let preview { remember(preview, for: key) }
         return preview
     }
@@ -80,11 +82,12 @@ public final class MediaPosterCache: @unchecked Sendable {
         memory.setObject(Entry(preview), forKey: key.stem as NSString, cost: preview.poster?.count ?? 1)
     }
 
-    private static func read(stem: String, in directory: URL) -> MediaPreview? {
+    private static func read(stem: String, in directory: URL, maxAge: TimeInterval) -> MediaPreview? {
         let sidecarURL = directory.appending(path: "\(stem).json", directoryHint: .notDirectory)
         guard let sidecarData = try? Data(contentsOf: sidecarURL),
               let sidecar = try? JSONDecoder().decode(Sidecar.self, from: sidecarData)
         else { return nil }
+        guard let storedAt = sidecar.storedAt, Date().timeIntervalSince(storedAt) < maxAge else { return nil }
         var poster: Data?
         if sidecar.hasPoster {
             guard let data = try? Data(contentsOf: directory.appending(path: "\(stem).jpg", directoryHint: .notDirectory)), !data.isEmpty
@@ -99,7 +102,7 @@ public final class MediaPosterCache: @unchecked Sendable {
         guard (try? manager.createDirectory(at: directory, withIntermediateDirectories: true)) != nil else { return }
         let sidecar = Sidecar(
             duration: preview.duration, size: preview.size, width: preview.width, height: preview.height,
-            hasPoster: preview.poster != nil
+            hasPoster: preview.poster != nil, storedAt: Date()
         )
         if let poster = preview.poster {
             guard (try? poster.write(to: directory.appending(path: "\(stem).jpg", directoryHint: .notDirectory), options: .atomic)) != nil
