@@ -873,7 +873,8 @@ public actor ChatSession: OutboxSubmitter {
             lastError: timeline.live.lastError,
             executionGeneration: timeline.live.executionGeneration,
             runningToolName: timeline.live.runningToolName,
-            streamingText: timeline.live.streamingText
+            streamingText: timeline.live.streamingText,
+            forwardedKeys: timeline.forwarded
         )
     }
 

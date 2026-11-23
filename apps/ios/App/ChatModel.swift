@@ -157,7 +157,7 @@ final class ChatModel {
     var snapshot: TimelineSnapshot?
     private var outboxEntries: [OutboxEntry] = []
     var arrivals: [String: Date] = [:]
-    private var aliases: [RowKey: String] = [:]
+    @ObservationIgnored private var identity = ChatRowIdentity()
     private var outboxRowIDs: Set<String> = []
     var built: [String: BuiltRow] = [:]
     var hasBaseline = false
@@ -690,17 +690,17 @@ final class ChatModel {
     }
 
     func rowID(for row: ChatTimelineRow) -> String {
-        if let alias = aliases[row.id] { return alias }
-        if outboxRowIDs.contains(row.item.id) {
-            aliases[row.id] = row.item.id
-            return row.item.id
-        }
-        return row.id.description
+        identity.ids(
+            for: [row], outboxIDs: outboxRowIDs, forwarded: snapshot?.forwardedKeys ?? [:]
+        )[0]
     }
 
     private func sourceItems() -> [(id: String, item: TranscriptItem, stored: Int?)] {
         let timelineRows = snapshot?.rows ?? []
-        var sources = timelineRows.map { (id: rowID(for: $0), item: $0.item, stored: $0.rowID) }
+        let timelineIDs = identity.ids(
+            for: timelineRows, outboxIDs: outboxRowIDs, forwarded: snapshot?.forwardedKeys ?? [:]
+        )
+        var sources = zip(timelineRows, timelineIDs).map { (id: $1, item: $0.item, stored: $0.rowID) }
         let known = Set(timelineRows.map(\.item.id)).union(sources.map(\.id))
         let awaiting = outboxEntries.filter { entry in
             entry.state == .pending && !known.contains("submission:\(entry.submissionID)")
