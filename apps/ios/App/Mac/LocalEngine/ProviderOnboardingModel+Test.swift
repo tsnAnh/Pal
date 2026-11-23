@@ -9,7 +9,7 @@ extension ProviderOnboardingModel {
 
     var modelsAreEditable: Bool {
         if flow.isSaving { return false }
-        switch flow.state {
+        return switch flow.state {
         case .testing, .slow, .signingIn, .idle: false
         case .awaitingTest, .passed, .failed, .offline, .modelChanged: true
         }
