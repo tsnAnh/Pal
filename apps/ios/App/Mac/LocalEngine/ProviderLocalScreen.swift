@@ -25,7 +25,7 @@ struct ProviderLocalScreen: View {
                                 detail: String(localized: "Ollama, LM Studio, or any OpenAI-compatible server."))
                             fields
                                 .padding(.top, 12)
-                            Text("Pal reads the models from the server on the next screen. Nothing is saved until the test passes.")
+                            Text("Pal checks the address on the next screen. If the server does not list its models there, type the model name.")
                                 .hermesText(.botPreview)
                                 .foregroundStyle(PalTokens.textTertiary)
                                 .multilineTextAlignment(.center)
@@ -40,7 +40,7 @@ struct ProviderLocalScreen: View {
                 HStack(spacing: SetupFooterMetrics.mac.buttonSpacing) {
                     SetupButton(title: String(localized: "Cancel"), kind: .secondary, identifier: "providerLocalCancel") {
                         key = ""
-                        model.back()
+                        Task { await model.back() }
                     }
                     SetupButton(title: String(localized: "Continue"), kind: .primary, identifier: "providerLocalContinue", action: submit)
                         .disabled(LocalAddress.normalized(address) == nil)

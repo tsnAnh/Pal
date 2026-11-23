@@ -56,6 +56,7 @@ final class ProviderOnboardingModel {
     @ObservationIgnored let client: ModelProvidersClient
     @ObservationIgnored let models: BotModelClient
     @ObservationIgnored var catalogTask: Task<Void, Never>?
+    @ObservationIgnored var clipboardMark: Int?
     @ObservationIgnored private let onFinish: @MainActor (Bool) -> Void
 
     init(
@@ -121,7 +122,13 @@ final class ProviderOnboardingModel {
 
     var continueTarget: ModelProvider? {
         if let id = connectedHere, let provider = providers.provider(id: id), provider.state == .set { return provider }
-        return Self.offered(providers.layout).first { $0.state == .set }
+        if let offered = Self.offered(providers.layout).first(where: { $0.state == .set }) { return offered }
+        return providers.providers.first { $0.state == .set && $0.canSignIn }
+    }
+
+    var inlineSignInService: String? {
+        guard case .signIn(let id) = screen else { return nil }
+        return ModelProvidersClient.serviceKey + id
     }
 
     private static func offered(_ layout: FirstRunLayout) -> [ModelProvider] {
@@ -144,15 +151,16 @@ final class ProviderOnboardingModel {
         searchText = ""
     }
 
-    func back() {
+    func back() async {
         guard canGoBack else { return }
-        leave(screen)
+        let leaving = screen
         stack.removeLast()
         searchText = ""
+        await leave(leaving)
     }
 
     func escape() {
-        if canGoBack { back() } else { Task { await skip() } }
+        Task { if canGoBack { await back() } else { await skip() } }
     }
 
     func resetToChoice() {
@@ -175,9 +183,11 @@ final class ProviderOnboardingModel {
         await providers.signIn(provider)
     }
 
-    func signInSettled() {
-        guard case .signIn(let id) = screen, let provider = providers.provider(id: id) else { return }
-        guard case .succeeded = providers.status(of: id) else { return }
+    func signInSettled() async {
+        guard case .signIn(let id) = screen, case .succeeded = providers.status(of: id) else { return }
+        await providers.refresh()
+        if flow.state != .signingIn, flow.holdsUnprovenWrittenCredential, flow.provider?.id != id { await flow.skip() }
+        guard case .signIn(let current) = screen, current == id, let provider = providers.provider(id: id) else { return }
         connectedHere = id
         if flow.state == .signingIn {
             flow.credentialWritten()
@@ -205,14 +215,14 @@ final class ProviderOnboardingModel {
     func skip() async {
         guard !isFinishing else { return }
         isFinishing = true
-        await flow.skip()
-        await finish()
+        let removed = await flow.skip()
+        await finish(removalSucceeded: removed)
     }
 
-    func finish() async {
+    func finish(removalSucceeded: Bool = true) async {
         isFinishing = true
-        await providers.refresh()
-        onFinish(providers.hasConnectedProvider)
+        let refreshed = await providers.refresh()
+        onFinish(refreshed && removalSucceeded && providers.hasConnectedProvider)
     }
 
     func startTest(_ provider: ModelProvider) {
@@ -220,6 +230,8 @@ final class ProviderOnboardingModel {
     }
 
     func begin(_ provider: ModelProvider, credential: ProviderCredential, owns: Bool, replacingTop: Bool = false) {
+        let continuesOwnedSignIn = owns && flow.provider?.id == provider.id
+        guard !flow.holdsUnprovenWrittenCredential || continuesOwnedSignIn else { return }
         origin = Self.origin(of: credential)
         flow.start(provider: provider, credential: credential, ownsCredential: owns)
         selectedModel = nil
@@ -241,12 +253,16 @@ final class ProviderOnboardingModel {
         }
     }
 
-    private func leave(_ screen: Screen) {
+    private func leave(_ screen: Screen) async {
         switch screen {
         case .test:
             catalogTask?.cancel()
             if flow.state == .testing || flow.state == .slow { flow.cancelTest() }
-            if origin != .written { flow.discard() }
+            if origin != .written {
+                flow.discard()
+            } else if flow.holdsUnprovenWrittenCredential {
+                await flow.skip()
+            }
         case .signIn:
             flow.signInCancelled()
         case .claude:

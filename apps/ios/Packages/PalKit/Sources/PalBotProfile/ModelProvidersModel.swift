@@ -180,10 +180,12 @@ public final class ModelProvidersModel {
         }
     }
 
-    public func refresh() async {
-        guard let fresh = try? await client.list() else { return }
+    @discardableResult
+    public func refresh() async -> Bool {
+        guard let fresh = try? await client.list() else { return false }
         providers = fresh
         loadFailed = false
+        return true
     }
 
     private func replace(_ provider: ModelProvider) {

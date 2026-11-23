@@ -6,34 +6,6 @@ import Testing
 
 @testable import Pal
 
-private func providerRow(_ id: String, kind: String, state: String = "not_set") -> JSONValue {
-    .object(["id": .string(id), "name": .string(id), "kind": .string(kind), "state": .string(state)])
-}
-
-private func stubGateway(_ rows: [JSONValue]) -> BotsGateway {
-    BotsGateway { method, _ in
-        if method == "model.providers.list" { return .object(["providers": .array(rows)]) }
-        throw URLError(.cannotConnectToHost)
-    }
-}
-
-@MainActor
-private func makeOnboarding(_ rows: [JSONValue], finish: @escaping @MainActor (Bool) -> Void = { _ in }) async -> ProviderOnboardingModel {
-    let gateway = stubGateway(rows)
-    let client = ModelProvidersClient(gateway: gateway)
-    let models = BotModelClient(gateway: gateway, profile: "default")
-    let root = FileManager.default.temporaryDirectory.appending(path: "provider-onboarding-\(UUID().uuidString)", directoryHint: .isDirectory)
-    let surfaces = SurfaceCache(store: CacheStore(root: root), account: { "test|me" })
-    let providers = ModelProvidersModel(client: client, surfaces: surfaces)
-    await providers.load()
-    let flow = ProviderTestFlow(backend: ModelProvidersBackend(providers: client, models: models))
-    return ProviderOnboardingModel(providers: providers, flow: flow, client: client, models: models, finish: finish)
-}
-
-private func plainProvider(_ id: String, _ kind: ModelProviderKind) -> ModelProvider {
-    ModelProvider(id: id, name: id, kind: kind, state: .notSet)
-}
-
 @MainActor
 @Suite("Provider onboarding", .serialized)
 struct ProviderOnboardingTests {
@@ -55,7 +27,7 @@ struct ProviderOnboardingTests {
         await model.choose(model.providers.provider(id: "openrouter") ?? plainProvider("openrouter", .apiKey))
         #expect(model.screen == .key("openrouter"))
         #expect(model.canGoBack)
-        model.back()
+        await model.back()
         #expect(model.screen == .choice)
         #expect(!model.canGoBack)
     }
@@ -76,7 +48,7 @@ struct ProviderOnboardingTests {
         model.continueWithKey("openrouter", key: SecretString("sk-fake-placeholder"))
         #expect(model.screen == .test("openrouter"))
         #expect(model.flow.hasStagedSecret)
-        model.back()
+        await model.back()
         #expect(model.screen == .key("openrouter"))
         #expect(!model.flow.hasStagedSecret)
         #expect(model.flow.state == .idle)
@@ -85,7 +57,7 @@ struct ProviderOnboardingTests {
     @Test func backingOutOfAWrittenTestKeepsTheProviderConnected() async {
         let model = await makeOnboarding([providerRow("openai-codex", kind: "device_code", state: "set")])
         model.startTest(model.providers.provider(id: "openai-codex") ?? plainProvider("openai-codex", .deviceCode))
-        model.back()
+        await model.back()
         #expect(model.screen == .choice)
         #expect(model.flow.provider?.id == "openai-codex")
     }

@@ -33,6 +33,7 @@ final class LocalEngineModel {
     @ObservationIgnored private let diagnostics: Diagnostics
     @ObservationIgnored private var session: EngineSession?
     @ObservationIgnored private var installTask: Task<Void, Never>?
+    @ObservationIgnored private var presentedScriptedProviderStep = false
 
     init(connection: ConnectionModel, diagnostics: Diagnostics, service: LocalEngineService? = nil) {
         self.connection = connection
@@ -61,6 +62,10 @@ final class LocalEngineModel {
     var isRunningForSignIn: Bool { state == .ready && session != nil }
 
     func detect() async {
+        if ProviderOnboardingScript.isActive {
+            await presentScriptedProviderStep()
+            return
+        }
         switch state {
         case .installing, .removing: return
         default: break
@@ -304,8 +309,20 @@ extension LocalEngineModel {
         return true
     }
 
-    private func providerOnboarding(_ connection: ConnectionModel) -> ProviderOnboardingModel {
-        let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
+    func presentScriptedProviderStep() async {
+        guard let connection, !presentedScriptedProviderStep else { return }
+        presentedScriptedProviderStep = true
+        let step = providerOnboarding(connection, gateway: ProviderOnboardingScript.gateway())
+        await step.providers.load()
+        providerStep = step
+        isPresentingSetup = true
+    }
+
+    private func providerOnboarding(
+        _ connection: ConnectionModel,
+        gateway: BotsGateway? = nil
+    ) -> ProviderOnboardingModel {
+        let gateway = gateway ?? BotsGateway { method, params in try await connection.rpc(method, params) }
         let client = ModelProvidersClient(gateway: gateway)
         let models = BotModelClient(gateway: gateway, profile: CreateBotModel.mainBot)
         let providers = ModelProvidersModel(client: client, surfaces: connection.surfaces)

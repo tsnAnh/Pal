@@ -56,7 +56,7 @@ struct ProviderKeyScreen: View {
                 HStack(spacing: SetupFooterMetrics.mac.buttonSpacing) {
                     SetupButton(title: String(localized: "Cancel"), kind: .secondary, identifier: "providerKeyCancel") {
                         text = ""
-                        model.back()
+                        Task { await model.back() }
                     }
                     SetupButton(title: String(localized: "Continue"), kind: .primary, identifier: "providerKeyContinue", action: submit)
                         .disabled(SecretEntryInput.trimmed(text) == nil)

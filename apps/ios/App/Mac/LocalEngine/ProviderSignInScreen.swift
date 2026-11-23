@@ -1,5 +1,4 @@
 #if os(macOS)
-import PalAuth
 import PalBotProfile
 import PalDesign
 import PalDevice
@@ -11,7 +10,6 @@ struct ProviderSignInScreen: View {
 
     @Environment(ServiceSignInCenter.self) private var center
     @State private var pasted = ""
-    @State private var clipboardMark: Int?
     @State private var copied = false
 
     private var service: String { ModelProvidersClient.serviceKey + providerID }
@@ -170,11 +168,7 @@ struct ProviderSignInScreen: View {
     }
 
     private func cancel() {
-        scrubClipboard()
-        Task {
-            await center.notNow(for: service)
-            model.back()
-        }
+        Task { await model.cancelSignIn(providerID) { await center.notNow(for: $0) } }
     }
 
     private func reopen() {
@@ -188,14 +182,14 @@ struct ProviderSignInScreen: View {
 
     private func pasteFromClipboard() {
         guard let value = ServiceSignInClipboard.paste() else { return }
-        clipboardMark = PasteboardScrub(SystemPasteboard()).mark()
+        model.notePasted()
         pasted = value
     }
 
     private func submit(addressMode: Bool) {
         guard let value = PastedCallback(pasted)?.value else { return }
         pasted = ""
-        scrubClipboard()
+        model.scrubPastedClipboard()
         Task {
             if addressMode {
                 await center.submitAddress(value, for: service)
@@ -203,11 +197,6 @@ struct ProviderSignInScreen: View {
                 await center.submitCallback(value, for: service)
             }
         }
-    }
-
-    private func scrubClipboard() {
-        if let mark = clipboardMark { PasteboardScrub(SystemPasteboard()).clear(ifUnchangedSince: mark) }
-        clipboardMark = nil
     }
 }
 #endif

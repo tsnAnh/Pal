@@ -59,7 +59,7 @@ struct ProviderTestFace: Equatable {
 
     private static var slow: ProviderTestFace {
         ProviderTestFace(
-            slug: "slow", title: String(localized: "Still waiting after 10 s"),
+            slug: "slow", title: String(localized: "Still waiting after \(ProviderTestFlow.defaultSlowAfterSeconds) s"),
             detail: String(localized: "Some models are slow to start. The test gives up at \(ProviderTestRequest.defaultTimeoutSeconds) s."),
             indicator: .spinner, showsChecklist: true)
     }

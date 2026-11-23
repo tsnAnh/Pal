@@ -19,7 +19,7 @@ struct ProviderTestFlowSaveTests {
         await flow.test()
         backend.replySave("Couldn't save the key. Try again in a moment.", nil)
         #expect(await flow.saveAndContinue() == false)
-        #expect(flow.state == .failed(reason: "Couldn't save the key. Try again in a moment.", kind: .other))
+        #expect(flow.state == .failed(reason: ProviderTestFlow.saveFailed, kind: .other))
         #expect(flow.hasStagedSecret && !flow.canSaveAndContinue && flow.canTest)
         #expect(backend.pins.isEmpty)
 
@@ -38,7 +38,7 @@ struct ProviderTestFlowSaveTests {
         await flow.test()
         backend.replyPin("Couldn't change the model. Nothing was changed.")
         #expect(await flow.saveAndContinue() == false)
-        #expect(flow.state == .failed(reason: "Couldn't change the model. Nothing was changed.", kind: .other))
+        #expect(flow.state == .failed(reason: ProviderTestFlow.saveFailed, kind: .other))
         #expect(flow.hasStagedSecret)
         #expect(backend.saves.count == 1 && backend.pins.count == 1)
     }
@@ -104,20 +104,20 @@ struct ProviderTestFlowSaveTests {
         #expect(backend.removals.isEmpty && flow.state == .idle)
     }
 
-    @Test("skipping after a pass keeps the credential, even after the model changed")
+    @Test("skipping after a pass keeps the credential, but not once the model changed")
     func skipAfterPassKeeps() async {
         let flow = makeFlow()
         flowWritten(flow)
         await flow.test()
         flow.select(model: "gpt-5-mini")
         await flow.skip()
-        #expect(backend.removals.isEmpty)
+        #expect(backend.removals == ["openai-codex"])
 
         let direct = makeFlow()
         flowWritten(direct)
         await direct.test()
         await direct.skip()
-        #expect(backend.removals.isEmpty && direct.state == .idle)
+        #expect(backend.removals == ["openai-codex"] && direct.state == .idle)
     }
 
     @Test("skipping a staged provider never calls remove and drops the key")

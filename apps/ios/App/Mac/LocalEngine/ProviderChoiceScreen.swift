@@ -138,7 +138,7 @@ struct ProviderChoiceScreen: View {
         SetupButton(title: String(localized: "Continue"), kind: .primary, identifier: "localEngineProvidersContinue") {
             model.continueToTest()
         }
-        .disabled(!model.providers.hasConnectedProvider || model.isFinishing)
+        .disabled(model.continueTarget == nil || model.isFinishing)
     }
 }
 

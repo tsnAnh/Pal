@@ -44,6 +44,11 @@ public enum ProviderTestState: Sendable, Equatable {
 public final class ProviderTestFlow {
     public nonisolated static let tookTooLong = "The test took too long. Try again."
     public nonisolated static let didNotPass = "The test didn't pass. Try again."
+    public nonisolated static let saveFailed = "Couldn't save. Nothing was changed. Try again."
+    public nonisolated static let saveFailedPartway = "Couldn't finish saving. Try again."
+    public nonisolated static let defaultSlowAfterSeconds = 10
+    public nonisolated static let defaultSlowAfter = Duration.seconds(defaultSlowAfterSeconds)
+    public nonisolated static let defaultGiveUpAfter = Duration.seconds(ProviderTestRequest.defaultTimeoutSeconds + 10)
 
     public private(set) var state: ProviderTestState = .idle
     public private(set) var provider: ModelProvider?
@@ -53,6 +58,7 @@ public final class ProviderTestFlow {
 
     private var credential: ProviderCredential?
     @ObservationIgnored private var hasPassed = false
+    @ObservationIgnored private var wasConnectedAtStart = false
     @ObservationIgnored private var isRemoving = false
     @ObservationIgnored private var attempt = 0
     @ObservationIgnored private var lifetime = 0
@@ -66,8 +72,8 @@ public final class ProviderTestFlow {
     public init(
         backend: any ProviderTestBackend,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        slowAfter: Duration = .seconds(10),
-        giveUpAfter: Duration = .seconds(35)
+        slowAfter: Duration = ProviderTestFlow.defaultSlowAfter,
+        giveUpAfter: Duration = ProviderTestFlow.defaultGiveUpAfter
     ) {
         self.backend = backend
         self.sleep = sleep
@@ -88,7 +94,11 @@ public final class ProviderTestFlow {
     }
 
     public var canSaveAndContinue: Bool {
-        if case .passed = state { !isSaving } else { false }
+        if case .passed = state { model != nil && !isSaving } else { false }
+    }
+
+    public var holdsUnprovenWrittenCredential: Bool {
+        ownsCredential && credential == .written && !hasPassed
     }
 
     public var canChangeModelAfterFailure: Bool {
@@ -112,6 +122,7 @@ public final class ProviderTestFlow {
         self.provider = provider
         self.credential = credential
         self.ownsCredential = ownsCredential
+        wasConnectedAtStart = provider.state == .set
         state = .awaitingTest
     }
 
@@ -143,16 +154,27 @@ public final class ProviderTestFlow {
         guard provider != nil, !chosen.isEmpty, chosen != model, !isSaving else { return }
         switch state {
         case .passed:
-            model = chosen
             state = .modelChanged
         case .failed, .offline:
-            model = chosen
             state = .awaitingTest
         case .awaitingTest, .modelChanged:
-            model = chosen
+            break
         case .idle, .signingIn, .testing, .slow:
             return
         }
+        model = chosen
+        hasPassed = false
+    }
+
+    public func clearModel() {
+        guard provider != nil, model != nil, !isSaving else { return }
+        switch state {
+        case .passed: state = .modelChanged
+        case .awaitingTest, .modelChanged, .failed, .offline: break
+        case .idle, .signingIn, .testing, .slow: return
+        }
+        model = nil
+        hasPassed = false
     }
 
     public func test() async {
@@ -184,15 +206,15 @@ public final class ProviderTestFlow {
     public func saveAndContinue() async -> Bool {
         guard canSaveAndContinue, let provider, let model else { return false }
         let epoch = lifetime
+        let staged = stagedWrite
+        let rollback = staged != nil && !wasConnectedAtStart ? provider.id : nil
         isSaving = true
         defer { if epoch == lifetime { isSaving = false } }
-        if case .staged(let apiKey, let baseURL)? = credential, apiKey != nil || baseURL != nil {
-            if let reason = await backend.saveStaged(provider: provider.id, apiKey: apiKey, baseURL: baseURL) {
-                return saveFailed(reason, epoch)
-            }
+        if let staged, await backend.saveStaged(provider: provider.id, apiKey: staged.apiKey, baseURL: staged.baseURL) != nil {
+            return await saveFailed(rollingBack: rollback, epoch)
         }
-        if let reason = await backend.pin(ModelChoice(provider: provider.id, model: model)) {
-            return saveFailed(reason, epoch)
+        if await backend.pin(ModelChoice(provider: provider.id, model: model)) != nil {
+            return await saveFailed(rollingBack: rollback, epoch)
         }
         guard epoch == lifetime else { return false }
         credential = nil
@@ -201,10 +223,12 @@ public final class ProviderTestFlow {
         return true
     }
 
-    public func skip() async {
-        let abandoned = hasPassed ? nil : writtenProviderID
+    @discardableResult
+    public func skip() async -> Bool {
+        let abandoned = holdsUnprovenWrittenCredential ? provider?.id : nil
         reset()
-        if let abandoned { _ = await backend.remove(provider: abandoned) }
+        guard let abandoned else { return true }
+        return await backend.remove(provider: abandoned)
     }
 
     public func remove() async -> Bool {
@@ -221,8 +245,9 @@ public final class ProviderTestFlow {
         reset()
     }
 
-    private var writtenProviderID: String? {
-        ownsCredential && credential == .written ? provider?.id : nil
+    private var stagedWrite: (apiKey: SecretString?, baseURL: String?)? {
+        guard case .staged(let apiKey, let baseURL)? = credential, apiKey != nil || baseURL != nil else { return nil }
+        return (apiKey, baseURL)
     }
 
     private func request(provider: String, model: String) -> ProviderTestRequest {
@@ -237,7 +262,9 @@ public final class ProviderTestFlow {
     private func apply(_ step: ProviderTestRun.Step) {
         switch step {
         case .slow: if state == .testing { state = .slow }
-        case .deadline: state = .failed(reason: Self.tookTooLong, kind: .timeout)
+        case .deadline:
+            hasPassed = false
+            state = .failed(reason: Self.tookTooLong, kind: .timeout)
         case .finished(let result): conclude(result)
         }
     }
@@ -248,14 +275,22 @@ public final class ProviderTestFlow {
             let tested = model ?? result.model
             state = .passed(ProviderTestPass(model: tested, latencyMilliseconds: result.latencyMilliseconds, replyPreview: result.replyPreview))
         } else if let error = result.error {
-            state = error.kind == .network ? .offline : .failed(reason: error.reason, kind: error.kind)
+            if error.kind == .network {
+                state = .offline
+            } else {
+                hasPassed = false
+                state = .failed(reason: error.reason, kind: error.kind)
+            }
         } else {
+            hasPassed = false
             state = .failed(reason: Self.didNotPass, kind: .other)
         }
     }
 
-    private func saveFailed(_ reason: String, _ epoch: Int) -> Bool {
-        if epoch == lifetime { state = .failed(reason: reason, kind: .other) }
+    private func saveFailed(rollingBack providerID: String?, _ epoch: Int) async -> Bool {
+        var undone = true
+        if let providerID { undone = await backend.remove(provider: providerID) }
+        if epoch == lifetime { state = .failed(reason: undone ? Self.saveFailed : Self.saveFailedPartway, kind: .other) }
         return false
     }
 
@@ -273,6 +308,7 @@ public final class ProviderTestFlow {
         credential = nil
         ownsCredential = false
         hasPassed = false
+        wasConnectedAtStart = false
         isSaving = false
         state = .idle
     }

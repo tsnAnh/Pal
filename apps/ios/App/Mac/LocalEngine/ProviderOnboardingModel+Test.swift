@@ -8,6 +8,7 @@ extension ProviderOnboardingModel {
     var canTest: Bool { selectedModel != nil && flow.canTest }
 
     var modelsAreEditable: Bool {
+        if flow.isSaving { return false }
         switch flow.state {
         case .testing, .slow, .signingIn, .idle: false
         case .awaitingTest, .passed, .failed, .offline, .modelChanged: true
@@ -52,10 +53,12 @@ extension ProviderOnboardingModel {
     }
 
     func setManualModel(_ text: String) {
+        guard modelsAreEditable else { return }
         manualModel = text
         let name = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if name.isEmpty {
             selectedModel = nil
+            flow.clearModel()
         } else {
             pick(model: name)
         }

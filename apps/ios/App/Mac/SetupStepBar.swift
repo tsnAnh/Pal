@@ -3,6 +3,7 @@ import PalDesign
 import SwiftUI
 
 struct SetupStepBar: View {
+    static let maxWidth: CGFloat = LocalEnginePanelMetrics.columnWidth
     static let height: CGFloat = 4
     static let spacing: CGFloat = 6
 
@@ -18,6 +19,7 @@ struct SetupStepBar: View {
                     .frame(height: Self.height)
             }
         }
+        .frame(maxWidth: Self.maxWidth)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Step \(step) of \(total)"))
         .accessibilityIdentifier(identifier)

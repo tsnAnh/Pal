@@ -100,6 +100,7 @@ struct ProviderModelList: View {
                 String(localized: "Model name"),
                 text: Binding(get: { model.manualModel }, set: { model.setManualModel($0) }),
                 prompt: Text("Model name"), identifier: "providerTestModelField")
+                .disabled(!model.modelsAreEditable)
             Text("Pal could not read the model list. Type the name of the model to use.")
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textTertiary)

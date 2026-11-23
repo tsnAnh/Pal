@@ -27,8 +27,8 @@ struct ProviderOnboardingView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
         .tracksProviderSignIns(model.providers)
-        .onChange(of: model.providers.rows) { _, _ in model.signInSettled() }
-        .task(id: model.providers.providerServiceKeys) { signIn.answerInline(model.providers.providerServiceKeys) }
+        .onChange(of: model.providers.rows) { _, _ in Task { await model.signInSettled() } }
+        .task(id: model.inlineSignInService) { signIn.answerInline(model.inlineSignInService.map { [$0] } ?? []) }
         .onDisappear { signIn.answerInline([]) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("localEngineProviders")
@@ -47,15 +47,15 @@ struct ProviderOnboardingView: View {
     }
 
     private func leaveScreen() {
-        if case .signIn(let id) = model.screen {
-            Task {
-                await signIn.notNow(for: ModelProvidersClient.serviceKey + id)
-                model.back()
+        let center = signIn
+        Task {
+            if case .signIn(let id) = model.screen {
+                await model.cancelSignIn(id) { await center.notNow(for: $0) }
+            } else if model.canGoBack {
+                await model.back()
+            } else {
+                await model.skip()
             }
-        } else if model.canGoBack {
-            model.back()
-        } else {
-            Task { await model.skip() }
         }
     }
 }

@@ -17,8 +17,8 @@ struct ProviderTestFlowResultTests {
         let flow = makeFlow()
         flowWritten(flow)
         await flow.test()
-        sleeper.release(.seconds(10))
-        sleeper.release(.seconds(35))
+        sleeper.release(ProviderTestFlow.defaultSlowAfter)
+        sleeper.release(ProviderTestFlow.defaultGiveUpAfter)
         for _ in 0..<200 { await Task.yield() }
         #expect(flow.canSaveAndContinue)
     }
