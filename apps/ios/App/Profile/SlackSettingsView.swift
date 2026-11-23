@@ -233,9 +233,9 @@ struct SlackSettingsView: View {
         HStack {
             Spacer(minLength: 0)
             SetupButton(title: String(localized: "Done"), kind: .primary, identifier: "slackSettingsDone", action: close)
+                .keyboardShortcut(.defaultAction)
         }
-        .padding(PalMetrics.screenMargin)
-        .overlay(alignment: .top) { PalHairline() }
+        .setupFooter(fillsWidth: false)
     }
 
     private func row<Trailing: View>(
