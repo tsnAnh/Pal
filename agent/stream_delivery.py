@@ -236,6 +236,20 @@ class StreamDeliveryMixin:
         except Exception:
             logger.debug("interim_assistant_callback error", exc_info=True)
 
+    def _deliver_details_bubble(self, text: str) -> bool:
+        """Show ``text`` as the bot's own message ahead of an ask raised inside a tool call; False when
+        no sink can show it (a held turn, or a surface with neither interim nor clarify-context delivery)."""
+        cb = getattr(self, "interim_assistant_callback", None) or getattr(self, "clarify_context_callback", None)
+        if getattr(self, "_hold_stream", False) or cb is None:
+            return False
+        try:
+            cb(text, already_streamed=False)
+        except Exception:
+            logger.debug("details bubble callback error", exc_info=True)
+            return False
+        self._record_delivered_interim_text(text)
+        return True
+
     def _fire_streamed_codex_commentary(self, text: str) -> None:
         """Deliver a completed live Codex commentary message immediately."""
         if getattr(self, "interim_assistant_callback", None) is None or not isinstance(text, str):

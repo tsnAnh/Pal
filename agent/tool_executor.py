@@ -758,8 +758,10 @@ def _dispatch_authorized_once(
     from agent.tool_progress_relay import bound_tool_progress
     from tools.connectors.data_use import collect_data_use
     from tools.mcp_elicitation_form import bound_form_asker  # MCP elicitation asks on this turn's clarify surface
+    from tools.details_bubble import bound_details_sink
     with bound_tool_progress(agent.tool_progress_callback, ref.name, ref.call_id), collect_data_use() as data_use, \
-            bound_form_asker(getattr(agent, "clarify_callback", None)), bound_call_grant(call_grant):
+            bound_form_asker(getattr(agent, "clarify_callback", None)), bound_call_grant(call_grant), \
+            bound_details_sink(getattr(agent, "_deliver_details_bubble", None)):
         try:
             return _run_with_activity_heartbeat(agent, ref.name, lambda: execute(ref.args))
         finally:

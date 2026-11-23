@@ -78,6 +78,8 @@ def test_every_session_kind_carries_the_block_once(kind):
     assert "Bring the solution, not the question" in stable
     assert "Never hand your owner your stuck work or a terminal command" in stable
     assert "Never ask your owner which model or effort" in stable
+    assert stable.count("ONE short question line and the options only") == 1
+    assert "Never paste the content, a list of fields or a cover letter" in stable
     assert PRECEDENCE in stable
 
 
@@ -126,7 +128,7 @@ def test_rule_text_names_no_secret_path(path_hint):
 
 
 def test_rule_text_stays_short():
-    assert len(OWNER_PROACTIVE_GUIDANCE.split()) < 230
+    assert len(OWNER_PROACTIVE_GUIDANCE.split()) < 275
 
 
 @pytest.fixture
