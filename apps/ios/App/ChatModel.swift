@@ -50,7 +50,7 @@ struct ChatRow: Identifiable, Equatable {
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
         case approvalAnswered(ApprovalRecord)
-        case connection(ConnectionCard)
+        case connection(ConnectionCard), noProvider
         case notice(ChatNotice)
         case routine(RoutineMessage)
         case botThread(BotThreadLink)
@@ -877,8 +877,8 @@ final class ChatModel {
             }
             return (.assistant(.deferringWarm(content.text, isStreaming: streaming)), images, content.files)
         case .tool(let call):
-            guard let generation = call.imageGeneration else { return nil }
-            return (.imageGeneration(generation), [], [])
+            let generation = call.imageGeneration
+            return generation.map { (.imageGeneration($0), [], []) }
         case .clarifyAnswered(let record):
             return (.clarifyAnswered([record]), [], [])
         case .clarify(let card):
@@ -889,8 +889,8 @@ final class ChatModel {
             return (.approvalAnswered(record), [], [])
         case .connection(let card):
             return (.connection(card), [], [])
-        case .botThread(let link):
-            return (.botThread(link), [], [])
+        case .noProvider: return (.noProvider, [], [])
+        case .botThread(let link): return (.botThread(link), [], [])
         }
     }
 

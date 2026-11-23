@@ -18,7 +18,8 @@ def home(monkeypatch, tmp_path):
     root.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(root))
     for var in ("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DASHSCOPE_API_KEY", "ALIBABA_CODING_PLAN_API_KEY",
-                "GOOGLE_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
+                "GOOGLE_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN",
+                "OPENROUTER_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(server, "_hermes_home", root)
     create_profile("scout", no_alias=True, no_skills=True)
@@ -63,6 +64,12 @@ def test_list_covers_every_registry_provider_with_a_kind_and_state(home):
     assert all(p["reason"] for p in listing["providers"] if p["kind"] == "unsupported")
     assert all(p["state"] == "unsupported" for p in listing["providers"] if p["kind"] == "unsupported")
     assert all(p["scope"] == "account" for p in listing["providers"] if p["id"] in {"nous", "xai-oauth"})
+
+
+def test_an_openrouter_key_saved_from_the_app_reads_as_set(home):
+    assert _row("openrouter")["state"] == "not_set"
+    assert control.store_pasted_credential("openrouter", "sk-or-v1-" + uuid.uuid4().hex * 2)
+    assert _row("openrouter")["state"] == "set"
 
 
 def test_status_per_credential_kind_is_set_not_set_or_expired(home, monkeypatch, canary):

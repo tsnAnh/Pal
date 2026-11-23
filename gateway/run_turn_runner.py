@@ -19,6 +19,7 @@ from contextlib import suppress
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from agent.error_surface import NO_PROVIDER_CONFIGURED, no_provider_configured_surface
 from agent.i18n import t
 from agent.interrupt_compat import _accepts_keyword
 from agent.replay_cleanup import canonicalize_replay_history
@@ -169,6 +170,29 @@ def _settle_api_runtime_lock(agent, result, captured):
             route_source=settings.get('route_source') or '', confirmed_runtime_lock=True)
     except RuntimeError as exc:
         result.update(final_response='', failed=True, completed=False, error=str(exc))
+
+
+def _no_provider_configured(exc: BaseException) -> bool:
+    from hermes_cli.auth import AuthError
+    seen: set[int] = set()
+    link: BaseException | None = exc
+    while link is not None and id(link) not in seen:
+        seen.add(id(link))
+        if isinstance(link, AuthError) and link.code == NO_PROVIDER_CONFIGURED:
+            return True
+        link = link.__cause__ or link.__context__
+    return False
+
+
+def _resolution_failure_result(exc: Exception, platform: Platform) -> dict[str, Any]:
+    from agent.turn_failure_copy import stamp_failure
+    text, reason, retryable = _resolution_failure_reply(exc, platform)
+    result = stamp_failure({"final_response": text, "messages": [], "api_calls": 0, "tools": [],
+                            "failed": True, "completed": False, "error": str(exc), "agent_persisted": False},
+                           reason, retryable)
+    if platform == Platform.LOCAL and _no_provider_configured(exc):
+        result["error_surface"] = no_provider_configured_surface()
+    return result
 
 
 def _resolution_failure_reply(exc: Exception, platform: Platform) -> tuple[str, str, bool]:
@@ -1460,10 +1484,7 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
             # a FAILED turn: a one-shot client exits non-zero, transcript persistence closes the
             # turn, and an API receipt reports failure, never a completed turn with an apology.
             logger.warning("Model resolution failed for session %s: %s", ctx.session_key or "", exc, exc_info=True)
-            from agent.turn_failure_copy import stamp_failure
-            text, reason, retryable = _resolution_failure_reply(exc, ctx.source.platform)
-            return stamp_failure({"final_response": text, "messages": [], "api_calls": 0, "tools": [],
-                                  "failed": True, "completed": False, "error": str(exc)}, reason, retryable)
+            return _resolution_failure_result(exc, ctx.source.platform)
         from gateway.session_authorities import active_authority
         from gateway.session_worker_construct import session_routing
         pr = session_routing(active_authority(runner), policy) if policy else runner._provider_routing

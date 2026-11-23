@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, Optional
 
+from agent.error_surface import PREVIEW_COPY_BY_CODE
 from gateway.response_filters import is_intentional_silence_response, strip_trailing_silence_marker
+from session_rules.turns import FAILED_TURN_DISPLAY_KIND
 from tools.bot_dm_wire import BOT_REPLY_RULE
 from tools.bot_mode_probe import NO_REPLY_MARKER
 
@@ -59,7 +62,18 @@ _MACHINE_TURN_PREFIXES = ("[IMPORTANT: Background process", "[ASYNC DELEGATION "
 PREVIEW_HIDDEN_SCAN = 64
 
 
-def owner_display_text(role: Any, content: Any, display_kind: Any = None) -> Optional[str]:
+def _surface_preview_copy(display_metadata: Any) -> Optional[str]:
+    if isinstance(display_metadata, str):
+        try:
+            display_metadata = json.loads(display_metadata)
+        except ValueError:
+            return None
+    surface = display_metadata.get("error_surface") if isinstance(display_metadata, dict) else None
+    code = surface.get("code") if isinstance(surface, dict) else None
+    return PREVIEW_COPY_BY_CODE.get(code) if isinstance(code, str) else None
+
+
+def owner_display_text(role: Any, content: Any, display_kind: Any = None, display_metadata: Any = None) -> Optional[str]:
     """A stored row as an owner's transcript preview shows it, ``None`` when it shows nothing: a marker
     row, or an inbound user turn a person did not write: any machine ``display_kind``, or cron and
     background-result plumbing an older row carries untagged (the rule of Pal's ``InboundKind``). The
@@ -72,6 +86,8 @@ def owner_display_text(role: Any, content: Any, display_kind: Any = None) -> Opt
             return None
     elif role != "assistant":
         return text
+    elif display_kind == FAILED_TURN_DISPLAY_KIND and (copy := _surface_preview_copy(display_metadata)):
+        return copy
     shown = display_text(role, text)
     return shown if shown and shown.strip() else None
 

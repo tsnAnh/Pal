@@ -265,7 +265,8 @@ class MessageReadsMixin(MessageBase):
             if row.message.role in ("user", "assistant") and _has_text(row.message.content):
                 if not owner_visible:
                     return _content_text(row.message.content)
-                text = owner_display_text(row.message.role, _content_text(row.message.content), row.message.display_kind)
+                text = owner_display_text(row.message.role, _content_text(row.message.content), row.message.display_kind,
+                                          row.message.display_metadata)
                 if text is not None:
                     return text
                 scanned += 1

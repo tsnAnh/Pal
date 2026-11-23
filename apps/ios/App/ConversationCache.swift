@@ -41,6 +41,10 @@ extension RosterModel {
 }
 
 extension RosterModel {
+    func stageIntro(_ intro: BotIntro, for name: String) {
+        pendingIntros[name] = intro
+    }
+
     var primaryBot: BotRow? {
         if let primary = bots.first(where: \.isPrimary) { return primary.isHidden ? nil : primary }
         return visibleBots.first

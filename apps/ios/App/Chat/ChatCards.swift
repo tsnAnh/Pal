@@ -167,6 +167,29 @@ private extension View {
     }
 }
 
+struct NoProviderCard: View {
+    let connect: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Pal needs an AI model to reply")
+                    .font(.headline)
+                    .foregroundStyle(PalTokens.textPrimary)
+                Text("Connect a provider and send your message again.")
+                    .hermesText(.chatBody)
+                    .foregroundStyle(PalTokens.textPrimary)
+            }
+            Button("Connect a model", action: connect)
+                .glassButtonStyle(prominent: true)
+                .accessibilityIdentifier("noProviderConnect")
+        }
+        .chatCard()
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("noProviderCard")
+    }
+}
+
 struct ConnectionRequestCard: View {
     @Environment(\.hermesTheme) private var theme
 

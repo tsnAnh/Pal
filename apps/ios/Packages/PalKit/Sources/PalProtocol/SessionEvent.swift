@@ -91,6 +91,7 @@ public struct MessageComplete: Codable, Sendable, Hashable {
     public var text: String
     public var status: String?
     public var error: String?
+    public var errorSurface: ErrorSurface?
     public var identity = LiveMessageIdentity()
 
     public init(from decoder: any Decoder) throws {
@@ -99,12 +100,14 @@ public struct MessageComplete: Codable, Sendable, Hashable {
         text = (try? container.decodeIfPresent(String.self, forKey: .text)) ?? ""
         status = try? container.decodeIfPresent(String.self, forKey: .status)
         error = try? container.decodeIfPresent(String.self, forKey: .error)
+        errorSurface = try? container.decodeIfPresent(ErrorSurface.self, forKey: .errorSurface)
     }
 
     enum CodingKeys: String, CodingKey {
         case text
         case status
         case error
+        case errorSurface = "error_surface"
     }
 }
 

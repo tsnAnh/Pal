@@ -450,7 +450,7 @@ struct Timeline: Sendable {
             guard live.carriesImage == !body.images.isEmpty else { return false }
             return Transcript.sameBody(a, body.text) || (live.carriesImage && body.text.isEmpty)
         case (.assistant(let a, _, false), .assistant(let b, _, _)): return !Transcript.isBlank(a) && Transcript.sameBody(a, b)
-        default: return false
+        default: return live.content == .noProvider && stored.content == .noProvider
         }
     }
 
@@ -506,7 +506,7 @@ struct Timeline: Sendable {
             if !wire.text.isEmpty {
                 parts.append((TranscriptItem(
                     id: wire.id,
-                    content: .assistant(text: wire.text, reasoning: wire.reasoning ?? "", isStreaming: false),
+                    content: .reply(wire.text, reasoning: wire.reasoning ?? "", from: wire),
                     timestamp: date,
                     uid: uid
                 ), mainRefs))
@@ -557,7 +557,7 @@ struct Timeline: Sendable {
                 guard !text.isEmpty else { return nil }
                 return TimelineEntryWire(
                     id: id, role: .assistant, text: text, reasoning: message.reasoning,
-                    timestamp: message.timestamp, displayKind: message.displayKind, rowID: message.rowID
+                    timestamp: message.timestamp, displayKind: message.displayKind, displayMetadata: message.displayMetadata, rowID: message.rowID
                 )
             case "tool":
                 let callID = message.toolCallID ?? id

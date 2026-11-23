@@ -161,6 +161,11 @@ struct OwnerIntroSheet: View {
     private var form: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
+            Text("Step 2 of 2")
+                .font(.system(size: 12))
+                .foregroundStyle(PalTokens.textTertiary)
+                .padding(.bottom, 8)
+                .accessibilityIdentifier("ownerIntroStep")
             Text("What should your bots call you?")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(PalTokens.textPrimary)

@@ -51,7 +51,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         case approval(PromptCard)
         case approvalAnswered(ApprovalRecord)
         case botThread(BotThreadLink)
-        case connection(ConnectionCard)
+        case connection(ConnectionCard), noProvider
     }
 
     public var id: String
@@ -238,7 +238,7 @@ public struct Transcript: Sendable, Equatable {
             case .clarify(let card): Summary.Entry(kind: "clarify", text: card.prompt.question ?? "")
             case .approval(let card): Summary.Entry(kind: "approval", text: card.prompt.command ?? "")
             case .approvalAnswered(let record): Summary.Entry(kind: "approval-answered", text: record.request)
-            case .botThread: nil
+            case .botThread, .noProvider: nil
             case .connection(let card): Summary.Entry(kind: "connection", text: card.operation.targets.map(\.name).joined(separator: ", "))
             }
         })
@@ -374,7 +374,7 @@ public struct Transcript: Sendable, Equatable {
             guard !text.isEmpty else { return [] }
             return [TranscriptItem(
                 id: id,
-                content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false),
+                content: .reply(text, reasoning: message.reasoning ?? "", from: message),
                 timestamp: serverDate(message.timestamp),
                 uid: message.messageUID
             )]
@@ -633,17 +633,17 @@ public struct Transcript: Sendable, Equatable {
         var finalID: String?
         if let index = streamingIndex, case .assistant(let existing, let reasoning, true) = items[index].content {
             let final = complete.text.isEmpty ? existing : complete.text
-            if final.isEmpty, reasoning.isEmpty {
+            if final.isEmpty, reasoning.isEmpty, !complete.needsModelProvider {
                 items.remove(at: index)
             } else {
-                items[index].content = .assistant(text: final, reasoning: reasoning, isStreaming: false)
+                items[index].content = complete.needsModelProvider ? .noProvider : .assistant(text: final, reasoning: reasoning, isStreaming: false)
                 items[index].uid = complete.identity.messageUID ?? items[index].uid
                 finalID = items[index].id
             }
-        } else if !complete.text.isEmpty, !hasAssistantInCurrentTurn(text: complete.text) {
+        } else if complete.needsModelProvider ? items.last?.content != .noProvider : !complete.text.isEmpty && !hasAssistantInCurrentTurn(text: complete.text) {
             var item = TranscriptItem(
                 id: "complete:\(complete.identity.messageUID ?? String(items.count))",
-                content: .assistant(text: complete.text, reasoning: "", isStreaming: false),
+                content: complete.needsModelProvider ? .noProvider : .assistant(text: complete.text, reasoning: "", isStreaming: false),
                 uid: complete.identity.messageUID
             )
             if let turnID = complete.identity.turnID, let segment = complete.identity.segment {

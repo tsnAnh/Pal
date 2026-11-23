@@ -78,12 +78,23 @@ def kind_of(pconfig) -> tuple[str, Optional[str]]:
     return "unsupported", UNSUPPORTED_REASONS.get(pconfig.auth_type, DEFAULT_UNSUPPORTED_REASON)
 
 
+def _openrouter_status() -> dict:
+    from hermes_cli.auth import _openrouter_auto_detected, _scoped_key_env_reader
+    from hermes_cli.config import get_env_value_prefer_dotenv
+    scoped = _scoped_key_env_reader()
+    return {"configured": _openrouter_auto_detected(lambda name: get_env_value_prefer_dotenv(name) or scoped(name))}
+
+
+_UNREGISTERED_STATUS: dict[str, Callable[[], dict]] = {"openrouter": _openrouter_status}
+
+
 def _state_of(pconfig, kind: str) -> str:
     if kind == "unsupported":
         return "unsupported"
     from hermes_cli.auth import get_auth_status, get_provider_auth_state
     try:
-        raw = get_auth_status(pconfig.slug)
+        status = _UNREGISTERED_STATUS.get(pconfig.slug)
+        raw = status() if status else get_auth_status(pconfig.slug)
         if kind == "oauth_paste":
             if raw.get("logged_in") or raw.get("needs_refresh"):
                 return "set"

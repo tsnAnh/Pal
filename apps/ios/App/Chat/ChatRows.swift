@@ -8,6 +8,7 @@ struct ChatRowView: View {
     let row: ChatRow
     let context: ChatRowContext
     let model: ChatModel
+    let openModelProviders: () -> Void
     let openThread: (BotThreadLink) -> Void
 
     @Environment(\.hermesTheme) private var theme
@@ -78,6 +79,8 @@ struct ChatRowView: View {
             ConnectionRequestCard(card: card, answering: context.answeringConnections) { target, decision in
                 model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)
             }
+        case .noProvider:
+            NoProviderCard(connect: openModelProviders)
         case .routine(let routine):
             let actions = messageActions(for: routine.text)
             RoutineOutputRow(routine: routine, highlight: findQuery, isCurrentMatch: isCurrentMatch)
