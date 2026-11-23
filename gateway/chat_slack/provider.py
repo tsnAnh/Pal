@@ -173,6 +173,7 @@ class SlackProvider(ChatProvider):
         workspace, bot = state.workspace, state.bot
         if config_vault_item_id:
             self.tokens.bind(workspace, config_vault_item_id)
+        self._probe_if_never_probed(workspace)
         token = self.tokens.valid_config_token(workspace)
         source = self._identity(bot)
         projection, manifest = self._manifest(workspace, source)
@@ -262,6 +263,12 @@ class SlackProvider(ChatProvider):
         if renewable:
             self._probe_after_credential(workspace)
         return held
+
+    def _probe_if_never_probed(self, workspace: str) -> None:
+        record = self.workspace_records.workspace(workspace)
+        renewable = record.get("capabilities", {}).get(ProviderCapability.unattended_refresh.value) == CapabilityMode.automatic.value
+        if renewable and not record.get("probed_at"):
+            self._probe_after_credential(workspace)
 
     def _probe_after_credential(self, workspace: str) -> None:
         try:
@@ -356,6 +363,7 @@ class SlackProvider(ChatProvider):
     def update_identity(self, installation: Installation) -> IdentityUpdate:
         workspace, record = self._record_for(installation)
         bot, source = installation.bot, self._identity(installation.bot)
+        self._probe_if_never_probed(workspace)
         token = self.tokens.valid_config_token(workspace)
         projection, manifest = self._manifest(workspace, source)
         self.api.call("apps.manifest.update", token=token, data={"app_id": record["app_id"], "manifest": manifest})
