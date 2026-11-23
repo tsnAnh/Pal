@@ -27,6 +27,7 @@ class AskItem:
     question: str
     choices: tuple[str, ...] = ()
     recommend: bool = True
+    default: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +159,7 @@ def _record_ask_quality(stats: Stats, message: Message) -> None:
             stats.asks_with_options += 1
             stats.asks_recommended_first += bool(item.recommend and (len(item.choices) >= 2 or states_recommendation(item.choices[0])))
             stats.asks_bare_yes_no += is_bare_yes_no(item.choices)
-        elif not states_default(f"{message.text}\n{item.question}"):
+        elif not item.default and not states_default(f"{message.text}\n{item.question}"):
             stats.asks_no_options_no_default += 1
 
 
@@ -289,7 +290,8 @@ def _clarify_asks(tool_calls) -> tuple[AskItem, ...]:
         for item in (arguments or {}).get("questions") or ():
             if isinstance(item, dict) and str(item.get("question") or "").strip():
                 choices = tuple(str(c) for c in item.get("choices") or () if str(c).strip())
-                asks.append(AskItem(str(item["question"]).strip(), choices, item.get("recommend") is not False))
+                asks.append(AskItem(str(item["question"]).strip(), choices, item.get("recommend") is not False,
+                                    str(item.get("default") or "").strip()))
     return tuple(asks)
 
 

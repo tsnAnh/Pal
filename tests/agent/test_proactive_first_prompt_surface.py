@@ -139,18 +139,6 @@ def test_clarify_takes_several_independent_questions_in_one_call():
     assert [r["status"] for r in ok["responses"]] == ["answered", "answered"]
 
 
-DUPLICATED_RULE_FINDING = (
-    "Baseline finding: the two-bubble rule (send the details as a normal message, then ONE short question line "
-    "and the options only, never paste the content into the question or an option) is written in both "
-    "OWNER_PROACTIVE_GUIDANCE (agent/prompt_builder.py:406-408) and the clarify description "
-    "(tools/clarify_tool.py:171-175). One home per fact: step 2 keeps it in the clarify text only."
-)
-MISSING_DEFAULT_RULE_FINDING = (
-    "Baseline finding: the clarify text allows an open-ended question ('omit choices') and says nothing about a "
-    "suggested default, so a bare open question is legal. Step 2 adds the rule and a default field."
-)
-
-
 def test_the_choices_rule_is_stated_once_in_the_clarify_text():
     text = ps.clarify_text(CLARIFY_SCHEMA)
     assert ps.choices_rule_count(text, "put your recommended option FIRST") == 1
@@ -158,12 +146,10 @@ def test_the_choices_rule_is_stated_once_in_the_clarify_text():
     assert ps.choices_rule_count(text, "ONE short question line") == 2
 
 
-@pytest.mark.xfail(strict=True, reason=DUPLICATED_RULE_FINDING)
 def test_the_principle_block_and_the_clarify_text_share_no_sentence():
     assert ps.duplicated_sentences(OWNER_PROACTIVE_GUIDANCE, ps.clarify_text(CLARIFY_SCHEMA)) == []
 
 
-@pytest.mark.xfail(strict=True, reason=MISSING_DEFAULT_RULE_FINDING)
 def test_a_question_without_choices_carries_a_suggested_default():
     assert not ps.open_question_rule_missing(CLARIFY_SCHEMA)
 

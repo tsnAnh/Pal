@@ -3,6 +3,7 @@ Schema, validation and a thin dispatcher; the UI lives in a platform-provided
 callback (cli.py, gateway/run.py, tui_gateway)."""
 
 import json
+import logging
 from typing import Callable, Dict, List, Optional
 
 from tools.clarify_split import OPTION_MAX_CHARS
@@ -11,8 +12,11 @@ MAX_CHOICES = 4  # the UI always appends an "Other (type your answer)" row
 MAX_QUESTIONS = 5  # independent questions per call
 # Applied to the first choice here (not per-surface) so every adapter renders it identically.
 RECOMMENDED_LABEL = "(Recommended)"
+SUGGESTED_LABEL = "Suggested:"
+BARE_QUESTION_NOTICE = "Next time give this question choices (recommended first) or a suggested default."
 _UNAVAILABLE = "Clarify tool is not available in this execution context."
-_SHAPE = "Pass questions=[{question, choices?, multi_select?}]; a single question is a one-entry array."
+_SHAPE = "Pass questions=[{question, choices?, default?, multi_select?}]; a single question is a one-entry array."
+logger = logging.getLogger(__name__)
 
 
 def mark_recommended(choices: list[str]) -> list[str]:
@@ -52,10 +56,25 @@ def _clean_answer(raw, multi: bool):
     return [strip_recommended(item) for item in raw if str(item).strip()]
 
 
+def _default_of(item: dict, index: int) -> tuple:
+    raw = item.get("default")
+    if raw is None:
+        return None, None
+    if not isinstance(raw, str):
+        return None, f"questions[{index}].default must be a string."
+    if len(raw.strip()) > OPTION_MAX_CHARS:
+        return None, f"questions[{index}].default is over the {OPTION_MAX_CHARS}-character limit."
+    return raw.strip() or None, None
+
+
+def _with_default(question: str, default: Optional[str]) -> str:
+    return f"{question} ({SUGGESTED_LABEL} {default})" if default else question
+
+
 def _normalize_questions(questions) -> tuple:
     """Validate ``questions`` -> ``(normalized, error)``. Entries carry ``qid`` (stable wire id
     ``q<index>`` surfaces key answers by), ``question``, decorated ``choices``, bare
-    ``choices_offered`` and ``multi_select``."""
+    ``choices_offered``, ``default`` (free-text questions only) and ``multi_select``."""
     if not isinstance(questions, list) or not questions:
         return None, f"questions must be a non-empty array. {_SHAPE}"
     if len(questions) > MAX_QUESTIONS:
@@ -81,12 +100,16 @@ def _normalize_questions(questions) -> tuple:
             if choices and not cleaned:
                 # A card with no options strands the turn: say so instead of silently asking open-ended.
                 return None, (f"questions[{index}].choices has {len(choices)} entries but all are blank. "
-                              "Send real labels, or omit choices to ask open-ended.")
+                              "Send real labels, or omit choices and give a suggested default.")
             choices = cleaned or None
+        default, error = _default_of(item, index)
+        if error:
+            return None, error
         normalized.append({
             "qid": f"q{index}", "question": text,
             "choices": display_choices(choices, recommend),
             "choices_offered": list(choices) if choices else None,
+            "default": None if choices else default,
             "multi_select": bool(item.get("multi_select")) and bool(choices),
             "recommend": recommend})
     return normalized, None
@@ -112,8 +135,13 @@ def _result(normalized: list[dict], reply: dict, shown: list[dict] | None = None
         back = dict(zip(seen["choices_offered"] or [], entry["choices_offered"] or []))
         if back and value:
             value = [back.get(v, v) for v in value] if isinstance(value, list) else back.get(value, value)
-        responses.append({"question": entry["question"], "choices_offered": entry["choices_offered"],
-                          "status": status, "user_response": value})
+        response = {"question": entry["question"], "choices_offered": entry["choices_offered"],
+                    "status": status, "user_response": value}
+        if entry["default"]:
+            response["default"] = entry["default"]
+        elif not entry["choices_offered"]:
+            response["notice"] = BARE_QUESTION_NOTICE
+        responses.append(response)
     result: dict[str, object] = {"responses": responses, "outcome": reply["outcome"]}
     if reply.get("notice"):
         result["notice"] = str(reply["notice"])
@@ -128,6 +156,9 @@ def clarify_tool(questions, callback: Optional[Callable] = None) -> str:
         return tool_error(error)
     if callback is None:
         return tool_error(_UNAVAILABLE)
+    bare = sum(1 for q in normalized if not q["choices_offered"] and not q["default"])
+    if bare:
+        logger.info("clarify.bare_question count=%d of=%d", bare, len(normalized))
     from agent.redact import redact_approval_display
     from tools.human_input_hooks import human_input_request
 
@@ -146,7 +177,9 @@ def clarify_tool(questions, callback: Optional[Callable] = None) -> str:
     shown = []
     for q in normalized:
         offered = prose(q["choices_offered"])
-        shown.append({**q, "question": prose([q["question"]])[0], "choices_offered": offered,
+        default = prose([q["default"]])[0] if q["default"] else None
+        shown.append({**q, "question": _with_default(prose([q["question"]])[0], default), "default": default,
+                      "choices_offered": offered,
                       "choices": display_choices(offered, q["recommend"])})
     # Observers see the questions only; the answers stay in the tool result.
     with human_input_request("clarify", prompt="\n".join(q["question"] for q in shown)) as human:
@@ -181,7 +214,9 @@ CLARIFY_SCHEMA = {
         f"single-select (up to {MAX_CHOICES} choices — put your recommended "
         "option FIRST, the UI marks it '(Recommended)' and auto-appends an "
         "'Other' free-text row), multi-select (multi_select=true), or "
-        "open-ended (omit choices). Options go ONLY in `choices`, never "
+        "free text (omit choices and set `default` to your suggested default "
+        "answer; a question with neither comes back with a notice). "
+        "Options go ONLY in `choices`, never "
         "enumerated inside the question text (choices render as pickable "
         "rows; options written into the question are dead prose the user "
         "can't click). Result: {responses: [...], outcome} in question order. "
@@ -202,7 +237,7 @@ CLARIFY_SCHEMA = {
                 "description": (
                     "The question(s). Each: ONE short question line (details go in a message "
                     "before the call; options excluded), "
-                    "optional choices (recommended first; omit for free-text), "
+                    "optional choices (recommended first) or, for free text, a default, "
                     "optional multi_select. Responses come back in question "
                     "order with the question text echoed."
                 ),
@@ -215,6 +250,7 @@ CLARIFY_SCHEMA = {
                             "items": {"type": "string"},  # no maxLength: llama.cpp's grammar converter rejects >=2000 (#131278); the limit is enforced above
                             "maxItems": MAX_CHOICES,
                         },
+                        "default": {"type": "string"},
                         "multi_select": {"type": "boolean"},
                     },
                     "required": ["question"],

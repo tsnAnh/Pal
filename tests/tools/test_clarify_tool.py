@@ -385,3 +385,65 @@ class TestRegistryBatchPassThrough:
         ))
         assert seen["questions"][0]["question"] == "Go?"
         assert result["responses"][0]["user_response"] == "yes"
+
+
+class TestClarifyAlwaysChoicesGuard:
+    """A question with neither choices nor a default is still asked, flagged and counted (soft guard)."""
+
+    def test_bare_question_is_delivered_with_a_notice_and_counted_without_its_text(self, caplog):
+        import logging
+        from tools.clarify_tool import BARE_QUESTION_NOTICE
+
+        seen = []
+
+        def cb(questions):
+            seen.extend(questions)
+            return _reply({"q0": "blue", "q1": "B"})
+
+        with caplog.at_level(logging.INFO, logger="tools.clarify_tool"):
+            result = _ask(cb, [{"question": "Secret colour?"}, {"question": "Plan?", "choices": ["A", "B"]}])
+        assert [q["question"] for q in seen] == ["Secret colour?", "Plan?"]
+        assert result["responses"][0]["user_response"] == "blue"
+        assert result["responses"][0]["notice"] == BARE_QUESTION_NOTICE
+        assert "notice" not in result["responses"][1]
+        assert "notice" not in result
+        assert "clarify.bare_question count=1 of=2" in caplog.text
+        assert "Secret colour" not in caplog.text
+
+    def test_default_is_shown_passed_through_and_echoed(self):
+        seen = []
+
+        def cb(questions):
+            seen.extend(questions)
+            return _reply({"q0": "Pal"})
+
+        result = _ask(cb, [{"question": "Bot name?", "default": " Pal "}])
+        assert seen[0]["default"] == "Pal"
+        assert seen[0]["question"] == "Bot name? (Suggested: Pal)"
+        assert seen[0]["choices"] is None
+        response = result["responses"][0]
+        assert response["question"] == "Bot name?"
+        assert response["default"] == "Pal"
+        assert response["user_response"] == "Pal"
+        assert "notice" not in response
+
+    def test_choices_win_over_a_default(self):
+        seen = []
+
+        def cb(questions):
+            seen.extend(questions)
+            return _reply({"q0": "A"})
+
+        result = _ask(cb, [{"question": "Plan?", "choices": ["A", "B"], "default": "C"}])
+        assert seen[0]["default"] is None
+        assert seen[0]["question"] == "Plan?"
+        assert "default" not in result["responses"][0]
+
+    def test_a_non_string_default_is_refused(self):
+        result = _ask(lambda q: _reply({}), [{"question": "How many?", "default": 3}])
+        assert "default must be a string" in result["error"]
+
+    def test_schema_offers_the_default_field(self):
+        item = CLARIFY_SCHEMA["parameters"]["properties"]["questions"]["items"]
+        assert item["properties"]["default"] == {"type": "string"}
+        assert item["required"] == ["question"]

@@ -209,3 +209,15 @@ def test_the_reach_command_reads_a_log_file(tmp_path, capsys):
     log.write_text(json.dumps([{"created_at": WEEK_2026_W10, "domain": "cron", "status": "alerted", "outcome": "acted"}]))
     assert cli.main(["reach", str(log)]) == 0
     assert "acted share: 1.0" in capsys.readouterr().out
+
+
+def test_a_free_text_clarify_question_with_a_default_is_not_a_bare_open_question():
+    def mined(question):
+        call = {"function": {"name": "clarify", "arguments": json.dumps({"questions": [question]})}}
+        return total(mining.mine({"alpha": ListSource(MinedSession("alpha", WEEK_2026_W10, (
+            Message("user", "x", WEEK_2026_W10),
+            Message("assistant", "Details sent.", WEEK_2026_W10 + 1, mining._clarify_asks([call])),
+            Message("user", "ok", WEEK_2026_W10 + 2), Message("assistant", "Ok.", WEEK_2026_W10 + 3))))}))["ask_quality"]
+
+    assert mined({"question": "Bot name?", "default": "Pal"})["no_options_no_default_share"] == 0.0
+    assert mined({"question": "Bot name?"})["no_options_no_default_share"] == 1.0

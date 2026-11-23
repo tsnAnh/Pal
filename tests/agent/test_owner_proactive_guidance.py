@@ -78,8 +78,9 @@ def test_every_session_kind_carries_the_block_once(kind):
     assert "Bring the solution, not the question" in stable
     assert "Never hand your owner your stuck work or a terminal command" in stable
     assert "Never ask your owner which model or effort" in stable
-    assert stable.count("ONE short question line and the options only") == 1
-    assert "Never paste the content, a list of fields or a cover letter" in stable
+    assert stable.count("Every ask offers choices") == 1
+    assert "plus at most one alternative" not in stable
+    assert "ONE short question line" not in stable
     assert PRECEDENCE in stable
 
 
@@ -188,3 +189,13 @@ def test_the_protocol_bump_makes_a_stored_bot_chat_prompt_stale_once(bot_mode_ho
     rebuilt = _whole_prompt(_bot_chat_agent())
     assert not bot_mode_probe.stored_prompt_capability_stale(rebuilt, bot_mode_home)
     assert (bot_mode_home / "SOUL.md").read_text(encoding="utf-8") == GATED_SOUL
+
+
+def test_the_choices_rule_lives_in_the_block_once_and_the_clarify_text_points_at_it():
+    from tools.clarify_tool import CLARIFY_SCHEMA
+
+    assert OWNER_PROACTIVE_GUIDANCE.count("Every ask offers choices") == 1
+    assert OWNER_PROACTIVE_GUIDANCE.count("suggested default") == 1
+    assert "Every ask offers choices" not in CLARIFY_SCHEMA["description"]
+    assert "`default`" in CLARIFY_SCHEMA["description"]
+    assert not _sentences(OWNER_PROACTIVE_GUIDANCE) & _sentences(CLARIFY_SCHEMA["description"])
