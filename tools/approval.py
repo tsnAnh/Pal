@@ -643,7 +643,7 @@ def request_draft_approval(*, text: str, description: str, pattern_key: str, dra
         _DRAFT_GATE, command=text, description=description, pattern_key=pattern_key,
         session_key=get_current_session_key(), approval_callback=approval_callback,
         is_cli=is_cli, is_gateway=is_gateway, is_ask=is_ask,
-        extra_data={"draft": draft, "details": details or []},
+        extra_data={"draft": draft, "details": details or [], "question": "Send this message?"},
     )
 
 

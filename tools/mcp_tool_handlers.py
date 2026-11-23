@@ -128,7 +128,7 @@ def _ask_spend_limit(server_name: str, tool_name: str, charge, booked: Optional[
     try:  # lazy: tools.approval routes the prompt to whichever surface owns the session
         from tools.approval_prompt import request_elicitation_consent
         answer = request_elicitation_consent(message, description, surface=f"mcp-trust/{server_name}", title=title,
-                                            remember_key=None)
+                                            question="Run this paid call?")
     except Exception as exc:
         logger.error("MCP spend limit: consent check failed for %s.%s: %s", server_name, tool_name, exc, exc_info=True)
         return tool_error(charge.refusal(spent))

@@ -158,7 +158,8 @@ def _consent(choice, unresolved: str) -> str:
 
 def request_elicitation_consent(message: str, description: str, *,
                                 timeout_seconds: int | None = None,
-                                surface: str = "mcp-elicitation", title: str = "Confirm this action?") -> str:
+                                surface: str = "mcp-elicitation", title: str = "Confirm this action?",
+                                question: str = "Continue?") -> str:
     """Route a consent question to the surface owning the active session:
     gateway sessions through ``_await_gateway_decision``, CLI/TUI through
     ``prompt_dangerous_approval``. Always fails closed: a missing notify_cb in a
@@ -192,8 +193,10 @@ def request_elicitation_consent(message: str, description: str, *,
                            "notify_cb is registered — failing closed", session_key)
             return "decline"
         try:
+            from tools.details_bubble import post_details
+            post_details("\n\n".join(part for part in (description, message) if part.strip()))
             decision = _gw._await_gateway_decision(
-                session_key, notify_cb, {"command": message, "description": description,
+                session_key, notify_cb, {"command": message, "description": description, "question": question,
                                          "pattern_key": "mcp_elicitation",
                                          "pattern_keys": ["mcp_elicitation"],
                                          "choices": ["once", "deny"]}, surface=surface)
