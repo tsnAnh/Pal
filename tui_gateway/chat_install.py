@@ -83,6 +83,8 @@ OWNER_FIELD_ID = "owner_member_id"
 class ChatProvider(abc.ABC):
     provider_id: str
     allowed_users_env: str | None = None
+    per_bot_adapter: bool = True
+    needs_public_url: bool = True
 
     def _missing(self, operation: str) -> ProviderNotImplemented:
         return ProviderNotImplemented(self.provider_id, operation)
@@ -95,6 +97,12 @@ class ChatProvider(abc.ABC):
 
     def complete_install(self, state: SetupState, authorization_code: str) -> Installation:
         raise self._missing("complete_install")
+
+    def install_in_place(self, state: SetupState) -> Installation | None:
+        return None
+
+    def apply_owner(self, installation: Installation, owner: str) -> None:
+        return None
 
     def identity_projection(self, source: BotIdentitySource) -> IdentityProjection:
         raise self._missing("identity_projection")
@@ -198,6 +206,25 @@ SLACK_CAPABILITIES = Capabilities(
     identity_policy=SLACK_IDENTITY_POLICY,
 )
 
+DISCORD_IDENTITY_POLICY = IdentityPolicy(
+    app_name_max=32, display_name_max=80, username_max=80, avatar_max_bytes=10 * 1024 * 1024, avatar_min_px=128,
+)
+
+DISCORD_CAPABILITIES = Capabilities(
+    provider_id="discord",
+    requires_config_credential=False,
+    creates_app=False,
+    capabilities=[
+        CapabilityEntry(capability=ProviderCapability.set_icon, mode=CapabilityMode.automatic),
+        CapabilityEntry(capability=ProviderCapability.app_level_credential, mode=CapabilityMode.automatic),
+        CapabilityEntry(capability=ProviderCapability.gateway_redirect, mode=CapabilityMode.unsupported),
+        CapabilityEntry(capability=ProviderCapability.unattended_refresh, mode=CapabilityMode.automatic),
+        CapabilityEntry(capability=ProviderCapability.join_public_space, mode=CapabilityMode.automatic),
+        CapabilityEntry(capability=ProviderCapability.join_private_space, mode=CapabilityMode.unsupported),
+    ],
+    identity_policy=DISCORD_IDENTITY_POLICY,
+)
+
 
 @dataclass(frozen=True)
 class SetupEvent:
@@ -206,6 +233,9 @@ class SetupEvent:
     installation_id: str | None = None
     manual_step: ProviderCapability | None = None
     error: SetupErrorCode | None = None
+    error_reason: str | None = None
+    error_permissions: tuple[str, ...] = ()
+    retry_after_seconds: int | None = None
     authorize_link: str | None = None
     owner_pending: bool = False
 
@@ -269,7 +299,9 @@ def _target(state: SetupState, event: SetupEvent, caps: Capabilities, credential
         return SetupStep.revoked, {
             "app_id": None, "installation_id": None, "manual_steps_done": [], "resume_step": None, "error": None}
     if kind is SetupEventKind.failed and event.error is not None and step not in (SetupStep.ready, SetupStep.revoked):
-        return SetupStep.error, {"resume_step": step, "error": SetupError(code=event.error, fix=FIX_FOR_ERROR[event.error])}
+        error = SetupError(code=event.error, fix=FIX_FOR_ERROR[event.error], reason=event.error_reason,
+                           permissions=list(event.error_permissions), retry_after_seconds=event.retry_after_seconds)
+        return SetupStep.error, {"resume_step": step, "error": error}
     if kind is SetupEventKind.retry and step is SetupStep.error:
         resume = state.resume_step or SetupStep.not_started
         config_credential_failed = state.error and state.error.fix is FixAction.reenter_credential \

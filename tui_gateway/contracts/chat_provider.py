@@ -119,6 +119,9 @@ class FixAction(WireEnum):
 class SetupError(Result):
     code: SetupErrorCode
     fix: FixAction
+    reason: str | None = None
+    permissions: list[str] = Field(default_factory=list)
+    retry_after_seconds: int | None = Field(default=None, ge=0)
 
 
 class SetupState(Result):
@@ -428,7 +431,8 @@ method("chat.provider.list", params=ProfileParams, result=ChatProviderListResult
 method("chat.install.status", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it.")
 method("chat.install.begin", params=ChatInstallBeginParams, result=ChatInstallStatusResult,
-       doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. "
+       doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL "
+           "and the provider installs through a redirect (Discord does not). "
            "app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; "
            "only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first.")
 method("chat.install.advance", params=ChatInstallAdvanceParams, result=ChatInstallStatusResult,
@@ -451,7 +455,8 @@ method("chat.install.update_identity", params=ChatInstallParams, result=ChatIden
            "needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only.")
 method("chat.install.revoke", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, "
-           "so a reinstall starts from a fresh one and the revoked state carries no app id.")
+           "so a reinstall starts from a fresh one and the revoked state carries no app id. "
+           "Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays.")
 method("chat.install.set_icon", params=ChatInstallSetIconParams, result=ChatInstallSetIconResult,
        doc="Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active "
            "install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. "

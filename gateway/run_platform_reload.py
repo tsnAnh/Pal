@@ -138,3 +138,15 @@ def reload_platform_verb(runner: Any, loop: asyncio.AbstractEventLoop) -> Callab
 
     return _handler
 
+
+
+def reload_routes_verb(runner: Any) -> Callable[..., dict]:
+    """Answer: ``{"reloaded", "routes"}``. Swaps ``runner.config.profile_routes`` for the saved list so a route
+    written by another process (a chat install) applies to the next inbound message; no adapter is rebuilt."""
+
+    def _handler(params: Optional[dict] = None) -> dict:
+        from gateway.config import load_gateway_config
+        runner.config.profile_routes = list(load_gateway_config().profile_routes)
+        return {"reloaded": True, "routes": len(runner.config.profile_routes)}
+
+    return _handler
