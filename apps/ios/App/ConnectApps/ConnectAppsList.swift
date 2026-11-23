@@ -43,10 +43,14 @@ struct ConnectAppsList: View {
     }
 
     #if os(macOS)
-    func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    func card<Content: View>(flat: Bool = false, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(spacing: 0) { content() }
             .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous).strokeBorder(PalTokens.panelBorder, lineWidth: 1))
+            .overlay {
+                if !flat {
+                    RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous).strokeBorder(PalTokens.panelBorder, lineWidth: 1)
+                }
+            }
             .padding(.horizontal, PalMetrics.screenMargin)
     }
     #endif
@@ -62,12 +66,12 @@ struct ConnectAppsList: View {
 
     @ViewBuilder
     func rowBlock<Data: RandomAccessCollection, Row: View>(
-        _ data: Data, @ViewBuilder row: @escaping (Data.Element) -> Row
+        _ data: Data, flat: Bool = false, @ViewBuilder row: @escaping (Data.Element) -> Row
     ) -> some View where Data.Element: Identifiable {
         #if os(macOS)
-        card { ForEach(data) { row($0) } }
+        card(flat: flat) { ForEach(data) { row($0) } }
         #else
-        PalGlassContainer(spacing: 8) { ConnectFlatRows(data, row: row) }
+        PalGlassContainer(spacing: 8) { ConnectFlatRows(data, dividers: !flat, row: row) }
         #endif
     }
 
@@ -101,16 +105,30 @@ struct ConnectAppsList: View {
                 .accessibilityIdentifier("capabilitiesLoading")
         case .failed:
             sectionHeader(String(localized: "Capabilities"), identifier: "capabilitiesTitle")
-            Text("Couldn't load capabilities")
-                .font(.system(size: ConnectRowMetrics.captionSize))
-                .foregroundStyle(PalTokens.textSecondary)
-                .padding(.horizontal, PalMetrics.screenMargin)
-                .accessibilityIdentifier("capabilitiesError")
+            VStack(spacing: 10) {
+                Text("Couldn't load capabilities")
+                    .font(.system(size: ConnectRowMetrics.captionSize))
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .accessibilityIdentifier("capabilitiesError")
+                CapabilityActionButton(title: String(localized: "Try again"), identifier: "capabilitiesRetry") {
+                    Task { await model.loadCapabilities() }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, PalMetrics.screenMargin)
         case .ready(let rows):
             if !rows.isEmpty {
                 sectionHeader(String(localized: "Capabilities"), identifier: "capabilitiesTitle")
-                rowBlock(rows) { row in
-                    CapabilityListRow(row: row, onSetKey: model.canSetKeys ? { model.beginKeyEntry(row, keyName: $0) } : nil)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(rows.groupedByState) { group in
+                        CapabilityGroupCaption(group: group)
+                        rowBlock(group.rows, flat: true) { row in
+                            CapabilityListRow(
+                                row: row, isSavingKey: model.isSavingKey(for: row),
+                                onSetKey: model.canSetKeys ? { model.beginKeyEntry(row, keyName: $0) } : nil
+                            )
+                        }
+                    }
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("capabilitiesList")
