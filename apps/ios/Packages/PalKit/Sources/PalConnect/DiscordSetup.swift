@@ -1,5 +1,6 @@
 import Foundation
 import PalProtocol
+import PalTransport
 
 public struct DiscordGuild: Decodable, Sendable, Hashable, Identifiable {
     public var id: String
@@ -30,7 +31,7 @@ extension ConnectAppsService {
             throw ConnectAppsError.oauthClient(.saveFailed)
         }
         do {
-            let reply = try await oauthClientCall("connectors.discord.token", ["item": .string(item)])
+            let reply = try await discordCall("connectors.discord.token", ["item": .string(item)])
             await discardVerified(verification)
             return reply["bot_name"]?.stringValue
         } catch {
@@ -39,8 +40,17 @@ extension ConnectAppsService {
         }
     }
 
+    func discordCall(_ method: String, _ params: [String: JSONValue]) async throws -> JSONValue {
+        do {
+            return try await rawCall(method, params)
+        } catch let error as GatewayTransportError {
+            guard case .rpc(let rpc) = error else { throw ConnectAppsError.oauthClient(.unreachable) }
+            throw SetupStatusError(DiscordFlow.refusal(rpc, method: method))
+        }
+    }
+
     public func discordServers() async throws -> DiscordServers {
-        let reply = try await oauthClientCall("connectors.discord.guilds", [:])
+        let reply = try await discordCall("connectors.discord.guilds", [:])
         return DiscordServers(
             guilds: try decodeList(reply, key: "guilds", as: DiscordGuild.self),
             allowed: (reply["allowed"]?.arrayValue ?? []).compactMap(\.stringValue),
@@ -49,7 +59,7 @@ extension ConnectAppsService {
     }
 
     public func saveDiscord(guildIDs: [String], readOnly: Bool) async throws {
-        _ = try await oauthClientCall(
+        _ = try await discordCall(
             "connectors.discord.save", ["guild_ids": .array(guildIDs.sorted().map { .string($0) }), "read_only": .bool(readOnly)]
         )
     }

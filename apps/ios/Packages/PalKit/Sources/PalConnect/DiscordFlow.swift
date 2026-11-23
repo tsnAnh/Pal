@@ -1,4 +1,5 @@
 import Foundation
+import PalProtocol
 
 public enum DiscordFlow {
     public static let flowID = "discord"
@@ -100,6 +101,63 @@ public enum DiscordFlow {
     }()
 }
 
+extension DiscordFlow {
+    static let methodPrefix = "connectors.discord."
+    private static let tokenMethod = methodPrefix + "token"
+
+    static func isGatewayRefusal(_ status: SetupStatus) -> Bool {
+        status.method?.hasPrefix(methodPrefix) == true
+    }
+
+    static func sendsToTokenStep(_ status: SetupStatus) -> Bool {
+        isGatewayRefusal(status) && status.method != tokenMethod && ["invalid_token", "needs_setup"].contains(status.code.lowercased())
+    }
+
+    static func refusal(_ rpc: RPCError, method: String) -> SetupStatus {
+        let reason = rpc.data?["reason"]?.stringValue?.uppercased() ?? ""
+        let fault = GatewayFault(rpc, method: method)
+        var status = SetupStatus(
+            code: reason.isEmpty ? SetupStatusClass.internalFault.rawValue : reason, method: method, trace: fault.trace.rawValue,
+            gatewayVersion: fault.gatewayVersion, subject: "Discord", valueName: "token"
+        )
+        let message = rpc.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pastedToken = method == tokenMethod
+        switch reason {
+        case "INVALID_TOKEN" where pastedToken:
+            return status
+        case "INVALID_TOKEN":
+            status.title = String(localized: "Discord did not accept the bot token")
+            status.actionTitle = String(localized: "Back to the token step")
+        case "NEEDS_SETUP":
+            status.title = String(localized: "Pal needs your bot token first")
+            status.actionTitle = String(localized: "Back to the token step")
+        case "CHECK_UNAVAILABLE":
+            status.title = String(localized: "Pal could not check with Discord")
+            status.actionTitle = String(localized: "Try again")
+        default:
+            break
+        }
+        if !message.isEmpty, SetupStatusClass.classify(code: reason) != .forbidden { status.reason = message }
+        return status
+    }
+
+    @MainActor
+    public static func recover(_ failure: SetupStatus, in model: StepFlowModel) async {
+        if sendsToTokenStep(failure) {
+            model.dismissFailure()
+            while model.engine.current.id != StepID.token {
+                let before = model.engine.index
+                await model.back()
+                if model.engine.index >= before { break }
+            }
+        } else if failure.kind == .vendorRefusedValue {
+            model.dismissFailure()
+        } else {
+            await model.retryAfterFailure()
+        }
+    }
+}
+
 public struct DiscordFlowRunner: Sendable {
     public struct Timing: Sendable {
         public var interval: Duration
@@ -139,6 +197,7 @@ public struct DiscordFlowRunner: Sendable {
     }
 
     public func classify(_ error: any Error) -> SetupStatus {
+        if let carried = error as? SetupStatusError, DiscordFlow.isGatewayRefusal(carried.status) { return carried.status }
         var status = SetupStatus(error: error, subject: "Discord", valueName: "token")
         switch status.kind {
         case .vendorRefusedValue:

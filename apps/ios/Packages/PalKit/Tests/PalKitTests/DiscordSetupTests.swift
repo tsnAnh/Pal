@@ -64,12 +64,15 @@ struct DiscordSetupTests {
     }
 
     @Test func aFailedHandshakeKeepsTheGatewayFaultForDetails() async throws {
-        let rpc = CustomRPC(["connectors.discord.save": rpcFailure(5034, reason: "CONNECT_FAILED")])
+        let rpc = CustomRPC(["connectors.discord.save": rpcFailure(5034, reason: "CONNECT_FAILED", message: "Discord didn't start on your Pal. Try again.")])
         do {
             try await customService(rpc).saveDiscord(guildIDs: ["111"], readOnly: true)
             Issue.record("expected a failure")
+        } catch let error as SetupStatusError {
+            #expect(error.status.code == "CONNECT_FAILED" && error.status.method == "connectors.discord.save")
+            #expect(error.status.reason == "Discord didn't start on your Pal. Try again." && error.status.trace?.isEmpty == false)
         } catch {
-            #expect((error as? ConnectAppsError)?.fault != nil)
+            Issue.record("expected the gateway's refusal, got \(error)")
         }
     }
 }

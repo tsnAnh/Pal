@@ -4,12 +4,15 @@ import PalTransport
 struct ScriptedDiscord {
     static let botName = "Scripted Bot"
     static let applicationID = "101010101010101010"
+    static let revokedMessage = "Discord didn't accept the saved bot token. Open the Discord developer portal, reset the token and paste it again."
     static let guilds: [JSONValue] = [["id": "111", "name": "Team"], ["id": "222", "name": "Friends"]]
 
     private var tokenSaved = false
     private var allowed: [String] = []
     private var readOnly = true
     private var connected = false
+    private var revoked = false
+    private var guildReads = 0
 
     mutating func handle(_ method: String, _ params: JSONValue, vault: [String: String]) throws -> JSONValue {
         switch method {
@@ -18,9 +21,13 @@ struct ScriptedDiscord {
                 throw Self.failure(4000, "INVALID_TOKEN")
             }
             tokenSaved = true
+            revoked = token.contains("revoked")
+            guildReads = 0
             return ["bot_name": .string(Self.botName), "application_id": .string(Self.applicationID)]
         case "connectors.discord.guilds":
             guard tokenSaved else { throw Self.failure(4090, "NEEDS_SETUP") }
+            guildReads += 1
+            if revoked, guildReads > 1 { throw Self.failure(4000, "INVALID_TOKEN", message: Self.revokedMessage) }
             return ["guilds": .array(Self.guilds), "allowed": .array(allowed.map(JSONValue.string)), "read_only": .bool(readOnly)]
         default:
             let ids = (params["guild_ids"]?.arrayValue ?? []).compactMap(\.stringValue)
@@ -67,7 +74,7 @@ struct ScriptedDiscord {
         ]
     }
 
-    private static func failure(_ code: Int, _ reason: String) -> GatewayTransportError {
-        .rpc(RPCError(code: code, message: reason, data: ["reason": .string(reason)]))
+    private static func failure(_ code: Int, _ reason: String, message: String? = nil) -> GatewayTransportError {
+        .rpc(RPCError(code: code, message: message ?? reason, data: ["reason": .string(reason)]))
     }
 }

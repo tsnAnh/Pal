@@ -135,4 +135,30 @@ final class DiscordSetupE2ETests: ConnectAppsTestCase {
         XCTAssertFalse(element(app, "stepFlowStatusBlock").exists, "the refusal stays on the field, not on a separate screen")
         shot(app, "discord-flow-token-refused")
     }
+
+    func testAServerListFailureOnTheLastStepSaysWhyAndGoesBackToTheTokenStep() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        _ = openFlow(app)
+        expectStep(app, 1, "Create your Discord bot")
+        primary(app).hit()
+        expectStep(app, 2, "Paste the bot token")
+        enterToken(app, "MTAxMDEwMTAxMDEwMTAxMDEw.Grevoked.fake-token-do-not-use-000000")
+        primary(app).hit()
+        expectStep(app, 3, "Turn on Message Content")
+        element(app, "stepFlowConfirm-message_content").hit()
+        primary(app).hit()
+        expectStep(app, 4, "Invite your bot to a server")
+        waitFor(element(app, "stepFlowCopy-0"), timeout: 20, "invite link card")
+        primary(app).hit()
+
+        let reason = element(app, "stepFlowStatusReason")
+        waitFor(reason, timeout: 30, "the real reason on the last step")
+        XCTAssertTrue(reason.label.contains("reset the token and paste it again"), "the gateway's own next step is shown")
+        XCTAssertFalse(app.staticTexts["Couldn't start the sign-in. Try again."].exists, "never the generic sign-in text")
+        let action = element(app, "stepFlowStatusAction")
+        XCTAssertEqual(action.label, "Back to the token step")
+        shot(app, "discord-flow-servers-token-refused")
+        action.hit()
+        expectStep(app, 2, "Paste the bot token")
+    }
 }
