@@ -96,8 +96,9 @@ def _ask_human(command: str, description: str, timeout_seconds: int, approval_ca
 
     if approval_callback is not None:
         try:
-            callback_kwargs = {"allow_permanent": False, "allow_session": False,
-                               **({"title": title} if title and callback_accepts(approval_callback, "title") else {})}
+            callback_kwargs = {name: value for name, value in
+                               (("allow_permanent", False), ("allow_session", False), ("title", title))
+                               if value is not None and callback_accepts(approval_callback, name)}
             return approval_callback(display_command, display_description, **callback_kwargs)
         except Exception as e:
             logger.error("Approval callback failed: %s", e, exc_info=True)

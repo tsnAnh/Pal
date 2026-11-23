@@ -19,9 +19,8 @@ from tests.computer_use_fakes import NoopBackend, reset_backend
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
-def _reset_backend(grant_computer_use_approvals):
-    """Tear down the cached backend between tests; destructive actions get an interactive "once"
-    through the shared approval gate (the tool fails closed with nobody to ask)."""
+def _reset_backend():
+    """Tear down the cached backend between tests."""
     from tools.computer_use import tool as cu_tool
     reset_backend()
     # Force the noop backend.

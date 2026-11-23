@@ -413,15 +413,6 @@ class GatewayChatView:
                 self.model = str(result['model']).split('/')[-1]
             print(f"{operation}: {target}")
             return True
-        if command == "/yolo":
-            # This session's approval bypass on the owner (same verb as the TUI's /yolo and Desktop).
-            word = rest.strip().lower()
-            if word not in {"", "on", "off"}:
-                raise GatewayClientError("Usage: /yolo [on|off]")
-            result = await self.client.rpc("config.set", session_id=self.session_id, key="yolo",
-                                           **({"value": "1" if word == "on" else "0"} if word else {}))
-            print(f"YOLO {'on' if result.get('value') == '1' else 'off'} for this session")
-            return True
         from hermes_cli import gateway_chat_commands
         if command == "/help":
             print(gateway_chat_commands.help_text())

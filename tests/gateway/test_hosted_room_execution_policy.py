@@ -10,9 +10,7 @@ import pytest
 from gateway.hosted_room_execution_policy import (
     MAX_POLICY_ITERATIONS,
     RoomExecutionPolicy,
-    bind_room_execution_policy,
     execution_policy_mapping,
-    reset_room_execution_policy,
 )
 from gateway.hosted_room_peer import (
     GatewayRoomCatalog,
@@ -22,17 +20,15 @@ from gateway.hosted_room_peer import (
     issue_room_grant,
     verify_room_grant,
 )
-from tools import approval_context
 from tui_gateway.hosted_room_peer_http import PeerRunsHTTPError
 from tui_gateway.hosted_room_service import _RouteStatusPeerClient
 
 
-def _policy(*, approval_mode: str = "manual", max_turns: int = 12) -> dict:
+def _policy(*, max_turns: int = 12) -> dict:
     return execution_policy_mapping(
         target_profile="reviewer",
         config={
             "agent": {"max_turns": max_turns},
-            "approvals": {"mode": approval_mode},
             "platform_toolsets": {"api_server": ["hermes-api-server", "web"]},
         },
     )
@@ -69,14 +65,13 @@ def _dispatch(policy: dict) -> HostedMemberDispatch:
     })
 
 
-def test_execution_policy_digest_covers_tools_approvals_and_iteration_limit():
+def test_execution_policy_digest_covers_tools_and_iteration_limit():
     value = _policy()
     checked = RoomExecutionPolicy.from_mapping(value)
     assert "bot_room" in checked.enabled_toolsets
 
     for field, replacement in (
         ("enabled_toolsets", ["bot_room"]),
-        ("approval_mode", "off"),
         ("max_iterations", 99),
     ):
         with pytest.raises(ValueError, match="policy_digest"):
@@ -98,52 +93,6 @@ def test_unlimited_policy_survives_the_catalog_json_round_trip_exactly():
     assert int(float(policy["max_iterations"])) == MAX_POLICY_ITERATIONS
     assert checked.execution_policy.max_iterations == MAX_POLICY_ITERATIONS
     assert checked.execution_policy.as_mapping() == policy
-
-
-def test_room_policy_overrides_broader_live_approval_config(monkeypatch):
-    policy = RoomExecutionPolicy.from_mapping(_policy(approval_mode="manual"))
-    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"mode": "off"})
-    token = bind_room_execution_policy(policy)
-    try:
-        assert approval_context._get_approval_mode() == "manual"
-    finally:
-        reset_room_execution_policy(token)
-
-
-@pytest.mark.parametrize(("room_mode", "routed_mode", "expected"), [
-    ("smart", "manual", "manual"),  # the member's looser mode never loosens the routed profile
-    ("manual", "off", "manual"),  # a remotely dispatched turn never reaches ``off`` through a route
-    ("smart", "smart", "smart"),
-])
-def test_profile_routed_child_takes_the_stricter_of_room_and_own_approval_mode(
-        monkeypatch, room_mode, routed_mode, expected):
-    """A subagent routed to another profile runs as that profile, under a room policy signed for the
-    delegating member: the stricter mode governs, and the member's own turn keeps the room's mode."""
-    from gateway.hosted_room_execution_policy import bind_profile_routed, reset_profile_routed
-
-    policy = RoomExecutionPolicy.from_mapping(_policy(approval_mode=room_mode))
-    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"mode": routed_mode})
-    policy_token = bind_room_execution_policy(policy)
-    try:
-        assert approval_context._get_approval_mode() == room_mode
-        routed_token = bind_profile_routed()
-        try:
-            assert approval_context._get_approval_mode() == expected
-        finally:
-            reset_profile_routed(routed_token)
-        assert approval_context._get_approval_mode() == room_mode
-    finally:
-        reset_room_execution_policy(policy_token)
-
-
-def test_room_catalog_fails_closed_when_remote_approvals_are_off():
-    with pytest.raises(ValueError, match="requires manual or smart approvals"):
-        catalog_mapping(
-            installation_id="install-peer",
-            persistent_process=True,
-            target_profile="reviewer",
-            execution_policy=_policy(approval_mode="off"),
-        )
 
 
 def test_grant_and_recipient_dispatch_bind_the_exact_policy_digest():
@@ -266,7 +215,7 @@ def _two_profile_homes(tmp_path, monkeypatch) -> None:
         home = root / "profiles" / name
         home.mkdir(parents=True)
         (home / "config.yaml").write_text(
-            f"agent:\n  max_turns: {turns}\napprovals:\n  mode: manual\n"
+            f"agent:\n  max_turns: {turns}\n"
             "platform_toolsets:\n  api_server: [hermes-api-server, web]\n")
         (home / ".env").write_text("")
     from hermes_cli import profiles

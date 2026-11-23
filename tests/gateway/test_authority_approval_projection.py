@@ -26,15 +26,15 @@ async def test_approval_replay_reads_are_served_from_the_owner_projection(tmp_pa
         live = authority.sessions['s'] = LiveSession(None, 'route')
         live.controls.pending['p1'] = ('route', {
             'kind': 'approval', 'prompt_id': 'p1', 'execution_generation': 1,
-            'command': 'rm -rf build', 'description': 'recursive delete', 'choices': ['once', 'deny', 'always']})
+            'command': '', 'description': 'Send the held message', 'choices': ['once', 'deny']})
         live.controls.pending['c1'] = (object(), {'kind': 'clarify', 'prompt_id': 'c1', 'execution_generation': 1,
                                                   'question': 'which?', 'choices': [], 'multi_select': False})
         viewer = AuthorityConnection(authority, object(), {'user_id': 'owner'})
         try:
             pending = await viewer.dispatch({'id': 1, 'method': 'approval.pending', 'params': {'session_id': 's'}})
             assert pending.get('result') == {'approvals': [{
-                'request_id': 'p1', 'command': 'rm -rf build', 'description': 'recursive delete',
-                'choices': ['once', 'deny', 'always'], 'allow_permanent': True}]}, pending
+                'request_id': 'p1', 'command': '', 'description': 'Send the held message',
+                'choices': ['once', 'deny']}]}, pending
             received = await viewer.dispatch({'id': 2, 'method': 'approval.received',
                                               'params': {'session_id': 's', 'request_id': 'p1'}})
             assert received.get('result') == {'acknowledged': False}, received

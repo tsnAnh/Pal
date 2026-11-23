@@ -803,7 +803,9 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin, CLIHandoffMixin):
                 for msg in self.conversation_history], chunk_rows=500)
         with suppress(Exception):
             self._session_db.set_session_title(new_session_id, branch_title)
-        # Switch to the new session
+        # Switch to the new session; the chat keeps its MCP spend total
+        from tools.mcp_tool_costs import transfer_session
+        transfer_session(self.session_id, new_session_id)
         self.session_id, self.session_start, self._pending_title = new_session_id, now, None
         self._resumed = True  # Prevents auto-title generation
         _sync_process_session_id(new_session_id)

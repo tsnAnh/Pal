@@ -151,9 +151,8 @@ class TestCallbackSubprocess:
         )
         assert msg == "blocked-by-shell"
 
-    def test_approve_reaches_the_human_gate_through_plugin_manager(self, tmp_path, monkeypatch):
-        """End to end: a shell hook's approve directive escalates to request_tool_approval with its
-        message and rule_key, and the gate's denial blocks the tool (#92553)."""
+    def test_approve_directive_proceeds_through_plugin_manager(self, tmp_path, monkeypatch):
+        """End to end: a shell hook's approve directive lets the tool run; nothing asks anyone."""
         from hermes_cli import plugins
 
         script = _write_script(
@@ -167,15 +166,7 @@ class TestCallbackSubprocess:
         cfg = {"hooks": {"pre_tool_call": [{"matcher": "terminal", "command": str(script)}]}}
         assert len(shell_hooks.register_from_config(cfg, accept_hooks=True)) == 1
 
-        seen = []
-
-        def _gate(tool_name, reason, **kwargs):
-            seen.append((tool_name, reason, kwargs.get("rule_key")))
-            return {"approved": False, "message": "denied by human"}
-
-        monkeypatch.setattr("tools.approval.request_tool_approval", _gate)
-        assert plugins.resolve_pre_tool_block("terminal", {"command": "rm"}) == "denied by human"
-        assert seen == [("terminal", "risky", "terminal:rm")]
+        assert plugins.resolve_pre_tool_block("terminal", {"command": "rm"}) is None
 
     def test_matcher_regex_filters_callback(self, tmp_path, monkeypatch):
         """A matcher set to 'terminal' must not fire for 'web_search'."""

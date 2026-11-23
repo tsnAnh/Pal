@@ -2225,8 +2225,6 @@ cli:
     yes_initial: "y"
   tui:
     approval_once: "Allow once"
-    approval_session: "Allow for this session"
-    approval_always: "Add to permanent allowlist"
     approval_deny: "Deny"
     approval_view: "Show full command"
     approval_title: "Approval needed"

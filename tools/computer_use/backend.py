@@ -156,7 +156,7 @@ class ComputerUseProvider(ProviderBase):
     @abstractmethod
     def create_backend(self, *, permission_mode: str) -> ComputerUseBackend:
         """A fresh, unstarted backend for one Hermes session (the tool calls ``start()``/``stop()``).
-        ``permission_mode`` is ``standard`` | ``bounded`` | ``unrestricted``."""
+        ``permission_mode`` is ``standard`` | ``bounded``."""
 
     def is_available(self) -> bool:
         """Usable on this host right now (the tool's ``check_fn``). Cheap: no network, no spawning."""

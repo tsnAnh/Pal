@@ -13,9 +13,8 @@ from functools import partial
 
 import pytest
 
-from hermes_cli import approvals_suggest, install_state, kanban_owner_recovery, worktree_ops
+from hermes_cli import install_state, kanban_owner_recovery, worktree_ops
 from hermes_cli.observability import shared_metrics_snapshot
-from persistence import StoreContention
 from persistence_assembly import open_persistence, open_store_admin, profile_scope
 from tests.fixtures.storage_seed import seed_session
 from tools import tool_result_storage
@@ -81,7 +80,7 @@ def test_retained_worktree_checks_wait_as_long_as_mains_two_second_reader(held, 
         live_waited, live_main, served_waited, served_main)
 
 
-def test_spillover_approvals_and_owner_receipt_wait_as_long_as_mains_five_second_reader(held):
+def test_spillover_and_owner_receipt_wait_as_long_as_mains_five_second_reader(held):
     db, hold = held
     spill_dir = db.parent / "cache" / "tool_results"
     receipt = {"db": str(db), "session_id": "s", "request_id": "r"}
@@ -90,11 +89,6 @@ def test_spillover_approvals_and_owner_receipt_wait_as_long_as_mains_five_second
         spill_main = _main_wait(db, 5.0)
         row, owner_waited = _timed(partial(kanban_owner_recovery._admission_row, receipt))
         owner_main = _main_wait(db, 5.0)
-        start = time.monotonic()
-        with pytest.raises(StoreContention):
-            approvals_suggest.scan_approval_history(db)
-        approvals_waited = time.monotonic() - start
-        approvals_main = _main_wait(db, 5.0)
     assert (names, row) == (None, None)
-    pairs = ((spill_waited, spill_main), (owner_waited, owner_main), (approvals_waited, approvals_main))
+    pairs = ((spill_waited, spill_main), (owner_waited, owner_main))
     assert all(_about(waited, main_wait) for waited, main_wait in pairs), pairs

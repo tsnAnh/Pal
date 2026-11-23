@@ -2142,8 +2142,6 @@ cli:
     yes_initial: "i"
   tui:
     approval_once: "Engedélyezés egyszer"
-    approval_session: "Engedélyezés erre a munkamenetre"
-    approval_always: "Állandó engedélylistára"
     approval_deny: "Elutasítás"
     approval_view: "Teljes parancs megjelenítése"
     approval_title: "⚠️  Veszélyes parancs"

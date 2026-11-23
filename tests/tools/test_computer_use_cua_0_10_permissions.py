@@ -20,51 +20,13 @@ def _reset_computer_use_state():
     reset_backend()
 
 
-def test_normal_hermes_session_maps_to_standard_mode():
+def test_default_config_maps_to_standard_mode():
     from tools.computer_use import tool as computer_use
 
-    with patch(
-        "tools.approval.is_approval_bypass_active_for_session",
-        return_value=False,
-    ):
-        assert computer_use._cua_permission_mode("session-a") == "standard"
+    assert computer_use._cua_permission_mode() == "standard"
 
 
-def test_any_explicit_hermes_bypass_maps_to_unrestricted_mode():
-    from tools.computer_use import tool as computer_use
-
-    with patch(
-        "tools.approval.is_approval_bypass_active_for_session",
-        return_value=True,
-    ):
-        assert computer_use._cua_permission_mode("session-a") == "unrestricted"
-
-
-def test_gateway_session_key_yolo_maps_to_unrestricted_mode():
-    """Gateway /yolo keys bypass off the gateway session_key contextvar,
-    not the DB session_id the tool path passes. Mode resolution must consult
-    both namespaces or /yolo is silently dead on messaging platforms."""
-    from tools import approval
-    from tools import approval_context
-    from tools.computer_use import tool as computer_use
-
-    gateway_key = "agent:main:telegram:private:12345"
-    token = approval_context.set_current_session_key(gateway_key)
-    try:
-        approval.enable_session_yolo(gateway_key)
-        # Tool dispatch passes the (different) DB session id.
-        assert computer_use._cua_permission_mode("db-sid-xyz") == "unrestricted"
-        approval.disable_session_yolo(gateway_key)
-        assert computer_use._cua_permission_mode("db-sid-xyz") == "standard"
-    finally:
-        approval.disable_session_yolo(gateway_key)
-        try:
-            approval_context.reset_current_session_key(token)
-        except Exception:
-            approval_context.set_current_session_key("")
-
-
-def test_mode_change_replaces_only_that_sessions_backend():
+def test_config_mode_change_replaces_the_cached_backend():
     from tools.computer_use import tool as computer_use
 
     created = []
@@ -81,63 +43,22 @@ def test_mode_change_replaces_only_that_sessions_backend():
         def stop(self):
             self.stopped = True
 
-    yolo = False
-    with patch(
-        "tools.approval.is_approval_bypass_active_for_session",
-        side_effect=lambda sid: yolo,
-    ), patch(
+    mode = "standard"
+    with patch.object(computer_use, "_cua_permission_mode", side_effect=lambda: mode), patch(
         "tools.computer_use.cua_backend.CuaDriverBackend", _Backend
     ):
         standard = computer_use._get_backend("session-a")
-        other = computer_use._get_backend("session-b")
-        yolo = True
-        unrestricted = computer_use._get_backend("session-a")
+        mode = "bounded"
+        bounded = computer_use._get_backend("session-a")
 
     assert standard.permission_mode == "standard"
     assert standard.stopped is True
-    assert unrestricted.permission_mode == "unrestricted"
-    assert unrestricted is not standard
-    assert other.permission_mode == "standard"
-    assert other.stopped is False
-
-
-def test_mode_change_is_rechecked_after_stale_backend_stops():
-    from tools.computer_use import tool as computer_use
-
-    yolo = False
-    created = []
-
-    class _Backend:
-        def __init__(self, permission_mode="standard"):
-            self.permission_mode = permission_mode
-            created.append(self)
-
-        def start(self):
-            pass
-
-        def stop(self):
-            nonlocal yolo
-            yolo = False
-
-    with patch(
-        "tools.approval.is_approval_bypass_active_for_session",
-        side_effect=lambda sid: yolo,
-    ), patch("tools.computer_use.cua_backend.CuaDriverBackend", _Backend):
-        original = computer_use._get_backend("session-a")
-        yolo = True
-        replacement = computer_use._get_backend("session-a")
-
-    assert original.permission_mode == "standard"
-    assert replacement.permission_mode == "standard"
-    assert replacement is not original
-    assert [backend.permission_mode for backend in created] == [
-        "standard",
-        "standard",
-    ]
+    assert bounded.permission_mode == "bounded"
+    assert bounded is not standard
 
 
 @pytest.mark.platforms("linux")
-def test_unrestricted_embedded_daemon_uses_private_socket_and_two_part_ack():
+def test_bounded_embedded_daemon_uses_private_socket_and_two_part_ack(tmp_path):
     from tools.computer_use import cua_backend
 
     process = Mock()
@@ -147,7 +68,9 @@ def test_unrestricted_embedded_daemon_uses_private_socket_and_two_part_ack():
     status = SimpleNamespace(returncode=0, stdout="running", stderr="")
     stopped = SimpleNamespace(returncode=0, stdout="", stderr="")
 
-    daemon = cua_backend._EmbeddedCuaDaemon("cua-driver", "unrestricted")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text("version: 3\n", encoding="utf-8")
+    daemon = cua_backend._EmbeddedCuaDaemon("cua-driver", "bounded", capability_manifest=str(manifest))
     with patch.object(
         cua_backend_driver,
         "_resolve_mcp_invocation",
@@ -180,10 +103,12 @@ def test_unrestricted_embedded_daemon_uses_private_socket_and_two_part_ack():
     assert [c.args for c in supervise.call_args_list] == [("register", [process.pid]), ("unregister", [process.pid])]
     assert command[:2] == ["/opt/cua-driver", "serve"]
     assert "--embedded" in command
-    assert command[command.index("--permission-mode") + 1] == "unrestricted"
-    assert "--dangerously-bypass-approvals" in command
-    assert env["CUA_DRIVER_PERMISSION_MODE"] == "unrestricted"
-    assert env["CUA_DRIVER_DANGEROUSLY_BYPASS_APPROVALS"] == "1"
+    assert command[command.index("--permission-mode") + 1] == "bounded"
+    assert command[command.index("--capability-manifest") + 1] == str(manifest)
+    assert "--approve-capability-manifest" in command
+    assert "--dangerously-bypass-approvals" not in command
+    assert env["CUA_DRIVER_PERMISSION_MODE"] == "bounded"
+    assert "CUA_DRIVER_DANGEROUSLY_BYPASS_APPROVALS" not in env
     assert proxy_command == "/opt/cua-driver"
     assert proxy_args == ["mcp", "--embedded", "--socket", daemon.socket_path]
 
@@ -191,11 +116,14 @@ def test_unrestricted_embedded_daemon_uses_private_socket_and_two_part_ack():
 def test_standard_backend_does_not_spawn_an_embedded_daemon():
     from tools.computer_use.cua_backend import CuaDriverBackend
 
-    standard = CuaDriverBackend(permission_mode="standard")
-    unrestricted = CuaDriverBackend(permission_mode="unrestricted")
+    assert CuaDriverBackend(permission_mode="standard")._embedded_daemon is None
 
-    assert standard._embedded_daemon is None
-    assert unrestricted._embedded_daemon is not None
+
+def test_bounded_backend_without_a_manifest_refuses_to_start():
+    from tools.computer_use.cua_backend import CuaDriverBackend
+
+    with pytest.raises(ValueError, match="capability_manifest"):
+        CuaDriverBackend(permission_mode="bounded")
 
 
 def test_retired_browser_grant_cannot_change_standard_runtime(tmp_path, monkeypatch):
@@ -254,53 +182,3 @@ def test_retired_browser_grant_cannot_change_standard_runtime(tmp_path, monkeypa
 
     assert captured["command"] == "/opt/cua-driver"
     assert captured["args"] == ["mcp"]
-
-
-# ── the escalation is at least audible ──────────────────────────────────
-
-
-def test_bypass_escalation_is_warned_once_per_session(caplog):
-    """`-z` reads as "don't prompt me" but also drops the driver's ceiling.
-
-    That widening is deliberate and unrestricted is reachable no other way,
-    but it is easy to trigger by accident: a script takes -z for quiet output
-    and loses its limits as a side effect. It must not be silent.
-    """
-    import logging
-
-    from tools.computer_use import tool as computer_use
-
-    computer_use._escalation_warned.clear()
-    with patch(
-        "tools.approval.is_approval_bypass_active_for_session",
-        return_value=True,
-    ):
-        with caplog.at_level(logging.WARNING, logger=computer_use.logger.name):
-            assert computer_use._cua_permission_mode("session-warn") == "unrestricted"
-            assert computer_use._cua_permission_mode("session-warn") == "unrestricted"
-
-    escalation = [
-        r for r in caplog.records if "escalated the cua-driver" in r.getMessage()
-    ]
-    assert len(escalation) == 1, "warning must fire once, not on every dispatch"
-    message = escalation[0].getMessage()
-    assert "standard" in message
-    assert "unrestricted" in message
-
-
-def test_no_escalation_warning_without_a_bypass(caplog):
-    import logging
-
-    from tools.computer_use import tool as computer_use
-
-    computer_use._escalation_warned.clear()
-    with patch(
-        "tools.approval.is_approval_bypass_active_for_session",
-        return_value=False,
-    ):
-        with caplog.at_level(logging.WARNING, logger=computer_use.logger.name):
-            assert computer_use._cua_permission_mode("session-quiet") == "standard"
-
-    assert not [
-        r for r in caplog.records if "escalated the cua-driver" in r.getMessage()
-    ]

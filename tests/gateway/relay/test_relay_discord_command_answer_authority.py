@@ -98,39 +98,6 @@ def _alice_approval(session_key):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("interaction_type", "data"), [
-    (2, {"name": "approve"}),
-    (3, {"custom_id": "/approve"}),
-])
-async def test_discord_interaction_from_another_member_does_not_approve(gateway, interaction_type, data):
-    from tests.waiting import async_wait_until
-
-    runner, transport, adapter = gateway
-    entry = _alice_approval(_thread_session_key(runner))
-    replies = adapter.send.await_count
-
-    await transport._handle_frame(json.dumps(_frame(interaction_type, "mallory", data)))
-
-    # The refusal reply is the end of the command's handling.
-    await async_wait_until(lambda: adapter.send.await_count > replies, timeout=10)
-    assert entry.result is None
-    assert not entry.event.is_set()
-
-
-@pytest.mark.asyncio
-async def test_discord_approve_command_from_the_requester_still_approves(gateway):
-    from tests.waiting import async_wait_until
-
-    runner, transport, _adapter = gateway
-    entry = _alice_approval(_thread_session_key(runner))
-
-    await transport._handle_frame(json.dumps(_frame(2, "alice", {"name": "approve"})))
-
-    await async_wait_until(entry.event.is_set, timeout=10)
-    assert entry.result == "once"
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["slash_confirm", "clarify"])
 @pytest.mark.parametrize(("sender", "delivered_here", "refused"), [
     ("mallory", False, True), ("alice", False, False), ("mallory", True, False)])
@@ -171,29 +138,6 @@ async def test_typed_answer_from_an_unadmitted_discord_sender_is_refused(gateway
         clarify_gateway.clear_session(session_key)
 
     assert (refusal is not None) is refused
-
-
-@pytest.mark.asyncio
-async def test_a_pre_gateway_dispatch_rewrite_keeps_the_interaction_unadmitted(gateway, monkeypatch):
-    """A plugin hook that rewrites the text (here: to the same text) replaces the event with a copy;
-    the copy still answers only as the unadmitted sender."""
-    from hermes_cli.plugins import get_plugin_manager
-    from tests.waiting import async_wait_until
-
-    async def rewrite(event, **_kwargs):
-        return {"action": "rewrite", "text": event.text}
-
-    manager = get_plugin_manager()
-    monkeypatch.setattr(manager, "_discovered", True)
-    monkeypatch.setattr(manager, "_hooks", {**manager._hooks, "pre_gateway_dispatch": [rewrite]})
-    runner, transport, adapter = gateway
-    entry = _alice_approval(_thread_session_key(runner))
-    replies = adapter.send.await_count
-
-    await transport._handle_frame(json.dumps(_frame(2, "mallory", {"name": "approve"})))
-
-    await async_wait_until(lambda: adapter.send.await_count > replies, timeout=10)
-    assert entry.result is None
 
 
 def test_admission_follows_the_sender_through_rebuilds_and_merges():
@@ -308,13 +252,3 @@ async def test_a_discord_interaction_from_an_admitted_sender_or_an_admin_runs(ga
     await async_wait_until(lambda: adapter.send.await_count > replies, timeout=10)
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("data", [{"name": "approve"}, {"name": "deny"}])
-async def test_an_unadmitted_discord_prompt_answer_still_reaches_the_runner(gateway, monkeypatch, data):
-    """``/approve`` and ``/deny`` pass the intake: the runner answers them as the unadmitted sender."""
-    _runner, transport, adapter = gateway
-    dispatched = _spy_dispatch(adapter, monkeypatch)
-
-    await transport._handle_frame(json.dumps(_frame(2, "mallory", data)))
-
-    assert dispatched == [f"/{data['name']}"]

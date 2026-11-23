@@ -1,6 +1,5 @@
 """Managed turns carry finite approval policy, accounting, and live tool details."""
 import asyncio
-from dataclasses import replace
 import json
 import os
 import threading
@@ -9,14 +8,13 @@ from types import SimpleNamespace
 import pytest
 
 
-def assignment(tmp_path, monkeypatch, *, finite=True, unattended=False, yolo=False):
+def assignment(tmp_path, monkeypatch, *, finite=True, unattended=False):
     from gateway.session_local import _bypass_policy
     from gateway.session_managed_worker import _bootstrap
     from tools.approval import clear_session
     clear_session('managed-contract')
     policy = _bypass_policy({'cwd': str(tmp_path), 'model': 'fixture', 'provider': 'custom',
                             'base_url': 'http://127.0.0.1:9/v1', 'ignore_user_config': True}, private_secrets={})
-    policy = replace(policy, request_json=json.dumps({**json.loads(policy.request_json), 'yolo': yolo}))
     monkeypatch.setattr('gateway.session_policy.launch_key', lambda *args: None)
     live = SimpleNamespace(source=SimpleNamespace(user_id='u', chat_id='c'), route='managed-contract')
     authority = SimpleNamespace(sessions={'sid': live}, runner=None, profile_id=str(tmp_path))
@@ -32,7 +30,7 @@ def test_child_executes_under_finite_policy_and_preserves_receipt(tmp_path, monk
     from agent import managed_worker as worker
     from gateway.session_finite import finite_turn_required, unattended_turn
     from hermes_scope import Fence, current_scope
-    from tools.approval import _yolo_active, clear_session
+    from tools.approval import clear_session
     frame, _ = assignment(tmp_path, monkeypatch, unattended=unattended)
     frame['scope'].update(epoch=3, generation=8)  # distinct, so a swapped fence is caught
     observed, frames, scopes = [], [], []
@@ -43,7 +41,7 @@ def test_child_executes_under_finite_policy_and_preserves_receipt(tmp_path, monk
             self.session_prompt_tokens = 100
             self.session_completion_tokens = 20
         def run_conversation(self, text, **kwargs):
-            observed.append((finite_turn_required(), unattended_turn(), _yolo_active()))
+            observed.append((finite_turn_required(), unattended_turn()))
             scopes.append(current_scope())
             self.kwargs['tool_start_callback']('call-1', 'read_file', {'path': 'report.txt'})
             self.kwargs['tool_complete_callback']('call-1', 'read_file', {'path': 'report.txt'},
@@ -81,7 +79,7 @@ def test_child_executes_under_finite_policy_and_preserves_receipt(tmp_path, monk
     monkeypatch.setattr('agent.title_generator.wait_for_title_upgrades', lambda: None)
     clear_session('managed-contract')  # the child owns a fresh approval registry
     worker.execute(frame, SimpleNamespace(send=lambda kind, **payload: frames.append({'type': kind, **payload})))
-    assert observed == [(True, unattended, unattended)]
+    assert observed == [(True, unattended)]
     # The worker's one turn runs under the fence its owner claimed it with.
     assert [(s.session, s.turn, s.fence) for s in scopes] == [('sid', 'x', Fence(3, 8))]
     receipt = next(f for f in frames if f['type'] == 'result')
@@ -98,18 +96,6 @@ def test_child_executes_under_finite_policy_and_preserves_receipt(tmp_path, monk
     assert json.loads(events[1]['result'])['error'] == 'file missing'
 
 
-def test_current_yolo_revocation_overrides_frozen_launch(tmp_path, monkeypatch):
-    from gateway.session_managed_worker import _bootstrap
-    from tools.approval import disable_session_yolo, clear_session, is_session_yolo_enabled
-    frame, args = assignment(tmp_path, monkeypatch, yolo=True)
-    assert json.loads(frame['policy']['request_json'])['turn_v1']['yolo'] is True
-    from gateway.session_managed_worker import worker_turn_scope
-    disable_session_yolo('managed-contract')
-    assert json.loads(_bootstrap(*args)['policy']['request_json'])['turn_v1']['yolo'] is False
-    clear_session('managed-contract')
-    with worker_turn_scope(frame):
-        assert is_session_yolo_enabled('managed-contract') is True
-    clear_session('managed-contract')
 
 
 

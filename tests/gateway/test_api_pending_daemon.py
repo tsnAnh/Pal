@@ -2,7 +2,6 @@
 import asyncio
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
-import shlex
 import os
 from pathlib import Path
 import socket
@@ -25,12 +24,9 @@ class PromptPeer(BaseHTTPRequestHandler):
         last = messages[-1] if messages else {}
         text = json.dumps(last)
         message = {'role': 'assistant', 'content': 'CONTROL_DONE'}
-        if last.get('role') != 'tool' and ('ASK_APPROVAL' in text or 'ASK_CLARIFY' in text):
-            approval = 'ASK_APPROVAL' in text
-            name = 'terminal' if approval else 'clarify'
-            # Git Bash eats unquoted backslashes: a bare C:\\... path removes nothing on Windows.
-            args = {'command': 'rm -rf ' + shlex.quote(self.server.target.as_posix())} if approval else {
-                'questions': [{'question': 'Choose the answer', 'choices': ['BLUE', 'GREEN']}]}
+        if last.get('role') != 'tool' and 'ASK_CLARIFY' in text:
+            name = 'clarify'
+            args = {'questions': [{'question': 'Choose the answer', 'choices': ['BLUE', 'GREEN']}]}
             message = {'role': 'assistant', 'content': None, 'tool_calls': [{
                 'id': 'call_control', 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)}}]}
         finish = 'tool_calls' if 'tool_calls' in message else 'stop'
@@ -63,7 +59,7 @@ def test_api_and_ws_pending_controls_share_identity(tmp_path):
     cfg = {'model': {'provider': 'custom', 'default': 'local-wire-stub', 'base_url': base},
            'gateway': {'platforms': {'api_server': {'enabled': True, 'port': port, 'host': '127.0.0.1'}}, 'multiplex_profiles': False},
            'auxiliary': {'title_generation': {'enabled': False}}, 'terminal': {'cwd': str(home)},
-           'platform_toolsets': {'api_server': ['terminal', 'clarify']}, 'approvals': {'mode': 'manual'}}
+           'platform_toolsets': {'api_server': ['terminal', 'clarify']}}
     (home / 'config.yaml').write_text(json.dumps(cfg))
     from tests.gateway.fixtures.local_recovery_probe import child_env
     env = {**child_env(), **{k: os.environ[k] for k in ('TIRITH_ENABLED',) if k in os.environ}}
@@ -78,7 +74,7 @@ def test_api_and_ws_pending_controls_share_identity(tmp_path):
             async def post(path, body):
                 async with client.post(url + path, json=body) as response:
                     return response.status, await response.json()
-            for kind, text in [('approval', 'ASK_APPROVAL'), ('clarify', 'ASK_CLARIFY')]:
+            for kind, text in [('clarify', 'ASK_CLARIFY')]:
                 status, accepted = await post('', {'input': text, 'session_id': 'api-controls'})
                 assert status == 202, accepted
                 run = accepted['run_id']
@@ -97,19 +93,17 @@ def test_api_and_ws_pending_controls_share_identity(tmp_path):
                         projected = await response.json()
                     assert projected['pending_controls'] == [prompt], projected
                     body = {'request_id': prompt['prompt_id'], 'execution_generation': prompt['execution_generation']}
-                    body.update({'choice': 'once'} if kind == 'approval' else {'answer': 'BLUE'})
-                    path = '/' + run + ('/approval' if kind == 'approval' else '/clarify')
+                    body['answer'] = 'BLUE'
+                    path = '/' + run + '/clarify'
                     wrong = {**body, 'execution_generation': body['execution_generation'] + 1}
                     assert (await post(path, wrong))[0] == 409
                     foreign = {**body, 'request_id': 'not-this-prompt'}
                     assert (await post(path, foreign))[0] == 409
-                    if kind == 'approval':
-                        assert peer.target.exists()
                     status, result = await post(path, body)
                     assert status == 200 and result['status'] == 'resolved', result
-                    late = await rpc(ws, 'approval.respond' if kind == 'approval' else 'clarify.respond',
-                                     session_id='api-controls', execution_generation=body['execution_generation'],
-                                     prompt_id=body['request_id'], **({'choice': 'once'} if kind == 'approval' else {'answer': 'GREEN'}))
+                    late = await rpc(ws, 'clarify.respond', session_id='api-controls',
+                                     execution_generation=body['execution_generation'],
+                                     prompt_id=body['request_id'], answer='GREEN')
                     assert 'error' in late or late['result']['status'] == 'already_resolved', late
                 loop = asyncio.get_running_loop()
                 deadline = loop.time() + 20
@@ -121,7 +115,7 @@ def test_api_and_ws_pending_controls_share_identity(tmp_path):
                     assert loop.time() < deadline, ('run never completed', final)
                     await asyncio.sleep(.05)
                 assert (await post(path, body))[0] == 409
-            assert not peer.target.exists()
+            assert peer.target.exists()
             tools = [m for req in peer.requests for m in req.get('messages', []) if m['role'] == 'tool']
             assert any('BLUE' in str(m['content']) for m in tools), tools
             print(json.dumps({'ordinary_daemon': True, 'shared_pending_identity': True, 'requests': len(peer.requests)}))

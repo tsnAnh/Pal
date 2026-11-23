@@ -81,7 +81,7 @@ def cmd_acp(args):
     """Launch Hermes Agent as an ACP server."""
     import os
     # The gateway-backed ACP server forwards launch flags from their documented env equivalents
-    # (main() already exported --yolo / --safe-mode / --ignore-user-config).
+    # (main() already exported --safe-mode / --ignore-user-config).
     for attr, name in (("accept_hooks", "HERMES_ACCEPT_HOOKS"), ("ignore_rules", "HERMES_IGNORE_RULES")):
         if getattr(args, attr, False):
             os.environ[name] = "1"

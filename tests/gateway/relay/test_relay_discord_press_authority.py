@@ -57,8 +57,7 @@ def _no_admin_list(monkeypatch):
 async def _raise_as_alice(adapter, stub, kind):
     """Raise *kind* inside Alice's turn and post its card; returns (prompt_id, option, answered?)."""
     from gateway.session_context import clear_session_vars, set_session_vars
-    from tools import approval, clarify_gateway, slash_confirm
-    from tools.approval_gateway_wait import _ApprovalEntry
+    from tools import clarify_gateway, slash_confirm
 
     ran = []
     clarify = None
@@ -70,13 +69,6 @@ async def _raise_as_alice(adapter, stub, kind):
     tokens = set_session_vars(platform="discord", user_id="alice", user_name="Alice", chat_type="group",
                               session_key=SESSION)
     try:
-        if kind == "exec_approval":
-            entry = _ApprovalEntry({"command": "rm -rf build"})
-            approval._gateway_queues[SESSION] = [entry]
-            approval.restrict_gateway_approval_card_to_deny(SESSION, entry.data["request_id"], restricted=False)
-            prompt_id = adapter._mint_prompt("exec_approval", {
-                "session_key": SESSION, "request_id": entry.data["request_id"], "chat_id": "c1"})
-            return prompt_id, "once", lambda: entry.result == "once"
         if kind == "slash_confirm":
             slash_confirm.register(SESSION, "cf1", "reload-mcp", handler)
         else:
@@ -108,7 +100,7 @@ async def _inbound_press(adapter, clicker, prompt_id, option):
         "prompt_response": {"prompt_id": prompt_id, "option_id": option}}))
 
 
-KINDS = ["exec_approval", "slash_confirm", "clarify"]
+KINDS = ["slash_confirm", "clarify"]
 
 
 @pytest.mark.asyncio

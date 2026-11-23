@@ -13,7 +13,6 @@ from acp.schema import AllowedOutcome, PermissionOption
 logger = logging.getLogger(__name__)
 
 _OPTION_ID_TO_HERMES = {"allow_once": "once", "deny": "deny"}
-_DEFAULT_TIMEOUT_SECONDS = 300.0
 
 _PERMISSION_REQUEST_IDS = count(1)
 
@@ -87,7 +86,12 @@ def await_permission(
 
 
 def resolve_permission_timeout(timeout: float | None) -> float:
-    return _DEFAULT_TIMEOUT_SECONDS if timeout is None else float(timeout)
+    """``None`` is the user's ``approvals.timeout``, the same knob every other consent surface follows."""
+    if timeout is not None:
+        return float(timeout)
+    from tools.approval_context import _get_approval_timeout
+
+    return float(_get_approval_timeout())
 
 
 def make_approval_callback(request_permission_fn: Callable, loop: asyncio.AbstractEventLoop,

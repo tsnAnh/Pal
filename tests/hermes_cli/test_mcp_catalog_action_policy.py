@@ -66,4 +66,3 @@ def test_discovery_records_the_policy_per_server_and_a_removed_scope_forgets_it(
     finally:
         mcp_tool._server_action_policies.pop("upwork", None)
         mcp_tool._tool_read_only_hints.pop("upwork", None)
-        mcp_tool._server_trust_levels.pop("upwork", None)

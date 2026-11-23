@@ -21,7 +21,6 @@ MKFS = "mk" + "fs.ext4 /dev/sda"
 @pytest.fixture(params=["manual", "off"])
 def gate_mode(request, monkeypatch):
     mode = request.param
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: mode)
     monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"mode": mode})
     return mode
 

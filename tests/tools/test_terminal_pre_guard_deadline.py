@@ -35,7 +35,7 @@ def stubbed_pipeline(monkeypatch):
     monkeypatch.setattr(terminal_module, "_plan_execution", lambda *_a, **_k: _plan())
     monkeypatch.setattr(terminal_module, "_acquire_env", lambda *_a, **_k: object())
     monkeypatch.setattr(
-        terminal_module, "_run_approval_guards", lambda *_a, **_k: terminal_module._ApprovalVerdict(),
+        terminal_module, "_run_approval_guards", lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
         terminal_module, "_run_foreground", lambda *_a, **_k: calls.append("foreground") or "foreground-ran",

@@ -321,7 +321,7 @@ def test_a_call_whose_transport_failed_after_the_sign_in_check_still_gets_the_si
     pal.call(SLUG, "whoami")
     authorization.expire_access_tokens()
     name = f"{SLUG}@default"
-    gate = handlers._trust_gate_check
+    gate = handlers._spend_gate_check
 
     def transport_fails_then_marker_lands(*args, **kwargs):
         verdict = gate(*args, **kwargs)
@@ -331,7 +331,7 @@ def test_a_call_whose_transport_failed_after_the_sign_in_check_still_gets_the_si
         HermesTokenStorage(name).mark_reauth_required("token_rejected")
         return verdict
 
-    monkeypatch.setattr(handlers, "_trust_gate_check", transport_fails_then_marker_lands)
+    monkeypatch.setattr(handlers, "_spend_gate_check", transport_fails_then_marker_lands)
     started = time.monotonic()
     answer = pal.call(SLUG, "whoami")
 

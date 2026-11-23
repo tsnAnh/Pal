@@ -1,8 +1,8 @@
 """Regression test for cron-session approval isolation.
 
 A cron job must use ``approvals.cron_mode`` for its own ``execute_code`` call,
-without leaving process-global state that changes a later interactive gateway
-turn handled by the same Python process.
+without leaving process-global state that makes a later interactive gateway
+turn handled by the same Python process refuse the same script.
 """
 
 from __future__ import annotations
@@ -55,36 +55,19 @@ def _clear_approval_state(monkeypatch):
     monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
     monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
     monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-    approval_module._permanent_approved.clear()
     approval_module.clear_session("default")
     approval_module.clear_session("cron-isolation-session")
     yield
-    approval_module._permanent_approved.clear()
     approval_module.clear_session("default")
     approval_module.clear_session("cron-isolation-session")
     reset_session_vars()
 
 
-def _register_gateway_auto_approve(session_key: str) -> None:
-    def _notify(_approval_data):
-        with approval_module._lock:
-            entries = approval_module._gateway_queues.get(session_key, [])
-            if entries:
-                entry = entries[-1]
-                entry.result = "once"
-                entry.event.set()
-
-    with approval_module._lock:
-        approval_module._gateway_notify_cbs[session_key] = _notify
-
-
-def test_run_job_cron_execute_code_deny_does_not_pollute_later_gateway_execute_code(
+def test_run_job_cron_execute_code_deny_does_not_block_later_gateway_execute_code(
     monkeypatch, tmp_path, cron_owner
 ):
-    """Cron deny stays scoped; a later gateway approval still reaches its user."""
+    """Cron deny stays scoped; a later gateway execute_code runs with no approval round-trip."""
     monkeypatch.setenv("HERMES_MODEL", "test-model")
-    monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", False)
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
     monkeypatch.setattr(approval_context, "_get_cron_approval_mode", lambda: "deny")
     monkeypatch.setattr("run_agent.AIAgent", _FakeCronAgent)
     monkeypatch.setattr(
@@ -139,16 +122,15 @@ def test_run_job_cron_execute_code_deny_does_not_pollute_later_gateway_execute_c
         cron_session="",
     )
     monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
+    approvals_asked = []
+    approval_module.register_gateway_notify(session_key, approvals_asked.append)
     try:
-        _register_gateway_auto_approve(session_key)
         result = approval_module.check_execute_code_guard(
             "import os; print(2)", "local"
         )
         assert result["approved"] is True
-        assert result.get("user_approved") is True
+        assert approvals_asked == []
     finally:
         clear_session_vars(session_tokens)
         approval_context.reset_current_session_key(key_token)
-        with approval_module._lock:
-            approval_module._gateway_queues.pop(session_key, None)
-            approval_module._gateway_notify_cbs.pop(session_key, None)
+        approval_module.unregister_gateway_notify(session_key)

@@ -127,7 +127,6 @@ def test_tui_runtime_config_and_session_info_keep_requested_custom_slug(monkeypa
 
     atomic_config_write(get_config_path(), CONFIG)
     agent = _agent()
-    monkeypatch.setattr("tui_gateway.server._load_approval_mode", lambda: "manual")
     config = _runtime_model_config(agent)
     assert config["provider"] == "custom:beta"
     info = _session_info(agent, {"agent": agent, "session_key": "s1", "profile_home": str(get_hermes_home())})

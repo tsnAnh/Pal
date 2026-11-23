@@ -304,8 +304,7 @@ class CLIChatTurnMixin:
         set_unlock_prompt_callback(self._vault_unlock_callback)
         set_save_login_prompt_callback(self._vault_save_login_callback)
         set_code_prompt_callback(self._vault_code_callback)
-        # Bind the approval session key so ``is_current_session_yolo_enabled()`` resolves
-        # against the same key ``/yolo`` toggles under (``enable_session_yolo(self.session_id)``).
+        # Bind the session key owner consents (held drafts, payments, spend limits) resolve against.
         try:
             from tools.approval_context import reset_current_session_key, set_current_session_key
             _approval_session_token = set_current_session_key(self.session_id or "default")
@@ -409,7 +408,7 @@ class CLIChatTurnMixin:
                 set_code_prompt_callback(None)
             except Exception:
                 pass
-            # Unbind the per-turn key; ``_session_yolo`` state itself persists across turns.
+            # Unbind the per-turn key.
             if _approval_session_token is not None and reset_current_session_key is not None:
                 try:
                     reset_current_session_key(_approval_session_token)
@@ -512,6 +511,8 @@ class CLIChatTurnMixin:
         # titling and the exit summary target the live child, not the ended parent.
         if (self.agent and getattr(self.agent, "session_id", None)
                 and self.agent.session_id != self.session_id):
+            from tools.mcp_tool_costs import transfer_session
+            transfer_session(self.session_id, self.agent.session_id)
             self.session_id = self.agent.session_id
             self._write_terminal_breadcrumb()
             self._pending_title = None

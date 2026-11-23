@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "y"
   tui:
     approval_once: "한 번 허용"
-    approval_session: "이 세션에서 허용"
-    approval_always: "영구 허용 목록에 추가"
     approval_deny: "거부"
     approval_view: "전체 명령 보기"
     approval_title: "⚠️  위험한 명령"

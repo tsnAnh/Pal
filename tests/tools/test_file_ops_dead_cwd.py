@@ -91,7 +91,7 @@ def test_sandbox_background_start_in_deleted_cwd_carries_the_fallback_note(tmp_p
     started = json.loads(spawn_background_process(
         command="pwd -P", env=env, env_type="ssh", effective_task_id="bg-dead-cwd", task_id="bg-dead-cwd",
         session_key="", workdir=None, cwd=str(doomed), effective_pty=False, notify_on_complete=False,
-        watch_patterns=None, approval_note=None, pty_disabled_reason=None))
+        watch_patterns=None, pty_disabled_reason=None))
     try:
         assert started["output"] == "Background process started", started
         assert str(doomed) in started["cwd_fallback"] and str(tmp_path.resolve()) in started["cwd_fallback"], started

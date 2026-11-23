@@ -35,7 +35,7 @@ def launch_gateway_chat(args) -> int:
         from hermes_cli.main import _confirm_startup_expensive_model_override
         from hermes_cli.gateway_chat import launch_from_args, bypass_launch
 
-        # Consent belongs before discovery/admission, even with --yolo. A bypass launch has
+        # Consent belongs before discovery/admission. A bypass launch has
         # no profile-derived model/provider to guard and must not read config.yaml here.
         if not bypass_launch(args):
             _confirm_startup_expensive_model_override(args)

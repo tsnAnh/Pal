@@ -192,7 +192,6 @@ class _TurnScopes:
     """Reset tokens for the thread/context scopes a turn binds (filled incrementally)."""
 
     approval: Any = None
-    bot_chat: Any = None
     approval_client: Any = None
     session_tokens: list = dataclasses.field(default_factory=list)
     # The turn's profile state (home, secrets, terminal policy, runtime scope) as ONE bind; released
@@ -681,9 +680,6 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
     # member's hosted-room turn otherwise died with UnscopedSecretError, and ambient TERMINAL_* a
     # secondary context poisoned must never become the launch turn's authority.
     scopes.profile = _profile_runtime_scope_tokens(session.get("profile_home"))
-    from tools.bot_mode_drafts import profile_is_bot_managed
-    from tools.approval_context import set_current_bot_chat
-    scopes.bot_chat = set_current_bot_chat(_is_bot_mode_session(session) and profile_is_bot_managed())
     from tools.approval_context import set_approval_client_probe
     scopes.approval_client = set_approval_client_probe(lambda: bool(_session_answering_clients(sid)))
     # The sudo password callback is thread-local: without re-wiring here, sudo prompts
@@ -1121,10 +1117,6 @@ def _release_turn_scopes(sid: str, session: dict, st: _TurnRun) -> None:
         if scopes.approval is not None:
             from tools.approval_context import reset_current_session_key
             reset_current_session_key(scopes.approval)
-    with contextlib.suppress(Exception):
-        if scopes.bot_chat is not None:
-            from tools.approval_context import reset_current_bot_chat
-            reset_current_bot_chat(scopes.bot_chat)
     with contextlib.suppress(Exception):
         if scopes.approval_client is not None:
             from tools.approval_context import reset_approval_client_probe

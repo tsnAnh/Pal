@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "y"
   tui:
     approval_once: "السماح مرة واحدة"
-    approval_session: "السماح لهذه الجلسة"
-    approval_always: "إضافة إلى قائمة السماح الدائمة"
     approval_deny: "رفض"
     approval_view: "عرض الأمر كاملًا"
     approval_title: "⚠️  أمر خطير"

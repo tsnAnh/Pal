@@ -28,7 +28,6 @@ def mcp_loop():
     with patch("tools.mcp_tool_loop._run_on_mcp_loop", side_effect=run_on_loop), \
          patch.dict(mcp_tool._servers, {}, clear=True), \
          patch.dict(mcp_tool._server_error_counts, {}, clear=True), \
-         patch.dict(mcp_tool._server_trust_levels, {"srv": "full"}), \
          patch.dict(mcp_tool._tool_read_only_hints, {}, clear=True):
         yield loop
     loop.call_soon_threadsafe(loop.stop)

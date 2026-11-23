@@ -10,7 +10,6 @@ from gateway.platforms.event import MessageEvent
 from gateway.session import SessionEntry, SessionSource, build_session_key
 from tools import approval as approval_mod
 from tools import slash_confirm as slash_confirm_mod
-from tools.approval import approve_session, enable_session_yolo, is_approved, is_session_yolo_enabled
 from tools.approval_gateway_wait import _ApprovalEntry
 
 
@@ -18,16 +17,10 @@ from tools.approval_gateway_wait import _ApprovalEntry
 def _clear_approval_state():
     approval_mod._gateway_queues.clear()
     approval_mod._gateway_notify_cbs.clear()
-    approval_mod._session_approved.clear()
-    approval_mod._session_yolo.clear()
-    approval_mod._permanent_approved.clear()
     slash_confirm_mod._pending.clear()
     yield
     approval_mod._gateway_queues.clear()
     approval_mod._gateway_notify_cbs.clear()
-    approval_mod._session_approved.clear()
-    approval_mod._session_yolo.clear()
-    approval_mod._permanent_approved.clear()
     slash_confirm_mod._pending.clear()
 
 
@@ -112,7 +105,7 @@ def _make_branch_runner():
 
 
 def test_clear_session_boundary_security_state_is_scoped():
-    """The helper must wipe only the target session's approval/yolo state.
+    """The helper must wipe only the target session's pending prompt state.
 
     Also exercises the /new reset path indirectly: /new calls this helper,
     so if the helper is scoped correctly, /new's clearing is correct too.
@@ -126,12 +119,6 @@ def test_clear_session_boundary_security_state_is_scoped():
     session_key = build_session_key(source)
     other_key = "agent:main:telegram:dm:other-chat"
 
-    approve_session(session_key, "recursive delete")
-    approve_session(other_key, "recursive delete")
-    enable_session_yolo(session_key)
-    enable_session_yolo(other_key)
-    runner._session_state(session_key).persistent.approvals = {"command": "rm -rf /tmp/demo"}
-    runner._session_state(other_key).persistent.approvals = {"command": "rm -rf /tmp/other"}
     runner._session_state(session_key).persistent.update_prompt_pending = True
     runner._session_state(other_key).persistent.update_prompt_pending = True
     runner._pending_skills_reload_notes[session_key] = (
@@ -153,23 +140,16 @@ def test_clear_session_boundary_security_state_is_scoped():
     runner._clear_session_boundary_security_state(session_key)
 
     # Target session cleared
-    assert is_approved(session_key, "recursive delete") is False
-    assert is_session_yolo_enabled(session_key) is False
-    assert runner._session_state(session_key).persistent.approvals is None
     assert not runner._session_state(session_key).persistent.update_prompt_pending
     assert session_key not in runner._pending_skills_reload_notes
     assert slash_confirm_mod.get_pending(session_key) is None
     # Other session untouched
-    assert is_approved(other_key, "recursive delete") is True
-    assert is_session_yolo_enabled(other_key) is True
-    assert runner._session_state(other_key).persistent.approvals is not None
     assert runner._session_state(other_key).persistent.update_prompt_pending
     assert other_key in runner._pending_skills_reload_notes
     assert slash_confirm_mod.get_pending(other_key) is not None
 
     # Empty session_key is a no-op
     runner._clear_session_boundary_security_state("")
-    assert is_approved(other_key, "recursive delete") is True
     assert runner._session_state(other_key).persistent.update_prompt_pending
     assert other_key in runner._pending_skills_reload_notes
     assert slash_confirm_mod.get_pending(other_key) is not None

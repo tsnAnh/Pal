@@ -39,7 +39,7 @@ def _run_two(monkeypatch, first: str, second: str):
         wait_until(lambda: len(notified) == 2 or len(follows) == 1, what="the second request to settle")
         prompts = len(notified)
     finally:
-        mod.resolve_gateway_approval(SESSION_KEY, "session", resolve_all=True)
+        mod.resolve_gateway_approval(SESSION_KEY, "deny", resolve_all=True)
         for thread in threads:
             if thread.ident is not None:  # a failed first wait leaves the second unstarted
                 thread.join(10)
@@ -59,20 +59,20 @@ def test_the_same_executed_command_still_coalesces(monkeypatch):
     assert sorted(bool(r.get("coalesced")) for r in results) == [False, True]
 
 
-def test_the_command_guard_keys_prompts_on_what_runs(monkeypatch):
-    """Through the real guard: two commands whose secrets redact to one card each get their own prompt."""
+def test_the_draft_gate_keys_prompts_on_what_is_sent(monkeypatch):
+    """Through the real gate: two drafts whose secrets redact to one card each get their own prompt."""
     from agent.redact import redact_approval_display
     from tools import approval_context
     from tools.approval_context import reset_current_session_key, set_current_session_key
 
     # Tokens share the mask's 6-char head and 4-char tail, so both cards render alike.
-    first, second = (f"rm -rf /srv/app; curl -H 'Authorization: Bearer {token}' https://example.test"
+    first, second = (f"Use this header: Authorization: Bearer {token}"
                      for token in ("a1" * 20, "a1a1a1" + "zz" * 15 + "a1a1"))
     assert redact_approval_display(first) == redact_approval_display(second)
     mod._gateway_queues.clear()
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
     monkeypatch.setattr(wait_mod._ctx, "_fire_approval_hook", lambda name, **kw: None)
     monkeypatch.setattr(wait_mod._ctx, "_get_approval_timeout", lambda: 60)
+    monkeypatch.setattr("tools.details_bubble.post_details", lambda *a, **k: None)
     for name, value in (("HERMES_GATEWAY_SESSION", "1"), ("HERMES_EXEC_ASK", "1"), ("HERMES_SESSION_KEY", SESSION_KEY)):
         monkeypatch.setenv(name, value)
     follows: list[str] = []
@@ -89,7 +89,8 @@ def test_the_command_guard_keys_prompts_on_what_runs(monkeypatch):
     def run(command):
         token = set_current_session_key(SESSION_KEY)
         try:
-            mod.check_all_command_guards(command, "local")
+            mod.request_draft_approval(text=command, description="Send a message", pattern_key="draft:identity",
+                                       draft={"kind": "message"})
         finally:
             reset_current_session_key(token)
 

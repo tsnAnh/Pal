@@ -38,6 +38,18 @@ _UTILITY_HANDLER_FACTORIES = {
     "unsubscribe_event": _events._make_unsubscribe_event_handler}
 
 
+def _annotation_read_only_hint(mcp_tool: Any) -> bool:
+    """True only when annotations (SDK object or cache dict) carry an exact ``True`` read-only hint;
+    unknown = write-capable. mcp 2.x exposes the attribute as ``read_only_hint`` (camelCase is only a
+    serialization alias), so both spellings are read."""
+    annotations = getattr(mcp_tool, "annotations", None)
+    if isinstance(annotations, dict):
+        hint = annotations.get("readOnlyHint", annotations.get("read_only_hint"))
+    else:
+        hint = mcp_field(annotations, "read_only_hint", "readOnlyHint")
+    return hint is True
+
+
 def _record_cost_policy(server_name: str, config: dict, key) -> None:
     """Declared ``tool_costs``/``spend_limit`` for *key*. Load-time validation already dropped malformed
     entries (``_filter_suspicious_mcp_servers``); a direct caller's bad table still fails loudly. Caller holds
@@ -439,7 +451,7 @@ def _write_schema_cache(name: str, server: "MCPServerTask", config: dict, should
             tools_payload.append({
                 "name": t.name, "description": t.description or "",
                 "inputSchema": schema_obj if isinstance(schema_obj, dict) else {},
-                "annotations": {"readOnlyHint": _annotation_read_only_hint(t)},  # lazy path trust-gates identically
+                "annotations": {"readOnlyHint": _annotation_read_only_hint(t)},
             })
         utility_payload = [{"schema": e["schema"], "handler_key": e["handler_key"]}
                            for e in _select_utility_schemas(name, server, config)]

@@ -88,7 +88,7 @@ def test_scanner_flags_unlisted_imports_even_in_blocks_with_placeholders():
     markdown = textwrap.dedent("""\
         ```python title="plugin.py"
         from agent.memory_provider import MemoryProvider
-        from tools.approval_smart import judge
+        from tools.approval_detection import detect_dangerous_command
         from plugins.web.my_backend.provider import MyProvider
         from agent.memory_providers import MemoryProvider as Typo
         class P(MemoryProvider): …  # prose placeholder
@@ -118,7 +118,7 @@ def test_scanner_flags_unlisted_imports_even_in_blocks_with_placeholders():
         ```
         """)
 
-    assert scan(markdown) == ({"tools.approval_smart.judge", "tools.approval._continued", "tools.approval._inline",
+    assert scan(markdown) == ({"tools.approval_detection.detect_dangerous_command", "tools.approval._continued", "tools.approval._inline",
                                "agent.memory_providers.MemoryProvider (core ships no agent.memory_providers)"}, [])
 
 

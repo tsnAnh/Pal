@@ -1071,8 +1071,8 @@ def _confirm_startup_expensive_model_override(args) -> None:
     if not warnings:
         return
 
-    # Intentionally independent of --yolo / --accept-hooks: those approve local
-    # command risk, not paid aggregator spend or a surprising provider route.
+    # Intentionally independent of --accept-hooks: it approves local
+    # hooks, not paid aggregator spend or a surprising provider route.
     is_interactive = sys.stdin.isatty()
     if not is_interactive and security_cfg.get("allow_data_training_tiers_noninteractive") is True:
         acknowledged = [w for w in warnings if w.kind == "data_policy"]

@@ -15,9 +15,8 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
-import pytest
 
 from gateway.platforms.base import SendResult
 from gateway.relay.egress import EGRESS_DECLINE_CODE
@@ -77,31 +76,8 @@ def _runner(adapter: _Adapter):
 APPROVAL = {"command": "rm -rf /", "description": "danger", "pattern_key": "k"}
 
 
-def test_exec_approval_decline_does_not_send_the_text_fallback():
-    from gateway.run_turn_runner import _ExecApprovalDeclined
-
-    adapter = _Adapter(
-        SendResult(success=False, error="declined", raw_response=CODE_ONLY_DECLINE)
-    )
-    runner = _runner(adapter)
-
-    # Raises (not returns) so `_await_gateway_decision`'s notify-failure path
-    # drops the CENTRAL approval entry and unblocks the waiting tool.
-    with pytest.raises(_ExecApprovalDeclined):
-        runner._approval_notify_sync(dict(APPROVAL))
-
-    assert adapter.text_sends == []
 
 
-def test_exec_approval_ORDINARY_failure_still_falls_back_to_text():
-    """The control. An ordinary failure MUST still reach the user."""
-    adapter = _Adapter(SendResult(success=False, error="slack 500"))
-    runner = _runner(adapter)
-
-    runner._approval_notify_sync(dict(APPROVAL))
-
-    assert len(adapter.text_sends) == 1
-    assert "rm -rf /" in adapter.text_sends[0]
 
 
 # ── slash confirm ───────────────────────────────────────────────────────────

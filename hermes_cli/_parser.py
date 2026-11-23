@@ -199,7 +199,7 @@ def _add_top_level_flags(parser: argparse.ArgumentParser) -> None:
         "runs that can't prompt."))
     inherited(parser, "--skills", "-s", action="append", default=None,
               help="Preload one or more skills for the session (repeat flag or comma-separate)")
-    inherited(parser, "--yolo", action="store_true", default=False, help=SUPPRESS)
+    inherited(parser, "--yolo", action="store_true", default=False, help=argparse.SUPPRESS)
     inherited(parser, "--pass-session-id", action="store_true", default=False,
               help="Include the session ID in the agent's system prompt")
     inherited(parser, "--checkpoints", action="store_true", default=False,

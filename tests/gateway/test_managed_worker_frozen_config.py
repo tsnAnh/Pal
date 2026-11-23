@@ -126,7 +126,7 @@ def test_ordinary_worker_binding_freezes_readers_but_keeps_customizations(tmp_pa
     plugin.mkdir(parents=True)
     (plugin / 'plugin.yaml').write_text('name: sentinel\nversion: 1.0.0\nkind: standalone\n', encoding='utf-8')
     (plugin / '__init__.py').write_text("import os; from pathlib import Path\nPath(os.environ['HERMES_HOME'], 'plugin-executed').touch()\ndef register(ctx): pass\n", encoding='utf-8')
-    frozen = {'plugins': {'enabled': ['sentinel']}, 'agent': {'max_turns': 7}, 'command_allowlist': ['echo *'],
+    frozen = {'plugins': {'enabled': ['sentinel']}, 'agent': {'max_turns': 7},
               'mcp_servers': {'x': {'command': 'FROZEN_A'}}}
     live = {**frozen, 'agent': {'max_turns': 99}, 'mcp_servers': {'x': {'command': 'LIVE_B'}},
             'display': {'personality': 'EDITED_AFTER_CREATE'}}
@@ -144,8 +144,8 @@ def test_ordinary_worker_binding_freezes_readers_but_keeps_customizations(tmp_pa
         from hermes_cli.plugins import discover_plugins
         from tools.mcp_tool_config import _load_mcp_config
         discover_plugins()
-        from tools import approval
-        approval.save_permanent_allowlist({{'echo *', 'ls *'}})
+        from hermes_cli.config import set_config_value
+        set_config_value('display.compact', 'true')
         print(json.dumps({{'safe': safe_worker_enabled(), 'turns': [load_config()['agent']['max_turns'],
             read_raw_config()['agent']['max_turns'], load_user_config_effective()['agent']['max_turns']],
             'mcp': _load_mcp_config()['x']['command'],
@@ -160,6 +160,6 @@ def test_ordinary_worker_binding_freezes_readers_but_keeps_customizations(tmp_pa
     assert receipt == {'safe': False, 'turns': [7, 7, 7], 'mcp': 'FROZEN_A', 'plugin': True}, receipt
     from hermes_cli.config import fast_safe_load
     saved = fast_safe_load((home / 'config.yaml').read_text(encoding='utf-8'))
-    assert saved['command_allowlist'] == ['echo *', 'ls *']
+    assert saved['display']['compact'] is True
     assert saved['agent']['max_turns'] == 99 and saved['mcp_servers']['x']['command'] == 'LIVE_B', saved
     assert saved['display']['personality'] == 'EDITED_AFTER_CREATE', saved

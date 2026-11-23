@@ -1196,7 +1196,6 @@ def policy_scope(policy, *, authority=None, home=None):
     owner = home if home is not None else getattr(authority, 'profile_id', None)
     terminal_token = bind_terminal_policy(terminal, profile_home=owner)
     policy_token = _ACTIVE_POLICY.set(active)
-    from gateway.session_local_editor import editor_scope
     try:
         from agent.auxiliary_task_config import session_auxiliary_scope
         from gateway.session_local_mcp import editor_mcp_scope
@@ -1204,7 +1203,7 @@ def policy_scope(policy, *, authority=None, home=None):
         # session never reads the profile: its side tasks use its own saved section (code defaults only).
         aux_scope = (session_auxiliary_scope(policy.config(authority, secrets=False).get('auxiliary'))
                      if policy.ignore_user_config else contextlib.nullcontext())
-        with (editor_scope(policy), editor_mcp_scope(authority, policy), aux_scope,
+        with (editor_mcp_scope(authority, policy), aux_scope,
               policy.client_env_scope()):
             yield
     finally:

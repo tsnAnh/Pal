@@ -18,12 +18,12 @@ def _cli():
 
 def test_dispatch_return_semantics_and_side_effects():
     c = _cli()
-    with patch.object(HermesCLI, "_toggle_yolo", return_value=None) as m, \
+    with patch.object(HermesCLI, "_show_usage", return_value=None) as m, \
             patch("hermes_cli.plugins.fire_pre_command_hook") as hook:
-        assert c.process_command("/yolo") is True
+        assert c.process_command("/usage") is True
         m.assert_called_once_with()
         hook.assert_called_once()
-        assert hook.call_args.kwargs["command"] == "yolo"
+        assert hook.call_args.kwargs["command"] == "usage"
     assert c._pending_resume_sessions is None  # non-resume command disarms it
 
     c = _cli()

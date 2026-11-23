@@ -26,7 +26,7 @@ async def test_session_info_carries_the_classic_cli_fields(tmp_path, monkeypatch
     info = local_session_info(authority, SessionRef('p', 's'))
     assert info['title'] == 'Some Title'
     assert isinstance(info['started_at'], float) and isinstance(info['last_active_at'], float)
-    assert info['yolo'] is False and info['api_mode'] == 'chat_completions' and info['tool_count'] == 3
+    assert 'yolo' not in info and info['api_mode'] == 'chat_completions' and info['tool_count'] == 3
     assert info['credential_hint'] == 'sk-a...1234' and 'abcdefgh' not in str(info)
     from tui_gateway.contracts.registry import CANONICAL_METHODS
     CANONICAL_METHODS['session.info'].result.model_validate(

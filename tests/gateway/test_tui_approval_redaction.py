@@ -9,9 +9,7 @@ route through the module-level `_emit_approval_request` helper, which redacts
 before emitting.
 """
 
-import inspect
 
-import pytest
 
 
 class TestTuiApprovalEmitRedaction:
@@ -38,21 +36,11 @@ class TestTuiApprovalEmitRedaction:
         assert sent["params"]["description"] == "x"
         assert "github.com" in sent["params"]["command"]
 
-    @pytest.mark.parametrize(
-        ("allow_session", "allow_permanent", "expected"),
-        [
-            (True, True, ["once", "session", "always", "deny"]),
-            (True, False, ["once", "session", "deny"]),
-            (False, False, ["once", "deny"]),
-        ],
-    )
-    def test_emit_approval_request_honors_allowed_scopes(
-        self, monkeypatch, allow_session, allow_permanent, expected
-    ):
+    def test_emit_approval_request_offers_only_once_and_deny(self, monkeypatch):
         tui_server, sent = self._sent(monkeypatch)
         tui_server._emit_approval_request(
             "sess-1",
-            {"allow_permanent": allow_permanent, "allow_session": allow_session, "command": "<write to AGENTS.md>"},
+            {"allow_permanent": True, "allow_session": True, "command": "<write to AGENTS.md>"},
         )
 
-        assert sent["params"]["choices"] == expected
+        assert sent["params"]["choices"] == ["once", "deny"]

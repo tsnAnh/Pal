@@ -190,13 +190,6 @@ def test_grep_pcre_pattern_with_grouped_root_delete_text_stays_safe():
     assert detect_hardline_command(command) == (False, None)
 
 
-def test_interpreter_heredoc_keeps_legacy_approval_key_compatibility():
-    from tools.approval import _approval_key_aliases
-
-    aliases = _approval_key_aliases("script execution via heredoc")
-    assert r"(python[23]?|perl|ruby|node)\s+<<" in aliases
-
-
 @pytest.mark.parametrize(
     "flag",
     ["-c", "-lc", "-ic", "-lic", "-cl", "-cil", "-lci", "-ilc", "-cli", "-abc"],

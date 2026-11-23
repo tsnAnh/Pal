@@ -35,15 +35,11 @@ async def flow(home, desc):
         assert subscriptions['result'] == {'subscriptions': []}, subscriptions
         library = await wire.call('library.list')
         assert library['result']['items'] == [] and library['result']['index_complete'] is True, library
-        permissions = await wire.call('permissions.get')
-        assert permissions['result']['auto_review'] is True, permissions
-        await wire.call('permissions.set_auto_review', enabled=False)
-        assert (await wire.call('permissions.get'))['result']['auto_review'] is False
         routines = await wire.call('cron.manage', action='list')
         assert routines['result']['success'] is True, routines
         refused = await wire.call('cron.manage', action='trigger_issue', name='x')
         assert refused['error']['code'] == 4001 and refused['error']['data']['field'] == 'action', refused
-        unknown_key = await wire.call('permissions.get', bogus=True)
+        unknown_key = await wire.call('library.list', bogus=True)
         assert unknown_key['error']['code'] == 4001 and 'bogus' in unknown_key['error']['data']['fields']
 
         before = await wire.call('profiles.list', include_sessions=False)
@@ -88,5 +84,5 @@ def run(home, env):
 def test_the_native_socket_of_a_real_daemon_serves_the_ios_app_rpcs(tmp_path):
     home, env = prepare(tmp_path)
     entries = run(home, env)
-    assert len(entries) >= 14
+    assert len(entries) >= 12
     assert not any(entry['reply'].get('error', {}).get('code') == -32601 for entry in entries)

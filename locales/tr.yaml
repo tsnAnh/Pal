@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "e"
   tui:
     approval_once: "Bir kez izin ver"
-    approval_session: "Bu oturum için izin ver"
-    approval_always: "Kalıcı izin listesine ekle"
     approval_deny: "Reddet"
     approval_view: "Komutun tamamını göster"
     approval_title: "⚠️  Tehlikeli Komut"

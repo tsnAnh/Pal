@@ -127,16 +127,16 @@ class TestApproval:
         approval_module._gateway_queues.pop(session_key, None)
 
         def notify(data):
-            threading.Timer(0.05, approval_module.resolve_gateway_approval, (session_key, "session")).start()
+            threading.Timer(0.05, approval_module.resolve_gateway_approval, (session_key, "once")).start()
 
         approval_data = {"command": SECRET_COMMAND, "description": "privileged install",
                          "pattern_key": "sudo", "pattern_keys": ["sudo"]}
         decision = approval_gateway_wait._await_gateway_decision(session_key, notify, approval_data)
 
-        assert decision["choice"] == "session"
+        assert decision["choice"] == "once"
         request, resolved = _single_pair(captured, "approval")
         assert request["session_key"] == session_key
-        assert resolved["outcome"] == "session"
+        assert resolved["outcome"] == "once"
         _assert_no_secret(captured, TOKEN)
 
     def test_gateway_notify_failure_still_resolves(self, captured):
@@ -148,23 +148,3 @@ class TestApproval:
 
         assert decision.get("notify_failed") is True
         assert _single_pair(captured, "approval")[1]["outcome"] == "notify_failed"
-
-    def test_plugin_transport_fires_pair(self, captured, monkeypatch):
-        from hermes_cli.plugins import PluginContext, PluginManager, PluginManifest
-        from tools import approval_prompt
-
-        manager = PluginManager()
-        manifest = PluginManifest(name="phone-fixture", version="1.0.0", description="", source="user", key="phone")
-        PluginContext(manifest, manager).register_approval_transport("phone", lambda req: req.respond("deny"))
-        monkeypatch.setattr(approval_prompt, "get_plugin_manager", lambda: manager)
-        monkeypatch.setattr(approval_context, "_get_approval_transport_config", lambda: ("phone", None))
-
-        attempt = approval_prompt._present_with_selected_transport(
-            command=SECRET_COMMAND, description="d", pattern_key="sudo", pattern_keys=["sudo"],
-            session_key="human-input-transport", surface="cli", allow_session=True, allow_permanent=True)
-
-        assert attempt["choice"] == "deny"
-        request, resolved = _single_pair(captured, "approval")
-        assert request["session_key"] == "human-input-transport"
-        assert resolved["outcome"] == "deny"
-        _assert_no_secret(captured, TOKEN)

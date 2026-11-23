@@ -86,7 +86,7 @@ def test_lease_authority_is_shared_across_processes(tmp_path):
 
 
 def test_takeover_during_an_admitted_action_discards_its_result(monkeypatch):
-    """Approval / backend start-up can take seconds; a human who takes over meanwhile must not have
+    """Backend start-up can take seconds; a human who takes over meanwhile must not have
     their keystrokes captured by an action admitted before they did."""
     from tools.computer_use import tool
 
@@ -102,8 +102,8 @@ def test_takeover_during_an_admitted_action_discards_its_result(monkeypatch):
     assert res["code"] == "human_has_control" and "SECRET" not in json.dumps(res)
 
 
-def test_takeover_handback_during_approval_does_not_start_the_device_op(monkeypatch):
-    """A full take-over / hand-back during approval leaves holder=agent, so assert_agent_may_act
+def test_takeover_handback_during_backend_startup_does_not_start_the_device_op(monkeypatch):
+    """A full take-over / hand-back during backend start-up leaves holder=agent, so assert_agent_may_act
     succeeds. Input still belongs to the human's turn: compare admitted.epoch before _dispatch,
     not only after. Do not patch _dispatch — a recording backend must never be called."""
     from tools.computer_use import tool
@@ -117,13 +117,13 @@ def test_takeover_handback_during_approval_does_not_start_the_device_op(monkeypa
             return json.dumps({"ok": True, "action": "click"})
 
     rec = Rec()
-    monkeypatch.setattr(tool, "_new_backend", lambda mode: rec)
 
-    def _approval_cycles_the_lease(scope, args, session_id=""):
+    def _startup_cycles_the_lease(mode):
         lease.acquire("human")
         lease.release("human")
+        return rec
 
-    monkeypatch.setattr(tool, "_request_approval", _approval_cycles_the_lease)
+    monkeypatch.setattr(tool, "_new_backend", _startup_cycles_the_lease)
     res = json.loads(tool.handle_computer_use({"action": "click", "coordinate": [1, 1]}))
     assert rec.calls == []
     assert res.get("code") == "human_has_control"

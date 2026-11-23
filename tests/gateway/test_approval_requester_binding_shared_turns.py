@@ -56,27 +56,6 @@ def _observe_adapter():
                          observe_unmentioned_group_messages=True)
 
 
-@pytest.mark.asyncio
-async def test_an_observed_group_approval_belongs_to_the_member_who_asked():
-    from gateway.approval_actor import approval_refusal
-    from tests.gateway.test_approval_requester_binding import _runner
-
-    write_approvers([])
-    adapter = _observe_adapter()
-    key = _approval_raised_in(_observed_event(adapter, 111, "Alice Example", "delete my notes"))
-
-    assert approval_refusal(key, "222") == "Alice Example"
-    # A bare "yes" is a sender-less observed text turn, routed to /approve (run_busy): Bob's is
-    # refused, Alice's answers.
-    runner = _runner()
-    bob, alice = _observed_event(adapter, 222, "Bob", "yes"), _observed_event(adapter, 111, "Alice Example", "yes")
-    bob.text = alice.text = "/approve"
-    assert await runner._handle_approve_command(bob) == "Only Alice Example can answer this approval."
-    await runner._handle_approve_command(alice)
-    from tools import approval as approval_mod
-    assert not approval_mod._gateway_queues.get(key)
-
-
 def test_an_approval_with_no_requester_is_answered_only_by_approvers_and_admins():
     """No requester recorded (a turn merged from two members) fails closed: never "anyone"."""
     from gateway.approval_actor import approval_refusal, refusal_text

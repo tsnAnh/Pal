@@ -69,14 +69,13 @@ def acting_as(home: Path):
 def test_a_money_step_is_refused_when_a_bot_calls_the_shared_server(world, monkeypatch):
     _root, bot = world
     monkeypatch.setattr(mcp_tool, "_server_action_policies", {})
-    monkeypatch.setattr(mcp_tool, "_server_trust_levels", {})
     monkeypatch.setattr(mcp_tool, "_server_cost_policies", {})
     monkeypatch.setattr(mcp_tool, "_tool_read_only_hints", {})
     with acting_as(bot):
         (_connection, config), = connector_configs("upwork", interpolate=False).items()
         registration._record_tool_trust_metadata("upwork", config, [])
-        refused = json.loads(handlers._trust_gate_check("upwork", "fund_escrow", args={"contract_id": "1"}))
-        read = handlers._trust_gate_check("upwork", "search_jobs", args={"q": "python"})
+        refused = json.loads(handlers._spend_gate_check("upwork", "fund_escrow", args={"contract_id": "1"}))
+        read = handlers._spend_gate_check("upwork", "search_jobs", args={"q": "python"})
     assert refused["code"] == mcp_action_gate.ACTION_REFUSED
     assert read is None
 

@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "y"
   tui:
     approval_once: "允許一次"
-    approval_session: "本次工作階段允許"
-    approval_always: "加入永久允許清單"
     approval_deny: "拒絕"
     approval_view: "顯示完整指令"
     approval_title: "⚠️  危險指令"

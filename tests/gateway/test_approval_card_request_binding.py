@@ -118,27 +118,8 @@ async def _press_teams_card(request_id):
     await adapter._on_card_action(ctx)
 
 
-async def _press_relay_card(request_id):
-    from gateway.platforms.event import MessageEvent, MessageType
-    from gateway.relay.adapter import RelayAdapter
-    from gateway.relay.descriptor import CONTRACT_VERSION, CapabilityDescriptor
-    from gateway.session import SessionSource
-    from tests.gateway.relay.stub_connector import StubConnector
-    desc = CapabilityDescriptor(
-        contract_version=CONTRACT_VERSION, platform="telegram", label="Telegram", max_message_length=4096,
-        supports_draft_streaming=False, supports_edit=True, supports_threads=True, markdown_dialect="markdown_v2",
-        len_unit="utf16", supported_ops=("send", "edit", "typing", "get_chat_info", "send_media", "prompt", "react"))
-    stub = StubConnector(desc)
-    adapter = RelayAdapter(PlatformConfig(), desc, transport=stub)
-    await adapter.send_exec_approval("c1", "rm -rf build", SESSION, request_id=request_id)
-    await adapter._consume_prompt_response(MessageEvent(
-        text="/once", message_type=MessageType.COMMAND,
-        source=SessionSource(platform="telegram", chat_id="c1", chat_type="dm", user_id="u1"),
-        prompt_response={"prompt_id": stub.sent[-1]["prompt_id"], "option_id": "once"}))
-
-
 _PRESSES = [_press_telegram_card, _press_slack_card, _press_feishu_card, _press_matrix_card, _press_whatsapp_card,
-            _press_teams_card, _press_relay_card]
+            _press_teams_card]
 
 
 @pytest.mark.asyncio

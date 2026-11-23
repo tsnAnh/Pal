@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "j"
   tui:
     approval_once: "Laat eenmalig toe"
-    approval_session: "Laat toe vir hierdie sessie"
-    approval_always: "Voeg by permanente toelaatlys"
     approval_deny: "Weier"
     approval_view: "Wys volledige opdrag"
     approval_title: "⚠️  Gevaarlike Opdrag"

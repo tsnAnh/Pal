@@ -89,18 +89,16 @@ def test_named_but_not_run_verbs_stay_off_the_floor(command):
 
 
 @pytest.mark.parametrize("command", ["nice reboot", "/sbin/shutdown -h now", "su -c reboot"])
-def test_wrapped_verb_is_blocked_end_to_end_under_yolo(command, monkeypatch):
-    from tools.approval import check_all_command_guards, disable_session_yolo
+def test_wrapped_verb_is_blocked_end_to_end(command, monkeypatch):
+    from tools.approval import check_all_command_guards
     from tools.approval_context import reset_current_session_key, set_current_session_key
 
     for name in ("HERMES_INTERACTIVE", "HERMES_GATEWAY_SESSION", "HERMES_CRON_SESSION", "HERMES_EXEC_ASK"):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("HERMES_YOLO_MODE", "1")
     token = set_current_session_key("hardline_carrier_test")
     try:
         result = check_all_command_guards(command, "local")
     finally:
-        disable_session_yolo("hardline_carrier_test")
         reset_current_session_key(token)
     assert result["approved"] is False
     assert result.get("hardline") is True

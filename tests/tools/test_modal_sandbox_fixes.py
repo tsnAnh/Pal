@@ -338,67 +338,34 @@ class TestDockerHostBindApproval:
     def test_isolated_docker_keeps_fast_path(self, monkeypatch):
         """Isolated Docker still bypasses dangerous-command approval."""
         import tools.approval as A
-        self._isolate_approval_state(monkeypatch)
         monkeypatch.setenv("HERMES_EXEC_ASK", "1")
         res = A.check_all_command_guards("rm -rf /workspace", "docker",
                                          has_host_access=False)
         assert res["approved"] is True
 
-    @staticmethod
-    def _isolate_approval_state(monkeypatch):
-        """Clear approval state that leaks in from the real user config.
-
-        ``tools.approval`` loads ``command_allowlist`` into module-level
-        ``_permanent_approved`` at import time. This file imports
-        ``tools.terminal_tool`` at module level (collection time — BEFORE the
-        hermetic HERMES_HOME fixture runs), so on a dev machine whose real
-        config permanently allowlists e.g. "delete in root path" the guard
-        under test silently approves and the assertions flip. CI never has
-        such an allowlist, making this a local-only flake.
-
-        Same import-time freeze applies to ``_YOLO_MODE_FROZEN``: it reads
-        HERMES_YOLO_MODE off the environment when the module is imported at
-        collection time, before conftest's per-test env blanking runs. A test
-        run launched from a --yolo Hermes session (or any shell exporting
-        HERMES_YOLO_MODE=1) freezes True and every guard auto-approves.
-        Reset it explicitly so the tests exercise the guard, not the bypass.
-        """
+    def test_host_bound_docker_keeps_the_floors(self):
+        """A host bind mount drops the container fast-path, so the floors apply."""
         import tools.approval as A
-        monkeypatch.setattr(A, "_permanent_approved", set())
-        monkeypatch.setattr(A, "_session_approved", {})
-        monkeypatch.setattr(A, "_YOLO_MODE_FROZEN", False)
-        monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
-
-    def test_host_bound_docker_requires_approval(self, monkeypatch):
-        """Host-bound Docker dangerous command escalates instead of bypassing."""
-        import tools.approval as A
-        self._isolate_approval_state(monkeypatch)
-        monkeypatch.setenv("HERMES_EXEC_ASK", "1")
-        res = A.check_all_command_guards("rm -rf /workspace", "docker",
-                                         has_host_access=True)
-        # Must NOT take the silent container fast-path.
-        assert res.get("approved") is not True
-        assert res.get("status") == "pending_approval"
+        assert A.check_all_command_guards("rm -rf /", "docker", has_host_access=False)["approved"] is True
+        res = A.check_all_command_guards("rm -rf /", "docker", has_host_access=True)
+        assert res["approved"] is False and res.get("hardline") is True
 
     def test_execute_code_isolated_docker_keeps_fast_path(self, monkeypatch):
         """Isolated Docker execute_code still bypasses the guard."""
         import tools.approval as A
-        self._isolate_approval_state(monkeypatch)
         monkeypatch.setenv("HERMES_EXEC_ASK", "1")
         res = A.check_execute_code_guard("import os", "docker",
                                          has_host_access=False)
         assert res["approved"] is True
 
-    def test_execute_code_host_bound_docker_requires_approval(self, monkeypatch):
-        """Host-bound Docker execute_code does not get the container fast-path."""
+    def test_execute_code_host_bound_docker_is_not_fast_pathed(self, monkeypatch):
+        """Host-bound Docker execute_code does not get the container fast-path: unattended deny applies."""
         import tools.approval as A
-        self._isolate_approval_state(monkeypatch)
-        monkeypatch.setenv("HERMES_EXEC_ASK", "1")
-        res = A.check_execute_code_guard(
-            "import os; os.system('rm -rf /workspace')", "docker",
-            has_host_access=True)
-        assert res.get("approved") is not True
-        assert res.get("status") == "pending_approval"
+        monkeypatch.setenv("HERMES_CRON_SESSION", "1")
+        monkeypatch.setattr("tools.approval_context._get_cron_approval_mode", lambda: "deny")
+        assert A.check_execute_code_guard("import os", "docker", has_host_access=False)["approved"] is True
+        res = A.check_execute_code_guard("import os", "docker", has_host_access=True)
+        assert res["approved"] is False
 
     def test_execute_code_vercel_sandbox_always_skips(self, monkeypatch):
         """vercel_sandbox has no host-bind concept and stays always-skipped."""

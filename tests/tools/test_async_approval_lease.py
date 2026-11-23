@@ -6,13 +6,22 @@ from tools import approval, async_delegation as ad
 from tools.approval_context import set_current_session_key, reset_current_session_key
 
 
+@pytest.fixture(autouse=True)
+def _no_details_bubble(monkeypatch):
+    monkeypatch.setattr("tools.details_bubble.post_details", lambda *a, **k: None)
+
+
+def _ask():
+    return approval.request_draft_approval(text="Dinner at 7?", description="Send a message",
+                                           pattern_key="draft:lease", draft={"kind": "message"})
+
+
 @pytest.mark.parametrize("choice", ["once", "deny", "timeout", "cancel", "missing"])
 def test_child_approval_after_parent_finished(monkeypatch, choice):
     ad._reset_for_tests()
     ready, ask, notified, done = (threading.Event() for _ in range(4))
     decisions = []
     monkeypatch.setattr(approval.approval_context, "_get_approval_timeout", lambda: 0.2 if choice == "timeout" else 5)
-    monkeypatch.setattr(approval.approval_context, "_get_approval_mode", lambda: "manual")
     key = "agent:test:chat-a"
 
     def notify(data):
@@ -22,7 +31,7 @@ def test_child_approval_after_parent_finished(monkeypatch, choice):
     def child():
         ready.set()
         assert ask.wait(5)
-        decisions.append(approval.check_execute_code_guard("print('safe test')", "local"))
+        decisions.append(_ask())
         done.set()
         return {"status": "completed"}
 
@@ -92,7 +101,6 @@ def test_cancelled_queued_worker_releases_transport(monkeypatch):
 
 def test_concurrent_children_have_independent_single_use_consent(monkeypatch):
     from tools.approval_notify_lease import acquire, run
-    monkeypatch.setattr(approval.approval_context, "_get_approval_mode", lambda: "manual")
     monkeypatch.setattr(approval, "_presence", lambda cb=None: (None, False, True, False))
     monkeypatch.setattr(approval.approval_context, "_get_approval_timeout", lambda: 5)
     key = "concurrent-children"
@@ -110,7 +118,7 @@ def test_concurrent_children_have_independent_single_use_consent(monkeypatch):
         token = set_current_session_key(key)
         try:
             def operation():
-                decision = approval.check_execute_code_guard("print(1)", "local")
+                decision = _ask()
                 results.append(decision)
                 if decision["approved"]:
                     executions.append(1)

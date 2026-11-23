@@ -11,7 +11,6 @@ import sys
 
 import pytest
 
-from hermes_cli.approvals_suggest import is_unsafe_class
 from tools.approval import detect_dangerous_command
 
 
@@ -47,7 +46,6 @@ def test_registry_write_requires_approval(cmd):
     is_dangerous, _key, description = detect_dangerous_command(cmd)
     assert is_dangerous, f"should be flagged: {cmd}"
     assert "registry" in description
-    assert is_unsafe_class(description), "registry writes must never be proposed for the allowlist"
 
 
 @pytest.mark.parametrize("cmd", [

@@ -29,10 +29,7 @@ if len(sys.argv)>2:  # optional: path to a baseline approval_detection.py (e.g. 
 r='re'+'boot'
 cmd='echo "$(grep -P \'safe\' /dev/null\n'+r+')"'
 print(json.dumps({'module':d.__file__,'approval_module':a.__file__,'case':'newline command','command':cmd,'baseline':(b.detect_hardline_command(cmd) if b else None),'head':d.detect_hardline_command(cmd),'variants':list(d._command_detection_variants(cmd))}))
-calls=[]
-def deny(*args,**kwargs):
-    calls.append([args,kwargs]);return 'deny'
-print(json.dumps({'pattern_guard':a.check_dangerous_command(cmd,'local',approval_callback=deny),'combined_guard':a.check_all_command_guards(cmd,'local',approval_callback=deny),'callback_calls':calls},default=str))
+print(json.dumps({'pattern_guard':a.check_dangerous_command(cmd,'local'),'combined_guard':a.check_all_command_guards(cmd,'local')},default=str))
 # Shadow the dangerous command name with a harmless function; verify shell
 # execution and marker contents, never invoke a host shutdown binary.
 marker=home/'marker'

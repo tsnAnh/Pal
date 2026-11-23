@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "j"
   tui:
     approval_once: "Einmalig erlauben"
-    approval_session: "Für diese Sitzung erlauben"
-    approval_always: "Dauerhaft zur Erlaubnisliste hinzufügen"
     approval_deny: "Ablehnen"
     approval_view: "Vollständigen Befehl anzeigen"
     approval_title: "⚠️  Gefährlicher Befehl"

@@ -44,7 +44,7 @@ def test_docker_recovery_marks_pending_and_finalizer_warns(monkeypatch):
     common: dict = dict(
         command="echo hi", env=env, env_type="docker", effective_task_id="t",
         task_id="t", session_id="s", session_key="k", workdir=None,
-        command_cwd=None, approval_note=None)
+        command_cwd=None)
 
     flagged = json.loads(finalize_foreground_result(
         result={"output": "hi", "returncode": 0, "environment_recreated": True}, **common))

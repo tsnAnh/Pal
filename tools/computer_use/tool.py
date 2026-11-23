@@ -197,7 +197,7 @@ def _backend_for_call(session_id: str = "") -> Iterator[ComputerUseBackend]:
                     continue
                 # A queued call can outlive a display/config change even when
                 # no other caller has replaced the cached backend yet.
-                if (_backend_permission_modes.get(sid) != _cua_permission_mode(str(session_id or ""))
+                if (_backend_permission_modes.get(sid) != _cua_permission_mode()
                         or backend_display_stale(_backend_displays.get(sid, ""), desktop_identity())):
                     continue
             yield backend

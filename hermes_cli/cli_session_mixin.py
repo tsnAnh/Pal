@@ -1,5 +1,5 @@
-"""Session lifecycle for the interactive CLI: new/resume/save, undo/retry rewinds, yolo
-persistence, manual compression, and exit summary.
+"""Session lifecycle for the interactive CLI: new/resume/save, undo/retry rewinds,
+manual compression, and exit summary.
 
 Mixin bound onto ``HermesCLI`` via the MRO. cli.py-internal symbols are imported LAZILY
 inside each method (``from cli import ...``) — never at module load time (import cycle).
@@ -210,8 +210,8 @@ def _write_save(session_id, fmt, filename, render):
 
 
 class CLISessionMixin:
-    """Session lifecycle for the interactive CLI: new/resume/save, undo/retry rewinds, yolo
-    persistence, manual compression, and exit summary."""
+    """Session lifecycle for the interactive CLI: new/resume/save, undo/retry rewinds,
+    manual compression, and exit summary."""
 
     def _restore_session_cwd(self, session_meta: dict, *, quiet: bool = False) -> None:
         """Relaunch a resumed session in the directory it was started from.
@@ -955,6 +955,8 @@ class CLISessionMixin:
                 # generation point at the live continuation, not the ended parent.
                 agent_sid = getattr(self.agent, "session_id", None)
                 if agent_sid and agent_sid != self.session_id:
+                    from tools.mcp_tool_costs import transfer_session
+                    transfer_session(self.session_id, agent_sid)
                     self.session_id = self.agent.session_id
                     self._write_terminal_breadcrumb()
                     self._pending_title = None

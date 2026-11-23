@@ -1,21 +1,14 @@
-"""AppleScript that can discard the operator's unsaved work always reaches a human (#141346).
+"""AppleScript that can discard the operator's unsaved work is flagged (#141346).
 
-Smart approval auto-approved `osascript` that closed the user's own unsaved PowerPoint deck with
-`saving no`, then `rm -f` of its only export. Three things are pinned here, because any one alone
-leaves the hole open:
-
-* detection: every osascript run whose program can close, quit, save over, delete, send keystrokes
-  or run a shell is flagged, and so is every run whose program this command line does not show
-  (script file, pipe, carrier, expansion). Read-only literal programs stay unflagged;
-* the gate: in smart mode those keys never reach the guardian LLM, even when it would APPROVE;
-* scope: the human answer covers one command, so "session" cannot pre-approve the next close.
+Every osascript run whose program can close, quit, save over, delete, send keystrokes or run a shell is
+flagged by detection, and so is every run whose program this command line does not show (script file, pipe,
+carrier, expansion). Read-only literal programs stay unflagged. Flagged runs are refused where nobody can
+answer (cron, ``-q``, unattended platforms).
 """
 
 import pytest
 
-from tools import approval as approval_module
-from tools import approval_context
-from tools.approval import check_all_command_guards, detect_dangerous_command
+from tools.approval import detect_dangerous_command
 from tools.approval_applescript import OSASCRIPT_OPAQUE_DESCRIPTION, OSASCRIPT_RISKY_DESCRIPTION
 
 RISKY, OPAQUE = OSASCRIPT_RISKY_DESCRIPTION, OSASCRIPT_OPAQUE_DESCRIPTION
@@ -185,80 +178,6 @@ def test_read_only_and_unrelated_commands_are_unchanged(command):
     "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
     "last", "front", "back", "middle", "some", "every", "1st", "2nd", "3rd", "4th", "23rd", "-1st",
 ])
-def test_content_selector_assignments_need_human(selector, smart_interactive):
+def test_content_selector_assignments_are_flagged(selector):
     command = f'osascript -e \'tell application "TextEdit" to set the {selector} paragraph of front document to ""\''
-    prompts = []
-
-    def human(cmd, desc, **kwargs):
-        prompts.append(kwargs)
-        return "deny"
-
-    result = check_all_command_guards(command, "local", approval_callback=human)
-    assert result["approved"] is False
-    assert len(prompts) == 1
-    assert prompts[0]["allow_session"] is False
-    assert prompts[0]["allow_permanent"] is False
-    assert smart_interactive == []
-
-
-@pytest.fixture
-def smart_interactive(monkeypatch):
-    """Interactive smart mode with a guardian that would APPROVE everything and records its calls."""
-    session_key = "test-141346"
-    monkeypatch.setenv("HERMES_SESSION_KEY", session_key)
-    monkeypatch.setenv("HERMES_INTERACTIVE", "1")
-    for name in ("HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION", "HERMES_CRON_SESSION", "HERMES_YOLO_MODE"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "smart")
-    monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", False)
-    guardian_calls = []
-
-    def guardian(command, *_args, **_kwargs):
-        guardian_calls.append(command)
-        return "approve"
-
-    monkeypatch.setattr(approval_module, "_smart_verdict", guardian)
-    approval_module.clear_session(session_key)
-    approval_module._permanent_approved.clear()
-    yield guardian_calls
-    approval_module.clear_session(session_key)
-
-
-@pytest.mark.parametrize("command", [
-    REPORTED,
-    'osascript -e \'do shell script "rm -f /Users/me/traz.pdf"\'',
-    'printf \'tell app "Keynote" to quit\' | osascript',
-])
-def test_smart_mode_asks_the_human_not_the_guardian(command, smart_interactive):
-    prompts = []
-
-    def human(cmd, desc, **kwargs):
-        prompts.append(kwargs)
-        return "deny"
-
-    result = check_all_command_guards(command, "local", approval_callback=human)
-
-    assert smart_interactive == []  # the guardian was never asked
-    assert len(prompts) == 1
-    assert prompts[0].get("allow_permanent") is False and prompts[0].get("allow_session") is False
-    assert result["approved"] is False
-    assert not result.get("smart_approved")
-
-
-def test_a_session_answer_does_not_preapprove_the_next_close(smart_interactive):
-    answers = []
-
-    def human(cmd, desc, **kwargs):
-        answers.append(cmd)
-        return "session"  # an older client may still return a broader scope
-
-    assert check_all_command_guards(REPORTED, "local", approval_callback=human)["approved"] is True
-    assert check_all_command_guards(REPORTED, "local", approval_callback=human)["approved"] is True
-    assert len(answers) == 2  # asked both times
-    assert smart_interactive == []
-
-
-def test_other_dangerous_commands_still_use_the_guardian(smart_interactive):
-    result = check_all_command_guards("rm -rf ./build", "local", approval_callback=lambda *a, **k: "deny")
-    assert result.get("smart_approved") is True
-    assert smart_interactive == ["rm -rf ./build"]
+    assert detect_dangerous_command(command)[0] is True

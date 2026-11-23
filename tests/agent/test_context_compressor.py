@@ -445,8 +445,7 @@ class TestSummarizeToolResultClarify:
 
 
 def _refusals():
-    """Refused-call results from the real producers: the approval gate messages in their terminal
-    envelope, the write guard's raw ``BLOCKED:`` text, the workdir guard's ``status`` "blocked"
+    """Refused-call results from the real producers: the draft gate messages, the write guard's raw ``BLOCKED:`` text, the workdir guard's ``status`` "blocked"
     envelope (its error reads "Blocked:", not "BLOCKED"), a pending gateway approval, and a
     successful kanban_block (``status`` "blocked" with no error, which is not a refusal). ``expected`` lists substrings the summary must
     contain; empty means it must not read as refused."""
@@ -455,23 +454,17 @@ def _refusals():
     from tools.terminal_tool import _error_json
     from tools.terminal_tool_guards import _validate_workdir
 
-    gate = approval._COMMAND_GATE
     no_consent = ["BLOCKED, not run", "did NOT consent"]
     return [
-        pytest.param("terminal", {"command": "rm -rf build"},
-                     _error_json(gate.cli_denied.format(description="", breaker=""), status="blocked"),
-                     no_consent, id="cli_denied"),
-        pytest.param("terminal", {"command": "rm -rf build"},
-                     _error_json(gate.transport_denied.format(breaker=""), status="blocked"),
-                     no_consent, id="transport_denied"),
-        pytest.param("terminal", {"command": "rm -rf build"},
-                     _error_json(gate.cli_timeout.format(breaker=""), status="blocked"),
-                     no_consent, id="cli_timeout"),
         pytest.param("write_file", {"path": "AGENTS.md", "content": "a\nb"},
                      "BLOCKED: write to protected agent-instruction file(s) (AGENTS.md) was denied "
                      "by the user. The user has NOT consented to this write. Do NOT retry it or "
                      "attempt the same edit via another path (terminal, execute_code, etc.).",
                      no_consent, id="write_guard"),
+        pytest.param("send_message", {"target": "alice", "message": "hi"},
+                     approval._DRAFT_GATE.cli_denied, ["BLOCKED, not run"], id="draft_denied"),
+        pytest.param("send_message", {"target": "alice", "message": "hi"},
+                     approval._DRAFT_GATE.cli_timeout, ["BLOCKED, not run"], id="draft_timeout"),
         pytest.param("terminal", {"command": "ls"},
                      _error_json(_validate_workdir("a;b"), status="blocked"),
                      ["BLOCKED, not run"], id="workdir_guard"),

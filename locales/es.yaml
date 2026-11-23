@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "s"
   tui:
     approval_once: "Permitir una vez"
-    approval_session: "Permitir durante esta sesión"
-    approval_always: "Permitir siempre (lista permanente)"
     approval_deny: "Denegar"
     approval_view: "Mostrar el comando completo"
     approval_title: "⚠️  Comando peligroso"

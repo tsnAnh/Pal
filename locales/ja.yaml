@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "y"
   tui:
     approval_once: "今回のみ許可"
-    approval_session: "このセッション中は許可"
-    approval_always: "永続的な許可リストに追加"
     approval_deny: "拒否"
     approval_view: "コマンド全文を表示"
     approval_title: "⚠️  危険なコマンド"

@@ -72,7 +72,7 @@ def _clean():
         del sys.modules[name]
 
 
-def test_selected_plugin_receives_tool_calls_and_unselected_stays_dormant(tmp_path, grant_computer_use_approvals):
+def test_selected_plugin_receives_tool_calls_and_unselected_stays_dormant(tmp_path):
     home = _home(tmp_path / "home", ("cu-alpha", "cu-beta"), "cu-beta")
     tok = set_hermes_home_override(str(home))
     try:

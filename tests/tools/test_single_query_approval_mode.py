@@ -23,12 +23,10 @@ from tools.approval_context import _get_single_query_approval_mode
 
 @pytest.fixture(autouse=True)
 def _clear_approval_state():
-    approval_module._permanent_approved.clear()
     approval_module.clear_session("default")
     approval_module.clear_session("test-session")
     reset_session_vars()
     yield
-    approval_module._permanent_approved.clear()
     approval_module.clear_session("default")
     approval_module.clear_session("test-session")
     reset_session_vars()
@@ -52,7 +50,7 @@ class TestSingleQueryApprovalModeParsing:
             assert _get_single_query_approval_mode() == "approve"
 
     def test_off_maps_to_approve(self):
-        """'off' is an alias for 'approve' (matches --yolo semantics)."""
+        """'off' is an alias for 'approve' ."""
         from unittest.mock import patch as mock_patch
         with mock_patch("hermes_cli.config.load_config_readonly", return_value={"approvals": {"single_query_mode": "off"}}):
             assert _get_single_query_approval_mode() == "approve"
@@ -124,7 +122,6 @@ class TestSingleQueryDenyMode:
         monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="deny"):
@@ -138,7 +135,6 @@ class TestSingleQueryDenyMode:
         monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="deny"):
@@ -154,7 +150,6 @@ class TestSingleQueryApproveMode:
         monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="approve"):
@@ -174,7 +169,6 @@ class TestSingleQueryDenyModeAllGuards:
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="deny"):
@@ -188,7 +182,6 @@ class TestSingleQueryDenyModeAllGuards:
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="deny"):
@@ -200,7 +193,6 @@ class TestSingleQueryDenyModeAllGuards:
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="approve"):
@@ -221,7 +213,6 @@ class TestSingleQueryExecuteCode:
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="deny"):
@@ -235,7 +226,6 @@ class TestSingleQueryExecuteCode:
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="approve"):
@@ -249,7 +239,6 @@ class TestSingleQueryExecuteCode:
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
 
         result = approval_module.check_execute_code_guard("import os", "local")
         assert result["approved"]
@@ -267,31 +256,10 @@ class TestSingleQueryModeInteractions:
         monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="deny"):
             result = check_dangerous_command("rm -rf /", "docker")
-            assert result["approved"]
-
-    def test_yolo_overrides_single_query_deny(self, monkeypatch):
-        """--yolo still bypasses single_query_mode=deny for dangerous (non-hardline)
-        commands."""
-        monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
-        monkeypatch.setenv("HERMES_YOLO_MODE", "1")
-        monkeypatch.setenv("HERMES_INTERACTIVE", "1")
-        monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-
-        # _YOLO_MODE_FROZEN is frozen at module import time (security: prevents
-        # prompt injection from runtime-setting HERMES_YOLO_MODE). Patch the
-        # module attribute directly to simulate process-startup with
-        # HERMES_YOLO_MODE=1.
-        from unittest.mock import patch as mock_patch
-        with (
-            mock_patch.object(approval_module, "_YOLO_MODE_FROZEN", True),
-            mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="deny"),
-        ):
-            result = check_dangerous_command("rm -rf /tmp/stuff", "local")
             assert result["approved"]
 
     def test_hardline_block_still_fires(self, monkeypatch):
@@ -299,7 +267,6 @@ class TestSingleQueryModeInteractions:
         monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
         monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_single_query_approval_mode", return_value="approve"):
@@ -309,14 +276,14 @@ class TestSingleQueryModeInteractions:
 
 class TestDaemonOneshotTurns:
     """Over the daemon, `-q` and `-z` are both finite, but only `-z` keeps the legacy
-    oneshot auto-approve (oneshot.py set HERMES_YOLO_MODE: nobody can answer a prompt)."""
+    oneshot auto-approve (nobody can answer a prompt)."""
 
     def test_unattended_finite_turn_approves_execute_code_but_plain_finite_stays_single_query(self, monkeypatch):
         from unittest.mock import patch as mock_patch
         from gateway.session_finite import admit_finite, finite_turn_scope
         from persistence.core.errors import AuthorityRefusal
 
-        for key in ("HERMES_SINGLE_QUERY_SESSION", "HERMES_GATEWAY_SESSION", "HERMES_EXEC_ASK", "HERMES_YOLO_MODE"):
+        for key in ("HERMES_SINGLE_QUERY_SESSION", "HERMES_GATEWAY_SESSION", "HERMES_EXEC_ASK"):
             monkeypatch.delenv(key, raising=False)
         assert admit_finite({"finite": True, "unattended": True}) == {"finite": True, "unattended": True}
         assert admit_finite({"finite": True, "unattended": False}) == {"finite": True}
@@ -330,4 +297,3 @@ class TestDaemonOneshotTurns:
                 assert approval_module.check_execute_code_guard("import os", "local")["outcome"] == "blocked"
             with finite_turn_scope(False, unattended=True):
                 assert approval_module.check_execute_code_guard("import os", "local")["approved"]  # headless default
-                assert not approval_module._yolo_active()

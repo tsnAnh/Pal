@@ -37,7 +37,6 @@ def bot_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
     monkeypatch.setenv("HERMES_EXEC_ASK", "1")
     monkeypatch.setenv("HERMES_INTERACTIVE", "1")
-    monkeypatch.setattr(approval, "_YOLO_MODE_FROZEN", False, raising=False)
     monkeypatch.setattr("tools.terminal_tool._get_approval_callback", lambda: None, raising=False)
     tokens = [approval_context.set_current_session_key(SESSION),
               approval_context.set_current_observability_context(turn_id="turn-1")]
@@ -47,13 +46,6 @@ def bot_home(tmp_path, monkeypatch):
     approval.unregister_gateway_notify(SESSION)
     approval.clear_session(SESSION)
     hc._LOAD_CONFIG_CACHE.clear()
-
-
-@pytest.fixture
-def bot_chat():
-    token = approval_context.set_current_bot_chat(True)
-    yield
-    approval_context.reset_current_bot_chat(token)
 
 
 @pytest.fixture
@@ -83,57 +75,6 @@ def _owner(*answers):
     owner = Owner(*answers)
     approval.register_gateway_notify(SESSION, owner)
     return owner
-
-
-def _ask_tool_approval(rule="k"):
-    return approval.request_tool_approval("home_lock", "unlock the front door", rule_key=rule)
-
-
-class TestBotChatApprovals:
-    def test_card_offers_exactly_once_always_deny(self, bot_home, bot_chat):
-        owner = _owner("once")
-        assert _ask_tool_approval()["approved"] is True
-        assert owner.cards[0]["choices"] == ["once", "always", "deny"]
-        assert owner.cards[0]["scope"] == "bot_chat"
-
-    def test_other_chats_keep_their_choices(self, bot_home):
-        owner = _owner("once")
-        assert _ask_tool_approval()["approved"] is True
-        assert "choices" not in owner.cards[0] and "scope" not in owner.cards[0]
-
-    def test_a_stray_session_answer_is_one_use_never_forever(self, bot_home, bot_chat):
-        owner = _owner("session", "once")
-        assert _ask_tool_approval()["approved"] is True
-        assert _ask_tool_approval()["approved"] is True
-        assert len(owner.cards) == 2
-
-    def test_always_allow_persists_for_the_profile(self, bot_home, bot_chat):
-        owner = _owner("always")
-        assert _ask_tool_approval()["approved"] is True
-        assert "plugin_rule:k" in hc.load_config().get("command_allowlist", [])
-        assert _ask_tool_approval()["approved"] is True
-        assert len(owner.cards) == 1
-
-    def test_deny_is_not_retried_until_the_next_message(self, bot_home, bot_chat):
-        owner = _owner("deny", "once")
-        first = _ask_tool_approval()
-        assert first["approved"] is False and first["outcome"] == "denied"
-        retry = _ask_tool_approval()
-        assert retry["approved"] is False and retry["outcome"] == "denied"
-        assert "next message" in retry["message"]
-        assert len(owner.cards) == 1
-        tokens = approval_context.set_current_observability_context(turn_id="turn-2")
-        try:
-            assert _ask_tool_approval()["approved"] is True
-        finally:
-            approval_context.reset_current_observability_context(tokens)
-        assert len(owner.cards) == 2
-
-    def test_deny_outside_the_bot_chat_asks_again(self, bot_home):
-        owner = _owner("deny", "once")
-        assert _ask_tool_approval()["approved"] is False
-        assert _ask_tool_approval()["approved"] is True
-        assert len(owner.cards) == 2
 
 
 class TestClassification:
@@ -181,9 +122,9 @@ class TestAttendedDrafts:
         assert card["command"] == EMAIL_ARGS["body"]
         assert card["draft"] == {"kind": "outbound_message", "channel": "Gmail", "recipient": "ada@example.com",
                                  "subject": "Lunch", "text": "Lunch at noon?", "editable": True, "held": False}
-        assert card["allow_session"] is False and card["allow_permanent"] is False
+        assert card["choices"] == ["once", "deny"]
 
-    def test_discard_is_final_and_tells_the_agent_not_to_retry(self, bot_home, bot_chat, owner_app):
+    def test_discard_is_final_and_tells_the_agent_not_to_retry(self, bot_home, owner_app):
         owner = _owner("deny", "once")
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
         assert args is None and "NOT sent" in block and "Do NOT retry" in block
@@ -760,7 +701,6 @@ class TestAnyChatOfTheBot:
     @pytest.mark.parametrize(("tool", "args"), CONSUMERS)
     def test_a_client_that_can_answer_gets_the_card_whatever_the_chat_is_called(self, bot_home, owner_app, tool, args):
         owner = _owner("once")
-        assert approval_context.is_bot_chat_turn() is False
         assert review_outbound(tool, args) == (None, None)
         card = owner.cards[0]
         assert card["choices"] == ["once", "deny"] and "draft" in card
@@ -822,7 +762,7 @@ class TestAnyChatOfTheBot:
         for _ in range(2):
             review_outbound(EMAIL, EMAIL_ARGS)
         assert len(owner.cards) == 2
-        assert all(card["allow_session"] is False and card["allow_permanent"] is False for card in owner.cards)
+        assert all(card["choices"] == ["once", "deny"] for card in owner.cards)
         assert "plugin_rule" not in str(hc.load_config().get("command_allowlist", []))
 
     def test_the_secret_and_too_long_blocks_come_before_any_card_or_draft(self, bot_home, owner_app):

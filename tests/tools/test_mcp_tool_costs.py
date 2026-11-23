@@ -48,7 +48,6 @@ def session():
     with patch.dict(mcp_tool._servers, {"srv": SimpleNamespace(session=session, _rpc_lock=None)}), \
          patch("tools.mcp_tool_loop._run_on_mcp_loop", side_effect=_run_on_loop), \
          patch.dict(mcp_tool._server_error_counts, {}, clear=True), \
-         patch.dict(mcp_tool._server_trust_levels, {}, clear=True), \
          patch.dict(mcp_tool._tool_read_only_hints, {}, clear=True), \
          patch.dict(mcp_tool._server_cost_policies, {}, clear=True), \
          patch.dict(mcp_tool_costs._spent, {}, clear=True), \
@@ -73,19 +72,17 @@ def _call(tool, chat="chat-a", answer="accept"):
     return json.loads(raw), asked
 
 
-def test_untrusted_prompt_names_cost_and_running_total_and_declines_add_nothing(session):
-    _register(dict(COSTED, trust="untrusted"))
-    _, asked = _call("paid_render", answer="decline")
-    assert "Costs about 40 credits." in asked[0] and "used about" not in asked[0]
-    result, asked = _call("paid_render")  # the declined call added nothing
-    assert result == {"result": "ok"} and "used about" not in asked[0]
-    _, asked = _call("batch")
-    assert "Costs 5-20 credits (per item). This chat has used about 40 credits on 'srv' (limit 100)." in asked[0]
-    # An undeclared tool on a costed server keeps main's exact prompt.
-    _, asked = _call("free_status")
-    assert asked == ["MCP tool 'free_status' on UNTRUSTED server 'srv' wants to run. This tool is write-capable "
-                     "(no readOnlyHint=true annotation) and may modify external state."]
-    assert session.call_tool.await_count == 3
+def test_over_limit_prompt_names_cost_and_running_total_and_declines_add_nothing(session):
+    _register(dict(COSTED, spend_limit=50))
+    result, asked = _call("paid_render")  # 40 of 50: runs without asking
+    assert result == {"result": "ok"} and asked == []
+    _, asked = _call("paid_render", answer="decline")  # 80 > 50
+    assert "Costs about 40 credits." in asked[0] and "used about 40 credits" in asked[0]
+    _, asked = _call("batch", answer="decline")  # the declined call added nothing: 40 + 20 > 50
+    assert "Costs 5-20 credits (per item). This chat has used about 40 credits on 'srv' (limit 50)." in asked[0]
+    result, asked = _call("free_status")  # an undeclared tool on a costed server never asks
+    assert result == {"result": "ok"} and asked == []
+    assert session.call_tool.await_count == 2
 
 
 def test_full_trust_asks_only_past_the_limit_and_unattended_refuses_without_dispatch(session):
@@ -113,26 +110,6 @@ def test_full_trust_asks_only_past_the_limit_and_unattended_refuses_without_disp
         reset_current_session_key(token)
         clear_session_vars(tokens)
     assert "used about 140 credits" in result["error"] and session.call_tool.await_count == dispatched
-
-
-def test_over_limit_untrusted_prompt_shows_notice_then_arguments_on_the_text_fallback(session):
-    """A surface without approval buttons gets the gateway's plain-text prompt: it carries the spend-limit
-    notice and cost first, then the call's arguments."""
-    from gateway.run import _format_exec_approval_fallback
-    _register(dict(COSTED, spend_limit=30, trust="untrusted"))
-    asked = []
-    token = set_current_session_key("chat-a")
-    try:
-        with patch("tools.approval_prompt.request_elicitation_consent",
-                   side_effect=lambda msg, desc, **kw: asked.append((msg, desc)) or "decline"):
-            handlers._make_tool_handler("srv", "paid_render", 30.0)({"scene": "castle", "notes": "y" * 3_000})
-    finally:
-        reset_current_session_key(token)
-    text = _format_exec_approval_fallback(*asked[0], "/", allow_permanent=False, allow_session=False)
-    notice, cost, arg = (text.find(s) for s in ("goes past the chat's spend limit", "Costs about 40 credits.",
-                                                 '"scene": "castle"'))
-    assert -1 < notice < arg and -1 < cost < arg
-    assert session.call_tool.await_count == 0
 
 
 def test_chats_and_profiles_never_share_a_tally(session):
@@ -206,8 +183,8 @@ def test_a_chat_keeps_its_total_across_a_rotation_and_each_cron_run_has_its_own(
     for _ in range(2):
         _call("paid_render", chat="parent")
     # Compression (CLI, TUI/Desktop) and /branch continue the chat under a new id through this one hook.
-    from tools.approval_yolo import transfer_session_yolo
-    transfer_session_yolo("parent", "child")
+    from tools.mcp_tool_costs import transfer_session
+    transfer_session("parent", "child")
     assert "used about 80 credits" in _call("paid_render", chat="child", answer="decline")[1][0]
     # Cron: the approval session key is "" for every job; each run binds its own tally.
     tokens = set_session_vars(cron_session="1")

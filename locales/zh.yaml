@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "y"
   tui:
     approval_once: "允许一次"
-    approval_session: "本会话内允许"
-    approval_always: "加入永久白名单"
     approval_deny: "拒绝"
     approval_view: "显示完整命令"
     approval_title: "⚠️  危险命令"

@@ -1,15 +1,9 @@
-"""Only once/session/always count as consent.
+"""Only "once" counts as consent.
 
-The approval gate used to be a deny-list: it refused "deny", ``None`` and "timeout" and treated
-every other value as a yes. The local CLI prompt is safe either way because
-``prompt_dangerous_approval`` normalizes keystrokes through a lookup table, but two paths hand
-their answer straight through to ``grant``:
-
-* the gateway round-trip (``_await_gateway_decision``), an inter-process message, and
-* third-party approval transport plugins.
-
-So a client that starts sending ``{"choice": "approve"}`` after an upgrade, a truncated payload, or
-a plugin bug read as consent and the command ran.
+The owner-decision gate used to be a deny-list: it refused "deny", ``None`` and "timeout" and treated
+every other value as a yes. The gateway round-trip (``_await_gateway_decision``) hands its answer
+straight through to ``grant``, so a client that starts sending ``{"choice": "approve"}`` after an
+upgrade, or a truncated payload, read as consent and the draft went out.
 
 This test pins the allow-list in ``tools.approval._human_decision.grant``.
 """
@@ -19,13 +13,18 @@ from __future__ import annotations
 import pytest
 
 import tools.approval as approval_module
-from tools import approval_context
-from tools.approval import check_all_command_guards
+from tools.approval import request_draft_approval
 from tools.terminal_tool import set_approval_callback
 from tests.waiting import wait_until
 
 
-DANGEROUS = "rm -rf /tmp/approval-allowlist-testdir"
+DRAFT = "Dinner at 7?"
+
+
+def ask_owner():
+    return request_draft_approval(text=DRAFT, description="Send a message", pattern_key="draft:allowlist",
+                                  draft={"kind": "message"})
+
 
 # Values a gateway client or transport plugin could plausibly send that are NOT consent. Every one
 # of these executed the command while the gate was a deny-list.
@@ -45,33 +44,25 @@ NOT_CONSENT = [
 
 @pytest.fixture(autouse=True)
 def _clean_approval_env(monkeypatch):
-    """Neutral approval environment: no yolo, manual mode, tirith quiet, no leftover grants."""
-    for key in ("HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION", "HERMES_SESSION_PLATFORM",
-                "HERMES_CRON_SESSION", "HERMES_YOLO_MODE"):
+    """Neutral approval environment."""
+    for key in ("HERMES_EXEC_ASK", "HERMES_GATEWAY_SESSION", "HERMES_SESSION_PLATFORM", "HERMES_CRON_SESSION"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("HERMES_INTERACTIVE", "1")
-    monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", False)
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
-    approval_module._session_approved.clear()
-    approval_module._permanent_approved.clear()
-    approval_module._denial_tally.clear()
+    monkeypatch.setattr("tools.details_bubble.post_details", lambda *a, **k: None)
     set_approval_callback(None)
     yield
-    approval_module._session_approved.clear()
-    approval_module._permanent_approved.clear()
-    approval_module._denial_tally.clear()
     set_approval_callback(None)
 
 
 def _drive_gateway(monkeypatch, answer):
-    """Run the command gate through the gateway branch with ``answer`` as the user's reply."""
+    """Run the owner gate through the gateway branch with ``answer`` as the user's reply."""
     monkeypatch.setenv("HERMES_EXEC_ASK", "1")
     monkeypatch.setattr(approval_module, "_gateway_notify_cb", lambda _sk: (lambda *a, **k: True))
     monkeypatch.setattr(
         approval_module, "_await_gateway_decision",
         lambda *a, **k: {"resolved": True, "choice": answer, "reason": None},
     )
-    return check_all_command_guards(DANGEROUS, "local")
+    return ask_owner()
 
 
 class TestGatewayAnswersMustBeConsentWords:
@@ -84,33 +75,16 @@ class TestGatewayAnswersMustBeConsentWords:
         assert result.get("user_consent") is False
         assert "not a recognized decision" in (result.get("message") or "")
 
-    @pytest.mark.parametrize("answer", ["ONCE", " once\n", "Approve"])
+    @pytest.mark.parametrize("answer", ["ONCE", " once\n", "Approve", "session", "always"])
     def test_spelling_variants_of_once_approve_this_call_only(self, monkeypatch, answer):
-        result = _drive_gateway(monkeypatch, answer)
-
-        assert result.get("approved") is True
-        assert not approval_module._session_approved
-
-    def test_unrecognized_answer_summary_names_the_gate_noun(self, monkeypatch):
-        """execute_code's refusal must say "code", like every other refusal on that gate."""
-        monkeypatch.setenv("HERMES_EXEC_ASK", "1")
-        monkeypatch.setattr(approval_module, "_gateway_notify_cb", lambda _sk: (lambda *a, **k: True))
-        monkeypatch.setattr(
-            approval_module, "_await_gateway_decision",
-            lambda *a, **k: {"resolved": True, "choice": "yes", "reason": None},
-        )
-        result = approval_module.check_execute_code_guard("print('x')", "local")
-
-        assert result.get("outcome") == "unrecognized_answer"
-        assert result.get("user_summary") == approval_module._user_summary("unrecognized_answer", noun="code")
-        assert "code" in result["user_summary"] and "command" not in result["user_summary"]
+        assert _drive_gateway(monkeypatch, answer).get("approved") is True
 
 
 # --- The answer is canonical where it is stored, not only in ``grant`` ---------------------------
 # Real round-trip (register_gateway_notify -> resolve_gateway_approval), no mocked wait: the
-# coalescing rule and the non-grant consent gates read ``entry.result`` before ``grant`` runs.
+# coalescing rule reads ``entry.result`` before ``grant`` runs.
 
-def _gateway_guard(session_key, command=DANGEROUS):
+def _gateway_guard(session_key):
     import contextvars
     from gateway.session_context import set_session_vars
     from tools.approval_context import set_current_session_key
@@ -118,7 +92,7 @@ def _gateway_guard(session_key, command=DANGEROUS):
     def run():
         set_session_vars(session_key=session_key, platform="whatsapp")
         set_current_session_key(session_key)
-        return check_all_command_guards(command, "local")
+        return ask_owner()
 
     return contextvars.Context().run(run)
 

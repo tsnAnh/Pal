@@ -1,7 +1,7 @@
 """Classic CLI slash commands on the shared gateway, beyond the view's own controls.
 
 ``GatewayChatView.command`` answers the controls it owns (/stop /approve /answer /discard
-/branch /model /compress /yolo /quit). This module adds the session commands main's classic
+/branch /model /compress /quit). This module adds the session commands main's classic
 CLI ran in-process, mapped onto what the owner serves -- the mapping Ink uses
 (``ui-tui/src/app/slash/canonicalSessionCommands.ts``):
 
@@ -28,7 +28,7 @@ PARITY_DOC = "https://hermes-agent.nousresearch.com/docs/developer-guide/gateway
 VIEW_ROUTES = {
     "quit": "detach", "stop": "session.interrupt", "approve": "approval.respond (prompt id)",
     "branch": "session.mutate branch", "model": "session.mutate model", "compress": "session.mutate compress",
-    "yolo": "config.set yolo", "help": "local",
+    "help": "local",
     "title": "session.mutate rename", "undo": "session.mutate rewind", "retry": "session.mutate rewind + resubmit",
     "new": "session.create", "clear": "session.create", "usage": "slash.exec + last-turn receipt",
     "tools": "session.info launch toolsets",
@@ -204,7 +204,7 @@ async def forward(view, name, rest):
         print(reply.get("output") or f"/{name}: no output")
 
 
-_VIEW_CONTROLS = frozenset({"quit", "stop", "approve", "branch", "model", "compress", "yolo", "help"})
+_VIEW_CONTROLS = frozenset({"quit", "stop", "approve", "branch", "model", "compress", "help"})
 # /clear is main's "new session + clear screen"; the gateway view keeps scrollback and starts fresh.
 _HANDLERS = {"title": _title, "undo": _undo, "retry": _retry, "new": _new, "clear": _new, "usage": _usage,
              "tools": _tools}
@@ -231,6 +231,6 @@ def help_text():
     from gateway.session_commands import _READ_COMMANDS
     reports = " ".join(f"/{name}" for name in sorted(_READ_COMMANDS - {"help"}))
     return ("/stop, /approve <id> <choice>, /answer <id> <text>, /discard <admission_id> (turn lost during "
-            "restart), /yolo [on|off], /quit (detach). /branch [title], /model <model> [--provider name], "
+            "restart), /quit (detach). /branch [title], /model <model> [--provider name], "
             "/compress [here [N] | <focus>] [--preview]. /title [name], /undo [N], /retry, /new [title] "
             f"(/reset), /usage, /tools.\nReports run by the gateway: {reports}.\nParity table: {PARITY_DOC}")

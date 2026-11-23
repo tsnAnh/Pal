@@ -192,7 +192,7 @@ class TestCliApprovalUi:
         cli._approval_state = {
             "command": giant_cmd,
             "description": "shell command via -c/-lc flag",
-            "choices": ["once", "session", "always", "deny"],
+            "choices": ["once", "deny"],
             "selected": 0,
             "show_full": True,
             "response_queue": queue.Queue(),
@@ -206,8 +206,8 @@ class TestCliApprovalUi:
 
         rendered = "".join(text for _style, text in fragments)
 
-        # All four choices visible even with a huge command.
-        for key in ("approval_once", "approval_session", "approval_always", "approval_deny"):
+        # Both choices visible even with a huge command.
+        for key in ("approval_once", "approval_deny"):
             label = t(f"cli.tui.{key}")
             assert label in rendered, f"choice {label!r} missing"
 
@@ -431,12 +431,12 @@ class TestPersistPromptSummary:
         cli = _make_cli_stub()
         printed = []
         with patch.object(cli_module, "_cprint", printed.append):
-            verdict = self._resolve_approval(cli, "session")
-        assert verdict == "session"
+            verdict = self._resolve_approval(cli, "once")
+        assert verdict == "once"
         summary = "\n".join(printed)
         assert "Approval" in summary
         assert "rm -rf /tmp/scratch" in summary
-        assert "allowed for session" in summary
+        assert "allowed once" in summary
 
 
     def test_persist_prompts_false_suppresses_summary(self):

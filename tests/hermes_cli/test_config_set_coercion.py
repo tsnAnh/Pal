@@ -5,7 +5,7 @@ Covers:
   numeric-typed keys (old code used str.isdigit() and stored strings).
 - CFG-05: null/none/~ coerce to None so a nullable field can be cleared.
 - CFG-04: malformed dotted keys with empty segments are rejected.
-- Guard: string-typed enum keys (approvals.mode) are NOT coerced.
+- Guard: string-typed enum keys (approvals.cron_mode) are NOT coerced.
 """
 
 import pytest
@@ -75,6 +75,6 @@ class TestMalformedKey:
 class TestStringTypedGuardPreserved:
     def test_enum_off_stays_string(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-        cfg.set_config_value("approvals.mode", "off")
-        v = _read(tmp_path, "approvals", "mode")
+        cfg.set_config_value("approvals.cron_mode", "off")
+        v = _read(tmp_path, "approvals", "cron_mode")
         assert v == "off" and isinstance(v, str)  # not bool False

@@ -2374,8 +2374,6 @@ cli:
     yes_initial: "o"
   tui:
     approval_once: "Autoriser une fois"
-    approval_session: "Autoriser pour cette session"
-    approval_always: "Ajouter à la liste d'autorisation permanente"
     approval_deny: "Refuser"
     approval_view: "Commande complète"
     approval_title: "⚠️  Commande dangereuse"

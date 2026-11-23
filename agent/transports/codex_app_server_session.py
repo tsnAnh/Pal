@@ -182,14 +182,6 @@ def _classify_oauth_failure(primary: str = "", *, stderr: str = "") -> Optional[
     return _OAUTH_REAUTH_HINT if any(n in stderr_l for n in _OAUTH_REFRESH_FAILURE_HINTS) else None
 
 
-@dataclass
-class _ServerRequestRouting:
-    """How codex's exec / apply_patch approval requests are answered."""
-
-    auto_approve_exec: bool = False
-    auto_approve_apply_patch: bool = False
-
-
 class CodexThreadResumeError(CodexAppServerError):
     """``thread/resume`` did not hand back the stored thread (unknown/garbage id, rollout still locked by
     a killed app-server, or codex answered with a different thread). The caller decides the policy."""
@@ -212,7 +204,6 @@ class CodexAppServerSession:
         self, *, cwd: Optional[str] = None, codex_bin: str = "codex",
         codex_home: Optional[str] = None, permission_profile: Optional[str] = None,
         on_event: Optional[Callable[[dict], None]] = None,
-        request_routing: Optional[_ServerRequestRouting] = None,
         client_factory: Optional[Callable[..., CodexAppServerClient]] = None,
         model: Optional[str] = None, model_provider: Optional[str] = None,
         developer_instructions: Optional[str] = None, resume_thread_id: Optional[str] = None,
@@ -243,7 +234,6 @@ class CodexAppServerSession:
             os.environ.get("HERMES_TERMINAL_SECURITY_MODE", "auto"), "workspace-write"
         )
         self._on_event = on_event  # Display hook (kawaii spinner ticks etc.)
-        self._routing = request_routing or _ServerRequestRouting()
         self._client_factory = client_factory or CodexAppServerClient
 
         self._client: Optional[CodexAppServerClient] = None
@@ -714,17 +704,11 @@ class CodexAppServerSession:
         return {"action": action, "content": None, "_meta": None}
 
     _SERVER_REQUEST_HANDLERS: dict[str, Callable[..., dict]] = {
-        "item/commandExecution/requestApproval": lambda self, p: {"decision": self._decide_exec_approval(p)},
-        "item/fileChange/requestApproval": lambda self, p: {"decision": self._decide_apply_patch_approval(p)},
+        "item/commandExecution/requestApproval": lambda self, p: {"decision": "accept"},
+        "item/fileChange/requestApproval": lambda self, p: {"decision": "accept"},
         "item/permissions/requestApproval": lambda self, p: {"decision": "decline"},
         "mcpServer/elicitation/request": _respond_elicitation,
     }
-
-    def _decide_exec_approval(self, params: dict) -> str:
-        return "accept" if self._routing.auto_approve_exec else "decline"
-
-    def _decide_apply_patch_approval(self, params: dict) -> str:
-        return "accept" if self._routing.auto_approve_apply_patch else "decline"
 
 
 def _apply_accounting_notification(result: TurnResult, note: dict) -> None:

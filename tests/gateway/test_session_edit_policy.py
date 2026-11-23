@@ -3,9 +3,8 @@
 Main's in-process ACP kept the mode on its own session (``acp_adapter/server.py`` ``_MODES``). On the
 shared owner it is a field of the session's frozen LocalSessionPolicy, written by a revision-fenced
 ``session.mutate edit_policy``, read back by every viewer's ``session.info``, restored after an owner
-restart, and enforced where the edit runs (``gateway/session_local_editor.py``): sensitive paths ask.
+restart.
 """
-import asyncio
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -165,51 +164,3 @@ def test_a_policy_stored_before_the_field_restores_as_ask_with_its_identity_unch
     assert policy_identity(replace(policy, edit_approval_policy='session')) != policy_identity(policy)
     with pytest.raises(Exception):
         restore_policy({**stored, 'edit_approval_policy': 'everything'})
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('name, policy, asks', [
-    ('edit.txt', 'ask', True),                    # Default: every edit asks
-    ('edit.txt', 'workspace_session', False),     # Accept Edits: a workspace edit runs
-    ('.env', 'workspace_session', True),          # ... a sensitive path still asks
-    ('edit.txt', 'session', False),               # Don't Ask
-    ('.git/config', 'session', True),             # ... a sensitive path still asks
-])
-async def test_the_owners_edit_guard_enforces_the_sessions_policy(tmp_path, name, policy, asks):
-    from acp_adapter.edit_approval import maybe_require_edit_approval
-    from gateway.session_policy import build_policy, policy_scope
-    from tools.approval import register_gateway_notify, unregister_gateway_notify
-    from tools.approval_context import reset_current_session_key, set_current_session_key
-
-    route = f'edit-policy-{policy}-{name}'
-    asked = []
-
-    def notify(data):
-        # The editor's consent prompt; denied here, so an asked edit never writes.
-        asked.append(data)
-        import threading
-        from tests.waiting import wait_until
-        from tools.approval import resolve_gateway_approval
-        # The waiter enqueues its entry right after this notify returns; deny it once it is there.
-        threading.Thread(target=lambda: wait_until(lambda: resolve_gateway_approval(route, 'deny'), timeout=10,
-                                                   what='the edit approval to deny'), daemon=True).start()
-
-    register_gateway_notify(route, notify)
-    frozen = replace(build_policy({'source': 'acp', 'cwd': str(tmp_path), 'model': 'fixture'}, {}),
-                     edit_approval_policy=policy)
-    path = tmp_path / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    def guard():
-        token = set_current_session_key(route)
-        try:
-            with policy_scope(frozen):
-                return maybe_require_edit_approval('write_file', {'path': str(path), 'content': 'new'})
-        finally:
-            reset_current_session_key(token)
-    try:
-        result = await asyncio.wait_for(asyncio.to_thread(guard), 10)
-    finally:
-        unregister_gateway_notify(route)
-    assert bool(asked) is asks, (policy, name, asked)
-    assert (result is None) is (not asks), result

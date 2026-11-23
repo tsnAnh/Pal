@@ -144,12 +144,10 @@ def _server_declarations(
 
 
 def _server_trust(manifest: Mapping[str, Any], mcp_servers: Mapping[str, dict[str, Any]]) -> dict[str, str]:
-    """Servers the package asks Hermes to gate: ``extensions.com.nousresearch.hermes.servers.<name>.trust``.
+    """Trust tiers a package declares: ``extensions.com.nousresearch.hermes.servers.<name>.trust``.
 
-    The package may only narrow access. ``untrusted`` makes every write-capable call to that server
-    ask the user first (the native ``trust: untrusted`` gate); ``full`` is the default and so changes
-    nothing. A package can never widen a server the user configured: a ``config.yaml`` server with
-    the same name replaces the package's entry, trust included.
+    The tier is validated and carried on the server entry so existing v1 manifests keep loading;
+    the runtime no longer asks before calls on an ``untrusted`` server.
     """
     raw_servers = manifest.get("extensions", {}).get(_HERMES_EXTENSION, {}).get("servers", {})
     trust: dict[str, str] = {}

@@ -120,10 +120,10 @@ def test_durable_kanban_admission_preserves_headless_policy_in_worker(kanban_own
     from gateway.session_kanban import run_task
     from gateway.session_managed_worker import _bootstrap, worker_turn_scope
     from gateway.session_policy import policy_for_source
-    from tools.approval import request_tool_approval
+    from tools.approval import check_execute_code_guard
     from tools.approval_context import _is_single_query_approval_context
 
-    owner = kanban_owner({**_CONFIG, 'approvals': {'mode': 'smart', 'single_query_mode': mode}})
+    owner = kanban_owner({**_CONFIG, 'approvals': {'single_query_mode': mode}})
     authority = owner.authority
 
     async def scenario():
@@ -140,8 +140,7 @@ def test_durable_kanban_admission_preserves_headless_policy_in_worker(kanban_own
                                {'execution_id': 'probe'})
             with worker_turn_scope(frame):
                 assert _is_single_query_approval_context(), 'persisted card must reach worker as single-query'
-                result = request_tool_approval('execute_code', 'headless test',
-                    approval_callback=lambda *args: (_ for _ in ()).throw(AssertionError('must not prompt')))
+                result = check_execute_code_guard("import shutil\nshutil.rmtree('victim')", 'local')
                 assert result['approved'] is (mode == 'approve')
                 if mode == 'deny':
                     assert 'single' in result['message'].lower()

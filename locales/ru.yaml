@@ -2125,8 +2125,6 @@ cli:
     yes_initial: "y"
   tui:
     approval_once: "Разрешить один раз"
-    approval_session: "Разрешить на этот сеанс"
-    approval_always: "Добавить в постоянный список разрешённых"
     approval_deny: "Отклонить"
     approval_view: "Показать команду целиком"
     approval_title: "⚠️  Опасная команда"

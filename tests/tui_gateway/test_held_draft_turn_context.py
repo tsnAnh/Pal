@@ -1,11 +1,10 @@
-import json
 import threading
 import types
 
 import pytest
 
 import hermes_cli.config as hc
-from tools import approval, approval_context, bot_mode_draft_store
+from tools import approval, bot_mode_draft_store
 from tools.bot_mode_drafts import review_outbound
 from tui_gateway import server
 
@@ -61,7 +60,6 @@ def _run_turn(title, clients, monkeypatch):
     outcome = {}
 
     def run_conversation(message, **kwargs):
-        outcome["bot_chat"] = approval_context.is_bot_chat_turn()
         outcome["review"] = review_outbound(TOOL, ARGS)
         return {"final_response": "done"}
 
@@ -84,7 +82,6 @@ def test_a_turn_of_an_ordinary_chat_with_an_answering_client_asks_inline(turn, m
 
     approval.register_gateway_notify(KEY, owner)
     outcome = _run_turn("Some other chat", [object()], monkeypatch)
-    assert outcome["bot_chat"] is False
     assert outcome["review"] == (None, None)
     assert len(cards) == 1 and cards[0]["draft"]["recipient"] == "client-1"
     assert cards[0]["command"] == ARGS["message"]
@@ -112,5 +109,4 @@ def test_a_turn_with_no_answering_client_holds_and_the_draft_is_listed_for_every
 def test_the_canonical_bot_chat_turn_without_a_client_holds_too(turn, monkeypatch):
     approval.register_gateway_notify(KEY, lambda data: None)
     outcome = _run_turn("Bot Chat", [], monkeypatch)
-    assert outcome["bot_chat"] is True
     assert outcome["review"][0] is not None and len(bot_mode_draft_store.list_pending()) == 1

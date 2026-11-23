@@ -11,12 +11,10 @@ from tools.approval_context import _get_cron_approval_mode
 
 @pytest.fixture(autouse=True)
 def _clear_approval_state():
-    approval_module._permanent_approved.clear()
     approval_module.clear_session("default")
     approval_module.clear_session("test-session")
     reset_session_vars()
     yield
-    approval_module._permanent_approved.clear()
     approval_module.clear_session("default")
     approval_module.clear_session("test-session")
     reset_session_vars()
@@ -99,8 +97,6 @@ class TestCronContextVarDetection:
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", False)
-        monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
         monkeypatch.setattr(approval_context, "_get_cron_approval_mode", lambda: "deny")
 
         tokens = set_session_vars(cron_session="1")
@@ -121,8 +117,6 @@ class TestCronContextVarDetection:
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", False)
-        monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "manual")
         monkeypatch.setattr(approval_context, "_get_cron_approval_mode", lambda: "deny")
 
         tokens = set_session_vars(cron_session="")
@@ -145,7 +139,6 @@ class TestCronDenyMode:
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="deny"):
@@ -159,7 +152,6 @@ class TestCronDenyMode:
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="deny"):
@@ -176,7 +168,6 @@ class TestCronApproveMode:
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="approve"):
@@ -196,7 +187,6 @@ class TestCronDenyModeAllGuards:
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="deny"):
@@ -209,34 +199,29 @@ class TestCronDenyModeAllGuards:
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="deny"):
             result = check_all_command_guards("echo hello", "local")
             assert result["approved"]
 
-    def test_permanent_pattern_key_allows_matching_command_in_cron_deny(self, monkeypatch):
-        """A canonical dangerous-pattern key in command_allowlist applies in unattended mode."""
+    def test_heredoc_script_is_refused_in_cron_deny(self, monkeypatch):
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
-        approval_module.load_permanent({"script execution via heredoc"})
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="deny"):
             result = check_all_command_guards("python3 - <<'PY'\nprint('ok')\nPY", "local")
 
-        assert result["approved"] is True
+        assert result["approved"] is False and "cron_mode" in result["message"]
 
     def test_combined_guard_approve_mode(self, monkeypatch):
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="approve"):
@@ -255,35 +240,10 @@ class TestCronModeInteractions:
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         from unittest.mock import patch as mock_patch
         with mock_patch("tools.approval_context._get_cron_approval_mode", return_value="deny"):
             result = check_dangerous_command("rm -rf /", "docker")
-            assert result["approved"]
-
-    def test_yolo_overrides_cron_deny(self, monkeypatch):
-        """--yolo still bypasses cron_mode=deny for dangerous (non-hardline) commands."""
-        monkeypatch.setenv("HERMES_CRON_SESSION", "1")
-        monkeypatch.setenv("HERMES_YOLO_MODE", "1")
-        monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
-        monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-
-        # _YOLO_MODE_FROZEN is frozen at module import time (security: prevents
-        # prompt injection from runtime-setting HERMES_YOLO_MODE). When the
-        # test process imports tools.approval BEFORE this test sets the env,
-        # the frozen value is False and yolo-bypass paths don't activate.
-        # Patch the module attribute directly to simulate process-startup
-        # with HERMES_YOLO_MODE=1.
-        from unittest.mock import patch as mock_patch
-        import tools.approval
-        with (
-            mock_patch.object(tools.approval, "_YOLO_MODE_FROZEN", True),
-            mock_patch("tools.approval_context._get_cron_approval_mode", return_value="deny"),
-        ):
-            # Use a dangerous-but-not-hardline command — `rm -rf /` is now
-            # hardline-blocked regardless of yolo (see test_hardline_blocklist.py).
-            result = check_dangerous_command("rm -rf /tmp/stuff", "local")
             assert result["approved"]
 
     def test_non_cron_non_interactive_still_auto_approves(self, monkeypatch):
@@ -291,7 +251,6 @@ class TestCronModeInteractions:
         monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
 
         result = check_dangerous_command("rm -rf /tmp/stuff", "local")
         assert result["approved"]
@@ -313,7 +272,6 @@ class TestCronWithGatewayOrigin:
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
 
         from gateway.session_context import set_session_vars, clear_session_vars
@@ -335,7 +293,6 @@ class TestCronWithGatewayOrigin:
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
         monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
 
         from gateway.session_context import set_session_vars, clear_session_vars
