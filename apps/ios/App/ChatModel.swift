@@ -169,7 +169,6 @@ final class ChatModel {
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
     private var delivering = false
-    private var retried: Set<String> = []
     private var absorbedEchoes = AbsorbedEchoLedger()
     private var lastCached: CachedTimeline?
 
@@ -319,7 +318,6 @@ final class ChatModel {
         guard let outbox, let failed = outboxEntries.first(where: { $0.submissionID == submissionID }) else { return }
         Task {
             guard let entry = try? await outbox.requeue(failed) else { return }
-            retried.insert(submissionID)
             await refreshOutbox()
             _ = await outbox.deliver(entry.submissionID)
             await refreshOutbox()
@@ -731,14 +729,14 @@ final class ChatModel {
         var sources = timelineRows.map { (id: rowID(for: $0), item: $0.item, stored: $0.rowID) }
         let known = Set(timelineRows.map(\.item.id)).union(sources.map(\.id))
         let awaiting = outboxEntries.filter { entry in
-            entry.state == .pending && !retried.contains(entry.submissionID) && !known.contains("submission:\(entry.submissionID)")
+            entry.state == .pending && !known.contains("submission:\(entry.submissionID)")
         }
         let absorbed = absorbedEchoes.hiddenSubmissions(
             pending: awaiting.map { AbsorbedEchoLedger.Pending(submissionID: $0.submissionID, text: displayText(for: $0)) },
             absorbed: timelineRows.map(\.item).filter { $0.id.hasPrefix("absorbed:") }
         )
         var shownOutbox: Set<String> = []
-        for entry in outboxEntries where !retried.contains(entry.submissionID) {
+        for entry in outboxEntries {
             let id = "submission:\(entry.submissionID)"
             guard !known.contains(id), !absorbed.contains(entry.submissionID) else { continue }
             if case .admitted = entry.state { continue }
@@ -782,8 +780,10 @@ final class ChatModel {
             lastSeen: lastSeenAtOpen
         )
         let entryByItem = Dictionary(entries.map { ($0.item.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let visible = outboxEntries.filter { !retried.contains($0.submissionID) }
-        let outboxByItem = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
+        let outboxByItem = Dictionary(
+            outboxEntries.map { ("submission:\($0.submissionID)", $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         var next: [ChatRow] = []
         var nextBuilt: [String: BuiltRow] = [:]
         next.reserveCapacity(sources.count)

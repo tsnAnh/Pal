@@ -61,14 +61,14 @@ public struct BotChatResolver: Sendable {
         try await api.list(title: Self.title).first { $0.title == Self.title }
     }
 
-    public func open(_ api: SessionAPI, timelineLimit: Int? = nil) async throws -> BotChatResolution {
+    public func open(_ api: SessionAPI, timelineLimit: Int? = nil, omitMessages: Bool = false) async throws -> BotChatResolution {
         _ = await api.supportsClarifyBatch()
         if let row = try await lookup(api) {
-            return try await resume(api, Self.target(of: row), timelineLimit)
+            return try await resume(api, Self.target(of: row), timelineLimit, omitMessages)
         }
         if let adopted = try await lookup(api) {
             diagnostics.info("chat", "adopted a chat that appeared before create")
-            return try await resume(api, Self.target(of: adopted), timelineLimit)
+            return try await resume(api, Self.target(of: adopted), timelineLimit, omitMessages)
         }
         let minted = try await api.create(title: Self.title, requestID: UUID().uuidString, hidden: true)
         guard let registered = try await lookup(api) else { throw ChatError.titleNotApplied }
@@ -77,12 +77,12 @@ public struct BotChatResolver: Sendable {
             return BotChatResolution(snapshot: minted, created: true, timeline: nil)
         }
         diagnostics.warning("chat", "created chat lost the title race; adopting the registered one")
-        return try await resume(api, target, timelineLimit)
+        return try await resume(api, target, timelineLimit, omitMessages)
     }
 
-    private func resume(_ api: SessionAPI, _ sessionID: String, _ timelineLimit: Int?) async throws -> BotChatResolution {
+    private func resume(_ api: SessionAPI, _ sessionID: String, _ timelineLimit: Int?, _ omitMessages: Bool) async throws -> BotChatResolution {
         guard let timelineLimit else {
-            return BotChatResolution(snapshot: try await api.resume(sessionID: sessionID), created: false, timeline: nil)
+            return BotChatResolution(snapshot: try await api.resume(sessionID: sessionID, omitMessages: omitMessages), created: false, timeline: nil)
         }
         let resumed = try await api.resumeTimeline(sessionID: sessionID, timelineLimit: timelineLimit)
         return BotChatResolution(snapshot: resumed.snapshot, created: false, timeline: resumed.timeline)

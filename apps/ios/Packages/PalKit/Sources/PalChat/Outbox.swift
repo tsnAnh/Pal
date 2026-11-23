@@ -177,6 +177,8 @@ public actor Outbox {
     }
 
     public static let attachmentUnreadable = "attachment_unreadable"
+    public static let deliveryExhausted = "delivery_exhausted"
+    public static let maxDeliveryAttempts = 6
 
     public static func backoff(afterAttempts attempts: Int) -> TimeInterval {
         min(300, 2 * pow(2, Double(max(attempts, 1) - 1)))
@@ -210,17 +212,17 @@ public actor Outbox {
     }
 
     public func requeue(_ failed: OutboxEntry) throws -> OutboxEntry {
-        let entry = try enqueue(
-            botID: failed.botID,
-            text: failed.text,
-            attachments: failed.attachments,
-            files: try fileStore.load(failed.files)
-        )
+        var revived = failed
         entries = try store.update { stored in
-            stored.removeAll { $0.submissionID == failed.submissionID && $0.state != .pending }
+            guard let index = stored.firstIndex(where: { $0.submissionID == failed.submissionID }),
+                  case .failed = stored[index].state
+            else { return }
+            stored[index].state = .pending
+            stored[index].attempts = 0
+            stored[index].nextAttemptAt = nil
+            revived = stored[index]
         }.entries
-        fileStore.remove(submissionID: failed.submissionID)
-        return entry
+        return revived
     }
 
     public func snapshot(botID: String? = nil) -> [OutboxEntry] {
@@ -256,6 +258,11 @@ public actor Outbox {
                 diagnostics.warning("outbox", "submission refused: reason=\(refusal.reason)")
                 record(submissionID, state: .failed(reason: refusal.reason))
                 return .failed(reason: refusal.reason)
+            }
+            if entry.attempts + 1 >= Self.maxDeliveryAttempts {
+                diagnostics.warning("outbox", "delivery gave up after \(entry.attempts + 1) attempts: \(Diagnostics.describe(error))")
+                record(submissionID, state: .failed(reason: Self.deliveryExhausted))
+                return .failed(reason: Self.deliveryExhausted)
             }
             diagnostics.info("outbox", "delivery will retry: \(Diagnostics.describe(error))")
             scheduleRetry(submissionID)
@@ -338,7 +345,7 @@ public struct BotChatSubmitter: OutboxSubmitter {
         let connection = try await connector.connect()
         let api = SessionAPI(connection: connection, profile: entry.botID)
         do {
-            let resolution = try await BotChatResolver(diagnostics: diagnostics).open(api)
+            let resolution = try await BotChatResolver(diagnostics: diagnostics).open(api, omitMessages: true)
             let status = try await api.submit(
                 sessionID: resolution.snapshot.sessionID,
                 text: entry.text,
