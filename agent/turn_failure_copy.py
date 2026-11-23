@@ -99,8 +99,10 @@ def untyped_failed_turn_display_kind(role: Any, content: Any) -> Optional[str]:
     return None
 
 
-def failed_turn_notice(turn_messages: Any) -> str:
+def failed_turn_notice(turn_messages: Any, *, unattended: bool = False) -> str:
     """Boundary copy for a failed turn: never claim "not processed" when a tool may have run."""
+    if unattended:
+        return AUTOMATION_INTERRUPTED_NOTICE
     for row in turn_messages or ():
         if isinstance(row, dict) and (
             row.get("role") == "tool" or (row.get("role") == "assistant" and row.get("tool_calls"))
