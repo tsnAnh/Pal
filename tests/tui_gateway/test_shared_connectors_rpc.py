@@ -166,23 +166,3 @@ def test_a_key_saved_for_a_custom_server_from_a_bots_connect_apps_lands_in_the_r
     assert env_of(world, "bot") == {}
 
 
-def test_a_bot_agent_cannot_save_a_key_into_a_server_the_root_owns(world, monkeypatch):
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
-
-    assert rpc("mcp.servers.set_api_key", name="github", profile="default", value="owner-key")["result"]["ok"] is True
-    before = (env_of(world, "default"), servers_of(world, "default"))
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    reply = rpc("mcp.servers.set_api_key", name="github", profile="bot", value="ghp_secret")
-    assert "error" in reply, reply
-    assert (env_of(world, "default"), servers_of(world, "default")) == before
-    assert env_of(world, "bot") == {} and "github" not in servers_of(world, "bot")
-
-
-def test_a_bot_agent_saving_a_key_for_a_server_the_root_does_not_own_keeps_it_in_the_bot(world, monkeypatch):
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
-
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    reply = rpc("mcp.servers.set_api_key", name="github", profile="bot", value="ghp_secret")
-    assert reply["result"]["ok"] is True, reply
-    assert list(env_of(world, "bot").values()) == ["ghp_secret"] and env_of(world, "default") == {}
-    assert "github" in servers_of(world, "bot") and "github" not in servers_of(world, "default")

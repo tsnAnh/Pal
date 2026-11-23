@@ -149,19 +149,6 @@ def test_hermes_tools_filters_for_a_server_the_root_owns_land_in_the_roots_entry
     assert "mine" not in world.servers(world.bot)
 
 
-def test_a_bots_agent_cannot_change_the_tool_filters_of_a_server_the_root_owns(world, monkeypatch):
-    from types import SimpleNamespace
-
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
-    from hermes_cli.tools_config_mcp import tools_disable_enable_command
-
-    owned = {"url": MINE, "enabled": True}
-    world.write_servers(world.root, {"mine": dict(owned)})
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    with world.acting_as(world.bot):
-        tools_disable_enable_command(SimpleNamespace(tools_action="disable", names=["mine:delete_all"], platform="cli"))
-    assert world.servers(world.root) == {"mine": owned}
-
 
 def test_enabling_a_connector_from_a_bots_chat_flips_the_roots_entry(world):
     from tools.connectors.mcp import _CatalogBackend

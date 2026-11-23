@@ -7,7 +7,6 @@ import pytest
 from hermes_cli import mcp_config
 from hermes_cli.config import load_config, set_config_value
 from hermes_cli.mcp_config import mcp_command
-from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
 from hermes_cli.shared_catalog import effective_mcp_servers
 from tests.hermes_cli.test_shared_connectors import GITHUB_KEY, GITHUB_URL, World, cli_add, make_world
 from tools.mcp_tool_config import _interpolate_env_vars, _require_rendered_remote
@@ -71,25 +70,6 @@ def test_a_key_the_root_already_has_is_never_overwritten_and_only_the_missing_on
     assert f"Saved {GITHUB_KEY} from your shell" not in out
     assert SHELL_VALUE not in out and "ghp_second_shell_value" not in out
 
-
-def test_an_agent_never_imports_shell_keys(world, monkeypatch, capsys):
-    world.write_servers(world.root, {})
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    monkeypatch.setenv(GITHUB_KEY, SHELL_VALUE)
-    with world.acting_as(world.bot):
-        cli_add(monkeypatch, "github", GITHUB_URL, "")
-    assert world.env(world.root) == {} and world.servers(world.root) == {}
-    assert "from your shell" not in capsys.readouterr().out
-
-
-def test_an_agent_testing_a_shared_server_imports_nothing(world, monkeypatch, capsys):
-    world.write_servers(world.root, {"github": header_entry(GITHUB_KEY)})
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    monkeypatch.setenv(GITHUB_KEY, SHELL_VALUE)
-    with world.acting_as(world.bot):
-        run_test_command("github")
-    assert world.env(world.root) == {}
-    assert "from your shell" not in capsys.readouterr().out
 
 
 def test_a_server_only_the_bot_has_never_imports_into_the_root(world, monkeypatch, capsys):

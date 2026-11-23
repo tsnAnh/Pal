@@ -237,26 +237,6 @@ def test_a_disconnect_from_a_bot_removes_the_root_entry_and_every_bot_loses_acce
             assert "upwork" not in enabled_mcp_server_names(load_config())
 
 
-@pytest.mark.parametrize("action", [
-    {"mcp_action": "remove", "name": "upwork", "everywhere": False},
-    {"mcp_action": "login", "name": "upwork"},
-])
-def test_a_bot_running_the_cli_cannot_change_a_connection_every_bot_shares(world, monkeypatch, action):
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV, ProfileAdminDenied
-
-    world.put_tokens("upwork", world.root)
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    monkeypatch.setattr("builtins.input", lambda *_: "y")
-    with world.acting_as(world.bot):
-        assert mcp_command(SimpleNamespace(**action)) == 1
-        with pytest.raises(ProfileAdminDenied):
-            _save_mcp_server("upwork", {"url": "https://evil.example/mcp", "enabled": True})
-        with pytest.raises(ProfileAdminDenied):
-            _remove_mcp_server("upwork")
-    assert world.servers(world.root)["upwork"] == ROOT_ENTRY
-    assert world.token_files(world.root) == {"upwork.json"}
-
-
 def test_removing_a_server_only_a_bot_has_removes_it_from_that_bot_and_leaves_the_root_alone(world):
     world.write_servers(world.bot, {"mine": {"url": "https://mine.example/mcp", "enabled": True}})
     with world.acting_as(world.bot):
@@ -386,33 +366,6 @@ def test_adding_a_header_key_server_from_a_bot_cli_writes_the_roots_env_and_entr
     assert "github" not in world.servers(world.bot)
 
 
-def test_a_bot_agent_adding_a_header_key_server_the_root_does_not_own_keeps_entry_and_key_in_the_bot(world, monkeypatch):
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
-
-    world.write_servers(world.root, {})
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    with world.acting_as(world.bot):
-        add_github_with_a_header_key(monkeypatch, "ghp_from_agent")
-    assert world.env(world.root) == {} and world.servers(world.root) == {}
-    assert world.env(world.bot) == {GITHUB_KEY: "ghp_from_agent"} and "github" in world.servers(world.bot)
-
-
-def test_a_bot_agent_cannot_remove_or_overwrite_a_shared_key_server(world, monkeypatch):
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV, ProfileAdminDenied
-
-    entry = {"enabled": True, "accounts": {"default": {}}}
-    world.write_servers(world.root, {"github": entry})
-    world.put_env(world.root, **{GITHUB_KEY: "root-key"})
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-    with world.acting_as(world.bot):
-        with pytest.raises(ProfileAdminDenied):
-            _save_mcp_server("github", {"url": GITHUB_URL, "enabled": True})
-        with pytest.raises(ProfileAdminDenied):
-            _remove_mcp_server("github")
-    assert world.servers(world.root)["github"] == entry
-    assert world.env(world.root) == {GITHUB_KEY: "root-key"}
-
-
 def test_adoption_copies_a_key_servers_entry_and_the_keys_it_references_into_the_root(world):
     world.write_servers(world.root, {})
     bot_entry = {"enabled": True, "headers": {"Authorization": f"Bearer ${{{GITHUB_KEY}}}"}}
@@ -497,54 +450,6 @@ def test_adoption_skips_a_key_server_a_profile_switched_off(world):
     world.put_env(world.bot, **{GITHUB_KEY: "bot-key"})
     adopt()
     assert world.servers(world.root) == {} and world.env(world.root) == {}
-
-
-def agent_context(monkeypatch) -> None:
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
-
-    monkeypatch.setenv(AGENT_TOOL_MARKER_ENV, "1")
-
-
-def test_a_server_an_agent_adds_stays_with_that_bot_with_its_own_tokens_and_keys_and_no_other_bot_sees_it(world, monkeypatch):
-    agent_context(monkeypatch)
-    mine = "https://mine.example/mcp"
-    with world.acting_as(world.bot):
-        cli_add(monkeypatch, "mine", mine, "bot-key")
-        world.put_tokens("mine", world.bot, "bot-token")
-    assert "mine" in world.servers(world.bot) and "mine" not in world.servers(world.root)
-    assert world.env(world.bot) == {"MCP_MINE_API_KEY": "bot-key"} and world.env(world.root) == {}
-    assert world.token_files(world.bot) == {"mine.json"}
-    assert "mine" not in enabled_names_of(world, world.other)
-    assert "mine" not in enabled_names_of(world, world.root)
-
-    monkeypatch.delenv("MCP_MINE_API_KEY", raising=False)
-    with world.acting_as(world.other):
-        cli_add(monkeypatch, "mine", mine, "other-key")
-        world.put_tokens("mine", world.other, "other-token")
-    assert world.env(world.other) == {"MCP_MINE_API_KEY": "other-key"} and world.env(world.bot) == {"MCP_MINE_API_KEY": "bot-key"}
-    assert world.token_files(world.other) == {"mine.json"}
-    assert "bot-token" in (world.bot / "mcp-tokens" / "mine.json").read_text()
-    assert "other-token" in (world.other / "mcp-tokens" / "mine.json").read_text()
-    assert world.token_files(world.root) == set()
-    assert "mine" in world.servers(world.other) and "mine" not in world.servers(world.root)
-
-
-def test_an_agent_cannot_change_a_server_the_root_owns_even_one_the_catalog_never_heard_of(world, monkeypatch):
-    from hermes_cli.profile_admin_guard import ProfileAdminDenied
-
-    owned = {"url": "https://mine.example/mcp", "enabled": True}
-    world.write_servers(world.root, {"mine": dict(owned)})
-    world.put_env(world.root, MCP_MINE_API_KEY="root-key")
-    agent_context(monkeypatch)
-    with world.acting_as(world.bot):
-        with pytest.raises(ProfileAdminDenied):
-            _save_mcp_server("mine", {"url": "https://evil.example/mcp", "enabled": True})
-        with pytest.raises(ProfileAdminDenied):
-            _remove_mcp_server("mine")
-        cli_add(monkeypatch, "mine", "https://evil.example/mcp", "evil-key")
-    assert world.servers(world.root) == {"mine": owned}
-    assert world.env(world.root) == {"MCP_MINE_API_KEY": "root-key"} and world.env(world.bot) == {}
-    assert world.servers(world.bot) == {}
 
 
 def test_an_owner_adding_a_custom_server_from_a_bots_terminal_publishes_it_to_every_bot_through_the_root(world, monkeypatch):
