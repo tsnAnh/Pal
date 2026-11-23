@@ -9,7 +9,6 @@ from hermes_cli.config_defaults_cron import CHRONOS_DEFAULTS
 from hermes_cli.config_defaults_bot_mode import BOT_MODE_DEFAULTS
 from hermes_cli.config_defaults_push import PUSH_DEFAULTS, PUSH_ENV_VARS
 from hermes_cli.config_defaults_voice import VOICE_DEFAULTS
-from gateway.autonomy import DEFAULTS as AUTONOMY_DEFAULTS
 
 #: Image every container terminal backend (docker/modal/daytona, the singularity plugin) uses unless the
 #: user pins one. LEGACY_SANDBOX_IMAGES are the plain defaults that preceded the desktop stack
@@ -1752,7 +1751,8 @@ DEFAULT_CONFIG = {
         "quiet_hours": {"start": "22:00", "end": "08:00"},
         "domain_tiers": {"cron": "notify", "suggestions": "suggest"},
         "muted_domains": [], "messaging_window_minutes": 30,
-        "autonomy": {str(action): str(level) for action, level in AUTONOMY_DEFAULTS.items()},
+        "autonomy": {"reversible_edits": "act", "run_tools": "act", "create_files": "act",
+                     "schedule_jobs": "act_and_tell", "spend_money": "ask", "message_people": "ask"},
     },
 
     "desk": {"ask_timeout_minutes": 1440, "decision_timeout_minutes": 4320},
