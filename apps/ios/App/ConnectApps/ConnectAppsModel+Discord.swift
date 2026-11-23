@@ -14,14 +14,16 @@ extension ConnectAppsModel {
               let engine = DiscordFlow.engine(resume: entry.setupProgress)
         else { return false }
         let flow = DiscordFlowRunner(service: service, entry: entry)
-        discordFlow = DiscordFlowSession(
-            app: app,
-            model: StepFlowModel(
-                engine: engine, store: GatewayStepFlowProgressStore(service: service, device: .current, gatewaySaved: entry.setupProgress?.saved ?? []),
-                runner: { step, values in try await flow.run(step, values: values) },
-                classify: { flow.classify($0) }, prepare: { try await flow.prepare($0) }
-            )
+        let model = StepFlowModel(
+            engine: engine, store: GatewayStepFlowProgressStore(service: service, device: .current, gatewaySaved: entry.setupProgress?.saved ?? []),
+            runner: { step, values in try await flow.run(step, values: values) },
+            classify: { flow.classify($0) }, prepare: { try await flow.prepare($0) }
         )
+        model.recovery = { [weak model] failure in
+            guard let model else { return }
+            await DiscordFlow.recover(failure, in: model)
+        }
+        discordFlow = DiscordFlowSession(app: app, model: model)
         return true
     }
 

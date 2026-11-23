@@ -195,3 +195,122 @@ def test_a_failed_write_switch_keeps_the_read_only_server(home, discord, handsha
 
     assert _reason(_call("connectors.discord.save", guild_ids=["111"], read_only=False)) == "CONNECT_FAILED"
     assert _ok("connectors.discord.guilds")["read_only"] is True and _row()["status"] == "connected"
+
+
+def _guilds_error():
+    return _call("connectors.discord.guilds")["error"]
+
+
+GUILDS_FAILURES = [
+    ("401", lambda _r: httpx.Response(401, json={"message": "401: Unauthorized", "code": 0}), 4000, "INVALID_TOKEN",
+     "Discord didn't accept the saved bot token. Open the Discord developer portal, reset the token and paste it again."),
+    ("403-json", lambda _r: httpx.Response(403, json={"message": "Missing Access", "code": 50001}), 4000, "INVALID_TOKEN",
+     "Discord refused the saved bot token (error 50001). Open the Discord developer portal, reset the token and paste it again."),
+    ("403-html", lambda _r: httpx.Response(403, text="<html>Attention Required! | Cloudflare</html>"), 5034, "CHECK_UNAVAILABLE",
+     "Discord blocked the Pal gateway's request before it reached your bot. Try again later."),
+    ("429-wait", lambda _r: httpx.Response(429, json={"message": "You are being rate limited.", "retry_after": 41.2}), 5034,
+     "CHECK_UNAVAILABLE", "Discord asked Pal to wait 42 seconds. Try again then."),
+    ("429-header", lambda _r: httpx.Response(429, headers={"retry-after": "7"}, text="slow down"), 5034, "CHECK_UNAVAILABLE",
+     "Discord asked Pal to wait 7 seconds. Try again then."),
+    ("429-bare", lambda _r: httpx.Response(429, text="slow down"), 5034, "CHECK_UNAVAILABLE",
+     "Discord is limiting the Pal gateway right now. Try again in a minute."),
+    ("500", lambda _r: httpx.Response(500, json={"message": "boom"}), 5034, "CHECK_UNAVAILABLE",
+     "Discord is having trouble (status 500). Try again in a moment."),
+    ("404", lambda _r: httpx.Response(404, json={}), 5034, "CHECK_UNAVAILABLE",
+     "Discord answered with an unexpected status (404). Try again."),
+    ("html-200", lambda _r: httpx.Response(200, text="<html>maintenance</html>"), 5034, "CHECK_UNAVAILABLE",
+     "Discord sent an answer Pal couldn't read. Try again."),
+    ("object-200", lambda _r: httpx.Response(200, json={"guilds": []}), 5034, "CHECK_UNAVAILABLE",
+     "Discord sent an answer Pal couldn't read. Try again."),
+    ("timeout", lambda r: (_ for _ in ()).throw(httpx.ReadTimeout("slow", request=r)), 5034, "CHECK_UNAVAILABLE",
+     "The Pal gateway timed out waiting for Discord. Try again."),
+    ("offline", lambda r: (_ for _ in ()).throw(httpx.ConnectError("down", request=r)), 5034, "CHECK_UNAVAILABLE",
+     "The Pal gateway could not reach Discord. Check its internet connection and try again."),
+]
+
+
+@pytest.fixture
+def routed(discord, monkeypatch):
+    def handle(request):
+        if request.headers.get("authorization") != f"Bot {TOKEN}":
+            return httpx.Response(401, json={"message": "401: Unauthorized"})
+        if request.url.path == "/api/v10/users/@me":
+            return httpx.Response(200, json=discord["me"])
+        return state["answer"](request)
+
+    state = {"answer": lambda _r: httpx.Response(200, json=GUILDS)}
+    monkeypatch.setattr(checks, "default_transport", httpx.MockTransport(handle))
+    monkeypatch.setattr("tui_gateway.discord_connector.time.sleep", lambda _s: None)
+    return state
+
+
+@pytest.mark.parametrize(("answer", "code", "reason", "message"), [c[1:] for c in GUILDS_FAILURES],
+                         ids=[c[0] for c in GUILDS_FAILURES])
+def test_a_failed_server_list_answers_the_real_reason_and_the_next_step(home, routed, caplog, answer, code, reason, message):
+    _connect_token()
+    routed["answer"] = answer
+    caplog.set_level(logging.DEBUG)
+
+    error = _guilds_error()
+
+    assert (error["code"], error["data"]["reason"], error["message"]) == (code, reason, message)
+    assert TOKEN not in caplog.text and TOKEN not in str(error) and "Cloudflare" not in caplog.text
+
+
+def test_a_short_rate_limit_is_waited_out_once_before_failing(home, routed, monkeypatch):
+    _connect_token()
+    waits, seen = [], []
+    monkeypatch.setattr("tui_gateway.discord_connector.time.sleep", waits.append)
+
+    def answer(_r):
+        seen.append(1)
+        return httpx.Response(429, json={"retry_after": 0.5}) if len(seen) == 1 else httpx.Response(200, json=GUILDS)
+
+    routed["answer"] = answer
+
+    assert _ok("connectors.discord.guilds")["guilds"] == GUILDS
+    assert waits == [0.5] and len(seen) == 2
+
+
+def test_a_rate_limit_that_persists_is_reported_with_its_wait(home, routed, monkeypatch):
+    _connect_token()
+    waits = []
+    monkeypatch.setattr("tui_gateway.discord_connector.time.sleep", waits.append)
+    routed["answer"] = lambda _r: httpx.Response(429, json={"retry_after": 1.2})
+
+    assert _guilds_error()["message"] == "Discord asked Pal to wait 2 seconds. Try again then."
+    assert waits == [1.2]
+
+
+def test_a_long_rate_limit_is_not_slept_through(home, routed, monkeypatch):
+    _connect_token()
+    waits = []
+    monkeypatch.setattr("tui_gateway.discord_connector.time.sleep", waits.append)
+    routed["answer"] = lambda _r: httpx.Response(429, json={"retry_after": 30})
+
+    assert _reason({"error": _guilds_error()}) == "CHECK_UNAVAILABLE"
+    assert waits == []
+
+
+def test_an_empty_server_list_is_an_answer_not_a_failure(home, routed):
+    _connect_token()
+    routed["answer"] = lambda _r: httpx.Response(200, json=[])
+
+    assert _ok("connectors.discord.guilds") == {"guilds": [], "allowed": [], "read_only": True}
+
+
+def test_a_token_that_discord_stops_accepting_after_the_check_is_refused_with_the_next_step(home, routed):
+    _connect_token()
+    routed["answer"] = lambda _r: httpx.Response(401, json={"message": "401: Unauthorized"})
+
+    error = _guilds_error()
+
+    assert (error["code"], error["data"]["reason"]) == (4000, "INVALID_TOKEN")
+    assert "reset the token and paste it again" in error["message"]
+
+
+def test_a_pasted_token_that_cannot_be_read_back_is_answered_not_dropped(home, discord):
+    response = _call("connectors.discord.token", item="missing-item")
+
+    assert (response["error"]["code"], _reason(response)) == (4000, "CLIENT_UNREADABLE")
+    assert response["error"]["message"] == "Couldn't read what you pasted. Paste it again."
