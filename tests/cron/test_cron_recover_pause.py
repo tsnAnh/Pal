@@ -1,5 +1,5 @@
-"""Receipt recovery: a ``missing`` admission is a definite non-admission (booked failed, never a
-pause), and a verified terminal receipt lifts the pause its own ``CronExecutionUnknown`` caused."""
+"""Receipt recovery: a ``missing`` admission is resubmitted until its bound, then booked skipped (never
+a pause), and a verified terminal receipt lifts the pause its own ``CronExecutionUnknown`` caused."""
 from contextlib import asynccontextmanager
 import json
 
@@ -28,9 +28,14 @@ def _foreign_journal(job, fire):
     return journal
 
 
-def test_missing_admission_is_booked_failed_not_paused(tmp_path, monkeypatch):
+def test_missing_admission_is_resubmitted_not_booked_failed_or_paused(tmp_path, monkeypatch):
     """The firer died after writing its journal but before the owner admitted the fire."""
-    _peer(monkeypatch, lambda method: {'status': 'missing', 'result': None})
+    calls = []
+
+    def answer(method):
+        calls.append(method)
+        return {'status': 'missing', 'result': None} if method == 'cron.recover' else {'session_id': 's', 'admission_id': 'a'}
+    _peer(monkeypatch, answer)
     with jobs.use_cron_store(tmp_path / 'cron'):
         job = jobs.create_job(prompt='report', schedule='every 1h', deliver='local')
         fire = executions.create_execution(job['id'], source='test')['id']
@@ -39,8 +44,27 @@ def test_missing_admission_is_booked_failed_not_paused(tmp_path, monkeypatch):
         scheduler_authority.reconcile_pending()
         saved = jobs.get_job(job['id'])
         assert saved['state'] != 'paused' and saved['enabled'] is True
+        assert calls == ['cron.recover', 'cron.submit']
+        assert json.loads(journal.read_text())['receipt'] == {'session_id': 's', 'admission_id': 'a'}
+        assert executions.get_execution(fire)['status'] == 'running'
+
+
+def test_missing_admission_past_its_bound_is_booked_skipped_not_paused(tmp_path, monkeypatch):
+    _peer(monkeypatch, lambda method: {'status': 'missing', 'result': None})
+    with jobs.use_cron_store(tmp_path / 'cron'):
+        job = jobs.create_job(prompt='report', schedule='every 1h', deliver='local')
+        fire = executions.create_execution(job['id'], source='test')['id']
+        executions.mark_execution_running(fire)
+        journal = _foreign_journal(job, fire)
+        record = json.loads(journal.read_text())
+        record['deferred'] = {'since': '2000-01-01T00:00:00+00:00'}
+        journal.write_text(json.dumps(record))
+        scheduler_authority.reconcile_pending()
+        saved = jobs.get_job(job['id'])
+        assert saved['state'] != 'paused' and saved['enabled'] is True
         assert saved['last_status'] == 'error'
-        assert executions.get_execution(fire)['status'] == 'failed'
+        row = executions.get_execution(fire)
+        assert row['status'] == 'failed' and row['error'].startswith('skipped: the owner never admitted this fire')
         assert not journal.exists()
 
 

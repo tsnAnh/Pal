@@ -257,6 +257,15 @@ async def operation(authority, name, params, actor=None):
     if row['status'] == 'terminal':
         result = saved['result'].get('cron_result') if saved else None
         flags = (saved['result'].get('cron_job_flags') or {}) if saved else {}
+        if result is None and row.get('outcome') == 'interrupted':
+            from cron.scheduler_authority import run_record
+            from cron.executions import get_execution
+            prefix, execution_id = row['request_id'].rsplit(':', 1)
+            job_id = prefix.split(':', 1)[1]
+            ledger = get_execution(execution_id) or {}
+            output, error = run_record(job_id, execution_id, ledger.get('scheduled_instant') or ledger.get('claimed_at'),
+                                       'interrupted', 'gateway restart; not run again')
+            result = [False, output, '', error]
         if result is None:
             result = [False, '', '', row.get('outcome') or 'unknown_execution']
     from cron.scheduler_liveness import owner_progress

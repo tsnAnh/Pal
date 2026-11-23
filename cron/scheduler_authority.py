@@ -2,11 +2,46 @@
 import asyncio
 import hashlib
 import json
+import logging
 import uuid
+from datetime import datetime, timedelta
+
+from hermes_time import now as _now
+
+DEFER_BOUND_SECONDS = 1800
+DRAIN_REASON = 'runtime_draining'
 
 
 class CronExecutionUnknown(RuntimeError):
     """The owner may have accepted this fire; never book it as failed or re-fire."""
+
+
+class CronDeferred(RuntimeError):
+    pass
+
+
+def is_drain_refusal(exc):
+    return DRAIN_REASON in (getattr(exc, 'reason', None), str(exc)) or getattr(exc, 'state', None) == 'draining'
+
+
+def run_record(job_id, execution_id, scheduled, outcome, cause):
+    line = f'{outcome}: {cause} (run {execution_id}, scheduled {scheduled or "unknown"})'
+    return f'# Cron Job: {job_id} ({outcome.upper()})\n\n{line}\n', line
+
+
+def settle_unverified_fire(job, execution_id, exc):
+    from cron.executions import give_up_execution
+    if isinstance(exc, CronDeferred):
+        give_up_execution(execution_id, reason=str(exc))
+        logging.getLogger('cron.scheduler').warning('Cron %s run %s deferred: %s', job['id'], execution_id, exc)
+        return False
+    from cron.jobs_error_text import sanitize_persisted_error
+    # One sanitized string for both stores: _lift_pause matches the pause by its reason.
+    reason = sanitize_persisted_error(str(exc)) or 'unverified admission'
+    pause_for_unknown(job['id'], execution_id, reason)
+    give_up_execution(execution_id, reason=reason)
+    logging.getLogger('cron.scheduler').error('Cron %s paused with unverified admission: %s', job['id'], exc)
+    return False
 
 
 def journal_path(job_id, request_id):
@@ -83,9 +118,16 @@ def run_canonical_job(job, *, extra_prompt=None, cancel_event=None, execution_id
         # write (file and directory) waits in a worker, and still completes before the next step.
         await asyncio.to_thread(write_journal)
 
+    async def defer():
+        held = record.get('deferred') or {}
+        record['deferred'] = dict(held, reason=DRAIN_REASON, since=held.get('since') or _now().isoformat())
+        record['job'] = dict(job)
+        await save()
+        raise CronDeferred('gateway was draining; fire stays pending under its run id')
+
     async def observe(call):
-        nonlocal attempted
-        attempted = True
+        nonlocal attempted, reached_owner
+        attempted = reached_owner = True
         await save()
         try:
             receipt = await call('submit', params)
@@ -96,6 +138,8 @@ def run_canonical_job(job, *, extra_prompt=None, cancel_event=None, execution_id
             if owner is not None or isinstance(exc, GatewayRPCError):
                 state = await call('recover', params)
                 if state['status'] == 'missing':
+                    if is_drain_refusal(exc):
+                        await defer()
                     error = f'{error_type_name(exc)}: {exc}'
                     result = [False, f'# Cron Job: {job["id"]} (FAILED)\n\n{error}\n', '', error]
                     record['refusal'] = result
@@ -130,9 +174,16 @@ def run_canonical_job(job, *, extra_prompt=None, cancel_event=None, execution_id
             await asyncio.sleep(delay)
             delay = min(delay * 2, 2.0)
 
+    reached_owner = False
+
     async def remote():
-        async with connect_gateway() as client:
-            return await observe(lambda op, data: client.rpc('cron.' + op, **data))
+        try:
+            async with connect_gateway() as client:
+                return await observe(lambda op, data: client.rpc('cron.' + op, **data))
+        except Exception as exc:
+            if reached_owner or not is_drain_refusal(exc):
+                raise
+            await defer()
 
     try:
         if owner is not None:
@@ -146,11 +197,73 @@ def run_canonical_job(job, *, extra_prompt=None, cancel_event=None, execution_id
             return asyncio.run_coroutine_threadsafe(
                 observe(lambda op, data: operation(authority, op, data)), loop).result()
         return asyncio.run(remote())
+    except CronDeferred:
+        raise
     except Exception as exc:
         if attempted:
             raise CronExecutionUnknown(f'Cron execution unverified; reconcile {journal}: {exc}') from exc
         error = f'{error_type_name(exc)}: {exc}'
         return False, f'# Cron Job: {job["id"]} (FAILED)\n\n{error}\n', '', error
+
+
+def _defer_deadline(record, row, journal, job):
+    held = (record.get('deferred') or {}).get('since') or (row or {}).get('claimed_at')
+    since = datetime.fromisoformat(held) if held else datetime.fromtimestamp(journal.stat().st_mtime).astimezone()
+    deadline = since + timedelta(seconds=DEFER_BOUND_SECONDS)
+    from cron.jobs import _parse_aware
+    slot = _parse_aware(job.get('next_run_at')) if job.get('schedule', {}).get('kind') in {'cron', 'interval'} else None
+    return since, min(deadline, slot) if slot is not None and slot > since else deadline
+
+
+def _submit_pending(params, owner, allow_connect):
+    from gateway.session_cron import operation
+    from hermes_cli.gateway_client import connect_gateway
+
+    if owner is not None:
+        return asyncio.run_coroutine_threadsafe(operation(owner[0], 'submit', params), owner[1]).result(timeout=60)
+    if not allow_connect:
+        return None
+
+    async def remote():
+        async with connect_gateway() as client:
+            return await client.rpc('cron.submit', **params)
+    return asyncio.run(remote())
+
+
+def _resubmit_or_settle(journal, record, params, row, job, owner, allow_connect):
+    from hermes_cli.gateway_client import GatewayClientError, GatewayRPCError
+    from persistence.core.errors import AuthorityRefusal
+    from utils import atomic_json_write
+
+    now = _now()
+    since, deadline = _defer_deadline(record, row, journal, job)
+    cause = 'gateway was draining' if (record.get('deferred') or {}).get('reason') == DRAIN_REASON else 'the owner never admitted this fire'
+    scheduled = (row or {}).get('scheduled_instant') or (row or {}).get('claimed_at')
+
+    def terminal(outcome, detail):
+        output, error = run_record(params['job_id'], params['request_id'], scheduled, outcome, detail)
+        return {'status': 'terminal', 'job': job, 'result': [False, output, '', error]}
+
+    if now >= deadline:
+        minutes = max(1, round((now - since).total_seconds() / 60))
+        return terminal('skipped', f'{cause} for {minutes} min')
+    try:
+        receipt = _submit_pending(params, owner, allow_connect)
+    except (AuthorityRefusal, GatewayRPCError) as exc:
+        if is_drain_refusal(exc):
+            return None
+        from storage_user_copy import error_type_name
+        return terminal('failed', f'resubmit refused: {error_type_name(exc)}: {exc}')
+    except (GatewayClientError, OSError, TimeoutError):
+        return None
+    if receipt is not None:
+        record['receipt'] = receipt
+        record['deferred'] = dict(record.get('deferred') or {}, retried_at=now.isoformat())
+        atomic_json_write(journal, record, mode=0o600, fsync_dir=True)
+        logging.getLogger(__name__).info('Cron fire %s of job %s submitted again after %s', params['request_id'],
+                                         params['job_id'], cause)
+    return None
+
 
 def reconcile_pending(*, allow_connect=True):
     """Observe prepared fires; never submit missing or interrupted work.
@@ -167,8 +280,6 @@ def reconcile_pending(*, allow_connect=True):
                                 _save_compose_deliver)
     from cron.scheduler_bookkeeping import fail_empty_response, finish_completed_run
     from utils import atomic_json_write
-    import logging
-
     root = get_hermes_home() / 'cron' / 'admissions'
     for journal in sorted(root.glob('*.json')):
         try:
@@ -202,15 +313,15 @@ def reconcile_pending(*, allow_connect=True):
                 else:
                     state = asyncio.run(observe())
             if state['status'] == 'missing':
-                # The owner holds no admission for this fire: a definite non-admission, booked as
-                # the same failed run the in-submit refusal books. Only ``unknown`` pauses.
+                # Never admitted (a drain refused it, or the firer died before its submit): resubmitted
+                # under the same run id until its bound, then booked skipped. Only ``unknown`` pauses.
                 current = get_job(params['job_id'])
                 if current is None:
                     journal.unlink(missing_ok=True)
                     continue
-                error = 'Cron admission missing: the owner never admitted this fire'
-                state = {'status': 'terminal', 'job': current,
-                         'result': [False, f'# Cron Job: {params["job_id"]} (FAILED)\n\n{error}\n', '', error]}
+                state = _resubmit_or_settle(journal, record, params, row, current, owner, allow_connect)
+                if state is None:
+                    continue
             if state['status'] != 'terminal':
                 if state['status'] == 'unknown' and not record.get('pause_recorded'):
                     reason = 'Canonical cron unknown; no automatic re-execution'
