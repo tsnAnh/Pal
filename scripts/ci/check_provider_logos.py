@@ -3,7 +3,8 @@
 
 The ids are the non-virtual providers of ``hermes_cli.provider_catalog`` (what
 ``hermes_cli/model_provider_control.py`` serves to the apps), the pre-release ones the catalogue hides
-until a user opts in, and ``EXTRA_IDS``. Each needs an entry in ``apps/ios/Design/ProviderLogos/manifest.json``
+until a user opts in, and ``EXTRA_IDS``. They are read from source (the ``CANONICAL_PROVIDERS`` table and the
+provider profiles declared under ``plugins/model-providers``) so the check runs on the bare CI interpreter, without the YAML library. Each needs an entry in ``apps/ios/Design/ProviderLogos/manifest.json``
 (written by ``apps/ios/Tools/provider-logos/vendor_provider_logos.py``) and, unless its variant is
 ``monogram`` or ``symbol``, a vendored imageset under ``App/Assets.xcassets/ProviderLogos``.
 
@@ -20,6 +21,7 @@ Run: python scripts/ci/check_provider_logos.py
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -39,6 +41,8 @@ FAINT = 0.5
 IMAGE_VARIANTS = ("color", "mono-dark")
 VARIANTS = (*IMAGE_VARIANTS, "monogram", "symbol")
 EXTRA_IDS = ("claude-subscription-directsdk-experimental",)
+VIRTUAL_IDS = frozenset({"moa"})
+CANONICAL_TABLE = Path("hermes_cli") / "models_catalog_static.py"
 
 SVG = "{http://www.w3.org/2000/svg}"
 SHAPES = {"path", "circle", "ellipse", "rect", "polygon", "polyline", "line", "text"}
@@ -162,13 +166,29 @@ def check(root: Path, ids: Iterable[str], manifest_path: Path, imageset_dir: Pat
     return found
 
 
-def catalogue_ids() -> list[str]:
-    sys.path.insert(0, str(REPO))
-    from hermes_cli.provider_catalog import provider_catalog_by_slug
-    from providers import unlisted_provider_names
+def _canonical_slugs(table: Path) -> set[str]:
+    for node in ast.parse(table.read_text(encoding="utf-8-sig")).body:
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", "") == "CANONICAL_PROVIDERS":
+            rows = next(g.iter for g in node.value.generators)
+            return {row.elts[0].value for row in rows.elts}
+    raise SystemExit(f"provider-logos: CANONICAL_PROVIDERS not found in {table}")
 
-    listed = [slug for slug, d in provider_catalog_by_slug().items() if d.auth_type != "virtual"]
-    return sorted({*listed, *unlisted_provider_names(), *EXTRA_IDS})
+
+def _plugin_profile_names(plugins: Path) -> set[str]:
+    names: set[str] = set()
+    for source in plugins.glob("*/__init__.py"):
+        for node in ast.walk(ast.parse(source.read_text(encoding="utf-8-sig"))):
+            if isinstance(node, ast.Call) and "Profile" in ast.unparse(node.func):
+                names |= {
+                    kw.value.value for kw in node.keywords
+                    if kw.arg == "name" and isinstance(kw.value, ast.Constant) and isinstance(kw.value.value, str)
+                }
+    return names
+
+
+def catalogue_ids(repo: Path = REPO) -> list[str]:
+    slugs = _canonical_slugs(repo / CANONICAL_TABLE) | _plugin_profile_names(repo / "plugins" / "model-providers")
+    return sorted({*slugs, *EXTRA_IDS} - VIRTUAL_IDS)
 
 
 def main(load_ids: Callable[[], list[str]] = catalogue_ids) -> int:

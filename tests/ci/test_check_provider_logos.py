@@ -135,3 +135,18 @@ def test_contrast_follows_the_wcag_ratio_against_white() -> None:
 def test_the_real_tree_has_a_logo_for_every_listed_provider() -> None:
     proc = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True, check=False)
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+def test_the_ids_read_from_source_equal_the_live_catalogue() -> None:
+    from hermes_cli.provider_catalog import provider_catalog_by_slug
+    from providers import unlisted_provider_names
+
+    live = {slug for slug, d in provider_catalog_by_slug().items() if d.auth_type != "virtual"}
+    live |= unlisted_provider_names() | set(lint.EXTRA_IDS)
+    assert set(lint.catalogue_ids()) == live
+
+
+def test_the_check_runs_without_the_yaml_library() -> None:
+    blocker = "import sys; sys.modules['ruamel'] = None; sys.modules['ruamel.yaml'] = None; import runpy; runpy.run_path(sys.argv[1], run_name='__main__')"
+    proc = subprocess.run([sys.executable, "-I", "-c", blocker, str(SCRIPT)], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
