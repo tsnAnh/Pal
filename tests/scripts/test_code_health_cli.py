@@ -34,10 +34,10 @@ _GUARD_SCRIPTS = (
     "scripts/check_profile_create_entry.py", "scripts/ci/check_os_marker_fakes.py", "scripts/check-case-collisions.py",
     "scripts/ci/check_lazy_deps_imports.py", "scripts/ci/check_profile_archive_boundary.py",
     "scripts/ci/check_agents_md_size.py", "scripts/ci/check_blob_size.py", "scripts/ci/check_swift_brand.py",
-    "scripts/ci/check_swift_nav_chrome.py", "scripts/ci/check_swift_bot_tint.py", "scripts/ci/check_swift_chat_drop.py", "scripts/ci/check_swift_chat_scroll.py", "scripts/ci/check_swift_scroll_gesture.py", "scripts/ci/check_swift_chat_row_alignment.py", "scripts/ci/check_swift_mac_layout.py", "scripts/ci/check_swift_modal_size.py", "scripts/ci/check_swift_glass.py", "scripts/ci/check_swift_icon_tint.py", "scripts/ci/check_swift_connect_palette.py", "scripts/ci/check_swift_image_viewer.py", "scripts/ci/check_swift_bot_settings.py", "scripts/ci/check_swift_perf.py", "scripts/ci/check_swift_fault_details.py", "scripts/ci/check_swift_entitlements.py",
+    "scripts/ci/check_swift_nav_chrome.py", "scripts/ci/check_swift_bot_tint.py", "scripts/ci/check_swift_chat_drop.py", "scripts/ci/check_swift_chat_scroll.py", "scripts/ci/check_swift_scroll_gesture.py", "scripts/ci/check_swift_chat_row_alignment.py", "scripts/ci/check_swift_mac_layout.py", "scripts/ci/check_swift_modal_size.py", "scripts/ci/check_swift_glass.py", "scripts/ci/check_swift_glass_input.py", "scripts/ci/check_swift_icon_tint.py", "scripts/ci/check_swift_connect_palette.py", "scripts/ci/check_swift_image_viewer.py", "scripts/ci/check_swift_bot_settings.py", "scripts/ci/check_swift_perf.py", "scripts/ci/check_swift_fault_details.py", "scripts/ci/check_swift_entitlements.py",
     "scripts/ci/swift_lint.py",
 )
-_SUPPORT = ("scripts/ci/profile_scope_patterns.json", "scripts/ci/swift_fault_details_allowlist.txt", "scripts/install_root_lint_baseline.json", "agent/subdirectory_hints.py",
+_SUPPORT = ("scripts/ci/profile_scope_patterns.json", "scripts/ci/swift_fault_details_allowlist.txt", "scripts/ci/glass_input_allowlist.txt", "scripts/install_root_lint_baseline.json", "agent/subdirectory_hints.py",
             "tools/__init__.py", "tools/registry.py", "hermes_constants.py", *_GUARD_SCRIPTS)
 # The config guards fail when a tree they scan is missing, so the fixture carries an empty stand-in.
 # The fixture's MOVES is empty, so its stand-ins and support files sit at their old paths.
