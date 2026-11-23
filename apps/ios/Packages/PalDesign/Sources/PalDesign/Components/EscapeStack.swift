@@ -134,7 +134,7 @@ private struct PalEscapeModifier: ViewModifier {
                 .environment(\.escapeHostLayer, nil)
                 .background {
                     if policy == .dismisses {
-                        Button("", action: dismiss)
+                        Button("") { dismiss() }
                             .keyboardShortcut(.cancelAction)
                             .frame(width: 0, height: 0)
                             .opacity(0)
@@ -146,7 +146,7 @@ private struct PalEscapeModifier: ViewModifier {
     }
 
     private func register(in stack: MacEscapeStack) {
-        stack.register(id, layer: layer, nested: nested, policy: policy, dismiss: dismiss)
+        stack.register(id, layer: layer, nested: nested, policy: policy) { dismiss() }
     }
 }
 
