@@ -160,6 +160,11 @@ private struct MacProviderRow: View {
                 }
             }
         }
+        .padding(.leading, BrandLogoTileSize.row.points + 13)
+        .overlay(alignment: .leading) {
+            ProviderLogo.tile(for: provider.id, name: provider.name)
+                .padding(.leading, 13)
+        }
     }
 }
 
