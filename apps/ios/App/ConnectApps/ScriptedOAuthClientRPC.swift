@@ -156,7 +156,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         let step = address != nil && !ipAddress ? (saved ? "client" : "console") : "address"
         let redirect = OAuthClientScript.googleRedirect(address ?? OAuthClientScript.addressSuggestion)
         return [
-            "slug": "google-workspace", "name": "Google Workspace", "category": "Docs and files", "icon": "plugin_glyph",
+            "slug": "google-workspace", "name": "Google Workspace", "category": "Docs and files", "icon": "google-workspace",
             "method": "oauth_client", "verified": true, "status": .string(status("google-workspace")), "notes": .string(Self.googleNotes),
             "setup_guide": ScriptedSetupGuides.google(addressProblem: ipAddress, redirect: redirect),
             "setup_progress": ScriptedSetupGuides.progress(step, saved: saved ? ["client_id", "client_secret"] : []),
@@ -166,7 +166,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func githubRow() -> JSONValue {
         let saved = progress["github"]?.connected == true
         return [
-            "slug": "github", "name": "GitHub", "category": "Developer tools", "icon": "plugin_glyph", "method": "api_key", "verified": false,
+            "slug": "github", "name": "GitHub", "category": "Developer tools", "icon": "github", "method": "api_key", "verified": false,
             "mcp_url": "https://api.githubcopilot.com/mcp/", "status": .string(status("github")),
             "setup_guide": ScriptedSetupGuides.github,
             "setup_progress": ScriptedSetupGuides.progress(saved ? "token" : "token_page", saved: saved ? ["token"] : []),
@@ -183,7 +183,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         let (name, guide) = guides[slug] ?? (slug, .null)
         let category = slug == "dropbox" ? "Docs and files" : "Design and web"
         return [
-            "slug": .string(slug), "name": .string(name), "category": .string(category), "icon": "plugin_glyph",
+            "slug": .string(slug), "name": .string(name), "category": .string(category), "icon": .string(slug),
             "method": "oauth_client", "verified": true, "mcp_url": .string("https://mcp.\(slug).com/mcp"), "status": .string(status(slug)),
             "setup_guide": guide,
             "setup_progress": ScriptedSetupGuides.progress(saved ? "client" : "app", saved: saved ? ["client_id", "client_secret"] : []),

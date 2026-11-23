@@ -38,25 +38,21 @@ final class ConnectorLogoCache {
 enum ConnectorLogo {
     static let namespace = "ConnectorLogos"
 
-    static func image(for app: ConnectApp) -> Image? {
-        guard case .catalog(let entry) = app.source else { return nil }
-        return image(named: entry.icon)
-    }
-
-    static func image(named id: String) -> Image? {
-        let name = "\(namespace)/\(id)"
-        guard !id.isEmpty, ConnectorLogoCache.shared.hasImage(named: name) else { return nil }
-        return Image(name).resizable()
-    }
+    static func assetName(_ id: String) -> String { "\(namespace)/\(id)" }
 }
 
 struct ConnectorLogoTile: View {
     let app: ConnectApp
 
     var body: some View {
-        if let logo = ConnectorLogo.image(for: app) {
-            AppTile { logo.scaledToFit().padding(ConnectRowMetrics.tileSize * 0.22) }
-        } else {
+        switch app.tileMark {
+        case .logo(let id):
+            let name = ConnectorLogo.assetName(id)
+            BrandLogoTile(
+                asset: ConnectorLogoCache.shared.hasImage(named: name) ? name : nil,
+                monogram: BrandMonogram.initials(from: app.name), size: .connector
+            )
+        case .puzzle:
             PluginGlyphTile()
         }
     }

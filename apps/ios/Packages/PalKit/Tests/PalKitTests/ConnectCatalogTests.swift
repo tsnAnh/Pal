@@ -341,3 +341,33 @@ struct ConnectAppsServiceTests {
         #expect(await service(rpc).tokenFailure(app) == .authRefused)
     }
 }
+
+@Suite("Connector tile mark")
+struct ConnectorTileMarkTests {
+    private func app(_ source: ConnectAppSource) -> ConnectApp {
+        ConnectApp(id: "x", name: "X", summary: "", category: "", source: source, state: .disconnected)
+    }
+
+    @Test func aCataloguedConnectorDrawsItsLogoNeverThePuzzle() {
+        let entry = PalCatalogEntry(slug: "slack_mcp", name: "Slack", icon: "slack", method: .mcpOAuth)
+        #expect(app(.catalog(entry)).tileMark == .logo("slack"))
+    }
+
+    @Test func aCataloguedConnectorWithThePlaceholderIconStillAsksForALogoSoItShowsTheMonogram() {
+        let entry = PalCatalogEntry(slug: "x", name: "X", icon: "plugin_glyph", method: .mcpOAuth)
+        #expect(app(.catalog(entry)).tileMark == .logo("plugin_glyph"))
+    }
+
+    @Test func theGoogleWorkspaceRowDrawsTheGoogleWorkspaceLogo() {
+        #expect(app(.googleWorkspace).tileMark == .logo("google-workspace"))
+    }
+
+    @Test func aCustomConnectorDrawsThePuzzle() {
+        let custom = CustomConnectorInfo(name: "Mine", url: "https://example.com/mcp")
+        #expect(app(.custom(custom)).tileMark == .puzzle)
+    }
+
+    @Test func aNonCataloguedMcpRowDrawsThePuzzle() {
+        #expect(app(.mcp(name: "files", requires: [])).tileMark == .puzzle)
+    }
+}

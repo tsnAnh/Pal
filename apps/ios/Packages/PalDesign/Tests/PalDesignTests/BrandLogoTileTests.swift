@@ -25,6 +25,11 @@ struct BrandLogoTileTests {
         #expect(BrandLogoTileMetrics.shadowOpacity <= 0.15)
     }
 
+    @Test func thePluginPuzzleIsTheConnectorSizedBrandTileSymbol() {
+        #expect(PluginGlyphTile.symbol == "puzzlepiece.extension")
+        #expect(BrandLogoTileSize.connector.points == ConnectRowMetrics.tileSize)
+    }
+
     @Test func monogramInkIsNearBlackNotTheThemeInk() {
         #expect(BrandLogoTileMetrics.inkHex == 0x111111)
     }

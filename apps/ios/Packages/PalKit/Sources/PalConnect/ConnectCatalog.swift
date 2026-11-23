@@ -246,6 +246,21 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     }
 }
 
+public enum ConnectorTileMark: Sendable, Equatable {
+    case logo(String)
+    case puzzle
+}
+
+extension ConnectApp {
+    public var tileMark: ConnectorTileMark {
+        switch source {
+        case .catalog(let entry): .logo(entry.icon)
+        case .googleWorkspace: .logo("google-workspace")
+        case .mcp, .custom: .puzzle
+        }
+    }
+}
+
 public struct InstalledSkill: Sendable, Equatable, Identifiable {
     public var name: String
     public var category: String
