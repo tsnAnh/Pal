@@ -158,6 +158,24 @@ def test_leaving_a_channel_drops_its_binding_retires_its_questions_and_can_repea
     assert r.rpc("chat.space.leave", space_id="C1")["result"] == {"outcome": "not_member"}
 
 
+def test_a_workspace_never_probed_is_probed_once_and_the_pushed_picture_becomes_the_app_icon(rig):
+    r = rig()
+    r.install()
+    with r.workspace_records().edit() as data:
+        kept = {k: v for k, v in data["workspaces"]["w1"].items() if k != "probed_at"}
+        data["workspaces"]["w1"] = {**kept, "capabilities": {"unattended_refresh": "automatic"}}
+    r.slack.calls.clear()
+    assert r.rpc("chat.install.set_icon", data=_png_url())["result"] == {"ok": True}
+    _wait_idle()
+    assert "apps.icon.set" in r.slack.calls
+    probed = r.workspace_records().workspace("w1")
+    assert probed["capabilities"]["set_icon"] == "automatic" and probed.get("probed_at")
+    r.slack.calls.clear()
+    assert r.rpc("chat.install.set_icon", data=_png_url())["result"] == {"ok": True}
+    _wait_idle()
+    assert "apps.icon.set" in r.slack.calls and "apps.manifest.create" not in r.slack.calls
+
+
 def test_the_bots_own_picture_is_stored_per_bot_and_pushed_to_slack(rig):
     r = rig()
     r.install()
