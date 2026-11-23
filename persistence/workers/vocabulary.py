@@ -47,7 +47,7 @@ ROW_ANNOTATION_KEYS = ("_row_id", "timestamp", "_db_row_snapshot", "_canonical_r
 SIDECAR_KEYS = frozenset({"_usage_anchor", "_proactive_prune_rearm_tokens", "_anthropic_rejected_thinking"})
 
 #: The ``model_config`` keys the worker's constructor upsert accepts.
-WORKER_CONSTRUCTOR_CONFIG_KEYS = frozenset({"max_iterations", "max_tokens", "reasoning_config", "yolo_mode"})
+WORKER_CONSTRUCTOR_CONFIG_KEYS = frozenset({"max_iterations", "max_tokens", "reasoning_config"})
 
 #: The largest encoded payload one worker receipt accepts.
 RECEIPT_PAYLOAD_MAX_BYTES = 4 * 1024 * 1024

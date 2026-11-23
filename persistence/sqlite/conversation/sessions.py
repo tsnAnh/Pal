@@ -52,7 +52,7 @@ from ._store.sessions import (
     list_sessions_rich, patch_session_model_config, promote_to_session_reset, publish_session_git_metadata,
     reopen_session, resolve_session_id, retire_undrained_queue_rows, search_sessions, session_count,
     session_count_by_source, session_count_ge, session_lifecycle_statuses, session_unread, set_session_archived,
-    set_session_hidden, set_session_pinned, set_session_read, set_session_yolo, touch_session_activity,
+    set_session_hidden, set_session_pinned, set_session_read, touch_session_activity,
     unarchive_recoverable_session, update_session_cwd, update_session_meta, update_session_model,
     update_session_runtime_lock, update_session_tool_names, update_system_prompt,
 )
@@ -563,11 +563,6 @@ class SQLiteSessionRepository:
                 model_options=dict(lock.model_options) if lock.model_options is not None else None,
                 route_source=lock.route_source, confirmed=lock.confirmed,
             )
-
-    def set_yolo(self, session_id: SessionId, enabled: bool) -> None:
-        holder = self._store.holder()
-        with refusals(holder, session_id):
-            set_session_yolo(holder, session_id, enabled)
 
     def update_system_prompt(self, session_id: SessionId, system_prompt: Optional[str]) -> None:
         holder = self._store.holder()
