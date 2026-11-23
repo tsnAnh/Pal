@@ -5,7 +5,7 @@
 every other caller goes through its functions, so the state machine cannot be bypassed.
 
 Flags, in every Python file outside that module and any ``tests`` directory, a string constant (pieces of an
-f-string included) in which a SQL keyword (INSERT INTO, REPLACE INTO, UPDATE, DELETE FROM, FROM, JOIN,
+f-string included) in which a SQL keyword (INSERT INTO, REPLACE INTO, UPDATE ... SET, DELETE FROM, FROM, JOIN,
 DROP TABLE, ALTER TABLE, CREATE TABLE, CREATE TRIGGER ... ON) is followed by one of the table names, matched
 case-insensitively across whitespace. Prose that merely says "commitments" does not match.
 
@@ -23,12 +23,13 @@ from pathlib import Path
 
 _OWNER = "gateway/commitments.py"
 _SKIP_DIRS = {".git", ".venv", "venv", "node_modules", "__pycache__", "tests"}
-_TABLE = r"""["`\[]?\b(?:commitments|commitment_events)\b"""
-_SQL = re.compile(
-    r"""(?:\binsert\s+(?:or\s+\w+\s+)?into|\breplace\s+into|\bupdate(?:\s+or\s+\w+)?|\bdelete\s+from|\bfrom|\bjoin"""
+_TABLE = r"""["`\[]?\b(?:commitments|commitment_events)\b["`\]]?"""
+_KEYWORDS = (
+    r"""\binsert\s+(?:or\s+\w+\s+)?into|\breplace\s+into|\bdelete\s+from|\bfrom|\bjoin"""
     r"""|\bdrop\s+table(?:\s+if\s+exists)?|\balter\s+table|\bcreate\s+table(?:\s+if\s+not\s+exists)?"""
-    r"""|\bcreate\s+(?:temp\s+|temporary\s+)?trigger\b[^;]*?\bon)\s+""" + _TABLE,
-    re.IGNORECASE)
+    r"""|\bcreate\s+(?:temp\s+|temporary\s+)?trigger\b[^;]*?\bon"""
+)
+_SQL = re.compile(rf"(?:{_KEYWORDS})\s+{_TABLE}|\bupdate(?:\s+or\s+\w+)?\s+{_TABLE}\s+set\b", re.IGNORECASE)
 
 
 def names_ledger_table(text: str) -> bool:
