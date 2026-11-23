@@ -147,8 +147,27 @@ class ChatInstallService:
         self.store.save(new, state.revision)
         return new
 
-    def _fail(self, provider: ChatProvider, state: SetupState, code: SetupErrorCode) -> SetupState:
-        return self._apply(provider, state, SetupEvent(kind=SetupEventKind.failed, error=code))
+    def _fail(self, provider: ChatProvider, state: SetupState, code: SetupErrorCode, *, reason: str | None = None,
+              permissions: tuple[str, ...] = (), retry_after_seconds: int | None = None) -> SetupState:
+        return self._apply(provider, state, SetupEvent(
+            kind=SetupEventKind.failed, error=code, error_reason=reason, error_permissions=permissions,
+            retry_after_seconds=retry_after_seconds))
+
+    def _install_in_place(self, provider: ChatProvider, state: SetupState) -> SetupState | None:
+        try:
+            installation = provider.install_in_place(state)
+        except StaleRevision:
+            raise
+        except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
+            logger.warning("chat install in place failed provider=%s error=%s", state.provider_id, type(exc).__name__)
+            code = exc.code if isinstance(getattr(exc, "code", None), SetupErrorCode) else SetupErrorCode.install_failed
+            retry_after = getattr(exc, "retry_after_seconds", None)
+            return self._fail(provider, state, code, reason=getattr(exc, "reason", None),
+                              permissions=tuple(getattr(exc, "permissions", ())),
+                              retry_after_seconds=retry_after if isinstance(retry_after, int) else None)
+        if installation is None:
+            return None
+        return self._complete(provider, state, installation, owner_optional=True)
 
     @staticmethod
     def _with_state(link: str, nonce: str) -> str:
@@ -212,6 +231,8 @@ class ChatInstallService:
             state = self._apply(provider, state, SetupEvent(
                 kind=SetupEventKind.app_created, app_id=created.app_id,
                 authorize_link=self._with_nonce(created.authorize_link, key, app_scheme)))
+        if state.step is SetupStep.needs_allow and (placed := self._install_in_place(provider, state)) is not None:
+            return placed
         if state.step is SetupStep.needs_allow and (state.next_action.link is None or state.next_action.kind is not NextActionKind.open_link):
             state = self._issue_link(provider, state, app_scheme)
         if state.step is SetupStep.installing:
@@ -362,7 +383,8 @@ class ChatInstallService:
             owner = provider.authorizing_identity(installation)
             if not owner and not owner_optional:
                 return self._fail(provider, state, SetupErrorCode.install_failed)
-            env_keys = [*provider.adapter_env(installation), *([provider.allowed_users_env] if provider.allowed_users_env else [])]
+            env_keys = [*provider.adapter_env(installation), *([provider.allowed_users_env] if provider.allowed_users_env else [])] \
+                if provider.per_bot_adapter else []
             self.store.save_installation(installation, env_keys, owner or "")
         except StaleRevision:
             raise
@@ -386,11 +408,7 @@ class ChatInstallService:
             logger.warning("chat install defaults failed provider=%s error=%s", state.provider_id, type(exc).__name__)
             return self._fail(provider, state, SetupErrorCode.install_failed)
         try:
-            env = dict(provider.adapter_env(installation))
-            if provider.allowed_users_env:
-                env[provider.allowed_users_env] = owner
-            self.control.apply_env(state.bot, provider.provider_id, env, [])
-            outcome = self.control.reload(state.bot)
+            outcome = self._start_adapter(provider, state, installation, owner)
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat install adapter start failed provider=%s error=%s", state.provider_id, type(exc).__name__)
             return self._fail(provider, state, SetupErrorCode.install_failed)
@@ -398,6 +416,16 @@ class ChatInstallService:
             logger.warning("chat install adapter not started provider=%s", state.provider_id)
             return self._fail(provider, state, SetupErrorCode.install_failed)
         return self._apply(provider, state, SetupEvent(kind=SetupEventKind.installed))
+
+    def _start_adapter(self, provider: ChatProvider, state: SetupState, installation: Installation, owner: str) -> ReloadOutcome:
+        if not provider.per_bot_adapter:
+            provider.apply_owner(installation, owner)
+            return ReloadOutcome.live
+        env = dict(provider.adapter_env(installation))
+        if provider.allowed_users_env:
+            env[provider.allowed_users_env] = owner
+        self.control.apply_env(state.bot, provider.provider_id, env, [])
+        return self.control.reload(state.bot)
 
     def complete_redirect(self, raw_state: str, code: str | None, error: str | None) -> tuple[RedirectOutcome, AppScheme]:
         issued = self.store.consume_nonce(raw_state) if raw_state else None
@@ -571,8 +599,9 @@ class ChatInstallService:
         if installation is not None:
             keys = self.store.env_keys(installation.id)
             try:
-                self.control.apply_env(bot, provider_id, {}, keys)
-                self.control.reload(bot)
+                if provider.per_bot_adapter:
+                    self.control.apply_env(bot, provider_id, {}, keys)
+                    self.control.reload(bot)
             except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
                 logger.warning("chat install adapter stop failed provider=%s error=%s", provider_id, type(exc).__name__)
                 raise ChatServiceError(GatewayReason.provider_failed, state) from None

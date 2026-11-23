@@ -728,7 +728,7 @@
     },
     {
       "name": "chat.install.revoke",
-      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id.",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays.",
       "params": [
         {
           "name": "params",
@@ -45600,6 +45600,7 @@
         "type": "object"
       },
       "ProfileCreateReceipt": {
+        "additionalProperties": false,
         "description": "What ``hermes profile create`` prints about a new profile, read on the machine (and in the\nprofile scope) that made it: built after a local create, or sent by the gateway that made it\n(``profiles.create`` with ``report``). The contract uses this type itself; a stdlib dataclass, so a\nlocal create never loads pydantic. A client treats a receipt missing a field, or with a wrong type,\nas an unknown outcome.",
         "properties": {
           "path": {
@@ -58083,6 +58084,38 @@
           },
           "fix": {
             "$ref": "#/components/schemas/FixAction"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "retry_after_seconds": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Retry After Seconds"
           }
         },
         "required": [
@@ -68739,7 +68772,7 @@
     },
     {
       "name": "chat.install.revoke",
-      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id.",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays.",
       "params": [
         {
           "name": "params",

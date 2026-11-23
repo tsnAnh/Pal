@@ -865,6 +865,9 @@ export type NextActionKind = 'none' | 'paste_credential' | 'open_link' | 'copy_t
 export interface SetupError {
   code: SetupErrorCode
   fix: FixAction
+  reason?: string | null
+  permissions?: string[]
+  retry_after_seconds?: number | null
 }
 export type SetupErrorCode = 'credential_rejected' | 'credential_expired' | 'app_create_failed' | 'allow_denied' | 'install_failed' | 'provider_unreachable'
 export type FixAction = 'reenter_credential' | 'retry' | 'restart_allow'
@@ -8728,7 +8731,7 @@ export interface RpcMethods {
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first. */
   'chat.install.begin': { params: ChatInstallBeginParams; result: ChatInstallStatusResult }
-  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. */
+  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
   'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }
@@ -9854,7 +9857,7 @@ export interface CanonicalRpcMethods {
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first. */
   'chat.install.begin': { params: ChatInstallBeginParams; result: ChatInstallStatusResult }
-  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. */
+  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
   'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }

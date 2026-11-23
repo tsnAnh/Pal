@@ -568,6 +568,12 @@ def reload_gateway_platform(home: Path, *, profile_home: Path, platform: str, en
     return query_gateway_control(home, "reload-platform", params=params, timeout=timeout)
 
 
+def reload_gateway_routes(home: Path, *, timeout: float = 8.0) -> Optional[dict[str, Any]]:
+    """Ask the gateway serving ``home`` to re-read ``profile_routes`` from its saved config now. Returns
+    ``{"reloaded", "routes"}``, or None when no gateway answers / it predates the verb."""
+    return query_gateway_control(home, "reload-routes", timeout=timeout)
+
+
 def request_unserve_profile(home: Path, name: str) -> Optional[dict[str, Any]]:
     return query_gateway_control(home, "unserve-profile", params={"name": name}, timeout=8.0)
 

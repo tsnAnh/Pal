@@ -119,6 +119,9 @@ class FixAction(WireEnum):
 class SetupError(Result):
     code: SetupErrorCode
     fix: FixAction
+    reason: str | None = None
+    permissions: list[str] = Field(default_factory=list)
+    retry_after_seconds: int | None = Field(default=None, ge=0)
 
 
 class SetupState(Result):
@@ -451,7 +454,8 @@ method("chat.install.update_identity", params=ChatInstallParams, result=ChatIden
            "needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only.")
 method("chat.install.revoke", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, "
-           "so a reinstall starts from a fresh one and the revoked state carries no app id.")
+           "so a reinstall starts from a fresh one and the revoked state carries no app id. "
+           "Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays.")
 method("chat.install.set_icon", params=ChatInstallSetIconParams, result=ChatInstallSetIconResult,
        doc="Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active "
            "install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. "

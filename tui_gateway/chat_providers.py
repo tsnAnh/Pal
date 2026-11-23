@@ -15,7 +15,13 @@ def _slack(**deps: Any) -> ChatProvider:
     return SlackProvider(**deps)
 
 
-PROVIDER_FACTORIES: dict[str, Callable[..., ChatProvider]] = {"slack": _slack}
+def _discord(*, redirect_url: str | None = None, **deps: Any) -> ChatProvider:
+    from gateway.chat_discord.provider import DiscordProvider
+
+    return DiscordProvider(**deps)
+
+
+PROVIDER_FACTORIES: dict[str, Callable[..., ChatProvider]] = {"slack": _slack, "discord": _discord}
 
 
 def provider_for(provider_id: str, **deps: Any) -> ChatProvider:
