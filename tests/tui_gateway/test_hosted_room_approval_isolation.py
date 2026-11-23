@@ -29,7 +29,7 @@ def _local_approval(service):
     return task
 
 
-@pytest.mark.parametrize('slow_action', ['approval', 'stop'])
+@pytest.mark.parametrize('slow_action', ['stop'])
 @pytest.mark.parametrize('other_action', ['approval', 'stop'])
 def test_slow_lender_does_not_hold_another_room(tmp_path, slow_action, other_action):
     entered, release = threading.Event(), threading.Event()

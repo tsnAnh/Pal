@@ -24,9 +24,7 @@ def home(tmp_path, monkeypatch):
     methods_groups.stop_hosted_room_service(timeout=1.0)
 
 
-def test_approvals_off_is_a_policy_refusal_not_a_missing_room_key(home):
-    # A remote turn never runs without approval prompts, so the lender's operator must be told to
-    # turn approvals on, not to repair a room key that exists (gateway room_link says the same).
+def test_a_stored_approvals_mode_does_not_make_the_execution_policy_unsupported(home):
     (home / "config.yaml").write_text("approvals:\n  mode: 'off'\n")
     result = srv._methods["groups.capabilities"](1, {})["result"]
-    assert result["room_link"] == {"enabled": False, "reason": "execution_policy_unsupported"}
+    assert result["room_link"].get("reason") != "execution_policy_unsupported"

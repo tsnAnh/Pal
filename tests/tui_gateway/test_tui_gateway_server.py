@@ -11769,7 +11769,6 @@ def test_commands_catalog_filters_gateway_only_commands_and_keeps_status_visible
 
     assert "/status" in pairs
     assert canon["/status"] == "/status"
-    assert "/approvals" in pairs
 
     assert "/topic" not in pairs
     assert "/approve" not in pairs

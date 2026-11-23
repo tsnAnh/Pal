@@ -1131,10 +1131,10 @@ class HostedRoomService:
     def approve_room_task(
         self, room_id: str, *, member_id: str, task_id: str, execution_generation: int,
         choice: str, request_id: str | None = None) -> Mapping[str, Any]:
-        """Resolve one exact local or peer approval and wake room observation."""
+        """Resolve one exact local approval and wake room observation."""
         room_id = hosted_rooms._room_id(room_id)
         key = (room_id, member_id)
-        route, client = self.peer_routes.get(key), self.peer_clients.get(key)
+        route = self.peer_routes.get(key)
         requested_approval_id = str(request_id or "")
 
         def matches(pending: Mapping[str, Any] | None) -> bool:
@@ -1156,7 +1156,7 @@ class HostedRoomService:
             if choice not in {"once", "deny"}:
                 raise RuntimeError("room approval choice must be once or deny")
             result = self._dispatch_approval(
-                route, client, action, task_id=task_id, execution_generation=execution_generation,
+                route, action, task_id=task_id, execution_generation=execution_generation,
                 request_id=requested_approval_id, choice=choice)
             with self._policy_lock, self._state_lock:
                 if matches(self._pending_actions.get(key)):
@@ -1165,19 +1165,15 @@ class HostedRoomService:
         return result
 
     def _dispatch_approval(
-        self, route, client, action: Mapping[str, Any], *, task_id: str, execution_generation: int,
+        self, route, action: Mapping[str, Any], *, task_id: str, execution_generation: int,
         request_id: str, choice: str) -> Mapping[str, Any]:
-        approve = _hook(client, "approve_receipt")
-        if route is not None and approve is not None:
-            result = approve(
-                task_id=task_id, execution_generation=execution_generation,
-                request_id=request_id, choice=choice, grant=route.grant)
-        else:
-            session_id = str(action.get("session_id") or "")
-            if not session_id:
-                raise RuntimeError("local room approval identity is unavailable")
-            result = self.rpc.approve(
-                session_id=session_id, request_id=request_id, choice=choice)
+        if route is not None:
+            raise RuntimeError("room approval target is unavailable")
+        session_id = str(action.get("session_id") or "")
+        if not session_id:
+            raise RuntimeError("local room approval identity is unavailable")
+        result = self.rpc.approve(
+            session_id=session_id, request_id=request_id, choice=choice)
         if result is None:
             raise RuntimeError("room approval target is unavailable")
         return result

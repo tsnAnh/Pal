@@ -248,8 +248,7 @@ def _(rid, params: dict, _catalog=_local_catalog, _methods=_METHODS, _owner=_for
     from gateway.hosted_rooms import MAX_LOG_LIMIT, PROTOCOL_VERSION, local_authority_gateway_id
     service = get_hosted_room_service()
     driver_ready = bool(service and service.runtime.status()["running"])
-    # The first missing piece, named as gateway/session_group_peers.py::room_link names it: an
-    # approvals-off profile is a policy refusal, not a missing room key.
+    # The first missing piece, named as gateway/session_group_peers.py::room_link names it.
     reason = "gateway_roomlink_secret_unavailable"
     try:
         from gateway.hosted_room_peer import gateway_room_grant_secret
