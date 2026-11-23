@@ -205,7 +205,7 @@ struct AddRuleSheet: View {
             content: {
                 VStack(alignment: .leading, spacing: 8) {
                     GroupedCard(accessibilityIdentifier: "permissionsRuleField") {
-                        TextField("Describe the action in a sentence", text: $text, axis: .vertical)
+                        PalTextField("Describe the action in a sentence", text: $text, axis: .vertical)
                             .lineLimit(3...6)
                             .focused($focused)
                             .hermesText(.rowTitle)

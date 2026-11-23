@@ -11,7 +11,7 @@ struct EditBotPersonaSection: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionCaption(String(localized: "What this bot is good at"), accessibilityIdentifier: "editBotDescriptionCaption")
             field(identifier: "editBotDescription") {
-                TextField("", text: $model.bio, prompt: Text("A short line about what it does"), axis: .vertical)
+                PalTextField("", text: $model.bio, prompt: Text("A short line about what it does"), axis: .vertical)
                     .lineLimit(1...4)
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textPrimary))
@@ -47,8 +47,7 @@ struct EditBotPersonaSection: View {
             SectionCaption(String(localized: "Personality"), accessibilityIdentifier: "editBotPersonalityCaption")
                 .padding(.top, 8)
             field(identifier: "editBotPersonality") {
-                TextEditor(text: $model.soul)
-                    .scrollContentBackground(.hidden)
+                PalTextEditor(text: $model.soul)
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textPrimary))
                     .frame(minHeight: 140)

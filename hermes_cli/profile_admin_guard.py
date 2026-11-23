@@ -19,10 +19,14 @@ AGENT_TOOL_MARKER_ENV = "HERMES_AGENT_TOOL_CONTEXT"
 GRANT_ENV = "HERMES_PROFILE_ADMIN_GRANT"
 TURN_ID_ENV = "HERMES_TURN_ID"
 GRANT_TTL_SECONDS = 120
-DENIED_MESSAGE = "Creating or deleting bots needs your approval in an interactive session."
+DENIED_MESSAGE = "Deleting a bot needs your approval in an interactive session."
+CREATE_REFUSED_MESSAGE = "Bots are created from the Create Bot form in the app."
 SHARED_MCP_DENIED_MESSAGE = (
     "Changing or deleting a shared MCP server for every bot needs your approval in an interactive session.")
 _DENIED_MESSAGES = {
+    "create": CREATE_REFUSED_MESSAGE,
+    "import": CREATE_REFUSED_MESSAGE,
+    "install": CREATE_REFUSED_MESSAGE,
     "mcp_replace_shared": SHARED_MCP_DENIED_MESSAGE,
     "mcp_remove_everywhere": SHARED_MCP_DENIED_MESSAGE,
     "catalog_migrate": "Migrating or rolling back the shared catalog for every bot needs your approval in an "
@@ -30,7 +34,7 @@ _DENIED_MESSAGES = {
 }
 
 _TOKEN_RE = re.compile(r"[0-9a-f]{64}")
-_CREATING_ACTIONS = frozenset({"create", "import", "install"})
+CREATING_ACTIONS = frozenset({"create", "import", "install"})
 _MAX_SPENT_TOKENS = 64
 
 _scoped_grant: contextvars.ContextVar[str] = contextvars.ContextVar("hermes_profile_admin_grant", default="")
@@ -206,7 +210,7 @@ def _claim_grant(token: str, action: str, subject: str) -> bool:
 
 
 def _rollback_subject(action: str, subject: str) -> str:
-    if action not in _CREATING_ACTIONS or not subject:
+    if action not in CREATING_ACTIONS or not subject:
         return ""
     from hermes_cli.profiles import get_profile_dir
     try:

@@ -37,7 +37,7 @@ struct EditBotSheet: View {
                             .padding(.top, 4)
                             .accessibilityIdentifier("editBotPreview")
                         photoControls
-                        TextField("", text: $model.name, prompt: Text("Name"))
+                        PalTextField("", text: $model.name, prompt: Text("Name"))
                             .focused($nameFocused)
                             .submitLabel(.done)
                             .onSubmit { nameFocused = false }

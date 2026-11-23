@@ -17,8 +17,7 @@ struct ConnectorAccountField: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         let border = failed ? Color(theme.palette.destructive) : PalTokens.fieldBorder
-        TextField("", text: $text, prompt: Text(prompt).foregroundStyle(PalTokens.textTertiary))
-            .textFieldStyle(.plain)
+        PalTextField("", text: $text, prompt: Text(prompt))
             .font(.system(size: 15))
             .foregroundStyle(PalTokens.textPrimary)
             .focused($focused)

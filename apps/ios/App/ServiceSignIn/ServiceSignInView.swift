@@ -105,9 +105,9 @@ struct ServiceSignInPasteStep: View {
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textSecondary)
                 .multilineTextAlignment(.center)
-            TextField("Address from the browser", text: $text, axis: .vertical)
+            PalTextField("Address from the browser",
+                         text: $text, axis: .vertical)
                 .lineLimit(2...4)
-                .textFieldStyle(.plain)
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textPrimary)
                 .autocorrectionDisabled()

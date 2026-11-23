@@ -158,10 +158,10 @@ final class ConnectAppsModel {
         )
         service = connectService
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection, tally: tally), profile: profile, diagnostics: .osLog())
-        capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in
+        capabilitiesService = CapabilitiesService(gateway: BotsGateway(call: CapabilitiesScript.wrap { method, params in
             tally.withLock { $0 += 1 }
             return try await connection.rpc(method, params)
-        })
+        }))
         surfaces = connection.surfaces
         if let held = surfaces.remembered(ConnectCatalog.self, catalogKey) {
             catalog = held

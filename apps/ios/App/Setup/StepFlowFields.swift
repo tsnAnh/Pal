@@ -112,13 +112,11 @@ struct StepPasteFields: View {
     private func input(_ field: SetupField) -> some View {
         if field.secret {
             SecretField(field.label, text: binding(field), identifier: "stepFlowField-\(field.id)")
-                .textFieldStyle(.plain)
                 .onChange(of: model.engine.value(for: field.id)) { old, new in
                     if old.isEmpty, new.count > 8 { clipboardMark = PasteboardScrub(SystemPasteboard()).mark() }
                 }
         } else {
-            TextField(field.label, text: binding(field))
-                .textFieldStyle(.plain)
+            PalTextField(field.label, text: binding(field))
                 .font(.system(size: 13, design: .monospaced))
                 .autocorrectionDisabled()
                 #if os(iOS)

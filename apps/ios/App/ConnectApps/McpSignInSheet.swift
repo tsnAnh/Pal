@@ -115,7 +115,6 @@ struct McpSignInSheet: View {
                         String(localized: "Address"), prompt: String(localized: "Paste the address here"), text: $address,
                         identifier: "mcpSignInPasteField"
                     )
-                    .textFieldStyle(.plain)
                     .disabled(controller.isSubmitting)
                     .onSubmit(submit)
                     .onChange(of: address) { old, new in

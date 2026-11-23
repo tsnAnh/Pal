@@ -191,7 +191,7 @@ private struct VaultTextRow: View {
     var content: PlatformTextContentType?
 
     var body: some View {
-        TextField(title, text: text)
+        PalTextField(title, text: text)
             .textContentType(content)
             .neverAutocapitalized()
             .autocorrectionDisabled()
@@ -206,7 +206,7 @@ private struct VaultPasswordRow: View {
     let identifier: String
 
     var body: some View {
-        SecureField(title, text: text)
+        PalTextField(title, text: text, isSecure: true)
             .textContentType(.oneTimeCode)
             .modifier(VaultFieldStyle())
             .accessibilityIdentifier(identifier)

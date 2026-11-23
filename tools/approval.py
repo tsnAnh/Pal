@@ -1390,6 +1390,22 @@ def _human_required_gate(command: str, description: str, approval_callback=None)
     return {**decision, "human_required": True} if decision.get("approved") else decision
 
 
+def _profile_creation_refusal(source: str, *, is_code: bool = False) -> dict | None:
+    from hermes_cli.profile_admin_guard import CREATE_REFUSED_MESSAGE, CREATING_ACTIONS
+    if not any(action in CREATING_ACTIONS for action, _ in human_required_grant_scope(source, code=is_code)):
+        return None
+    logger.warning("Refused an agent-run bot or profile creation")
+    return _blocked(CREATE_REFUSED_MESSAGE, pattern_key="human_required:create", description=CREATE_REFUSED_MESSAGE)
+
+
+def _human_required_outcome(source: str, description: str, approval_callback=None, *, is_code: bool = False) -> dict:
+    refusal = _profile_creation_refusal(source, is_code=is_code)
+    if refusal is not None:
+        return refusal
+    gated = f"execute_code <<'PY'\n{source}\nPY" if is_code else source
+    return _with_profile_admin_grant(_human_required_gate(gated, description, approval_callback), source, is_code=is_code)
+
+
 def _with_profile_admin_grant(result: dict, command: str, *, is_code: bool = False) -> dict:
     if not (result.get("approved") and result.get("human_required")):
         return result
@@ -1472,7 +1488,7 @@ def check_dangerous_command(command: str, env_type: str,
         return blocked
     human_required, human_description = detect_human_required_command(command)
     if human_required:
-        return _with_profile_admin_grant(_human_required_gate(command, human_description, approval_callback), command)
+        return _human_required_outcome(command, human_description, approval_callback)
     unread = hardline_scan_incomplete(command)
     if _yolo_active() or approval_context._get_approval_mode() == "off":
         return _scan_incomplete_block(_NO_REVIEWER_BYPASS) if unread else _approved()
@@ -1566,7 +1582,7 @@ def check_all_command_guards(command: str, env_type: str,
 
     human_required, human_description = detect_human_required_command(command)
     if human_required:
-        return _with_profile_admin_grant(_human_required_gate(command, human_description, approval_callback), command)
+        return _human_required_outcome(command, human_description, approval_callback)
 
     approval_mode = approval_context._get_approval_mode()
     # A command the hardline scan could not finish is human-only: no bypass, allowlist glob,
@@ -1667,8 +1683,7 @@ def check_execute_code_guard(code: str, env_type: str, has_host_access: bool = F
         return _approved()
     human_required, human_description = detect_human_required_code(code)
     if human_required:
-        return _with_profile_admin_grant(
-            _human_required_gate(f"execute_code <<'PY'\n{code}\nPY", human_description), code, is_code=True)
+        return _human_required_outcome(code, human_description, is_code=True)
     approval_mode = approval_context._get_approval_mode()
     if _yolo_active() or approval_mode == "off":
         return _approved()

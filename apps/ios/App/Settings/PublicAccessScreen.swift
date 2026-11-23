@@ -333,7 +333,7 @@ private struct AddPublicRouteSheet: View {
     }
 
     private func field(_ title: String, text: Binding<String>, identifier: String) -> some View {
-        TextField(title, text: text)
+        PalTextField(title, text: text)
             .neverAutocapitalized()
             .autocorrectionDisabled()
             .hermesText(.rowTitle)

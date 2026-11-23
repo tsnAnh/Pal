@@ -126,7 +126,7 @@ struct CustomConnectorBody: View {
     @ViewBuilder
     private var formContent: some View {
         labeled("Name") {
-            TextField("Add a name", text: $model.name)
+            PalTextField("Add a name", text: $model.name)
                 .modifier(FieldStyle(style: style))
                 .disabled(model.isEditing || model.isBusy)
                 .accessibilityIdentifier("customConnectorNameField")
@@ -147,7 +147,7 @@ struct CustomConnectorBody: View {
         }
         labeled("Server URL") {
             VStack(alignment: .leading, spacing: 6) {
-                TextField("example.com/mcp", text: $model.url)
+                PalTextField("example.com/mcp", text: $model.url)
                     .modifier(FieldStyle(style: style))
                     .urlKeyboard()
                     .disabled(model.isBusy)
@@ -162,7 +162,7 @@ struct CustomConnectorBody: View {
         }
         labeled("HTTP headers") { headerRows }
         labeled("Client ID") {
-            TextField("Client ID", text: $model.clientID, prompt: Text(verbatim: ""))
+            PalTextField("Client ID", text: $model.clientID, prompt: Text(verbatim: ""))
                 .modifier(FieldStyle(style: style))
                 .disabled(model.isBusy)
                 .accessibilityIdentifier("customConnectorClientIDField")
@@ -175,7 +175,7 @@ struct CustomConnectorBody: View {
             ForEach($model.headers) { $row in
                 let index = model.index(ofHeader: row.id)
                 HStack(spacing: 8) {
-                    TextField("Key", text: $row.key)
+                    PalTextField("Key", text: $row.key)
                         .modifier(FieldStyle(style: style))
                         .disabled(row.isStored || model.isBusy)
                         .accessibilityIdentifier("customConnectorHeaderKey-\(index)")
@@ -287,7 +287,6 @@ private struct FieldStyle: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .textFieldStyle(.plain)
             .font(style.bodyFont)
             .neverAutocapitalized()
             .autocorrectionDisabled()
