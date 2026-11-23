@@ -46,6 +46,30 @@ COMPLIANT_CONTROLLER = (
 )
 COMPLIANT_PLATFORM = "extension View {\n    func chatRow() -> some View { self }\n}\n"
 
+FLIPPED_PLATFORM = (
+    "extension View {\n"
+    "    func chatList() -> some View {\n"
+    "        scaleEffect(x: 1, y: -1, anchor: .center)\n"
+    "    }\n"
+    "}\n"
+)
+INSET_LIST = (
+    "struct ChatTranscriptList: View {\n"
+    "    var body: some View {\n"
+    "        ScrollView { rows }\n"
+    "            .scrollPosition($scroll.position)\n"
+    "            .contentMargins(.top, 8, for: .automatic)\n"
+    "    }\n"
+    "}\n"
+)
+UNROUTED_CONTROLLER = (
+    "final class ChatScrollController {\n"
+    "    func jump(_ target: ScrollPosition) {\n"
+    "        target.scrollTo(edge: .top)\n"
+    "    }\n"
+    "}\n"
+)
+
 
 def _write(root: Path, files: dict[str, str]) -> Path:
     for name, body in files.items():
@@ -67,24 +91,12 @@ def _scan(root: Path, allowlist: str | None = None) -> list[str]:
     return writer.scan(root, path)
 
 
-def _main_shape(tmp_path: Path) -> Path:
-    def show(name: str) -> str:
-        return subprocess.run(
-            ["git", "show", f"origin/main:apps/ios/{name}"], cwd=REPO, check=True, capture_output=True, text=True
-        ).stdout
-
-    return _write(tmp_path, {name: show(name) for name in (LIST, CONTROLLER, PLATFORM)})
-
-
 def test_a_compliant_tree_passes(tmp_path):
     assert _scan(_tree(tmp_path)) == []
 
 
 def test_mains_flipped_list_fails_on_each_old_writer(tmp_path):
-    try:
-        root = _main_shape(tmp_path)
-    except subprocess.CalledProcessError:
-        pytest.skip("origin/main is not available")
+    root = _write(tmp_path, {LIST: INSET_LIST, CONTROLLER: UNROUTED_CONTROLLER, PLATFORM: FLIPPED_PLATFORM})
     found = _scan(root)
     text = "\n".join(found)
     assert f"{PLATFORM}:" in text and "flipped list" in text
