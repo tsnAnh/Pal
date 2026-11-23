@@ -15,9 +15,10 @@ struct VideoAttachmentTests {
         #expect(content.text == "https://cdn.example.com/clip.m3u8")
     }
 
-    @Test func hostFilePathVideoIsLeftAlone() {
-        let text = "Done\nMEDIA:/home/agent/out/clip.mp4"
-        #expect(MessageImages.extract(from: text, role: .assistant).text == text)
+    @Test func hostFilePathVideoBecomesFileCard() {
+        let content = MessageImages.extract(from: "Done\nMEDIA:/home/agent/out/clip.mp4", role: .assistant)
+        #expect(content.text == "Done")
+        #expect(content.files.map(\.name) == ["clip.mp4"])
     }
 
     @Test func nonPlayableRemoteExtensionIsLeftAlone() {

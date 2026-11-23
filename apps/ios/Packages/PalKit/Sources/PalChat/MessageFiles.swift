@@ -26,8 +26,11 @@ public enum MessageFiles {
     private static let previewPrefix = "::preview{"
     private static let maxPathLength = 2048
     private static let trailingMarks = CharacterSet(charactersIn: ".,;:!?'\"*_`)]}>")
-    private static let leftToOtherRenderers: Set<String> = MessageImages.imageExtensions.union(["mp4", "m4v", "mov", "m3u8", "webm", "mkv", "avi"])
-    private static let audioExtensions: Set<String> = ["mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac"]
+    private static let leftToOtherRenderers = MessageImages.imageExtensions
+    private static let mediaExtensions: Set<String> = [
+        "mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac",
+        "mp4", "m4v", "mov", "webm", "mkv", "avi",
+    ]
 
     public static func extract(from text: String, isStreaming: Bool) -> (text: String, files: [FileReference]) {
         guard text.contains(tag) || text.contains(previewPrefix) else { return (text, []) }
@@ -79,7 +82,7 @@ public enum MessageFiles {
     }
 
     private static func assetKind(of path: String) -> String {
-        audioExtensions.contains((path as NSString).pathExtension.lowercased()) ? "media" : "file"
+        mediaExtensions.contains((path as NSString).pathExtension.lowercased()) ? "media" : "file"
     }
 
     private static func fenceMarker(of line: String) -> Character? {
