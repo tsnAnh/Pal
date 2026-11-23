@@ -132,7 +132,7 @@ jobs:
         if: failure()
         run: |
           for dir in apps/ios/build/release-mac/*/; do
-            for name in archive.log export.log appcast.log notarize-log.json; do
+            for name in archive.log export.log dmg.log appcast.log notarize-log.json; do
               if [[ -f "$dir$name" ]]; then
                 echo "::group::$dir$name"
                 tail -n 80 "$dir$name"

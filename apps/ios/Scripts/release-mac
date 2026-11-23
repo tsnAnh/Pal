@@ -8,9 +8,10 @@ Usage: Scripts/release-mac [--version X.Y.Z] [--build-number N] [--notes FILE] [
                            [--asc-key-file P8 --asc-key-id ID --asc-issuer-id ID]
                            [--ed-key-file FILE] [--profile FILE --profile FILE]
 
-Archives Pal for macOS, signs it with Developer ID (team G94PJ7VQBJ), notarizes and
-staples it, then publishes the zip as a GitHub release on tsnAnh/Pal (pal-mac-<build>, or
-TAG with --tag) and refreshes the Sparkle appcast on the pal-mac-feed release.
+Archives Pal for macOS as a universal (arm64 + x86_64) app, signs it with Developer ID (team
+G94PJ7VQBJ), notarizes and staples it, packs it into a signed, notarized and stapled DMG, then
+publishes the DMG as a GitHub release on tsnAnh/Pal (pal-mac-<build>, or TAG with --tag) and
+refreshes the Sparkle appcast on the pal-mac-feed release.
 
   --version X.Y.Z        CFBundleShortVersionString to stamp, 1-3 dotted digits (default: project.yml)
   --build-number N       CFBundleVersion to stamp (default: UTC yymmdd.HHMM); must be newer than the live feed
@@ -27,7 +28,7 @@ TAG with --tag) and refreshes the Sparkle appcast on the pal-mac-feed release.
                          archive is signed with the Developer ID Application certificate and these
                          profiles instead of Xcode's automatic signing, with no Apple ID or API key
                          needed by xcodebuild (default: automatic signing)
-  --dry-run              archive, export, verify, zip and generate the appcast locally;
+  --dry-run              archive, export, verify, build and sign the DMG and generate the appcast locally;
                          skip notarization, stapling and every GitHub write
 USAGE
 }
@@ -85,7 +86,7 @@ scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ios_dir="$(dirname "$scripts_dir")"
 out="$ios_dir/build/release-mac/$build_number"
 tag="${release_tag:-pal-mac-$build_number}"
-zip_name="Pal-$build_number.zip"
+dmg_name="Pal-$build_number.dmg"
 archive="$out/Pal.xcarchive"
 app="$out/export/Pal.app"
 options="$out/ExportOptions.plist"
@@ -185,7 +186,7 @@ plist_value() { /usr/libexec/PlistBuddy -c "Print :$2" "$1/Contents/Info.plist";
 
 preflight() {
   local tool
-  for tool in xcodegen gh xcrun ditto xmllint curl shasum; do
+  for tool in xcodegen gh xcrun ditto xmllint curl shasum hdiutil lipo codesign; do
     command -v "$tool" >/dev/null || die "$tool is required"
   done
   if [[ $dry_run -eq 0 ]]; then
@@ -266,6 +267,8 @@ archive_and_export() {
     -archivePath "$archive" \
     ${xcode_auth[@]+"${xcode_auth[@]}"} \
     ${archive_signing[@]+"${archive_signing[@]}"} \
+    ARCHS="arm64 x86_64" \
+    ONLY_ACTIVE_ARCH=NO \
     CURRENT_PROJECT_VERSION="$build_number" \
     PAL_UPDATE_FEED="$FEED_URL" \
     ${version_setting[@]+"${version_setting[@]}"} \
@@ -296,6 +299,18 @@ verify_signing_key() {
     || die "the Sparkle signing key does not match PAL_UPDATE_PUBLIC_KEY ($embedded_key) embedded in the app"
 }
 
+verify_universal() {
+  local file archs checked=0
+  while IFS= read -r -d '' file; do
+    archs="$(lipo -archs "$file" 2>/dev/null)" || continue
+    [[ " $archs " == *" arm64 "* && " $archs " == *" x86_64 "* ]] \
+      || die "${file#"$out/"} is not universal (architectures: $archs)"
+    checked=$((checked + 1))
+  done < <(find "$app" -type f -print0)
+  [[ $checked -gt 0 ]] || die "found no Mach-O binaries in $app"
+  echo "verified $checked universal binaries (arm64 + x86_64)"
+}
+
 verify_bundle() {
   local feed bundle_version details live
   feed="$(plist_value "$app" SUFeedURL)"
@@ -304,6 +319,7 @@ verify_bundle() {
   [[ "$bundle_version" == "$build_number" ]] || die "CFBundleVersion is '$bundle_version', expected $build_number"
 
   verify_signing_key "$(plist_value "$app" SUPublicEDKey)"
+  verify_universal
 
   codesign --verify --deep --strict "$app" || die "codesign verification failed for $app"
   details="$(codesign -dvv "$app" 2>&1)"
@@ -318,26 +334,67 @@ verify_bundle() {
   echo "verified bundle $build_number (live feed: $live)"
 }
 
+submit_for_notarization() {
+  local file="$1" name="$2" result="$out/notarize-$2.json" status id
+  xcrun notarytool submit "$file" "${notary_auth[@]}" --wait --output-format json > "$result" \
+    || { cat "$result" >&2; die "notarytool submit failed for the $name"; }
+  status="$(plutil -extract status raw -o - "$result")"
+  id="$(plutil -extract id raw -o - "$result")"
+  if [[ "$status" != "Accepted" ]]; then
+    xcrun notarytool log "$id" "${notary_auth[@]}" "$out/notarize-log.json" >/dev/null 2>&1 || true
+    die "notarization of the $name $status (submission $id); see $out/notarize-log.json"
+  fi
+}
+
+developer_id_identity() {
+  codesign -dvv "$app" 2>&1 | sed -n 's/^Authority=\(Developer ID Application: .*\)$/\1/p' | head -1
+}
+
+create_dmg() {
+  local dmg="$1" root="$out/dmg-root" attempt
+  rm -rf "$root" "$dmg"
+  mkdir -p "$root"
+  ditto "$app" "$root/Pal.app"
+  ln -s /Applications "$root/Applications"
+  for attempt in 1 2 3; do
+    if hdiutil create -volname Pal -srcfolder "$root" -fs HFS+ -format UDZO -ov "$dmg" > "$out/dmg.log" 2>&1; then
+      rm -rf "$root"
+      return
+    fi
+    echo "hdiutil create failed (attempt $attempt of 3)" >&2
+    sleep 5
+  done
+  tail -20 "$out/dmg.log" >&2
+  die "hdiutil could not create $dmg_name; see $out/dmg.log"
+}
+
+package_dmg() {
+  local dmg="$stage/$dmg_name" identity
+  create_dmg "$dmg"
+  identity="$(developer_id_identity)"
+  [[ -n "$identity" ]] || die "could not read the Developer ID Application identity that signed $app"
+  codesign --sign "$identity" --timestamp "$dmg" || die "codesign could not sign $dmg_name"
+  codesign --verify --strict "$dmg" || die "codesign verification failed for $dmg_name"
+  if [[ $dry_run -eq 1 ]]; then
+    echo "dry run: skipping notarization and stapling of $dmg_name"
+    return
+  fi
+  submit_for_notarization "$dmg" DMG
+  xcrun stapler staple "$dmg" || die "stapling $dmg_name failed"
+  spctl -a -vvv -t open --context context:primary-signature "$dmg" || die "Gatekeeper rejected $dmg_name"
+}
+
 notarize() {
   mkdir -p "$stage"
   if [[ $dry_run -eq 1 ]]; then
-    echo "dry run: skipping notarization and stapling"
+    echo "dry run: skipping notarization and stapling of the app"
   else
-    local submission status id
     ditto -c -k --keepParent "$app" "$out/notarize.zip"
-    xcrun notarytool submit "$out/notarize.zip" "${notary_auth[@]}" --wait --output-format json > "$out/notarize.json" \
-      || { cat "$out/notarize.json" >&2; die "notarytool submit failed"; }
-    status="$(plutil -extract status raw -o - "$out/notarize.json")"
-    id="$(plutil -extract id raw -o - "$out/notarize.json")"
-    if [[ "$status" != "Accepted" ]]; then
-      submission="$out/notarize-log.json"
-      xcrun notarytool log "$id" "${notary_auth[@]}" "$submission" >/dev/null 2>&1 || true
-      die "notarization $status (submission $id); see $submission"
-    fi
-    xcrun stapler staple "$app" || die "stapling failed"
+    submit_for_notarization "$out/notarize.zip" app
+    xcrun stapler staple "$app" || die "stapling the app failed"
     spctl -a -vvv -t exec "$app" || die "Gatekeeper rejected the notarized app"
   fi
-  ditto -c -k --sequesterRsrc --keepParent "$app" "$stage/$zip_name"
+  package_dmg
 }
 
 make_feed() {
@@ -363,9 +420,9 @@ make_feed() {
 }
 
 verify_public_download() {
-  curl -fsSL -o "$out/public-$zip_name" "${download_prefix}$zip_name" || die "published asset is not downloadable"
-  [[ "$(sha256_of "$out/public-$zip_name")" == "$(sha256_of "$stage/$zip_name")" ]] \
-    || die "public download of $zip_name does not match the local zip"
+  curl -fsSL -o "$out/public-$dmg_name" "${download_prefix}$dmg_name" || die "published asset is not downloadable"
+  [[ "$(sha256_of "$out/public-$dmg_name")" == "$(sha256_of "$stage/$dmg_name")" ]] \
+    || die "public download of $dmg_name does not match the local DMG"
 }
 
 live_enclosure_url() {
@@ -376,14 +433,14 @@ publish_tag_release() {
   local title="Pal for Mac $short_version ($build_number)" asset
   if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
     [[ "$(live_enclosure_url)" != */download/"$tag"/* ]] || die "release $tag is already live in the appcast; use a new tag"
-    gh release upload "$tag" "$stage/$zip_name" --repo "$REPO" --clobber
+    gh release upload "$tag" "$stage/$dmg_name" --repo "$REPO" --clobber
     while IFS= read -r asset; do
-      [[ "$asset" == Pal-*.zip && "$asset" != "$zip_name" ]] || continue
+      [[ ( "$asset" == Pal-*.zip || "$asset" == Pal-*.dmg ) && "$asset" != "$dmg_name" ]] || continue
       gh release delete-asset "$tag" "$asset" --repo "$REPO" --yes
     done < <(gh release view "$tag" --repo "$REPO" --json assets --jq '.assets[].name')
     gh release edit "$tag" --repo "$REPO" --title "$title" --latest
   else
-    gh release create "$tag" "$stage/$zip_name" \
+    gh release create "$tag" "$stage/$dmg_name" \
       --repo "$REPO" \
       --verify-tag \
       --title "$title" \
@@ -395,16 +452,16 @@ publish_tag_release() {
 
 publish_build_release() {
   local local_sha remote_sha
-  local_sha="$(sha256_of "$stage/$zip_name")"
+  local_sha="$(sha256_of "$stage/$dmg_name")"
   if gh release view "$tag" --repo "$REPO" >/dev/null 2>&1; then
-    curl -fsSL -o "$out/remote-$zip_name" "${download_prefix}$zip_name" \
-      || die "release $tag exists but asset $zip_name is not downloadable"
-    remote_sha="$(sha256_of "$out/remote-$zip_name")"
+    curl -fsSL -o "$out/remote-$dmg_name" "${download_prefix}$dmg_name" \
+      || die "release $tag exists but asset $dmg_name is not downloadable"
+    remote_sha="$(sha256_of "$out/remote-$dmg_name")"
     [[ "$remote_sha" == "$local_sha" ]] || die "release $tag exists with different bytes; use a new build number"
     echo "release $tag already published with identical bytes"
     return
   fi
-  gh release create "$tag" "$stage/$zip_name" \
+  gh release create "$tag" "$stage/$dmg_name" \
     --repo "$REPO" \
     --target "$(git -C "$ios_dir" rev-parse HEAD)" \
     --title "Pal for Mac $short_version ($build_number)" \
@@ -445,7 +502,7 @@ make_feed
 if [[ $dry_run -eq 1 ]]; then
   echo "dry run complete for build $build_number"
   echo "  app:      $app"
-  echo "  zip:      $stage/$zip_name"
+  echo "  dmg:      $stage/$dmg_name"
   echo "  appcast:  $stage/appcast.xml"
   echo "  logs:     $out"
   exit 0

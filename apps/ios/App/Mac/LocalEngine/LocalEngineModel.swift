@@ -23,6 +23,7 @@ final class LocalEngineModel {
     private(set) var tailnetPassword: String?
     private(set) var tailnetFailure: String?
     private(set) var isUpdatingTailnet = false
+    @ObservationIgnored private var tailnetGeneration = 0
     var isPresentingSetup = false
 
     @ObservationIgnored private weak var connection: ConnectionModel?
@@ -135,7 +136,9 @@ final class LocalEngineModel {
     }
 
     private func refreshTailnet() async {
-        guard !isUpdatingTailnet, let status = try? await service.tailnetStatus(), !isUpdatingTailnet else { return }
+        guard !isUpdatingTailnet else { return }
+        let generation = tailnetGeneration
+        guard let status = try? await service.tailnetStatus(), !isUpdatingTailnet, generation == tailnetGeneration else { return }
         apply(status)
     }
 
@@ -151,6 +154,7 @@ final class LocalEngineModel {
     func enableTailnet() async {
         guard !isUpdatingTailnet else { return }
         isUpdatingTailnet = true
+        tailnetGeneration += 1
         tailnetFailure = nil
         defer { isUpdatingTailnet = false }
         do {
@@ -159,12 +163,15 @@ final class LocalEngineModel {
             tailnetPassword = credentials.password
         } catch {
             tailnetFailure = tailnetMessage(for: error)
+            return
         }
+        await detect()
     }
 
     func disableTailnet() async {
         guard !isUpdatingTailnet else { return }
         isUpdatingTailnet = true
+        tailnetGeneration += 1
         tailnetFailure = nil
         defer { isUpdatingTailnet = false }
         do {
@@ -176,6 +183,16 @@ final class LocalEngineModel {
 
     func dismissTailnetPassword() {
         tailnetPassword = nil
+    }
+
+    private func turnOffTailnetBeforeRemoval() async {
+        guard case .on = tailnet else { return }
+        tailnetGeneration += 1
+        do {
+            apply(try await service.disableTailnet())
+        } catch {
+            diagnostics.info("engine", "tailnet off before removal failed: \(Diagnostics.describe(error))")
+        }
     }
 
     private func tailnetMessage(for error: any Error) -> String {
@@ -208,6 +225,7 @@ final class LocalEngineModel {
         state.apply(.removalBegan)
         guard state == .removing else { return }
         settingsFailure = nil
+        await turnOffTailnetBeforeRemoval()
         do {
             try await service.remove(deleteData: deleteData)
             state.apply(.removalSucceeded)
