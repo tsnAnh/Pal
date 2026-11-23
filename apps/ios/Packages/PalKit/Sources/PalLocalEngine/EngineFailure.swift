@@ -74,6 +74,13 @@ public struct EngineFailure: Error, Sendable, Equatable {
         )
     }
 
+    public static func tailnet(trace: String) -> EngineFailure {
+        EngineFailure(
+            operation: .start, step: nil, resumeStage: nil, code: "tailnet_failed",
+            reason: String(localized: "Pal couldn't change iPhone access. Try again."), trace: trace
+        )
+    }
+
     public static func engineNotResponding(trace: String) -> EngineFailure {
         EngineFailure(
             operation: .start, step: .startPal, resumeStage: nil, code: "service_not_responding",
