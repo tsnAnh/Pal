@@ -1,9 +1,3 @@
-"""The commitment ledger: promises that outlive a turn, their legal state machine and an append-only event log.
-
-This module is the only writer of the ``commitments`` and ``commitment_events`` tables (the
-``commitment-writers`` check enforces it). Every public function takes the profile home and an injected ``now``.
-"""
-
 from __future__ import annotations
 
 import json

@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""Fail when SQL naming the commitment ledger tables appears outside gateway/commitments.py.
-
-``gateway/commitments.py`` is the only module that reads or writes ``commitments`` and ``commitment_events``;
-every other caller goes through its functions, so the state machine cannot be bypassed.
-
-Flags, in every Python file outside that module and any ``tests`` directory, a string constant (pieces of an
-f-string included) in which a SQL keyword (INSERT INTO, REPLACE INTO, UPDATE ... SET, DELETE FROM, FROM, JOIN,
-DROP TABLE, ALTER TABLE, CREATE TABLE, CREATE TRIGGER ... ON) is followed by one of the table names, matched
-case-insensitively across whitespace. Prose that merely says "commitments" does not match.
-
-Run: python scripts/ci/check_commitment_writers.py [--root DIR]
-Exit 1 on any violation, 0 when clean.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -37,7 +23,6 @@ def names_ledger_table(text: str) -> bool:
 
 
 def ledger_sql_lines(source: str) -> list[int]:
-    """Line numbers of the string constants in ``source`` that run SQL on a ledger table."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -48,7 +33,6 @@ def ledger_sql_lines(source: str) -> list[int]:
 
 
 def find_ledger_sql(root: Path) -> list[tuple[str, int]]:
-    """``(path, line)`` of every ledger SQL string outside the owning module."""
     root = root.resolve()
     if not root.is_dir():
         raise ValueError(f"repository root is not a directory: {root}")

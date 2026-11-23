@@ -31,8 +31,9 @@ def call(args: dict, *, tool_call_id: str = "") -> dict:
         reset_current_observability_context(tokens)
 
 
-def promise(**extra) -> dict:
-    return call({"action": "promise", "text": "Send the weekly report", "owner_requested": True, **extra})
+def promise(*, tool_call_id: str = "", **extra) -> dict:
+    return call({"action": "promise", "text": "Send the weekly report", "owner_requested": True, **extra},
+                tool_call_id=tool_call_id)
 
 
 def schema_states(schema: dict) -> set[str]:

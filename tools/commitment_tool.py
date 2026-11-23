@@ -1,5 +1,3 @@
-"""Commitment tool: promises that outlive a turn, recorded in the per-profile ledger (gateway/commitments.py)."""
-
 import hashlib
 import time
 import uuid
