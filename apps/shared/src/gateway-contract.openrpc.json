@@ -3248,7 +3248,7 @@
     },
     {
       "name": "library.asset",
-      "summary": "Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
+      "summary": "Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
       "params": [
         {
           "name": "params",
@@ -3787,6 +3787,42 @@
       }
     },
     {
+      "name": "model.providers.host_check",
+      "summary": "What the Hermes host has for a cli_plan provider: the command-line tool, a sign-in it can see, and the provider plugin. install_hint is the next step in plain words (absent when ready); disclosure is the plugin's billing and account notice to show before installing. cli_version and plan are absent until the plugin reports them. Any other provider answers cli_found false with install_hint \"This provider has no host check.\"",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ModelProviderHostCheckParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ModelProviderHostCheckResult"
+        }
+      }
+    },
+    {
+      "name": "model.providers.install_plugin",
+      "summary": "Install the plugin behind a cli_plan provider from the plugin catalog, as the plugins screen does. already_installed: nothing was run. refused: the host is managed or the command-line tool is missing (reason says which). The provider row is refreshed in the result.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ModelProviderHostCheckParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ModelProviderInstallPluginResult"
+        }
+      }
+    },
+    {
       "name": "model.providers.list",
       "summary": "Every model provider with whether its credential is set, expired or missing for the profile. Setting or replacing a credential goes through auth.begin with service provider:<id>.",
       "params": [
@@ -3837,6 +3873,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ModelProviderBaseUrlResult"
+        }
+      }
+    },
+    {
+      "name": "model.providers.test",
+      "summary": "Send one real request (a few tokens) to the provider and model and report whether it answered, how long it took and, on failure, why. Nothing is saved: a staged api_key lives in memory for the call only and is never written, logged or echoed. api_key applies only to api_key providers; sign-in and cli_plan providers are tested with their stored login and ignore it. base_url is honoured only where the provider's address is editable. timeout_s defaults to 30 and is capped at 60. A provider that cannot be tested here answers ok=false, error.kind unsupported, code unsupported_provider. Malformed params are RPC error 4001; a login shared by every profile tested from another profile is 4095.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ModelProviderTestParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ModelProviderTestResult"
         }
       }
     },
@@ -35237,9 +35291,22 @@
         "title": "LegacyPluginRow",
         "type": "object"
       },
+      "LibraryAssetKind": {
+        "enum": [
+          "image",
+          "video",
+          "audio",
+          "pdf",
+          "document",
+          "archive",
+          "other"
+        ],
+        "title": "LibraryAssetKind",
+        "type": "string"
+      },
       "LibraryAssetParams": {
         "additionalProperties": false,
-        "description": "``max_bytes`` defaults to 8 MB (max 16 MB). Images come back as a thumbnail of at most 512 px\nunless ``thumbnail`` is false.",
+        "description": "Three call shapes. Whole file (old apps, unchanged): ``max_bytes`` defaults to 8 MB (max 16 MB);\nimages come back as a thumbnail of at most 512 px unless ``thumbnail`` is false.\n``preview`` returns a JPEG or PNG of at most 512 px (video poster frame, first PDF page, still image)\ncapped by ``max_bytes``, or an empty ``data_base64`` with ``preview_reason``; sources up to 200 MB for\nvideo and 32 MB for images and PDF. ``offset`` and/or ``length`` read one range of the file, up to\n2 MB per call, for files up to 200 MB. ``preview`` and ranges do not combine.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -35273,6 +35340,37 @@
             "default": true,
             "title": "Thumbnail",
             "type": "boolean"
+          },
+          "preview": {
+            "default": false,
+            "title": "Preview",
+            "type": "boolean"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Offset"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Length"
           }
         },
         "required": [
@@ -35283,6 +35381,7 @@
       },
       "LibraryAssetResult": {
         "additionalProperties": false,
+        "description": "``size`` is always the bytes in ``data_base64``; ``total`` is the file's true size.\n``kind``, ``sniffed_mime`` and ``previewable`` come from the file's first 4 KB, not its name:\n``previewable`` is false for HTML, SVG, archives, executables, scripts and anything unrecognised.\n``mime`` stays the name-based type (the preview's own type when a preview image is returned).\n``offset`` and ``length`` echo the range served; ``length`` can be below the request, and 0 past the end.",
         "properties": {
           "mime": {
             "title": "Mime",
@@ -35295,6 +35394,124 @@
           "size": {
             "title": "Size",
             "type": "integer"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LibraryAssetKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "sniffed_mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sniffed Mime"
+          },
+          "previewable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Previewable"
+          },
+          "preview_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LibraryPreviewReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Seconds"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Height"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Offset"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Length"
           }
         },
         "required": [
@@ -35486,6 +35703,22 @@
         ],
         "title": "LibraryListResult",
         "type": "object"
+      },
+      "LibraryPreviewReason": {
+        "description": "Why a preview request returned no image. The app falls back to its own thumbnail or an icon card.",
+        "enum": [
+          "not_previewable",
+          "unsupported_kind",
+          "too_large",
+          "heic_decoder_missing",
+          "ffmpeg_missing",
+          "pdf_renderer_missing",
+          "render_failed",
+          "timed_out",
+          "busy"
+        ],
+        "title": "LibraryPreviewReason",
+        "type": "string"
       },
       "ListedSkill": {
         "additionalProperties": false,
@@ -39777,7 +40010,7 @@
       },
       "ModelProvider": {
         "additionalProperties": false,
-        "description": "One model provider's setup state for the bot profile. ``scope`` account means the login is shared by\nevery profile on the host, so only the main profile may change it. ``base_url`` is the address override\n(plain, not a secret), ``default_base_url`` what applies without one. No credential value is ever carried.",
+        "description": "One model provider's setup state for the bot profile. ``kind`` cli_plan is a subscription that runs\nthrough a command-line tool on the Hermes host (Claude Direct SDK): it has no sign-in flow here, ``state``\nis set once the tool, its plugin and its sign-in are all present, and ``reason`` carries what is missing\n(see model.providers.host_check / install_plugin). ``scope`` account means the login is shared by\nevery profile on the host, so only the main profile may change it. ``base_url`` is the address override\n(plain, not a secret), ``default_base_url`` what applies without one. No credential value is ever carried.",
         "properties": {
           "id": {
             "title": "Id",
@@ -39938,11 +40171,169 @@
         "title": "ModelProviderBaseUrlResult",
         "type": "object"
       },
+      "ModelProviderHostCheckParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ModelProviderHostCheckParams",
+        "type": "object"
+      },
+      "ModelProviderHostCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "cli_found": {
+            "title": "Cli Found",
+            "type": "boolean"
+          },
+          "cli_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cli Version"
+          },
+          "signed_in": {
+            "title": "Signed In",
+            "type": "boolean"
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Plan"
+          },
+          "plugin_installed": {
+            "title": "Plugin Installed",
+            "type": "boolean"
+          },
+          "plugin_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Plugin Version"
+          },
+          "install_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Install Hint"
+          },
+          "disclosure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Disclosure"
+          }
+        },
+        "required": [
+          "cli_found",
+          "signed_in",
+          "plugin_installed"
+        ],
+        "title": "ModelProviderHostCheckResult",
+        "type": "object"
+      },
+      "ModelProviderInstallPluginOutcome": {
+        "enum": [
+          "installed",
+          "already_installed",
+          "refused",
+          "unsupported",
+          "failed"
+        ],
+        "title": "ModelProviderInstallPluginOutcome",
+        "type": "string"
+      },
+      "ModelProviderInstallPluginResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/ModelProviderInstallPluginOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelProvider"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ModelProviderInstallPluginResult",
+        "type": "object"
+      },
       "ModelProviderKind": {
         "enum": [
           "api_key",
           "device_code",
           "oauth_paste",
+          "cli_plan",
           "unsupported"
         ],
         "title": "ModelProviderKind",
@@ -40039,6 +40430,166 @@
         ],
         "title": "ModelProviderState",
         "type": "string"
+      },
+      "ModelProviderTestError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ModelProviderTestErrorKind"
+          }
+        },
+        "required": [
+          "code",
+          "reason",
+          "retryable",
+          "kind"
+        ],
+        "title": "ModelProviderTestError",
+        "type": "object"
+      },
+      "ModelProviderTestErrorKind": {
+        "enum": [
+          "auth",
+          "network",
+          "timeout",
+          "model",
+          "quota",
+          "unsupported",
+          "other"
+        ],
+        "title": "ModelProviderTestErrorKind",
+        "type": "string"
+      },
+      "ModelProviderTestParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Base Url"
+          },
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Api Key"
+          },
+          "timeout_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Timeout S"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "ModelProviderTestParams",
+        "type": "object"
+      },
+      "ModelProviderTestResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "integer"
+          },
+          "reply_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reply Preview"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelProviderTestError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "ok",
+          "provider",
+          "model",
+          "latency_ms"
+        ],
+        "title": "ModelProviderTestResult",
+        "type": "object"
       },
       "ModelProvidersResult": {
         "additionalProperties": false,
@@ -70001,7 +70552,7 @@
     },
     {
       "name": "library.asset",
-      "summary": "Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
+      "summary": "Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
       "params": [
         {
           "name": "params",

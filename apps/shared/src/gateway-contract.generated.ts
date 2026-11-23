@@ -3229,18 +3229,35 @@ export interface LibraryItem {
   occurred_at: string
 }
 export type LibraryItemKind = 'link' | 'media' | 'file'
-/** ``max_bytes`` defaults to 8 MB (max 16 MB). Images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false. */
+/** Three call shapes. Whole file (old apps, unchanged): ``max_bytes`` defaults to 8 MB (max 16 MB); images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false. ``preview`` returns a JPEG or PNG of at most 512 px (video poster frame, first PDF page, still image) capped by ``max_bytes``, or an empty ``data_base64`` with ``preview_reason``; sources up to 200 MB for video and 32 MB for images and PDF. ``offset`` and/or ``length`` read one range of the file, up to 2 MB per call, for files up to 200 MB. ``preview`` and ranges do not combine. */
 export interface LibraryAssetParams {
   profile?: string | null
   asset_ref: string
   max_bytes?: number | null
   thumbnail?: boolean
+  preview?: boolean
+  offset?: number | null
+  length?: number | null
 }
+/** ``size`` is always the bytes in ``data_base64``; ``total`` is the file's true size. ``kind``, ``sniffed_mime`` and ``previewable`` come from the file's first 4 KB, not its name: ``previewable`` is false for HTML, SVG, archives, executables, scripts and anything unrecognised. ``mime`` stays the name-based type (the preview's own type when a preview image is returned). ``offset`` and ``length`` echo the range served; ``length`` can be below the request, and 0 past the end. */
 export interface LibraryAssetResult {
   mime: string
   data_base64: string
   size: number
+  total?: number | null
+  kind?: LibraryAssetKind | null
+  sniffed_mime?: string | null
+  previewable?: boolean | null
+  preview_reason?: LibraryPreviewReason | null
+  duration_seconds?: number | null
+  width?: number | null
+  height?: number | null
+  offset?: number | null
+  length?: number | null
 }
+export type LibraryAssetKind = 'image' | 'video' | 'audio' | 'pdf' | 'document' | 'archive' | 'other'
+/** Why a preview request returned no image. The app falls back to its own thumbnail or an icon card. */
+export type LibraryPreviewReason = 'not_previewable' | 'unsupported_kind' | 'too_large' | 'heic_decoder_missing' | 'ffmpeg_missing' | 'pdf_renderer_missing' | 'render_failed' | 'timed_out' | 'busy'
 /** ``machine_kind`` is ``Spark``, ``Mac``, ``PC`` or ``computer``. ``nvidia_platform`` is ``products.nvidia_platform()``: ``rtx_spark``, ``dgx_spark``, ``discrete`` or null. ``locale`` is the OS account's first UI language, null when the OS has none. */
 export interface MachineFactsResult {
   machine: MachineInfo
@@ -3265,7 +3282,7 @@ export interface ModelProvidersResult {
   profile: string
   providers: ModelProvider[]
 }
-/** One model provider's setup state for the bot profile. ``scope`` account means the login is shared by every profile on the host, so only the main profile may change it. ``base_url`` is the address override (plain, not a secret), ``default_base_url`` what applies without one. No credential value is ever carried. */
+/** One model provider's setup state for the bot profile. ``kind`` cli_plan is a subscription that runs through a command-line tool on the Hermes host (Claude Direct SDK): it has no sign-in flow here, ``state`` is set once the tool, its plugin and its sign-in are all present, and ``reason`` carries what is missing (see model.providers.host_check / install_plugin). ``scope`` account means the login is shared by every profile on the host, so only the main profile may change it. ``base_url`` is the address override (plain, not a secret), ``default_base_url`` what applies without one. No credential value is ever carried. */
 export interface ModelProvider {
   id: string
   name: string
@@ -3278,7 +3295,7 @@ export interface ModelProvider {
   reason?: string | null
   can_remove: boolean
 }
-export type ModelProviderKind = 'api_key' | 'device_code' | 'oauth_paste' | 'unsupported'
+export type ModelProviderKind = 'api_key' | 'device_code' | 'oauth_paste' | 'cli_plan' | 'unsupported'
 export type ModelProviderState = 'set' | 'not_set' | 'expired' | 'unsupported'
 export type ModelProviderScope = 'profile' | 'account'
 export interface ModelProviderRemoveParams {
@@ -3302,6 +3319,49 @@ export interface ModelProviderBaseUrlResult {
   provider?: ModelProvider | null
 }
 export type ModelProviderBaseUrlOutcome = 'saved' | 'reset' | 'invalid' | 'unsupported' | 'failed'
+export interface ModelProviderTestParams {
+  profile?: string | null
+  provider: string
+  model: string
+  base_url?: string | null
+  api_key?: string | null
+  timeout_s?: number | null
+}
+export interface ModelProviderTestResult {
+  ok: boolean
+  provider: string
+  model: string
+  latency_ms: number
+  reply_preview?: string | null
+  error?: ModelProviderTestError | null
+}
+export interface ModelProviderTestError {
+  code: string
+  reason: string
+  retryable: boolean
+  kind: ModelProviderTestErrorKind
+}
+export type ModelProviderTestErrorKind = 'auth' | 'network' | 'timeout' | 'model' | 'quota' | 'unsupported' | 'other'
+export interface ModelProviderHostCheckParams {
+  profile?: string | null
+  provider: string
+}
+export interface ModelProviderHostCheckResult {
+  cli_found: boolean
+  cli_version?: string | null
+  signed_in: boolean
+  plan?: string | null
+  plugin_installed: boolean
+  plugin_version?: string | null
+  install_hint?: string | null
+  disclosure?: string | null
+}
+export interface ModelProviderInstallPluginResult {
+  outcome: ModelProviderInstallPluginOutcome
+  reason?: string | null
+  provider?: ModelProvider | null
+}
+export type ModelProviderInstallPluginOutcome = 'installed' | 'already_installed' | 'refused' | 'unsupported' | 'failed'
 /** ``auto_review`` is true only under the smart guardian; ``approval_mode`` is the profile's real setting so a client can say approvals are off, in which case rules are stored and not applied. */
 export interface PermissionsState {
   auto_review: boolean
@@ -9016,7 +9076,7 @@ export interface RpcMethods {
   'learning.edit': { params: LearningEditParams; result: LearningMutationResult }
   /** Pre-render the /journey timeline (frames + legend/summary) so the TUI walks it locally. */
   'learning.frames': { params: LearningFramesParams; result: LearningFramesResult }
-  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
+  /** Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }
@@ -9076,12 +9136,18 @@ export interface RpcMethods {
   'model.disconnect': { params: ModelDisconnectParams; result: ModelDisconnectResult }
   /** Provider/model inventory for the picker, layered over the session's live provider when given. */
   'model.options': { params: ModelOptionsParams; result: ModelOptionsResult }
+  /** What the Hermes host has for a cli_plan provider: the command-line tool, a sign-in it can see, and the provider plugin. install_hint is the next step in plain words (absent when ready); disclosure is the plugin's billing and account notice to show before installing. cli_version and plan are absent until the plugin reports them. Any other provider answers cli_found false with install_hint "This provider has no host check." */
+  'model.providers.host_check': { params: ModelProviderHostCheckParams; result: ModelProviderHostCheckResult }
+  /** Install the plugin behind a cli_plan provider from the plugin catalog, as the plugins screen does. already_installed: nothing was run. refused: the host is managed or the command-line tool is missing (reason says which). The provider row is refreshed in the result. */
+  'model.providers.install_plugin': { params: ModelProviderHostCheckParams; result: ModelProviderInstallPluginResult }
   /** Every model provider with whether its credential is set, expired or missing for the profile. Setting or replacing a credential goes through auth.begin with service provider:<id>. */
   'model.providers.list': { params: ProfileParams; result: ModelProvidersResult }
   /** Remove a provider's stored credential for the profile, as `hermes auth remove` / `hermes logout` do. still_set: something outside Pal (the host's environment, a shared provider key) still supplies one. */
   'model.providers.remove': { params: ModelProviderRemoveParams; result: ModelProviderRemoveResult }
   /** Set the provider's address (an http(s) URL), or reset it to the default when base_url is null. */
   'model.providers.set_base_url': { params: ModelProviderBaseUrlParams; result: ModelProviderBaseUrlResult }
+  /** Send one real request (a few tokens) to the provider and model and report whether it answered, how long it took and, on failure, why. Nothing is saved: a staged api_key lives in memory for the call only and is never written, logged or echoed. api_key applies only to api_key providers; sign-in and cli_plan providers are tested with their stored login and ignore it. base_url is honoured only where the provider's address is editable. timeout_s defaults to 30 and is capped at 60. A provider that cannot be tested here answers ok=false, error.kind unsupported, code unsupported_provider. Malformed params are RPC error 4001; a login shared by every profile tested from another profile is 4095. */
+  'model.providers.test': { params: ModelProviderTestParams; result: ModelProviderTestResult }
   /** Save an API key for a provider and return its refreshed inventory row. */
   'model.save_key': { params: ModelSaveKeyParams; result: ModelSaveKeyResult }
   /** Write onboarding.run in the root profile's config.yaml; answers the new state. */
@@ -9633,9 +9699,12 @@ export const RPC_METHODS = [
   'messaging.telegram.status',
   'model.disconnect',
   'model.options',
+  'model.providers.host_check',
+  'model.providers.install_plugin',
   'model.providers.list',
   'model.providers.remove',
   'model.providers.set_base_url',
+  'model.providers.test',
   'model.save_key',
   'onboarding.set_run',
   'onboarding.skip',
@@ -9984,7 +10053,7 @@ export interface CanonicalRpcMethods {
   'kanban.evidence.list': { params: KanbanEvidenceParams; result: KanbanEvidenceResult }
   /** Native-owner only: admit the dispatcher's current claim on a kanban task. */
   'kanban.run': { params: KanbanRunParams; result: KanbanRunResult }
-  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
+  /** Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }

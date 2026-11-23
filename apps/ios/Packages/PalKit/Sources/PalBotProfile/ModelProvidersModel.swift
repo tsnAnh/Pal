@@ -81,7 +81,7 @@ public final class ModelProvidersModel {
     }
 
     public func signIn(_ provider: ModelProvider) async {
-        guard provider.canSignIn, !isWorking(provider.id) else { return }
+        guard provider.canSignIn, provider.kind != .cliPlan, !isWorking(provider.id) else { return }
         rows[provider.id] = .working(.signingIn)
         switch await client.beginSignIn(provider.id) {
         case .started(let requestID):
@@ -180,10 +180,12 @@ public final class ModelProvidersModel {
         }
     }
 
-    private func refresh() async {
-        guard let fresh = try? await client.list() else { return }
+    @discardableResult
+    public func refresh() async -> Bool {
+        guard let fresh = try? await client.list() else { return false }
         providers = fresh
         loadFailed = false
+        return true
     }
 
     private func replace(_ provider: ModelProvider) {
@@ -228,6 +230,7 @@ extension ModelProvider {
     public var group: ModelProviderGroup {
         switch (kind, state) {
         case (.unsupported, _), (.unknown, _), (_, .unsupported): .onHost
+        case (.cliPlan, .notSet), (.cliPlan, .unknown): .onHost
         case (_, .set), (_, .expired): .connected
         case (_, .notSet), (_, .unknown): .available
         }
@@ -285,6 +288,7 @@ enum ModelProviderSorting {
     }
 
     private static let sharedText = "Shared by all your bots"
+    private static let cliPlanDetail = "Set up Claude Code and its plugin on the computer that runs Pal."
 
     private static func matches(_ provider: ModelProvider, _ needle: String) -> Bool {
         provider.name.localizedStandardContains(needle) || provider.id.localizedStandardContains(needle)
@@ -311,7 +315,7 @@ enum ModelProviderSorting {
     private static func stateDetail(_ provider: ModelProvider, group: ModelProviderGroup) -> String? {
         if provider.state == .expired { return provider.reason ?? "Expired. Sign in again to keep using it." }
         switch group {
-        case .onHost: return provider.reason
+        case .onHost: return provider.reason ?? (provider.kind == .cliPlan ? cliPlanDetail : nil)
         case .connected:
             if provider.acceptsSetupToken { return "API key or Claude plan token saved" }
             return provider.kind == .apiKey ? "API key saved" : "Signed in"
@@ -330,7 +334,7 @@ enum ModelProviderSorting {
             return isSet ? "Replace key" : "Add key"
         case .deviceCode, .oauthPaste:
             return isSet ? "Sign in again" : "Sign in"
-        case .unsupported, .unknown:
+        case .unsupported, .unknown, .cliPlan:
             return nil
         }
     }

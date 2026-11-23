@@ -247,6 +247,7 @@ private struct TelegramTokenSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(blocking: .unsavedInput, when: !model.botToken.isEmpty))
     }
 
     private var introText: String {

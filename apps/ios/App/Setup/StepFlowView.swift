@@ -11,6 +11,7 @@ struct StepFlowView<Accessory: View>: View {
     let accessory: (FlowStep) -> Accessory
     private(set) var headerContent: AnyView?
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -165,18 +166,20 @@ struct StepFlowView<Accessory: View>: View {
         }
     }
 
+    private var footerLayout: StepFlowLayout { layout.footerLayout(at: dynamicTypeSize) }
+
     private var footer: some View {
         Group {
-            switch layout {
+            switch footerLayout {
             case .stacked:
-                VStack(spacing: 10) {
+                VStack(spacing: SetupFooterMetrics.buttons(fillsWidth: true).buttonSpacing) {
                     primary
                     back
                     quiet
                     pageLink
                 }
             case .rail:
-                HStack(spacing: 10) {
+                HStack(spacing: SetupFooterMetrics.mac.buttonSpacing) {
                     Spacer(minLength: 0)
                     back
                     quiet
@@ -184,7 +187,7 @@ struct StepFlowView<Accessory: View>: View {
                     primary
                 }
             case .stepper:
-                HStack(spacing: 10) {
+                HStack(spacing: SetupFooterMetrics.mac.buttonSpacing) {
                     back
                     Spacer(minLength: 0)
                     quiet
@@ -192,15 +195,13 @@ struct StepFlowView<Accessory: View>: View {
                 }
             }
         }
-        .padding(PalMetrics.screenMargin)
-        .frame(maxWidth: .infinity)
-        .overlay(alignment: .top) { PalHairline() }
+        .setupFooter(fillsWidth: footerLayout.fillsWidth)
     }
 
     @ViewBuilder
     private var back: some View {
         if engine.canGoBack, engine.phase != .working {
-            SetupButton(title: String(localized: "Back"), fillsWidth: layout.fillsWidth, identifier: "stepFlowBack") {
+            SetupButton(title: String(localized: "Back"), fillsWidth: footerLayout.fillsWidth, identifier: "stepFlowBack") {
                 Task { await model.back() }
             }
         }
@@ -209,29 +210,36 @@ struct StepFlowView<Accessory: View>: View {
     @ViewBuilder
     private var quiet: some View {
         if engine.phase == .working {
-            SetupQuietButton(title: String(localized: "Cancel"), identifier: "stepFlowCancel") { model.cancelWork() }
+            SetupQuietButton(title: String(localized: "Cancel"), fillsWidth: footerLayout.fillsWidth, identifier: "stepFlowCancel") {
+                model.cancelWork()
+            }
         } else if case .waiting = engine.current.kind {
-            SetupQuietButton(title: String(localized: "Cancel"), identifier: "stepFlowCancel") { Task { await model.back() } }
+            SetupQuietButton(title: String(localized: "Cancel"), fillsWidth: footerLayout.fillsWidth, identifier: "stepFlowCancel") {
+                Task { await model.back() }
+            }
         } else if engine.canSkip, let title = engine.current.skipTitle {
-            SetupQuietButton(title: title, identifier: "stepFlowSkip") { Task { await model.skip() } }
+            SetupQuietButton(title: title, fillsWidth: footerLayout.fillsWidth, identifier: "stepFlowSkip") { Task { await model.skip() } }
         } else if case .openAndCheck(let open) = engine.current.kind, engine.phase == .ready {
-            SetupQuietButton(title: open.recheckTitle, identifier: "stepFlowRecheck") { Task { await model.recheck() } }
+            SetupQuietButton(title: open.recheckTitle, fillsWidth: footerLayout.fillsWidth, identifier: "stepFlowRecheck") {
+                Task { await model.recheck() }
+            }
         }
     }
 
     @ViewBuilder
     private var pageLink: some View {
         if let link = engine.current.pageLink, engine.failure == nil, engine.phase != .working {
-            SetupButton(title: link.label, fillsWidth: layout.fillsWidth, identifier: "stepFlowPage") { model.openPage(link.url) }
+            SetupButton(title: link.label, fillsWidth: footerLayout.fillsWidth, identifier: "stepFlowPage") { model.openPage(link.url) }
         }
     }
 
     @ViewBuilder
     private var primary: some View {
         if engine.failure == nil || inlineRefusal != nil, engine.phase != .working, engine.phase != .preparing, engine.primaryAction != .none {
-            SetupButton(title: primaryTitle, kind: .primary, fillsWidth: layout.fillsWidth, identifier: "stepFlowPrimary") {
+            SetupButton(title: primaryTitle, kind: .primary, fillsWidth: footerLayout.fillsWidth, identifier: "stepFlowPrimary") {
                 if engine.primaryAction == .finish { close() } else { Task { await model.performPrimary() } }
             }
+            .keyboardShortcut(.defaultAction)
             .disabled(!engine.isPrimaryEnabled || inlineRefusal != nil)
         }
     }

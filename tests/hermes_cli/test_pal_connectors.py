@@ -42,7 +42,7 @@ def test_t3code_is_a_per_user_address_mcp_oauth_connector():
     entry = next(e for e in load_pal_connectors() if e.id == "t3code")
 
     assert (entry.name, entry.icon, entry.category, entry.method, entry.verified) == (
-        "T3 Code", "plugin_glyph", "Developer tools", ConnectionMethod.MCP_OAUTH, False)
+        "T3 Code", "t3code", "Developer tools", ConnectionMethod.MCP_OAUTH, False)
     assert entry.mcp_url is None and entry.oauth is None and entry.setup is None and entry.stdio is None
     assert entry.source == "https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md"
     assert entry.notes == "Runs on your own computer. Turn on Network access in T3 Code first."
@@ -69,7 +69,7 @@ def test_a_bot_app_entry_needs_no_endpoint_and_slack_is_one():
 
     assert entries["slack"].method is ConnectionMethod.BOT_APP
     assert entries["slack"].mcp_url is None and entries["slack"].oauth is None
-    assert entries["slack"].category == "Communication" and entries["slack"].icon == "plugin_glyph"
+    assert entries["slack"].category == "Communication" and entries["slack"].icon == "slack"
 
 
 def test_discord_runs_the_pinned_stdio_server_with_the_token_only_as_a_template():

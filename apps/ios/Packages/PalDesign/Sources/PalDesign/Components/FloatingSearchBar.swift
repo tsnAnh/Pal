@@ -83,17 +83,16 @@ public struct FloatingSearchBar: View {
             PalIcon("magnifyingglass")
                 .font(.system(size: 19, weight: .regular))
                 .accessibilityHidden(true)
-            TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Color(theme.palette.textSecondary)))
+            PalTextField(accessibilityLabel, text: $text, prompt: Text(prompt))
                 .hermesText(.searchPrompt)
                 .foregroundStyle(Color(theme.palette.textPrimary))
                 .searchFieldTraits()
                 .focused($isFocused)
-                .accessibilityLabel(Text(accessibilityLabel))
                 .accessibilityIdentifier(accessibilityIdentifier)
         }
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity, minHeight: PalMetrics.searchBarHeight, maxHeight: PalMetrics.searchBarHeight)
-        .palGlass(Capsule(), interactive: false)
+        .palGlass(Capsule(), interactive: isFocused)
     }
 
     private func glassCircle(systemName: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {

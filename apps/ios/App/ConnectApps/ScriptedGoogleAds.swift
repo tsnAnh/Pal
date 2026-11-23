@@ -55,7 +55,7 @@ struct ScriptedGoogleAds {
         let manager = managerID.map { "Manager account \($0)." } ?? ""
         let notes = ["Read only. Pal reads campaign stats and never changes a campaign.", manager].filter { !$0.isEmpty }.joined(separator: " ")
         return [
-            "slug": .string(Self.slug), "name": "Google Ads", "category": "Monitoring and analytics", "icon": "plugin_glyph",
+            "slug": .string(Self.slug), "name": "Google Ads", "category": "Monitoring and analytics", "icon": "google-ads",
             "method": "oauth_client", "verified": true, "status": .string(signedIn ? "connected" : "not_connected"),
             "notes": .string(notes), "setup_guide": .null, "setup_progress": .null,
         ]

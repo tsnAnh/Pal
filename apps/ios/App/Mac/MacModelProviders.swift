@@ -160,6 +160,11 @@ private struct MacProviderRow: View {
                 }
             }
         }
+        .padding(.leading, BrandLogoTileSize.row.points + 13)
+        .overlay(alignment: .leading) {
+            ProviderLogo.tile(for: provider.id, name: provider.name)
+                .padding(.leading, 13)
+        }
     }
 }
 
@@ -173,12 +178,11 @@ private struct MacProviderAddressEditor: View {
             Text("Address")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(PalTokens.textPrimary)
-            TextField(
+            PalTextField(
                 "Address",
                 text: Binding(get: { model.address(for: provider) }, set: { model.setAddress($0, for: provider) }),
-                prompt: Text(provider.defaultBaseURL ?? "Address").foregroundStyle(PalTokens.textTertiary)
+                prompt: Text(provider.defaultBaseURL ?? "Address")
             )
-            .textFieldStyle(.plain)
             .font(.system(size: 12))
             .foregroundStyle(PalTokens.textPrimary)
             .autocorrectionDisabled()
@@ -204,6 +208,7 @@ private struct MacProviderAddressEditor: View {
         }
         .padding(14)
         .frame(width: 300)
+        .palEscape(.native, dismiss: dismiss)
     }
 
     private func save() {
@@ -222,8 +227,7 @@ private struct MacProviderSearchField: View {
     var body: some View {
         HStack(spacing: 8) {
             PalIcon("magnifyingglass", ink: .secondary).font(.system(size: 11))
-            TextField("Search providers", text: $text)
-                .textFieldStyle(.plain)
+            PalTextField("Search providers", text: $text)
                 .font(.system(size: 12))
                 .foregroundStyle(PalTokens.textPrimary)
                 .accessibilityIdentifier("providersSearchField")

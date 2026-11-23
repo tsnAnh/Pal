@@ -1,0 +1,37 @@
+Connector logos listed in manifest.json (one imageset per logo id under App/Assets.xcassets/ConnectorLogos).
+The logos remain trademarks of their respective owners.
+
+Simple Icons (https://github.com/simple-icons/simple-icons), CC0 1.0 Universal: the brand marks vendored in #185
+(airtable, atlassian, buildkite, ...), and the ClickHouse path redrawn in one near-black ink.
+Licence: https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md
+
+Iconify "SVG Logos" collection by Gil Barbara (https://github.com/gilbarbara/logos), CC0 1.0 Universal: the marks fetched
+from https://api.iconify.design/logos/<name>.svg (aws, discord-icon, google-ads, google-icon, higgsfield-icon,
+hugging-face-icon, intercom-icon, microsoft-icon, monday-icon, paypal, posthog-icon, resend-icon, shopify, slack-icon,
+twilio-icon).
+Licence: https://raw.githubusercontent.com/gilbarbara/logos/master/LICENSE.txt
+
+Brand files from the owners' own MIT repositories:
+
+context7-icon.svg, Copyright (c) 2021 Upstash, Inc. (https://github.com/upstash/context7)
+t3code logo.svg, Copyright (c) 2026 T3 Tools Inc. (https://github.com/pingdotgg/t3code)
+Gamma and Semgrep marks come from the brands' own sites with no licence stated; see their flags in manifest.json.
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished
+to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

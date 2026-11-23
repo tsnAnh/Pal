@@ -39,8 +39,7 @@ struct MacRenameBot: View {
                 .accessibilityAddTraits(.isHeader)
             PalHairline(color: PalTokens.panelBorder)
             VStack(alignment: .leading, spacing: 8) {
-                TextField("", text: $name)
-                    .textFieldStyle(.plain)
+                PalTextField("", text: $name)
                     .font(.system(size: 13))
                     .foregroundStyle(PalTokens.textPrimary)
                     .focused($focused)
@@ -69,7 +68,7 @@ struct MacRenameBot: View {
                 try? await Task.sleep(for: .milliseconds(120))
             }
         }
-        .interactiveDismissDisabled(isSaving)
+        .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: isSaving))
     }
 
     private var errorMessage: LocalizedStringKey? {
@@ -88,7 +87,7 @@ struct MacRenameBot: View {
             Spacer()
             Button("Cancel") { router.renamingBot = nil }
                 .glassButtonStyle()
-                .keyboardShortcut(.cancelAction)
+                .palCancelShortcut()
                 .accessibilityIdentifier("renameBotCancel")
             Button {
                 save()

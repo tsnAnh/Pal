@@ -264,13 +264,11 @@ private struct ClarifyOpenField: View {
 
     var body: some View {
         let placeholder = String(localized: "Type your answer…")
-        TextField(
+        PalTextField(
             "",
             text: $text,
-            prompt: Text(placeholder).foregroundStyle(Color(theme.palette.textTertiary))
+            prompt: Text(placeholder)
         )
-        .textFieldStyle(.plain)
-        .focusEffectDisabled()
         .font(.body)
         .foregroundStyle(Color(theme.palette.textPrimary))
         .focused(focused)

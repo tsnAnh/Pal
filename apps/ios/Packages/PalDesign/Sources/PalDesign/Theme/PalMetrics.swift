@@ -176,6 +176,16 @@ public struct ChatLineBox: Equatable, Sendable {
     public let height: CGFloat
     public let baselineOffset: CGFloat
     public let leading: CGFloat
+    public let capHeight: CGFloat
+
+    public var textBaselineShift: CGFloat {
+        #if os(macOS)
+        if #available(macOS 26, *) { return -baselineOffset }
+        return 0
+        #else
+        return -baselineOffset
+        #endif
+    }
 
     public init(fontSize: CGFloat) {
         #if os(macOS)
@@ -186,6 +196,7 @@ public struct ChatLineBox: Equatable, Sendable {
         height = (fontSize * ChatMetrics.bodyLineHeight / PalTextStyle.chatBody.size).rounded()
         baselineOffset = (height - font.ascender + font.descender) / 2
         leading = max(0, height - (font.ascender - font.descender + font.leading).rounded(.up))
+        capHeight = font.capHeight
     }
 }
 

@@ -22,6 +22,7 @@ struct BotLink: Sendable {
 final class BotLinks {
     private let connection: ConnectionModel
     private var links: [String: BotLink] = [:]
+    private let warm = WarmSessionPool()
 
     init(connection: ConnectionModel) {
         self.connection = connection
@@ -29,7 +30,11 @@ final class BotLinks {
 
     func link(for bot: String) throws -> BotLink {
         if let existing = links[bot] { return existing }
-        let hub = SessionHub(profile: bot, connector: LiveChatConnector(connection: connection), diagnostics: .osLog())
+        let connection = self.connection
+        let store = ConversationTimelineStore(bot: bot) { (connection.cache, connection.accountKey) }
+        let hub = SessionHub(
+            profile: bot, connector: LiveChatConnector(connection: connection), store: store, pool: warm, diagnostics: .osLog()
+        )
         let link = BotLink(outbox: try Outbox(directory: Self.outboxDirectory(for: bot), submitter: hub), sessions: hub)
         links[bot] = link
         return link

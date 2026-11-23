@@ -37,7 +37,7 @@ struct EditBotSheet: View {
                             .padding(.top, 4)
                             .accessibilityIdentifier("editBotPreview")
                         photoControls
-                        TextField("", text: $model.name, prompt: Text("Name"))
+                        PalTextField("", text: $model.name, prompt: Text("Name"))
                             .focused($nameFocused)
                             .submitLabel(.done)
                             .onSubmit { nameFocused = false }
@@ -61,6 +61,10 @@ struct EditBotSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(
+            blocking: .unsavedInput,
+            when: model.nameChanged || model.lookChanged || model.photoChanged || !model.changedPersonaFields.isEmpty
+        ))
     }
 
     private var shapeBinding: Binding<BlobKind> {

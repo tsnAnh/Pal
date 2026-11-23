@@ -281,6 +281,7 @@ private struct AddPublicRouteSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(blocking: .unsavedInput, when: model.issuedSecret == nil && draft != WebhookRouteDraft()))
     }
 
     @ViewBuilder
@@ -332,7 +333,7 @@ private struct AddPublicRouteSheet: View {
     }
 
     private func field(_ title: String, text: Binding<String>, identifier: String) -> some View {
-        TextField(title, text: text)
+        PalTextField(title, text: text)
             .neverAutocapitalized()
             .autocorrectionDisabled()
             .hermesText(.rowTitle)

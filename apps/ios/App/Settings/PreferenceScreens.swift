@@ -188,7 +188,7 @@ struct TimeZoneScreen: View {
             title: "Time Zone", leading: .back, accessibilityIdentifier: "timeZoneScreen", onLeading: back
         ) {
             VStack(spacing: 12) {
-                TextField("Search time zones", text: $query)
+                PalTextField("Search time zones", text: $query)
                     .neverAutocapitalized()
                     .autocorrectionDisabled()
                     .hermesText(.rowTitle)
@@ -260,9 +260,8 @@ struct ImportMemoryScreen: View {
         SettingsPage(title: "Import Memory", identifier: "importMemoryScreen", back: back) {
             VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                 GroupedCard(accessibilityIdentifier: "importMemoryCard") {
-                    TextEditor(text: $model.text)
+                    PalTextEditor(text: $model.text)
                         .focused($focused)
-                        .scrollContentBackground(.hidden)
                         .hermesText(.rowTitle)
                         .foregroundStyle(Color(theme.palette.textPrimary))
                         .frame(minHeight: 180)

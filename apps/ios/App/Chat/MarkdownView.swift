@@ -226,6 +226,7 @@ struct InlineText: View {
     @Environment(\.hermesTheme) private var theme
     @Environment(\.chatInk) private var chatInk
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 17
+    @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
 
     var body: some View {
         composed
@@ -241,11 +242,15 @@ struct InlineText: View {
     private var composed: Text {
         let mark = FindMark(ink: chatInk, surfaceText: foreground, isCurrent: isCurrentMatch)
         let highlighted = InlineTextComposer.highlight(text, query: highlight, fill: mark.fill, ink: mark.text)
+        let line = ChatLineBox(fontSize: style.size * textScale)
+        let iconOffset = InlineIconMetrics.baselineOffset(iconHeight: iconSize, line: line)
         return InlineTextComposer.compose(highlighted) { link in
             if let icon = FaviconCache.shared.image(for: link, pointSize: iconSize) {
-                return Text(Image(platformImage: icon))
+                return Text(Image(platformImage: icon)).baselineOffset(iconOffset)
             }
-            return Text(Image(systemName: "globe")).foregroundStyle(Color(theme.palette.textSecondary))
+            return Text(Image(systemName: "globe"))
+                .foregroundStyle(Color(theme.palette.textSecondary))
+                .baselineOffset(line.textBaselineShift)
         }
     }
 }

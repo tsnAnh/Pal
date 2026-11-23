@@ -10,7 +10,7 @@ struct LocalEngineSetupPanel: View {
     var body: some View {
         Group {
             if let step = engine.providerStep {
-                LocalEngineProviderStep(engine: engine, model: step)
+                ProviderOnboardingView(model: step)
             } else {
                 switch engine.state {
                 case .installing(let progress):
@@ -94,7 +94,7 @@ struct LocalEngineSetupPanel: View {
         .padding(.horizontal, 32)
         .padding(.top, PalMetrics.macPanelTitleClearance)
         .padding(.bottom, 28)
-        .frame(maxWidth: 484, maxHeight: .infinity)
+        .frame(maxWidth: LocalEnginePanelMetrics.columnWidth, maxHeight: .infinity)
         .frame(maxWidth: .infinity)
     }
 
@@ -125,6 +125,10 @@ struct LocalEngineSetupPanel: View {
     }
 }
 
+enum LocalEnginePanelMetrics {
+    static let columnWidth: CGFloat = 484
+}
+
 struct PanelColumn<Main: View, Action: View>: View {
     @ViewBuilder let main: Main
     @ViewBuilder let action: Action
@@ -139,7 +143,7 @@ struct PanelColumn<Main: View, Action: View>: View {
         .padding(.horizontal, 32)
         .padding(.top, PalMetrics.macPanelTitleClearance)
         .padding(.bottom, 28)
-        .frame(maxWidth: 484, maxHeight: .infinity)
+        .frame(maxWidth: LocalEnginePanelMetrics.columnWidth, maxHeight: .infinity)
         .frame(maxWidth: .infinity)
     }
 }
@@ -246,7 +250,7 @@ struct PanelButton: View {
             Button(action: action) { label }
                 .glassButtonStyle()
                 .buttonBorderShape(.capsule)
-                .keyboardShortcut(.cancelAction)
+                .palCancelShortcut()
                 .accessibilityIdentifier(identifier)
         }
     }

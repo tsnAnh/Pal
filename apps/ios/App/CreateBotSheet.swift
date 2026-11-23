@@ -55,10 +55,10 @@ private struct CreateBotNameField: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            TextField(
+            PalTextField(
                 "",
                 text: $model.name,
-                prompt: Text("Name your Bot").foregroundStyle(PalTokens.textTertiary)
+                prompt: Text("Name your Bot")
             )
             .hermesText(.nameField)
             .multilineTextAlignment(.center)

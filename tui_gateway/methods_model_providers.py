@@ -8,6 +8,9 @@ method = _registry.method
 _profile_scoped = _registry.profile_scoped
 
 _PROVIDERS_FAILED = 5301
+_PROBE_INVALID = 4001
+_PROBE_SHARED_LOGIN = 4095
+_PROBE_FAILED = 5302
 _SHARED_LOGIN_REFUSAL = "This login is shared by every profile. Change it from the main profile."
 
 
@@ -89,5 +92,57 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"outcome": "reset" if given is None else "saved", "provider": _providers_row(provider_id)})
 
 
+def _providers_cli_plan_entry(provider_id):
+    from hermes_cli.model_provider_cli_plan import CLI_PLAN_PROVIDERS
+    return CLI_PLAN_PROVIDERS.get(provider_id) if isinstance(provider_id, str) else None
+
+
+@method("model.providers.test")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    from hermes_cli import model_provider_probe as probe
+    provider_id = params.get("provider")
+    before = _providers_row(provider_id) if isinstance(provider_id, str) and provider_id else None
+    untestable = before is None or before["kind"] == "unsupported"
+    try:
+        parsed = probe.parse_params(params, base_url_editable=untestable or before["base_url_editable"])
+    except probe.InvalidProbeParams as exc:
+        return _err(rid, _PROBE_INVALID, str(exc))
+    if untestable:
+        return _ok(rid, probe.unsupported_result(parsed, (before or {}).get("reason") or "Unknown provider.").wire())
+    if _providers_shared_refusal(parsed.provider):
+        return _err(rid, _PROBE_SHARED_LOGIN, _SHARED_LOGIN_REFUSAL)
+    try:
+        return _ok(rid, probe.run_probe(parsed, before["kind"]).wire())
+    except Exception as exc:  # health: allow BLE001 -- no exc_info on purpose: a provider error can echo the staged key
+        logger.error("model.providers.test failed for %s (%s)", parsed.provider, type(exc).__name__)
+        return _err(rid, _PROBE_FAILED, "Could not run the provider test")
+
+
+@method("model.providers.host_check")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    from hermes_cli import model_provider_cli_plan as cli_plan
+    entry = _providers_cli_plan_entry(params.get("provider"))
+    return _ok(rid, (cli_plan.host_check(entry) if entry else cli_plan.NO_HOST_CHECK).wire())
+
+
+@method("model.providers.install_plugin")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    from hermes_cli import model_provider_cli_plan as cli_plan
+    provider_id = str(params.get("provider") or "")
+    entry = _providers_cli_plan_entry(provider_id)
+    if entry is None:
+        return _ok(rid, {"outcome": "unsupported", "reason": "This provider has no plugin to install.",
+                         "provider": _providers_row(provider_id)})
+    outcome, reason = cli_plan.install_plugin(entry)
+    return _ok(rid, {"outcome": outcome, **({"reason": reason} if reason else {}),
+                     "provider": _providers_row(provider_id)})
+
+
 def register(server) -> None:
     bind_module(globals(), server, skip=("_",))
+    # test = a network call of up to 60 s; install_plugin = a git clone; host_check reads sign-in evidence.
+    server._LONG_HANDLERS = server._LONG_HANDLERS | {
+        "model.providers.test", "model.providers.host_check", "model.providers.install_plugin"}

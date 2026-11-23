@@ -36,7 +36,6 @@ struct PasteAddressEntry: View {
                 }
             }
             SecretField(String(localized: "Address"), prompt: String(localized: "Paste the address here"), text: $text, identifier: identifiers.field)
-                .textFieldStyle(.plain)
                 .padding(12)
                 .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .disabled(!state.acceptsInput)
@@ -63,7 +62,7 @@ struct PasteAddressEntry: View {
                     .accessibilityIdentifier("paste-address-reopen")
                 Button(String(localized: "Cancel"), action: cancel)
                     .glassButtonStyle()
-                    .keyboardShortcut(.cancelAction)
+                    .palCancelShortcut()
                     .accessibilityIdentifier(identifiers.cancel)
             }
         }

@@ -12,7 +12,7 @@ private struct RoomNameField: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        TextField("", text: $text, prompt: Text(prompt))
+        PalTextField("", text: $text, prompt: Text(prompt))
             .padding(.horizontal, PalMetrics.rowInset)
             .frame(height: PalMetrics.rowMinimumHeight)
             .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
@@ -67,7 +67,7 @@ struct CreateRoomSheet: View {
             },
             content: { form }
         )
-        .macSheetDismissDisabled(model.isCreating)
+        .palEscapePolicy(model.isCreating ? .blocked(.inFlight) : EscapePolicy(blocking: .unsavedInput, when: !model.name.isEmpty || !model.selected.isEmpty))
     }
 
     @ViewBuilder
@@ -101,7 +101,7 @@ struct CreateRoomSheet: View {
         #else
         List {
             Section {
-                TextField("", text: $model.name, prompt: Text(String(localized: "Group chat name")))
+                PalTextField("", text: $model.name, prompt: Text(String(localized: "Group chat name")))
                     .focused($nameFocused)
                     .accessibilityLabel(Text("Group chat name"))
                     .accessibilityIdentifier("roomNameField")

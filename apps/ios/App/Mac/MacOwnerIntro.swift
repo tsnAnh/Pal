@@ -153,7 +153,7 @@ struct OwnerIntroSheet: View {
             .padding(.bottom, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .macSheetDismissDisabled(model.isSaving)
+        .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: model.isSaving))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ownerIntro")
     }
@@ -161,11 +161,8 @@ struct OwnerIntroSheet: View {
     private var form: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
-            Text("Step 2 of 2")
-                .font(.system(size: 12))
-                .foregroundStyle(PalTokens.textTertiary)
-                .padding(.bottom, 8)
-                .accessibilityIdentifier("ownerIntroStep")
+            SetupStepBar(step: 2, total: 2, identifier: "ownerIntroStep")
+                .padding(.bottom, 14)
             Text("What should your bots call you?")
                 .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(PalTokens.textPrimary)
@@ -261,8 +258,7 @@ struct OwnerIntroSheet: View {
 
     private var nameField: some View {
         @Bindable var model = model
-        return TextField("Your name", text: $model.name)
-            .textFieldStyle(.plain)
+        return PalTextField("Your name", text: $model.name)
             .font(.system(size: 14))
             .foregroundStyle(PalTokens.textPrimary)
             .focused($nameFocused)

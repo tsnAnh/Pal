@@ -16,14 +16,7 @@ extension ConnectAppsList {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     resumeBanner
                     content { phoneLoaded(state) }
-                    Button { model.addCustomConnector() } label: {
-                        Label("Add a custom connector", palIcon: "plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .glassButtonStyle()
-                    .accessibilityIdentifier("addCustomConnectorButton")
-                    .padding(.top, PalMetrics.cardGap)
-                    .padding(.horizontal, PalMetrics.screenMargin)
+                    AddCustomConnectorButton { model.addCustomConnector() }
                 }
                 .padding(.bottom, PalMetrics.cardGap)
             }

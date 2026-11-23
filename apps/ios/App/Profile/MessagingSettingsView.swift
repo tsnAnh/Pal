@@ -87,7 +87,7 @@ struct MessagingSettingsView: View {
             Text(setting.label)
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(Color(theme.palette.textSecondary))
-            TextField("", text: Binding(get: { model.text(for: setting) }, set: { model.drafts[setting.key] = $0 }), prompt: Text(hint(setting.kind)))
+            PalTextField("", text: Binding(get: { model.text(for: setting) }, set: { model.drafts[setting.key] = $0 }), prompt: Text(hint(setting.kind)))
                 .neverAutocapitalized()
                 .autocorrectionDisabled()
                 .accessibilityLabel(Text(setting.label))

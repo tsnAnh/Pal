@@ -325,7 +325,7 @@ struct ConnectAppsServiceTests {
             "mcp.servers.set_api_key": { _ in throw GatewayTransportError.rpc(RPCError(code: 4001, message: "bad")) },
         ])
         let app = ConnectApp(
-            id: "mcp:github", name: "Github", summary: "", category: "Other",
+            id: "mcp:github", name: "GitHub", summary: "", category: "Other",
             source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
         )
         await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["MCP_GITHUB_API_KEY": "v"]) }
@@ -335,9 +335,39 @@ struct ConnectAppsServiceTests {
     @Test func aRefusedTokenIsReportedAfterTheServerTestsIt() async {
         let rpc = ScriptedRPC(["mcp.servers.test": { _ in ["ok": false, "reason": "auth_refused", "tools": []] }])
         let app = ConnectApp(
-            id: "mcp:github", name: "Github", summary: "", category: "Other",
+            id: "mcp:github", name: "GitHub", summary: "", category: "Other",
             source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
         )
         #expect(await service(rpc).tokenFailure(app) == .authRefused)
+    }
+}
+
+@Suite("Connector tile mark")
+struct ConnectorTileMarkTests {
+    private func app(_ source: ConnectAppSource) -> ConnectApp {
+        ConnectApp(id: "x", name: "X", summary: "", category: "", source: source, state: .disconnected)
+    }
+
+    @Test func aCataloguedConnectorDrawsItsLogoNeverThePuzzle() {
+        let entry = PalCatalogEntry(slug: "slack_mcp", name: "Slack", icon: "slack", method: .mcpOAuth)
+        #expect(app(.catalog(entry)).tileMark == .logo("slack"))
+    }
+
+    @Test func aCataloguedConnectorWithThePlaceholderIconStillAsksForALogoSoItShowsTheMonogram() {
+        let entry = PalCatalogEntry(slug: "x", name: "X", icon: "plugin_glyph", method: .mcpOAuth)
+        #expect(app(.catalog(entry)).tileMark == .logo("plugin_glyph"))
+    }
+
+    @Test func theGoogleWorkspaceRowDrawsTheGoogleWorkspaceLogo() {
+        #expect(app(.googleWorkspace).tileMark == .logo("google-workspace"))
+    }
+
+    @Test func aCustomConnectorDrawsThePuzzle() {
+        let custom = CustomConnectorInfo(name: "Mine", url: "https://example.com/mcp")
+        #expect(app(.custom(custom)).tileMark == .puzzle)
+    }
+
+    @Test func aNonCataloguedMcpRowDrawsThePuzzle() {
+        #expect(app(.mcp(name: "files", requires: [])).tileMark == .puzzle)
     }
 }

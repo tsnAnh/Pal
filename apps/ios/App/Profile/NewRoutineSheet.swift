@@ -55,10 +55,11 @@ struct NewRoutineSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(blocking: .unsavedInput, when: !model.title.isEmpty || !model.prompt.isEmpty || !model.schedule.isEmpty))
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String, identifier: String) -> some View {
-        TextField("", text: text, prompt: Text(prompt))
+        PalTextField("", text: text, prompt: Text(prompt))
             .autocapitalization(sentences: identifier != "newRoutineSchedule")
             .autocorrectionDisabled(identifier == "newRoutineSchedule")
             .padding(.horizontal, PalMetrics.rowInset)
@@ -70,7 +71,7 @@ struct NewRoutineSheet: View {
     }
 
     private var promptField: some View {
-        TextField("", text: $model.prompt, prompt: Text("Summarize what happened overnight"), axis: .vertical)
+        PalTextField("", text: $model.prompt, prompt: Text("Summarize what happened overnight"), axis: .vertical)
             .lineLimit(3...8)
             .padding(.horizontal, PalMetrics.rowInset)
             .padding(.vertical, 14)

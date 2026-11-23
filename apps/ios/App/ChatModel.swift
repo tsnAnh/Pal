@@ -170,10 +170,8 @@ final class ChatModel {
     private var running: Task<Void, Never>?
     private var delivering = false
     private var absorbedEchoes = AbsorbedEchoLedger()
-    private var lastCached: CachedTimeline?
 
     private let opening = ChatOpenCoordinator()
-    private var pendingCacheSave: Task<Void, Never>?
     private var findSearch: Task<Void, Never>?
     private var pendingReveal: RowKey?
 
@@ -216,6 +214,7 @@ final class ChatModel {
     func start() {
         roster.markRead(bot.name)
         guard running == nil else { return }
+        ChatOpenTrace.begin(bot: bot.name)
         let link: BotLink
         do {
             link = try links.link(for: bot.name)
@@ -230,6 +229,7 @@ final class ChatModel {
 
     func stop() {
         markViewed()
+        ChatOpenTrace.finish(bot: bot.name)
         running?.cancel()
         running = nil
         opening.cancel()
@@ -245,7 +245,7 @@ final class ChatModel {
     }
 
     func markViewed() {
-        saveCache()
+        if let session { Task { await session.flushCache() } }
         guard hasBaseline else { return }
         lastSeenStore.record(Date(), for: bot.name)
     }
@@ -569,14 +569,22 @@ final class ChatModel {
             return
         }
         self.session = session
-        if case .live = await session.phase { noteLive() }
+        var warm = false
+        if case .live = await session.phase {
+            warm = true
+            noteLive()
+        }
+        let before = await session.timelineSnapshot
+        await session.restore()
         let current = await session.timelineSnapshot
-        if current.rows.isEmpty, let cached = await loadCache() {
-            await session.seed(cached)
-            opening.hold(version: await session.timelineSnapshot.version) { [weak self] in self?.applyTimeline($0) }
+        if before.rows.isEmpty, !current.rows.isEmpty {
+            LaunchClock.mark("chat \(openedBot.name) shown from cache (\(current.rows.count) rows)", on: .osLog())
+            ChatOpenTrace.mark(openedBot.name, "cache.frame", rows: current.rows.count)
+            opening.hold(version: current.version) { [weak self] in self?.apply($0) }
         } else {
             apply(current)
         }
+        if warm { await session.refresh() }
         async let timeline: Void = consumeTimeline(session)
         async let phases: Void = consumePhases(session)
         async let retrying: Void = retryLoop()
@@ -584,17 +592,6 @@ final class ChatModel {
         await timeline
         await phases
         await retrying
-    }
-
-    private func loadCache() async -> CachedTimeline? {
-        let cache = roster.conversationCache
-        let name = openedBot.name
-        let cached = await Task.detached(priority: .userInitiated) { cache.load(bot: name) }.value
-        if let cached {
-            lastCached = cached
-            LaunchClock.mark("chat \(name) shown from cache (\(cached.entryCount) entries)", on: .osLog())
-        }
-        return cached
     }
 
     private func attach(_ session: ChatSession) async {
@@ -625,7 +622,10 @@ final class ChatModel {
     }
 
     private func noteLive() {
-        if !hasBeenLive { LaunchClock.mark("chat \(openedBot.name) live", on: .osLog()) }
+        if !hasBeenLive {
+            LaunchClock.mark("chat \(openedBot.name) live", on: .osLog())
+            ChatOpenTrace.mark(openedBot.name, "live")
+        }
         hasBeenLive = true
         assignIfChanged(\.connection, .live)
     }
@@ -645,13 +645,8 @@ final class ChatModel {
     private func consumeTimeline(_ session: ChatSession) async {
         await TimelinePacer.consume(session.timelineSnapshots, apply: { next in
             guard let ready = opening.admit(next) else { return }
-            applyTimeline(ready)
+            apply(ready)
         })
-    }
-
-    private func applyTimeline(_ next: TimelineSnapshot) {
-        apply(next)
-        if next.sessionID != nil { scheduleCacheSave() }
     }
 
     func apply(_ next: TimelineSnapshot) {
@@ -662,6 +657,7 @@ final class ChatModel {
         rebuild(patching: previous)
         observeActivityChange()
         resolvePendingReveal()
+        ChatOpenTrace.frameApplied(bot: openedBot.name, version: next.version, rows: next.rows.count)
     }
 
     private func retryLoop() async {
@@ -685,28 +681,6 @@ final class ChatModel {
         let signature = ActivitySignature(running: snapshot?.isRunning ?? false, prompting: isAskingClarify)
         defer { lastSignature = signature }
         if signature != lastSignature { roster.nudge() }
-    }
-
-    private func scheduleCacheSave() {
-        guard pendingCacheSave == nil else { return }
-        pendingCacheSave = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            self?.saveCache()
-        }
-    }
-
-    private func saveCache() {
-        pendingCacheSave?.cancel()
-        pendingCacheSave = nil
-        guard let session else { return }
-        let cache = roster.conversationCache
-        let name = openedBot.name
-        Task {
-            guard let cached = await session.cachedTimeline(), cached != lastCached else { return }
-            lastCached = cached
-            cache.save(cached, bot: name)
-        }
     }
 
     private func displayText(for entry: OutboxEntry) -> String {

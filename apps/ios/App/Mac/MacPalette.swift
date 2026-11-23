@@ -90,13 +90,6 @@ struct MacPalette: View {
             }
         }
         .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
-        .background {
-            Button("") { router.closeSearch() }
-                .keyboardShortcut(.cancelAction)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("searchScreen")
         .task { model.start() }
@@ -109,19 +102,13 @@ struct MacPalette: View {
         HStack(spacing: 12) {
             PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 14))
-            TextField("", text: Bindable(model).query, prompt: Text("Search Bots, Chats, Settings…").foregroundStyle(PalTokens.textTertiary))
-                .textFieldStyle(.plain)
+            PalTextField("", text: Bindable(model).query, prompt: Text("Search Bots, Chats, Settings…"))
                 .font(.system(size: 17))
                 .foregroundStyle(PalTokens.textPrimary)
                 .focused($focused)
-                .focusEffectDisabled()
                 .onSubmit(openSelected)
                 .onKeyPress(.downArrow) { move(1) }
                 .onKeyPress(.upArrow) { move(-1) }
-                .onKeyPress(.escape) {
-                    router.closeSearch()
-                    return .handled
-                }
                 .accessibilityLabel(Text("Search"))
                 .accessibilityIdentifier("searchField")
         }

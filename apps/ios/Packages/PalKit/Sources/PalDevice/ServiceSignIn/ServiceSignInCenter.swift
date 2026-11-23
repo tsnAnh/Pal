@@ -135,8 +135,8 @@ public final class ServiceSignInCenter {
         return dialog.reason
     }
 
-    @ObservationIgnored private let call: Call
-    @ObservationIgnored private let openBrowser: SystemBrowserOpener
+    @ObservationIgnored let call: Call
+    @ObservationIgnored let openBrowser: SystemBrowserOpener
     @ObservationIgnored private let nativeSignIn: ServiceNativeSignIn?
     @ObservationIgnored private let pasteSignIn: ServicePasteSignIn?
     @ObservationIgnored private let pasteOnlyServices: Set<String>
@@ -168,73 +168,18 @@ public final class ServiceSignInCenter {
         }
     }
 
-    public func signIn() async {
-        guard let dialog = current, dialog.phase == .prompting, dialog.canSignIn else { return }
-        let requestID = dialog.requestID
-        let service = dialog.service
-        if dialog.requiresAppSignIn {
-            if dialog.automaticSignInAvailable {
-                await signInNatively(service: service, requestID: requestID)
-            } else {
-                await startPasting(service: service, requestID: requestID)
-            }
-            return
-        }
-        switch dialog.flow {
-        case .deviceCode:
-            guard let url = Self.secureURL(dialog.verificationURI) else {
-                setPhase(.failed(Self.pageFailure), for: service)
-                return
-            }
-            setPhase(.signingIn, for: service)
-            openBrowser(url)
-            do {
-                _ = try await call(ServiceSignInWire.signInMethod, ServiceSignInWire.requestParams(requestID))
-            } catch {
-                setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
-            }
-        case .oauth:
-            setPhase(.signingIn, for: service)
-            do {
-                let result = AuthSignInResult(try await call(ServiceSignInWire.signInMethod, ServiceSignInWire.requestParams(requestID)))
-                guard result.recorded, let url = Self.secureURL(result.authorizationURL) else {
-                    setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
-                    return
-                }
-                guard isWaiting(service, requestID) else { return }
-                openBrowser(url)
-            } catch {
-                setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
-            }
-        case .oauthPaste:
-            guard let url = Self.secureURL(dialog.verificationURI) else {
-                setPhase(.failed(Self.pageFailure), for: service)
-                return
-            }
-            setPhase(.signingIn, for: service)
-            openBrowser(url)
-            do {
-                _ = try await call(ServiceSignInWire.signInMethod, ServiceSignInWire.requestParams(requestID))
-            } catch {
-                setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
-            }
-        case .apiKey, .header, .manual, .unknown:
-            return
-        }
-    }
-
-    public func signInByPasting() async {
-        guard let dialog = current, dialog.canPasteInstead else { return }
+    public func signInByPasting(for service: String? = nil) async {
+        guard let dialog = service.map(dialog(for:)) ?? current, dialog.canPasteInstead else { return }
         await startPasting(service: dialog.service, requestID: dialog.requestID)
     }
 
-    public func reopenSignInPage() {
-        guard let dialog = current, case .pasteAddress = dialog.phase else { return }
+    public func reopenSignInPage(for service: String? = nil) {
+        guard let dialog = service.map(dialog(for:)) ?? current, case .pasteAddress = dialog.phase else { return }
         pasteSignIn?.reopen(dialog.service)
     }
 
-    public func submitAddress(_ text: String) async {
-        guard let pasteSignIn, let dialog = current, case .pasteAddress = dialog.phase else { return }
+    public func submitAddress(_ text: String, for service: String? = nil) async {
+        guard let pasteSignIn, let dialog = service.map(dialog(for:)) ?? current, case .pasteAddress = dialog.phase else { return }
         let service = dialog.service
         let requestID = dialog.requestID
         setPhase(.signingIn, for: service)
@@ -251,7 +196,7 @@ public final class ServiceSignInCenter {
         }
     }
 
-    private func startPasting(service: String, requestID: String) async {
+    func startPasting(service: String, requestID: String) async {
         guard let pasteSignIn else { return }
         setPhase(.signingIn, for: service)
         if let failure = await pasteSignIn.begin(service) {
@@ -261,7 +206,7 @@ public final class ServiceSignInCenter {
         }
     }
 
-    private func signInNatively(service: String, requestID: String) async {
+    func signInNatively(service: String, requestID: String) async {
         guard let nativeSignIn else { return }
         setPhase(.signingIn, for: service)
         let attempt = Task { await nativeSignIn(service) }
@@ -280,8 +225,8 @@ public final class ServiceSignInCenter {
         }
     }
 
-    public func submitCallback(_ text: String) async {
-        guard let dialog = current, dialog.flow == .oauthPaste, let pasted = PastedCallback(text) else { return }
+    public func submitCallback(_ text: String, for service: String? = nil) async {
+        guard let dialog = service.map(dialog(for:)) ?? current, dialog.flow == .oauthPaste, let pasted = PastedCallback(text) else { return }
         switch dialog.phase {
         case .signingIn, .callbackFailed: break
         case .prompting, .pasteAddress, .keySet, .keyFailed, .signedIn, .failed, .expired: return
@@ -396,11 +341,11 @@ public final class ServiceSignInCenter {
         dialogs.removeAll { $0.service == service }
     }
 
-    private func isWaiting(_ service: String, _ requestID: String) -> Bool {
+    func isWaiting(_ service: String, _ requestID: String) -> Bool {
         dialogs.first(where: { $0.service == service })?.phase == .signingIn
     }
 
-    private func setPhase(_ phase: ServiceSignInPhase, for service: String, ifRequest requestID: String? = nil) {
+    func setPhase(_ phase: ServiceSignInPhase, for service: String, ifRequest requestID: String? = nil) {
         guard let index = dialogs.firstIndex(where: { $0.service == service }) else { return }
         if let requestID, dialogs[index].requestID != requestID { return }
         if requestID != nil, dialogs[index].phase != .signingIn { return }
@@ -431,7 +376,7 @@ public final class ServiceSignInCenter {
         return (existing + incoming).filter { seen.insert($0).inserted }
     }
 
-    private static func secureURL(_ raw: String?) -> URL? {
+    static func secureURL(_ raw: String?) -> URL? {
         guard let raw, let url = URL(string: raw), url.scheme?.lowercased() == "https", url.host()?.isEmpty == false else { return nil }
         return url
     }

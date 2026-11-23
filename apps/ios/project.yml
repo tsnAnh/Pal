@@ -204,7 +204,9 @@ targets:
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift
           - MacRoomSheetE2ETests.swift
+          - MacProviderOnboardingE2ETests.swift
           - ConnectAppsE2ETests.swift
+          - GlassInputE2ETests.swift
           - ConnectorDetailsE2ETests.swift
           - SlackMemberShots.swift
           - MacPerfTourSupport.swift
@@ -226,7 +228,9 @@ targets:
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift
           - MacRoomSheetE2ETests.swift
+          - MacProviderOnboardingE2ETests.swift
           - ConnectAppsE2ETests.swift
+          - GlassInputE2ETests.swift
           - ConnectorDetailsE2ETests.swift
           - SlackMemberShots.swift
           - MacPerfTourSupport.swift

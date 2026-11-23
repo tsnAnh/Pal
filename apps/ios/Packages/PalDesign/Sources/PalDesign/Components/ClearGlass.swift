@@ -71,20 +71,9 @@ public struct ClearGlassSearchField: View {
     }
 
     public var body: some View {
-        HStack(spacing: 8) {
-            PalIcon("magnifyingglass", ink: .secondary)
-                .font(.system(size: fontSize))
-                .accessibilityHidden(true)
-            TextField("", text: $text, prompt: Text(prompt).foregroundStyle(PalTokens.textTertiary))
-                .textFieldStyle(.plain)
-                .font(.system(size: fontSize))
-                .foregroundStyle(PalTokens.textPrimary)
-                .autocorrectionDisabled()
-                .accessibilityLabel(Text(accessibilityLabel))
-                .accessibilityIdentifier(accessibilityIdentifier)
-        }
-        .padding(.horizontal, 14)
-        .frame(height: height)
-        .palClearGlass(Capsule(), interactive: false)
+        PalGlassTextField(
+            accessibilityLabel, text: $text, prompt: Text(prompt), icon: "magnifyingglass",
+            identifier: accessibilityIdentifier, minHeight: height, fontSize: fontSize
+        )
     }
 }
