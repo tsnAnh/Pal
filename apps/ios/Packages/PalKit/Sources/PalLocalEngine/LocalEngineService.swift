@@ -119,6 +119,23 @@ public actor LocalEngineService {
         return status
     }
 
+    public func tailnetStatus() async throws -> TailnetStatus { try await runTailnet("status") }
+
+    public func enableTailnet() async throws -> TailnetCredentials { try await runTailnet("on") }
+
+    public func disableTailnet() async throws -> TailnetStatus { try await runTailnet("off") }
+
+    private func runTailnet<Value: Decodable>(_ verb: String) async throws -> Value {
+        let trace = makeTrace()
+        let outcome = try await launcher(["tailnet", verb, "--json"], label: "tailnet \(verb)", logsOutput: false)
+        log?.write("trace \(trace) tailnet \(verb) exit=\(outcome.code)")
+        if outcome.code == 0, let value = TailnetOutput.decode(Value.self, lines: outcome.lines) { return value }
+        if outcome.code != 0, let report = TailnetOutput.decode(TailnetErrorReport.self, lines: outcome.lines) {
+            throw TailnetError(message: report.error)
+        }
+        throw EngineFailure.tailnet(trace: trace)
+    }
+
     public func remove(deleteData: Bool) async throws {
         let trace = makeTrace()
         guard configuration.launcherExists else { return }
@@ -296,19 +313,20 @@ extension LocalEngineService {
     }
 
     private func execute(
-        _ command: EngineCommand?, label: String, onLine: @escaping @Sendable (EngineOutputLine) -> Void = { _ in }
+        _ command: EngineCommand?, label: String, logsOutput: Bool = true,
+        onLine: @escaping @Sendable (EngineOutputLine) -> Void = { _ in }
     ) async -> EngineProcessOutcome {
         guard let command else { return .launchFailed }
         let log = log
         return await runner.run(command) { line in
-            log?.write("[\(label)] \(line.text)")
+            if logsOutput { log?.write("[\(label)] \(line.text)") }
             onLine(line)
         }
     }
 
-    private func launcher(_ arguments: [String], label: String) async throws -> LauncherOutcome {
+    private func launcher(_ arguments: [String], label: String, logsOutput: Bool = true) async throws -> LauncherOutcome {
         let lines = LineCollector()
-        let outcome = await execute(launcherCommand(arguments), label: label) { line in
+        let outcome = await execute(launcherCommand(arguments), label: label, logsOutput: logsOutput) { line in
             if !line.isError { lines.append(line.text) }
         }
         switch outcome {

@@ -37,6 +37,7 @@ struct LocalEngineSettingsSection: View {
                         .disabled(engine.startAtLogin == nil || engine.isUpdatingLogin || isRemoving)
                         .accessibilityIdentifier("localEngineLoginToggle")
                 }
+                LocalEngineTailnetRows(engine: engine, isRemoving: isRemoving)
                 Button {
                     deleteData.isOn = false
                     confirmingRemoval = true
@@ -49,7 +50,7 @@ struct LocalEngineSettingsSection: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(isRemoving || engine.isUpdatingLogin)
+                .disabled(isRemoving || engine.isUpdatingLogin || engine.isUpdatingTailnet)
             }
             if let failure = engine.settingsFailure {
                 Text(failure.reason)
@@ -60,8 +61,18 @@ struct LocalEngineSettingsSection: View {
                     .padding(.top, 8)
                     .accessibilityIdentifier("localEngineSettingsError")
             }
+            if let message = engine.tailnetFailure {
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color(theme.palette.destructive))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 13)
+                    .padding(.top, 8)
+                    .accessibilityIdentifier("localEngineTailnetError")
+            }
         }
         .task { await engine.refreshSettings() }
+        .onDisappear { engine.dismissTailnetPassword() }
         .macConfirm(isPresented: $confirmingRemoval) {
             MacDialogContent(
                 String(localized: "Remove Pal from this Mac?"),

@@ -260,6 +260,8 @@ targets:
     dependencies:
       - target: Pal
       - package: PalKit
+        product: PalLocalEngine
+      - package: PalKit
         product: PalProtocol
       - package: PalKit
         product: PalDiagnostics

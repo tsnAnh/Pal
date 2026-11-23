@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 from typing import Callable
 
+from hermes_cli.subcommands.tailnet import build_tailnet_parser
+
 
 def _add_server_runtime_args(parser) -> None:
     """Runtime flags shared by ``dashboard`` and ``serve`` (same ``web_server.start_server``)."""
@@ -123,3 +125,5 @@ def build_dashboard_parser(
             "portal. Also settable via HERMES_DASHBOARD_PORTAL_URL. Mainly for "
             "testing against a staging/preview portal.")
     dashboard_register_parser.set_defaults(func=cmd_dashboard_register)
+
+    build_tailnet_parser(subparsers)
