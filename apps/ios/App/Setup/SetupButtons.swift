@@ -5,6 +5,8 @@ struct SetupButton: View {
     enum Kind {
         case primary
         case secondary
+
+        fileprivate var role: SetupButtonRole { self == .primary ? .primary : .secondary }
     }
 
     let title: String
@@ -21,7 +23,7 @@ struct SetupButton: View {
                 label.opacity(isBusy ? 0 : 1)
                 if isBusy { ProgressView().controlSize(.small) }
             }
-            .frame(maxWidth: fillsWidth ? .infinity : nil)
+            .setupButtonLabel(SetupFooterMetrics.buttons(fillsWidth: fillsWidth), role: kind.role, fillsWidth: fillsWidth)
         }
         .glassButtonStyle(prominent: kind == .primary)
         .disabled(isBusy)
@@ -41,6 +43,7 @@ struct SetupButton: View {
 
 struct SetupQuietButton: View {
     let title: String
+    var fillsWidth = false
     let identifier: String
     let action: () -> Void
 
@@ -48,7 +51,8 @@ struct SetupQuietButton: View {
         Button(action: action) {
             Text(title)
                 .foregroundStyle(PalTokens.textSecondary)
-                .contentShape(Rectangle())
+                .setupButtonLabel(SetupFooterMetrics.buttons(fillsWidth: fillsWidth), role: .quiet, fillsWidth: fillsWidth)
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier(identifier)
