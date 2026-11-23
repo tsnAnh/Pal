@@ -117,7 +117,7 @@ struct ChatBottomBar: View {
                 model.dismissError()
                 model.send(text)
                 draft = ""
-                scroll.jumpToBottom(animated: !reduceMotion)
+                scroll.sent(animated: !reduceMotion)
             },
             openVoiceMode: {
                 dictation.stop()

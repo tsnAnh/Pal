@@ -206,5 +206,5 @@ def test_the_shipped_allowlist_parses_with_reasons():
 
 def test_the_cli_exits_1_and_names_the_fix_on_a_failing_tree(tmp_path):
     root = _tree(tmp_path, App__Chat__ChatRows_swift="proxy.scrollTo(id)\n")
-    run = subprocess.run([sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True)
+    run = subprocess.run([sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True, check=False)
     assert run.returncode == 1 and FIX in run.stdout

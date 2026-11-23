@@ -43,7 +43,6 @@ struct MacChatBenchSurface: View {
             .macChatChrome(model: model, router: router, find: {}, focusComposer: {})
             .background(PalTokens.content)
             .messageMenuPresenter().composerActivity(focused: composerFocused)
-            .onAppear { scroll.setVisible(true, rowIDs: model.rowIDs) }
     }
 }
 
@@ -107,8 +106,9 @@ final class MacChatBenchHost {
 
     var isAtNewest: Bool {
         guard let scrollView = transcriptScrollView, let document = scrollView.documentView else { return false }
-        return document.frame.height > scrollView.contentView.bounds.height
-            && scrollView.contentView.bounds.origin.y <= -scrollView.contentInsets.top + 0.5
+        let clip = scrollView.contentView
+        return document.frame.height > clip.bounds.height
+            && clip.bounds.origin.y >= document.frame.height - clip.bounds.height + scrollView.contentInsets.bottom - 0.5
     }
 
     private var scrollSignature: [CGFloat] {
@@ -138,9 +138,9 @@ final class MacChatBenchHost {
     func scroll(by points: Double) {
         guard let scrollView = transcriptScrollView else { return }
         let clip = scrollView.contentView
-        let newest = -scrollView.contentInsets.top
-        let oldest = (scrollView.documentView?.frame.height ?? 0) - clip.bounds.height + scrollView.contentInsets.bottom
-        let next = min(max(newest, clip.bounds.origin.y + points), oldest)
+        let oldest = -scrollView.contentInsets.top
+        let newest = (scrollView.documentView?.frame.height ?? 0) - clip.bounds.height + scrollView.contentInsets.bottom
+        let next = min(max(oldest, clip.bounds.origin.y - points), newest)
         clip.scroll(to: CGPoint(x: clip.bounds.origin.x, y: next))
         scrollView.reflectScrolledClipView(clip)
         NotificationCenter.default.post(name: NSScrollView.didLiveScrollNotification, object: scrollView)

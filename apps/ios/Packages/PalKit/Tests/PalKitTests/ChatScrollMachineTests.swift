@@ -214,6 +214,14 @@ struct ChatScrollMachineTests {
         #expect(machine.handle(.revealRetry) == .none)
     }
 
+    @Test func revealOfAnAlreadyVisibleRowSettlesOnTheNextRetry() {
+        var machine = readingMachine()
+        _ = machine.handle(.visibleRowsChanged(["r"]))
+        #expect(machine.handle(.revealRow("r")) == .scrollToRow("r"))
+        #expect(machine.handle(.revealRetry) == .none)
+        #expect(machine.state == .readingHistory)
+    }
+
     @Test func revealExhaustsAfterTheAttemptBudget() {
         var machine = readingMachine()
         _ = machine.handle(.revealRow("r"))

@@ -66,7 +66,7 @@ def parse_allowlist(path: Path) -> tuple[list[Waiver], list[str]]:
     errors: list[str] = []
     if not path.is_file():
         return waivers, errors
-    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for number, raw in enumerate(path.read_text(encoding="utf-8-sig").splitlines(), 1):
         entry = raw.strip()
         if not entry or entry.startswith("#"):
             continue

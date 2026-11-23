@@ -281,8 +281,8 @@ public struct ChatScrollMachine: Sendable, Equatable {
     }
 
     private mutating func revealRetry() -> Command {
-        guard case .programmatic(.row(let id)) = state, !visibleIDs.contains(id) else { return .none }
-        guard attempts < Self.revealAttempts else {
+        guard case .programmatic(.row(let id)) = state else { return .none }
+        guard !visibleIDs.contains(id), attempts < Self.revealAttempts else {
             state = .readingHistory
             return .none
         }

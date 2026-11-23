@@ -874,7 +874,7 @@ public actor ChatSession: OutboxSubmitter {
             executionGeneration: timeline.live.executionGeneration,
             runningToolName: timeline.live.runningToolName,
             streamingText: timeline.live.streamingText,
-            forwardedKeys: timeline.forwardedKeys
+            forwardedKeys: timeline.forwarded
         )
     }
 

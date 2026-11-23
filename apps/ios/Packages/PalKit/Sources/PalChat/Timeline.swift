@@ -94,8 +94,7 @@ struct Timeline: Sendable {
     private var alias: [TimelineRef: RowKey] = [:]
     private var liveKeys: [String: RowKey] = [:]
     private var anchors: [RowKey: RowKey] = [:]
-    private var forwarded: [RowKey: RowKey] = [:]
-    var forwardedKeys: [RowKey: RowKey] { forwarded }
+    private(set) var forwarded: [RowKey: RowKey] = [:]
     private var nextKey: UInt64 = 1
     private var failedAttempts = 0
     private var generation = 0
