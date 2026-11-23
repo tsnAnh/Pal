@@ -72,6 +72,7 @@ ADMIN_APPROVAL_MESSAGE = "An admin of your organisation needs to approve Pal."
 _ADMIN_CODES = ("consent_required", "interaction_required")
 _ADMIN_WORDS = re.compile(
     r"\baadsts(90094|90095|65001)\b"
+    r"|\bpermissions?\b.{0,40}\bblocked\b.{0,40}\bworkspaces?\b"
     r"|\badmin(istrator)?s?\b.{0,80}\b(approv\w*|consent\w*|authori[sz]\w*)"
     r"|\b(approv\w*|consent\w*|authori[sz]\w*)\b.{0,80}\badmin", re.DOTALL)
 
@@ -81,7 +82,8 @@ def is_admin_approval_pending(error: str | None, description: str | None = None)
     not the owner: ``consent_required`` / ``interaction_required`` (the sign-in is already interactive, so
     the owner cannot resolve them), or any other error whose text or ``error_description`` asks for an
     admin's approval, consent or authorization (Entra AADSTS90094, Atlassian "site admin must authorize",
-    Notion "workspace owner or admin to approve"). A plain ``access_denied`` is the owner saying no."""
+    Notion "workspace owner or admin to approve"), or says the workspace's permissions are blocked (Trello
+    "Permissions are blocked for these workspaces"). A plain ``access_denied`` is the owner saying no."""
     code = str(error or "").strip().lower()
     if code in _ADMIN_CODES:
         return True

@@ -1,0 +1,48 @@
+# Nous-approved MCP catalog entry.
+# Presence in this directory = approval. Merged via PR review.
+manifest_version: 1
+
+name: trello
+connector_slug: trello
+description: Boards, lists, cards, checklists and your Inbox in Trello.
+source: https://trello.com/mcp
+
+# Trello's official hosted MCP server (github.com/atlassian/trello-mcp-server,
+# Apache-2.0) over Streamable HTTP; nothing to install locally. It is separate
+# from the Atlassian Rovo MCP server and free on every Trello plan.
+transport:
+  type: http
+  url: https://mcp.trello.com/v1
+
+auth:
+  type: oauth
+  # Native MCP OAuth 2.1 (case 1), no pre-registered client. Protected-resource
+  # metadata is served at the RFC 9728 path-suffixed form
+  # https://mcp.trello.com/.well-known/oauth-protected-resource/v1 and names
+  # the Atlassian authorization server, which offers Dynamic Client
+  # Registration, PKCE S256 and public clients (token_endpoint_auth_method
+  # "none"). Hermes's MCP client + mcp_oauth_manager handle discovery, DCR,
+  # PKCE, token exchange and refresh.
+  #
+  # On the consent screen the user picks ONE Trello workspace per connection
+  # and the read/write permissions; changing permissions means disconnecting
+  # and reconnecting. A workspace whose admin disabled the Trello permissions
+  # in Atlassian Administration shows "Permissions are blocked for these
+  # workspaces".
+
+# Tool selection at install time:
+# The surface is small (members, boards, lists, cards, checklists, Inbox,
+# search), so `default_enabled` stays unset and everything starts pre-checked.
+
+suggest:
+  keywords:
+    - trello
+  hosts:
+    - trello.com
+
+post_install: |
+  On first connection, Hermes will open a browser to authenticate with Trello.
+  After auth, restart your Hermes session so the Trello tools are loaded.
+
+  You can re-run the tool checklist any time with:
+    hermes mcp configure trello
