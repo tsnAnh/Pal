@@ -69,6 +69,32 @@ struct ChatScrollControllerTests {
         #expect(!afterConverging)
     }
 
+    @Test("a newest-edge request still waiting for the scroll view is never queued twice")
+    func outstandingRequestIsNotRepeated() {
+        let controller = ChatScrollController()
+        controller.position = ScrollPosition(idType: String.self, y: 120)
+        controller.observe(viewport(distanceFromNewest: 120))
+        #expect(positionNotified(controller) { controller.contentGrew() })
+        let whileWaiting = positionNotified(controller) {
+            controller.contentGrew()
+            controller.observe(viewport(distanceFromNewest: 120))
+            controller.contentGrew()
+        }
+        #expect(!whileWaiting)
+        controller.observe(viewport(distanceFromNewest: 200))
+        #expect(positionNotified(controller) { controller.contentGrew() })
+    }
+
+    @Test("a new row and the jump button each ask again even when a request is waiting")
+    func newIntentAsksAgain() {
+        let controller = ChatScrollController()
+        controller.position = ScrollPosition(idType: String.self, y: 120)
+        controller.observe(viewport(distanceFromNewest: 120))
+        controller.rowsChanged(["a"])
+        #expect(positionNotified(controller) { controller.rowsChanged(["a", "b"]) })
+        #expect(positionNotified(controller) { controller.jumpToBottom(animated: false) })
+    }
+
     @Test("a hidden chat defers bookkeeping and resyncs once when shown")
     func hiddenChatDefersUntilShown() {
         let controller = ChatScrollController()
