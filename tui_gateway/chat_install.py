@@ -84,6 +84,7 @@ class ChatProvider(abc.ABC):
     provider_id: str
     allowed_users_env: str | None = None
     per_bot_adapter: bool = True
+    needs_public_url: bool = True
 
     def _missing(self, operation: str) -> ProviderNotImplemented:
         return ProviderNotImplemented(self.provider_id, operation)

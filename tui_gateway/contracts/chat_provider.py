@@ -431,7 +431,8 @@ method("chat.provider.list", params=ProfileParams, result=ChatProviderListResult
 method("chat.install.status", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it.")
 method("chat.install.begin", params=ChatInstallBeginParams, result=ChatInstallStatusResult,
-       doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. "
+       doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL "
+           "and the provider installs through a redirect (Discord does not). "
            "app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; "
            "only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first.")
 method("chat.install.advance", params=ChatInstallAdvanceParams, result=ChatInstallStatusResult,

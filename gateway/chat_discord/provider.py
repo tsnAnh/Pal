@@ -59,6 +59,7 @@ def saved_app_token() -> str | None:
 class DiscordProvider(ChatProvider):
     provider_id = "discord"
     per_bot_adapter = False
+    needs_public_url = False
 
     def __init__(self, *, vault: VaultStore | None = None, api: DiscordApi | None = None,
                  records: DiscordRecords | None = None, routes: ProfileRoutes | None = None,

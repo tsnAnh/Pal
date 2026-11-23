@@ -263,7 +263,7 @@ class ChatInstallService:
         state = self._current(bot, provider_id, workspace)
         if state.step is SetupStep.ready:
             return state, self._installation_of(state)
-        if not (self.public_url() or "").startswith("https://"):
+        if provider.needs_public_url and not (self.public_url() or "").startswith("https://"):
             raise ChatServiceError(GatewayReason.needs_public_url, state, SET_PUBLIC_URL_ACTION)
         try:
             state = self._reopen_unmet(provider, self._apply(provider, state, SetupEvent(kind=SetupEventKind.begin)))
