@@ -23,6 +23,7 @@ ENTRA = "AADSTS90094: The grant requires admin permission."
 ATLASSIAN = "Your site admin must authorize this app for the site 'acme.atlassian.net' before the app can access your account."
 NOTION = "This connection is blocked by workspace policy. Ask a workspace owner or admin to approve the client."
 SUPABASE = "An organization owner or admin must approve this app before it can access the organization."
+TRELLO = "Permissions are blocked for these workspaces"
 SECRET_HINT = "vendor-detail-123"
 
 PENDING = [
@@ -33,6 +34,7 @@ PENDING = [
     pytest.param(None, "Registration failed: 403 " + ATLASSIAN, id="atlassian-site-admin-text"),
     pytest.param(None, NOTION, id="notion-owner-or-admin-text"),
     pytest.param(None, SUPABASE, id="supabase-owner-or-admin-text"),
+    pytest.param("access_denied", TRELLO, id="trello-permissions-blocked-description"),
 ]
 
 ORDINARY = [
@@ -42,6 +44,7 @@ ORDINARY = [
     pytest.param("server_error", "administrator rights are not required", id="admin-word-without-approval"),
     pytest.param(None, "Registration failed: 400 invalid_redirect_uri redirect_uri not allowed", id="registration-refusal"),
     pytest.param(None, "Timed out waiting for MCP OAuth callback", id="timeout"),
+    pytest.param("access_denied", "Permissions were blocked by a firewall", id="blocked-without-workspace"),
 ]
 
 

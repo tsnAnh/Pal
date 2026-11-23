@@ -968,6 +968,20 @@ class TestShippedCatalog:
             assert entry.description
             assert entry.transport.type in ("stdio", "http")
 
+    def test_trello_is_native_oauth_with_no_client_prompt_and_matches_the_pal_catalog(self, monkeypatch):
+        monkeypatch.delenv("HERMES_OPTIONAL_MCPS", raising=False)
+        from hermes_cli.mcp_catalog import _catalog_root, _parse_manifest
+        from hermes_cli.pal_connectors import load_pal_connectors
+
+        entry = _parse_manifest(_catalog_root() / "trello" / "manifest.yaml")
+        pal = {e.id: e for e in load_pal_connectors()}["trello"]
+
+        assert (entry.name, entry.connector_slug, entry.transport.type) == ("trello", "trello", "http")
+        assert entry.transport.url == pal.mcp_url == "https://mcp.trello.com/v1"
+        assert entry.auth.type == "oauth"
+        assert not entry.auth.env and not entry.auth.oauth and entry.auth.provider is None and entry.auth.signin_on is None
+        assert entry.tools.default_enabled is None and entry.tools.default_excluded is None
+
     def test_all_shipped_manifests_are_version_locked(self, monkeypatch):
         """Contract: catalog entries follow the same supply-chain rules as
         pyproject dependencies — everything Hermes fetches/launches is pinned

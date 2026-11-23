@@ -9,7 +9,7 @@ OWNER_PICKS = frozenset({
     "motherduck", "circleci", "buildkite", "postman", "semgrep", "context7", "deepwiki", "hugging_face",
     "aws-knowledge", "microsoft-learn", "twilio-docs", "unreal-engine", "wolfram",
     "sentry", "grafana", "datadog",
-    "linear", "atlassian", "clickup", "monday", "todoist", "notion", "airtable", "craft", "miro",
+    "linear", "atlassian", "clickup", "monday", "todoist", "trello", "notion", "airtable", "craft", "miro",
     "google-workspace", "google-ads", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
     "stripe", "intercom", "calendly",
     "slack", "clickhouse", "mintlify", "upwork", "discord", "t3code",
@@ -20,7 +20,7 @@ OWNER_PICKS = frozenset({
 def test_shipped_catalog_is_exactly_the_owner_picks():
     ids = {e.id for e in load_pal_connectors()}
     assert ids == OWNER_PICKS
-    assert len(ids) == 60
+    assert len(ids) == 61
 
 
 def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
@@ -46,6 +46,16 @@ def test_t3code_is_a_per_user_address_mcp_oauth_connector():
     assert entry.mcp_url is None and entry.oauth is None and entry.setup is None and entry.stdio is None
     assert entry.source == "https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md"
     assert entry.notes == "Runs on your own computer. Turn on Network access in T3 Code first."
+
+
+def test_trello_is_a_work_management_mcp_oauth_connector_that_asks_for_no_client_registration():
+    entry = {e.id: e for e in load_pal_connectors()}["trello"]
+
+    assert (entry.name, entry.icon, entry.category, entry.method, entry.verified) == (
+        "Trello", "trello", "Work management", ConnectionMethod.MCP_OAUTH, True)
+    assert entry.mcp_url == "https://mcp.trello.com/v1" and entry.source == "https://trello.com/mcp"
+    assert entry.oauth is None and entry.setup is None and entry.stdio is None
+    assert not entry.cimd and not entry.scopes and entry.multi_account
 
 
 def test_only_t3code_is_an_mcp_oauth_entry_without_an_address():

@@ -837,6 +837,15 @@ connectors:
   mcp_url: https://ai.todoist.net/mcp
   verified: true
   source: https://developer.todoist.com/api/v1/
+- id: trello
+  name: Trello
+  description: "Search and update boards, lists, cards and checklists, and add to your Inbox in Trello."
+  icon: trello
+  category: Work management
+  method: mcp_oauth
+  mcp_url: https://mcp.trello.com/v1
+  verified: true
+  source: https://trello.com/mcp
 - id: twilio-docs
   name: Twilio Docs
   description: "Search the Twilio developer documentation."
