@@ -104,7 +104,7 @@ private struct ChatTranscriptRows: View {
                 .chatListRow()
                 .newestFirst()
             }
-            footer(ink: ink)
+            VStack(spacing: 0) { footer(ink: ink) }
                 .chatListRow()
                 .newestFirst()
             ForEach(model.rowsNewestFirst) { row in
@@ -137,13 +137,13 @@ private struct ChatTranscriptRows: View {
 
     @ViewBuilder
     private func footer(ink: Color) -> some View {
-        if model.isRunning, !model.hasPendingPrompt {
-            ChatWorkingRow(status: model.workingStatus, ink: ink, avatar: model.bot.spec)
-                .padding(.top, ChatMetrics.senderSwitchGap)
-        }
         if connectionIsSlow {
             connectionStatus
                 .padding(.top, 12)
+        }
+        if model.isRunning, !model.hasPendingPrompt {
+            ChatWorkingRow(status: model.workingStatus, ink: ink, avatar: model.bot.spec)
+                .padding(.top, ChatMetrics.senderSwitchGap)
         }
     }
 
