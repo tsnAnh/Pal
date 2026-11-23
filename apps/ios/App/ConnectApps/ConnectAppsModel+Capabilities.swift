@@ -27,6 +27,11 @@ extension ConnectAppsModel {
 
     var canSetKeys: Bool { capabilityProfile != nil }
 
+    func isSavingKey(for row: CapabilityRow) -> Bool {
+        guard keyState == .submitting, let request = keyRequest else { return false }
+        return row.settableKeys.contains(request.keyName)
+    }
+
     func beginKeyEntry(_ row: CapabilityRow, keyName: String) {
         guard canSetKeys, row.settableKeys.contains(keyName) else { return }
         keyState = .idle

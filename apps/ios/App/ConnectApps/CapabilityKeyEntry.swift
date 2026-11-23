@@ -26,17 +26,23 @@ struct CapabilityKeyEntrySheet: View {
 
 struct CapabilitySetKeyButton: View {
     let row: CapabilityRow
+    var isSaving = false
     let onSelect: (String) -> Void
 
     var body: some View {
         let keys = row.settableKeys
+        let title = String(localized: "Set key")
         if keys.count == 1, let key = keys.first {
-            SetupButton(title: String(localized: "Set key"), identifier: "capabilitySetKey-\(row.id)") { onSelect(key) }
+            CapabilityActionButton(title: title, isBusy: isSaving, identifier: "capabilitySetKey-\(row.id)") { onSelect(key) }
         } else if keys.count > 1 {
-            Menu(String(localized: "Set key")) {
+            Menu {
                 ForEach(keys, id: \.self) { key in Button(key) { onSelect(key) } }
+            } label: {
+                CapabilityActionLabel(title: title, isBusy: isSaving)
             }
-            .interactiveGlassButtonStyle()
+            .glassButtonStyle()
+            .disabled(isSaving)
+            .accessibilityLabel(Text(title))
             .accessibilityIdentifier("capabilitySetKey-\(row.id)")
         }
     }
