@@ -141,6 +141,7 @@ The stage-by-stage contract: `website/docs/developer-guide/cli-internals.md` § 
   `update_serve_obligations.py` are a FROZEN compat surface (`tests/compat/old_updater_surface.json`):
   removing a name bricks releases mid-update.
 - Read #92091 (gateway-owned control socket) before adding any process-scan heuristic.
+- `hermes update` waits for in-flight turns; `--force` interrupts them, so ask the owner before using it.
 
 ## Profiles (multi-instance)
 
