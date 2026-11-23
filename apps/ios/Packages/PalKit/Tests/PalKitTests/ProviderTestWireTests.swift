@@ -194,6 +194,7 @@ struct ProviderHostCheckTests {
 
         let expected: [(String, ProviderPluginInstall)] = [
             ("installed", .installed(nil)), ("refused", .refused("Not now.")), ("failed", .failed("Not now.")), ("surprise", .failed("Not now.")),
+            ("already_installed", .installed(nil)),
         ]
         for (wire, result) in expected {
             let bots = ScriptedBots()

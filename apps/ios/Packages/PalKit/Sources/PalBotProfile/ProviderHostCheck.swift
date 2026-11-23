@@ -92,7 +92,7 @@ extension ModelProvidersClient {
             let action = try await perform("model.providers.install_plugin", ["provider": .string(provider)])
             let reason = action.reason ?? Self.couldNotInstallPlugin
             switch action.outcome {
-            case "installed": return .installed(action.provider)
+            case "installed", "already_installed": return .installed(action.provider)
             case "refused": return .refused(reason)
             default: return .failed(reason)
             }
