@@ -1,3 +1,4 @@
+import PalDesign
 import SwiftUI
 
 private struct BrowserTarget: Identifiable {
@@ -82,6 +83,7 @@ private struct BrowserFrame<Page: View>: View {
                 }
         }
         .frame(minWidth: 720, idealWidth: 900, minHeight: 560, idealHeight: 720)
+        .palEscape(.native) { dismiss() }
     }
 }
 

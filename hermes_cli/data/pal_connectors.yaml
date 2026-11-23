@@ -19,7 +19,7 @@ connectors:
   verified: true
   source: https://support.atlassian.com/rovo/docs/getting-started-with-the-atlassian-remote-mcp-server/
 - id: aws-knowledge
-  name: Aws Knowledge
+  name: AWS Knowledge
   description: "Look up AWS documentation, API references and best practices."
   icon: plugin_glyph
   category: Hosting and infrastructure
@@ -94,7 +94,7 @@ connectors:
       - {id: client_secret, label: Client secret, secret: true}
       check: canva_client
 - id: circleci
-  name: Circleci
+  name: CircleCI
   description: "Find failing builds, read their logs and rerun workflows in CircleCI."
   icon: circleci
   category: Developer tools
@@ -113,7 +113,7 @@ connectors:
   verified: true
   source: https://clickhouse.com/docs/products/cloud/features/ai-ml/remote-mcp
 - id: clickup
-  name: Clickup
+  name: ClickUp
   description: "Search, create and update tasks, docs and spaces in your ClickUp workspace."
   icon: clickup
   category: Work management
@@ -176,7 +176,7 @@ connectors:
   verified: true
   source: https://docs.datadoghq.com/mcp_server/setup/
 - id: deepwiki
-  name: Deepwiki
+  name: DeepWiki
   description: "Ask questions about any public GitHub repository and read its generated documentation."
   icon: plugin_glyph
   category: Developer tools
@@ -377,7 +377,7 @@ connectors:
   verified: true
   source: https://developers.gamma.app/docs/gamma-mcp-server
 - id: github
-  name: Github
+  name: GitHub
   description: "Browse repositories, issues and pull requests, and create or update them on GitHub."
   icon: github
   category: Developer tools
@@ -404,7 +404,7 @@ connectors:
       - {id: token, label: Token, secret: true, prefixes: [github_pat_, ghp_]}
       check: github_token
 - id: gitlab
-  name: Gitlab
+  name: GitLab
   description: "Browse projects, issues, merge requests and pipelines, and update them on GitLab."
   icon: gitlab
   category: Developer tools
@@ -573,7 +573,7 @@ connectors:
   verified: true
   source: https://developers.miro.com/docs/connecting-to-miro-mcp
 - id: monday
-  name: Monday
+  name: monday.com
   description: "Search and update boards, items and docs in your monday.com account."
   icon: plugin_glyph
   category: Work management
@@ -582,7 +582,7 @@ connectors:
   verified: true
   source: https://developer.monday.com/api-reference/docs/integrate-with-monday-mcp
 - id: motherduck
-  name: Motherduck
+  name: MotherDuck
   description: "Run SQL queries against your MotherDuck databases."
   icon: plugin_glyph
   category: Hosting and infrastructure
@@ -903,7 +903,7 @@ connectors:
   verified: false
   source: https://www.wolfram.com/agent-tools/
 - id: wordpress-com
-  name: Wordpress Com
+  name: WordPress.com
   description: "Read and write posts, pages and comments, and see stats, on your WordPress.com sites."
   icon: wordpress-com
   category: Design and web

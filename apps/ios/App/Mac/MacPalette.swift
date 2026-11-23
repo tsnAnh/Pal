@@ -90,13 +90,6 @@ struct MacPalette: View {
             }
         }
         .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
-        .background {
-            Button("") { router.closeSearch() }
-                .keyboardShortcut(.cancelAction)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("searchScreen")
         .task { model.start() }
@@ -116,10 +109,6 @@ struct MacPalette: View {
                 .onSubmit(openSelected)
                 .onKeyPress(.downArrow) { move(1) }
                 .onKeyPress(.upArrow) { move(-1) }
-                .onKeyPress(.escape) {
-                    router.closeSearch()
-                    return .handled
-                }
                 .accessibilityLabel(Text("Search"))
                 .accessibilityIdentifier("searchField")
         }

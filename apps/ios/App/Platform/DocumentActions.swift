@@ -11,9 +11,7 @@ enum DocumentActions {
         do {
             try data.write(to: url, options: .atomic)
         } catch {
-            let alert = NSAlert()
-            alert.messageText = String(localized: "The file couldn't be saved.")
-            alert.runModal()
+            PalAlert.notice(String(localized: "The file couldn't be saved."))
         }
     }
 }

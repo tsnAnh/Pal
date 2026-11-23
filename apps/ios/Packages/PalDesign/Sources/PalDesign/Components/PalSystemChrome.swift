@@ -37,7 +37,7 @@ public struct PalCloseButton: View {
             Button(role: .close, action: action)
         } else {
             Button("Close", role: .cancel, action: action)
-                .keyboardShortcut(.cancelAction)
+                .palCancelShortcut()
         }
         #else
         Button(role: .close, action: action)

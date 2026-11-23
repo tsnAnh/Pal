@@ -59,6 +59,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "swift-chat-row-alignment": (("apps/ios/*.swift", True),),
     "swift-mac-layout": (("apps/ios/*.swift", True),),
     "swift-modal-size": (("apps/ios/*.swift", True),),
+    "swift-esc-dismiss": (("apps/ios/*.swift", True), ("scripts/ci/esc_dismiss_allowlist.txt", True)),
     "swift-glass": (("apps/ios/*.swift", True), ("apps/ios/.glass-lint-baseline.json", True)),
     "swift-icon-tint": (("apps/ios/*.swift", True), ("scripts/ci/swift_icon_tint_allowlist.txt", True)),
     "swift-connect-palette": (("apps/ios/*.swift", True), ("scripts/ci/check_swift_connect_palette.py", True)),
@@ -72,6 +73,8 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "swift-entitlements": (("apps/ios/project.yml", True), ("apps/ios/*.entitlements", True)),
     "swift-lint": (("apps/ios/*.swift", True), ("apps/ios/.swiftlint*", True)),
     "pal-nous-boundary": (*((g, True) for g in _PY), ("apps/ios/*.swift", True)),
+    "connector-names": (("hermes_cli/data/pal_connectors.yaml", True), ("scripts/ci/connector_names_allowlist.txt", True),
+                        ("scripts/ci/check_connector_names.py", True)),
     "tooling-tests": _OUTSIDE_IOS,
 }
 
@@ -80,7 +83,7 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "python": ALL_CHECKS,
     "tooling-tests": ("tooling-tests",),
     "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives", "line-endings",
-                   "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-scroll-gesture", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-glass",
+                   "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-scroll-gesture", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-esc-dismiss", "swift-glass",
                    "swift-icon-tint", "swift-connect-palette", "swift-glass-input", "swift-image-viewer", "swift-media-preview", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint",
                    "pal-nous-boundary"),
     "swift": (),

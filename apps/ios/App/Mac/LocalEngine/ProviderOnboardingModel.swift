@@ -46,7 +46,7 @@ final class ProviderOnboardingModel {
     var showsAllModels = false
     private(set) var stack: [Screen] = [.choice]
     private(set) var origin = Origin.written
-    private(set) var connectedHere: String?
+    var connectedHere: String?
     private(set) var isFinishing = false
     var selectedModel: String?
     var manualModel = ""

@@ -1,12 +1,12 @@
 ---
-title: "Github — GitHub via gh CLI: PRs, issues, reviews, repos, auth"
-sidebar_label: "Github"
+title: "GitHub — GitHub via gh CLI: PRs, issues, reviews, repos, auth"
+sidebar_label: "GitHub"
 description: "GitHub via gh CLI: PRs, issues, reviews, repos, auth"
 ---
 
 {/* This page is auto-generated from the skill's SKILL.md by website/scripts/generate-skill-docs.py. Edit the source SKILL.md, not this page. */}
 
-# Github
+# GitHub
 
 GitHub via gh CLI: PRs, issues, reviews, repos, auth.
 

@@ -250,7 +250,7 @@ struct PanelButton: View {
             Button(action: action) { label }
                 .glassButtonStyle()
                 .buttonBorderShape(.capsule)
-                .keyboardShortcut(.cancelAction)
+                .palCancelShortcut()
                 .accessibilityIdentifier(identifier)
         }
     }

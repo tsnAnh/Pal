@@ -87,11 +87,7 @@ enum SharePresenter {
     }
 
     static func alert(title: String, message: String) {
-        let alert = NSAlert()
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: String(localized: "OK"))
-        alert.runModal()
+        PalAlert.notice(title, message: message)
     }
 
     private final class PickerDelegate: NSObject, NSSharingServicePickerDelegate, NSSharingServiceDelegate {

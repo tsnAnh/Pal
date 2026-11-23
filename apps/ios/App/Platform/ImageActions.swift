@@ -29,23 +29,14 @@ enum ImageActions {
         panel.nameFieldStringValue = ((suggestedName as NSString).deletingPathExtension as String) + ".png"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard let data = NSImage(cgImage: image).pngData() else {
-            NSAlert.show(String(localized: "The image couldn't be saved."))
+            PalAlert.notice(String(localized: "The image couldn't be saved."))
             return
         }
         do {
             try data.write(to: url, options: .atomic)
         } catch {
-            NSAlert.show(String(localized: "The image couldn't be saved."))
+            PalAlert.notice(String(localized: "The image couldn't be saved."))
         }
-    }
-}
-
-private extension NSAlert {
-    @MainActor
-    static func show(_ message: String) {
-        let alert = NSAlert()
-        alert.messageText = message
-        alert.runModal()
     }
 }
 #endif
