@@ -36,7 +36,7 @@ struct CapabilitySetKeyButton: View {
             Menu(String(localized: "Set key")) {
                 ForEach(keys, id: \.self) { key in Button(key) { onSelect(key) } }
             }
-            .buttonStyle(.glass(.regular.interactive()))
+            .interactiveGlassButtonStyle()
             .accessibilityIdentifier("capabilitySetKey-\(row.id)")
         }
     }

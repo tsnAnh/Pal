@@ -11,7 +11,7 @@ struct MacChatHeader: View {
     @Environment(MacShell.self) private var shell
 
     var body: some View {
-        GlassEffectContainer(spacing: 24) {
+        PalGlassContainer(spacing: 24) {
             Button { shell.toggleInspector() } label: {
                 HStack(spacing: 8) {
                     BotAvatarView(spec: bot.spec, size: 22 * 1.15, mood: mood)

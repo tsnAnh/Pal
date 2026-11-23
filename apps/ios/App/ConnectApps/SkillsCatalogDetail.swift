@@ -54,7 +54,7 @@ extension SkillsCatalogSheet {
             VStack(alignment: .leading, spacing: 12) {
                 Text(message).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textSecondary))
                 Button("Try again") { Task { await model.loadDetail() } }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("skillDetailRetry")
             }
             .accessibilityIdentifier("skillDetailFailed")
@@ -113,7 +113,7 @@ extension SkillsCatalogSheet {
                     }
                     if !key.isOptional, row.isInstalled {
                         Button(String(localized: "Add key")) { model.beginKeyEntry(row, keyName: key.name) }
-                            .buttonStyle(.glass)
+                            .glassButtonStyle()
                             .accessibilityLabel(Text("Add key for \(key.name)"))
                             .accessibilityIdentifier("skillAddKey-\(key.name)")
                     }
@@ -164,7 +164,7 @@ extension SkillsCatalogSheet {
     private func removeButton(_ row: SkillRow, working: Bool) -> some View {
         if row.isRemovable {
             busyButton(String(localized: "Remove"), isBusy: working, identifier: "skillRemove") { model.removeTarget = row }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
         }
     }
 

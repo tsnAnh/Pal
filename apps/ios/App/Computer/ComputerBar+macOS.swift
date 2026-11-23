@@ -31,7 +31,7 @@ struct MacComputerBar: View {
                 }
                 if teach.canStart {
                     Button("Teach a skill") { Task { await teach.start() } }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .accessibilityIdentifier("computerTeachSkill")
                 }
                 primary
@@ -68,7 +68,7 @@ struct MacComputerBar: View {
                 .font(.system(size: MacComputerMetrics.textSize))
         }
         .menuStyle(.button)
-        .buttonStyle(.glass)
+        .glassButtonStyle()
         .menuIndicator(.hidden)
         .fixedSize()
         .accessibilityLabel(Text("Clipboard"))
@@ -95,7 +95,7 @@ struct MacComputerCorner: View {
     let collapse: () -> Void
 
     var body: some View {
-        GlassEffectContainer {
+        PalGlassContainer {
             HStack(spacing: 8) {
                 MacIconButton(systemName: "questionmark", label: String(localized: "Help"), identifier: "computerHelpButton", action: help)
                 MacIconButton(

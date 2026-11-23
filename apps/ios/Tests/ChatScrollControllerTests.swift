@@ -21,6 +21,12 @@ struct ChatScrollControllerTests {
         return fired.value
     }
 
+    private func scrolled(toY y: CGFloat) -> ScrollPosition {
+        var position = ScrollPosition(idType: String.self, edge: .top)
+        position.scrollTo(y: y)
+        return position
+    }
+
     private func viewport(distanceFromNewest: CGFloat) -> ChatViewport {
         ChatViewport(distanceFromNewest: distanceFromNewest, distanceFromOldest: 4000, viewportHeight: 600, contentHeight: 5000)
     }
@@ -100,7 +106,7 @@ struct ChatScrollControllerTests {
         }
         #expect(!whileHidden)
         #expect(positionNotified(controller) { controller.setVisible(true, rowIDs: []) })
-        #expect(controller.position.y == 370)
+        #expect(controller.position == scrolled(toY: 370))
     }
 
     @Test("an open that drifts off the newest edge pins it once, then hands the edge anchor back")
@@ -108,7 +114,7 @@ struct ChatScrollControllerTests {
         let controller = ChatScrollController()
         controller.observe(viewport(distanceFromNewest: 0), tracksOpen: true)
         controller.observe(viewport(distanceFromNewest: 36.5), tracksOpen: true)
-        #expect(controller.position.y == 0)
+        #expect(controller.position == scrolled(toY: 0))
         controller.observe(viewport(distanceFromNewest: 0), tracksOpen: true)
         #expect(controller.position.edge == .top)
         let afterwards = positionNotified(controller) {

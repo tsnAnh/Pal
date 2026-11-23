@@ -229,7 +229,7 @@ struct OwnerIntroSheet: View {
     }
 
     private var photoPills: some View {
-        GlassEffectContainer(spacing: 8) {
+        PalGlassContainer(spacing: 8) {
             HStack(spacing: 8) {
                 if model.photo == nil {
                     pill("Add photo", icon: "camera", identifier: "ownerIntroAddPhoto", action: model.choosePhoto)
@@ -248,7 +248,7 @@ struct OwnerIntroSheet: View {
                 Text(title).font(.system(size: 12.5))
             }
         }
-        .buttonStyle(.glass)
+        .glassButtonStyle()
         .buttonBorderShape(.capsule)
         .disabled(model.isSaving)
         .accessibilityIdentifier(identifier)

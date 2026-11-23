@@ -44,19 +44,19 @@ public enum PalGlass {
 
 CASES = [
     ("glass-dark-tint", SCREEN, "Button(\"Go\") {}\n    .buttonStyle(.glass(.regular.tint(Color.black.opacity(0.4))))\n",
-     "Button(\"Go\") {}\n    .buttonStyle(.glass)\n    .shadow(color: .black.opacity(0.3), radius: 8)\n"),
+     "Button(\"Go\") {}\n    .glassButtonStyle()\n    .shadow(color: .black.opacity(0.3), radius: 8)\n"),
     ("glass-dark-tint", SCREEN, "Capsule().glassEffect(.regular.tint(.black))\n", "Capsule().palGlass(Capsule())\n"),
     ("glass-dark-tint", DESIGN, PRE_FIX_PAL_GLASS, "static func style(_ base: Glass) -> Glass { base }\n"),
     ("glass-hand-rolled", SCREEN, "Text(t).glassEffect(.regular, in: Capsule())\n", "Text(t).palGlass(Capsule())\n"),
     ("glass-hand-rolled", SCREEN, "let view = NSGlassEffectView()\n", "let view = NSVisualEffectView()\n"),
-    ("glass-pill-button", SCREEN, "Button(\"Go\") {}.buttonStyle(.pill(.accent))\n", "Button(\"Go\") {}.buttonStyle(.glass)\n"),
+    ("glass-pill-button", SCREEN, "Button(\"Go\") {}.buttonStyle(.pill(.accent))\n", "Button(\"Go\") {}.glassButtonStyle()\n"),
     ("glass-pill-button", SCREEN, "PillButton(\"Try again\", accessibilityIdentifier: \"retry\") {}\n",
-     "Button(\"Try again\") {}.buttonStyle(.glass)\n"),
+     "Button(\"Try again\") {}.glassButtonStyle()\n"),
     ("glass-pill-button", SCREEN, "Button(\"Go\") {}.buttonStyle(.palPill(height: 28))\n", "Button(\"Go\") {}.buttonStyle(.palGlass)\n"),
     ("glass-pill-button", SCREEN, "Button(\"Go\") { go() }\n    .background(Color.blue, in: Capsule())\n",
      "Button(\"Go\") { go() }\n    .glassButtonStyle(prominent: true)\n"),
     ("glass-button-size", SCREEN, "Button(\"Back\") { goBack() }\n    .buttonStyle(.glass)\n    .controlSize(.large)\n",
-     "Button(\"Back\") { goBack() }\n    .buttonStyle(.glass)\n"),
+     "Button(\"Back\") { goBack() }\n    .glassButtonStyle()\n"),
     ("glass-button-tint", SCREEN, "Button(\"Create\", action: create)\n    .buttonStyle(.glassProminent)\n    .tint(PalTokens.textPrimary)\n",
      "Button(\"Create\", action: create)\n    .glassButtonStyle(prominent: true)\n"),
     ("glass-prominent-direct", SCREEN, "Button(\"Take control\") { take() }\n    .buttonStyle(.glassProminent)\n",
@@ -71,27 +71,27 @@ CASES = [
     ("glass-system-tint", SCREEN, "Button(\"Go\") {}.tint(Color(theme.palette.accentBlue))\n", "Button(\"Go\") {}.tint(PalTokens.textPrimary)\n"),
     ("glass-container", SCREEN,
      "var bar: some View {\n    HStack {\n        a.palGlass(Circle())\n        b.palGlass(Circle())\n    }\n}\n",
-     "var bar: some View {\n    GlassEffectContainer(spacing: 8) {\n        a.palGlass(Circle())\n        b.palGlass(Circle())\n    }\n}\n"),
+     "var bar: some View {\n    PalGlassContainer(spacing: 8) {\n        a.palGlass(Circle())\n        b.palGlass(Circle())\n    }\n}\n"),
     ("glass-sheet-chrome", SCREEN,
      "SheetChrome(title: t, accessibilityIdentifier: \"s\", onLeading: close) {\n    list\n        .padding(.bottom, 32)\n}\n",
      "SheetChrome(title: t, accessibilityIdentifier: \"s\", onLeading: close) {\n    list\n}\n"),
     ("glass-sheet-chrome", SCREEN,
      "ToolbarItem(placement: .topBarTrailing) {\n    Button(\"Close\") { dismiss() }\n}\n",
-     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() }\n}\n"),
+     "ToolbarItem(placement: .cancellationAction) {\n    PalCloseButton { dismiss() }\n}\n"),
     ("glass-sheet-chrome", SCREEN, "Button(\"Close\") { dismiss() }\n",
-     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() }\n}\n"),
+     "ToolbarItem(placement: .cancellationAction) {\n    PalCloseButton { dismiss() }\n}\n"),
     ("glass-sheet-chrome", SCREEN,
      ".sheet(isPresented: $on) {\n    NavigationStack {\n        form.navigationTitle(\"New\")\n    }\n}\n",
      ".sheet(isPresented: $on) {\n    SheetChrome(title: \"New\", accessibilityIdentifier: \"s\", onLeading: close) { form }\n}\n"),
     ("glass-close-chrome", SCREEN,
      "var header: some View {\n    HStack {\n        Text(title)\n        Button(role: .close, action: close)\n            .buttonStyle(.glass)\n    }\n}\n",
-     "var body: some View {\n    list.toolbar {\n        ToolbarItem(placement: .cancellationAction) {\n            Button(role: .close, action: close)\n        }\n    }\n}\n"),
+     "var body: some View {\n    list.toolbar {\n        ToolbarItem(placement: .cancellationAction) {\n            PalCloseButton(action: close)\n        }\n    }\n}\n"),
     ("glass-close-chrome", SCREEN,
      "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() } label: { Text(\"Close\") }\n}\n",
-     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close) { dismiss() }\n}\n"),
+     "ToolbarItem(placement: .cancellationAction) {\n    PalCloseButton { dismiss() }\n}\n"),
     ("glass-close-chrome", SCREEN,
      "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close, action: close) { Text(\"Close\") }\n}\n",
-     "ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close, action: close)\n}\n"),
+     "ToolbarItem(placement: .cancellationAction) {\n    PalCloseButton(action: close)\n}\n"),
     ("glass-close-chrome", SCREEN,
      "PalClearGlassIconButton(systemName: \"xmark\", label: \"Close\", identifier: \"x\", action: close)\n",
      "PalClearGlassIconButton(systemName: \"pencil\", label: \"Edit\", identifier: \"x\", action: edit)\n"),
@@ -116,6 +116,13 @@ CASES = [
     ("glass-raw-color", SCREEN, "let tile = Color(red: 0.1, green: 0.2, blue: 0.3)\n", "let tile = PalTokens.control\n"),
     ("glass-raw-color", SCREEN, "let dot = Color(white: 0.4)\n", "let dot = Color.secondary\n"),
     ("glass-raw-color", SCREEN, "let hue = \"#0f7a3c\"\n", "let hue = \"#fragment\"\n"),
+    ("glass-raw-glass-api", SCREEN, "Button(\"Go\") {}\n    .buttonStyle(.glass)\n", "Button(\"Go\") {}\n    .glassButtonStyle()\n"),
+    ("glass-raw-glass-api", SCREEN, "GlassEffectContainer { a.palGlass(Circle()) }\n", "PalGlassContainer { a.palGlass(Circle()) }\n"),
+    ("glass-toolbar-availability", DESIGN,
+     "public extension ToolbarContent {\n    @ToolbarContentBuilder\n    func hidden() -> some ToolbarContent {\n"
+     "        if #available(macOS 26, *) { sharedBackgroundVisibility(.hidden) } else { self }\n    }\n}\n",
+     "public extension View {\n    @ViewBuilder\n    func title() -> some View {\n"
+     "        if #available(macOS 26, *) { toolbar { item.sharedBackgroundVisibility(.hidden) } } else { toolbar { item } }\n    }\n}\n"),
 ]
 
 
@@ -142,9 +149,9 @@ def test_rules_that_belong_to_one_layer_ignore_the_other(tmp_path: Path) -> None
 def test_close_inside_sheet_chrome_or_a_toolbar_item_passes(tmp_path: Path) -> None:
     trailing = (
         "SheetChrome(title: t, leading: .back, accessibilityIdentifier: \"s\", onLeading: back, trailing: {\n"
-        "    Button(role: .close) { close() }\n}, content: { form })\n"
+        "    PalCloseButton { close() }\n}, content: { form })\n"
     )
-    group = "ToolbarItemGroup(placement: .cancellationAction) {\n    Button(role: .close, action: close)\n}\n"
+    group = "ToolbarItemGroup(placement: .cancellationAction) {\n    PalCloseButton(action: close)\n}\n"
     assert _rules(tmp_path / "a", SCREEN, trailing) == []
     assert _rules(tmp_path / "b", SCREEN, group) == []
 

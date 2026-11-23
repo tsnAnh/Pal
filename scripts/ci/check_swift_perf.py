@@ -621,7 +621,7 @@ def hover_bar_unconditional(src: Source) -> Iterator[tuple[int, str]]:
         headers = (src.text[src.starts[src.line_of(o) - 1]:o] for o in src.enclosing(m.start()) if src.text[o] == "{")
         if not any(re.search(r"\bif\b", header) for header in headers):
             yield src.line_of(m.start()), ("the hover bar is built for every row while hidden: each row pays for a "
-                                           "GlassEffectContainer and its buttons. Build MacMessageHoverBar only while the row is "
+                                           "PalGlassContainer and its buttons. Build MacMessageHoverBar only while the row is "
                                            "hovered, focused or showing its menu (the barBuilt gate in MacMessageChrome)")
 
 

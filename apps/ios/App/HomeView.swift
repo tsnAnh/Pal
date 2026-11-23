@@ -34,7 +34,7 @@ struct HomeView: View {
             .padding(.horizontal, 8)
             .padding(.bottom, 24)
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .palSoftScrollEdge(for: .top)
         .accessibilityIdentifier("rosterScreen")
         .toolbar {
             ToolbarItem(placement: .leadingBar) {
@@ -54,7 +54,9 @@ struct HomeView: View {
                     .accessibilityLabel(Text("Pal Kanban"))
                     .accessibilityIdentifier("kanbanButton")
                 }
-                ToolbarSpacer(.fixed, placement: .trailingBar)
+                #if os(iOS)
+                PalToolbarSpacer(placement: .trailingBar)
+                #endif
             }
             if rooms.canCreate {
                 ToolbarItem(placement: .trailingBar) {
@@ -75,7 +77,7 @@ struct HomeView: View {
         }
         .toolbarTitleDisplayMode(.inline)
         .background(Color(theme.palette.canvas))
-        .safeAreaBar(edge: .bottom) {
+        .palSafeAreaBar(edge: .bottom) {
             FloatingSearchLauncher(
                 accessibilityLabel: String(localized: "Search"),
                 accessibilityIdentifier: "rosterSearchField",

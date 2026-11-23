@@ -57,7 +57,16 @@ struct ComputerView: View {
         #endif
         .clearNavigationBackground()
         .darkNavigationBar()
-        .toolbar { toolbar }
+        .palPrincipalToolbarItem { titleItem }
+        #if os(iOS)
+        .toolbar {
+            ToolbarItem(placement: .trailingBar) {
+                Button { model.showsHelp = true } label: { PalIcon("questionmark") }
+                    .accessibilityLabel(Text("Help"))
+                    .accessibilityIdentifier("computerHelpButton")
+            }
+        }
+        #endif
         .toolbarTitleDisplayMode(.inline)
         .task(id: model.attempt) { await model.run() }
         .onAppear {
@@ -73,28 +82,17 @@ struct ComputerView: View {
         .toast($model.toast)
     }
 
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) {
-            HStack(spacing: ComputerMetrics.avatarToName) {
-                if let spec { BotAvatarView(spec: spec, size: ComputerMetrics.avatarSize) }
-                Text(title)
-                    .font(.system(size: ComputerMetrics.titleSize))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(title))
-            .accessibilityIdentifier("computerTitle")
+    private var titleItem: some View {
+        HStack(spacing: ComputerMetrics.avatarToName) {
+            if let spec { BotAvatarView(spec: spec, size: ComputerMetrics.avatarSize) }
+            Text(title)
+                .font(.system(size: ComputerMetrics.titleSize))
+                .foregroundStyle(.white)
+                .lineLimit(1)
         }
-        .sharedBackgroundVisibility(.hidden)
-        #if os(iOS)
-        ToolbarItem(placement: .trailingBar) {
-            Button { model.showsHelp = true } label: { PalIcon("questionmark") }
-                .accessibilityLabel(Text("Help"))
-                .accessibilityIdentifier("computerHelpButton")
-        }
-        #endif
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(title))
+        .accessibilityIdentifier("computerTitle")
     }
 
     private var overlayState: some View {
@@ -135,7 +133,7 @@ struct ComputerView: View {
                 .accessibilityIdentifier("computerFailureMessage")
             if retry {
                 Button("Try again") { model.retry() }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("computerRetry")
             }
         }
@@ -162,7 +160,7 @@ struct ComputerView: View {
                 controlTools
                 if teach.canStart {
                     Button("Teach a skill") { Task { await teach.start() } }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .accessibilityIdentifier("computerTeachSkill")
                 }
                 Spacer(minLength: 0)
@@ -172,7 +170,7 @@ struct ComputerView: View {
             } else if model.phase == .connecting || model.phase == .live {
                 if teach.canStart {
                     Button("Teach a skill") { Task { await teach.start() } }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .accessibilityIdentifier("computerTeachSkill")
                 }
                 Spacer(minLength: 0)

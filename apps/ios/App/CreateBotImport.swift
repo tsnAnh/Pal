@@ -36,7 +36,7 @@ struct CreateBotImportRow: View {
                     Text("Import a template")
                 }
             }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .disabled(importer.isBusy)
             .accessibilityIdentifier("createBotImport")
             if importer.phase == .idle, let failure = importer.failure {

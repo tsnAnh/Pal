@@ -240,7 +240,7 @@ private struct PanelButton: View {
                 .accessibilityIdentifier(identifier)
         case .secondary:
             Button(action: action) { label }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .buttonBorderShape(.capsule)
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier(identifier)

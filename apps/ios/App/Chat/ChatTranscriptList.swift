@@ -37,7 +37,7 @@ struct ChatTranscriptList: View {
         .newestFirst()
         .overlay { ChatOpeningOverlay(model: model, hidesIntro: !desk.desk.cards.isEmpty) }
         .scrollDismissesKeyboard(.interactively)
-        .scrollEdgeEffectHidden(true, for: .all)
+        .palHiddenScrollEdge(for: .all)
         .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
         .safeAreaInset(edge: .top, spacing: 0) { ChatAutoApproveBanner(model: model) }
         .teachPresentations(teach, surface: .chat)

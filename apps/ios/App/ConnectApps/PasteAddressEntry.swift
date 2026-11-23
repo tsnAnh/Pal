@@ -58,11 +58,11 @@ struct PasteAddressEntry: View {
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier(identifiers.submit)
                 Button(String(localized: "Open the sign-in page again"), action: onReopen)
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .disabled(state == .submitting)
                     .accessibilityIdentifier("paste-address-reopen")
                 Button(String(localized: "Cancel"), action: cancel)
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier(identifiers.cancel)
             }

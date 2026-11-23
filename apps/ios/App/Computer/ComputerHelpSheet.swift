@@ -139,7 +139,7 @@ struct ComputerHelpSheet: View {
                 }
                 .padding(.bottom, 40)
             }
-            .scrollEdgeEffectStyle(.soft, for: .top)
+            .palSoftScrollEdge(for: .top)
         }
         .iOSOnly { $0.presentationDetents([.fraction(0.955)]).presentationDragIndicator(.hidden) }
     }

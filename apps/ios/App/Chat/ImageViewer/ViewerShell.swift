@@ -56,7 +56,7 @@ struct ViewerShell<Content: View, Composer: View>: View {
                 .accessibilityIdentifier("imageViewerTitle")
             HStack {
                 Spacer(minLength: 0)
-                GlassEffectContainer(spacing: 8) {
+                PalGlassContainer(spacing: 8) {
                     HStack(spacing: 8) {
                         ForEach(actions, id: \.self) { action in
                             actionButton(action)

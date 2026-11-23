@@ -22,7 +22,7 @@ extension ConnectionView {
             } label: {
                 capsuleLabel(String(localized: "Set up Pal on this Mac"), leading: PalIcon("laptopcomputer", ink: .onInverseFill))
             }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .buttonBorderShape(.capsule)
             .disabled(model.isBusy)
             .accessibilityIdentifier("localEngineSetupButton")
@@ -87,7 +87,7 @@ private struct LocalEngineRunningCard: View {
                     .padding(.horizontal, 6)
                     .frame(minHeight: 22)
             }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .buttonBorderShape(.capsule)
             .disabled(isBusy || engine.isSigningIn)
             .accessibilityIdentifier("localEngineContinue")

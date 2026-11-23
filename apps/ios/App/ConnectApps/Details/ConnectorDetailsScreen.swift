@@ -83,7 +83,7 @@ struct ConnectorDetailsScreen: View {
     private var primaryAction: some View {
         if model.isConnected {
             Button("Disconnect") { model.disconnect() }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(model.isBusy)
                 .accessibilityIdentifier("connectorDetailsDisconnect")
         } else if let title = model.rowState.actionTitle {

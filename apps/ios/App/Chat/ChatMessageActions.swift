@@ -95,7 +95,7 @@ private struct SwipeReplyGlyph: View {
     let progress: CGFloat
 
     var body: some View {
-        GlassEffectContainer {
+        PalGlassContainer {
             PalIcon("arrow.uturn.left")
                 .font(.system(size: 15, weight: .semibold))
                 .frame(width: 32, height: 32)

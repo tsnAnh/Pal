@@ -40,8 +40,6 @@ struct MacModalHugging: Layout {
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let ideal = subviews.first?.sizeThatFits(ProposedViewSize(width: frame.width, height: nil)).height ?? 0
-        let line = "DEBUGHUG ideal=\(ideal) max=\(frame.maxHeight) subs=\(subviews.count) proposal=\(proposal)\n"
-        if let h = FileHandle(forWritingAtPath: "/tmp/sheet-sizes/hug.log") { h.seekToEndOfFile(); h.write(Data(line.utf8)) } else { try? line.write(toFile: "/tmp/sheet-sizes/hug.log", atomically: true, encoding: .utf8) }
         return CGSize(width: frame.width, height: min(ideal, frame.maxHeight))
     }
 
@@ -114,7 +112,7 @@ struct MacModalActions: View {
         HStack(spacing: 10) {
             Spacer(minLength: 0)
             Button("Cancel", action: onCancel)
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(isBusy)
                 .accessibilityIdentifier(cancelIdentifier)
             Button(action: onConfirm) {
@@ -261,7 +259,7 @@ struct MacFailure: View {
         MacCard {
             VStack(alignment: .leading, spacing: 10) {
                 Text(message).font(.system(size: 12)).foregroundStyle(PalTokens.textSecondary)
-                Button("Try Again", action: retry).buttonStyle(.glass)
+                Button("Try Again", action: retry).glassButtonStyle()
             }
             .padding(13)
         }

@@ -54,14 +54,14 @@ struct RoomView: View {
         .defaultScrollAnchor(.bottom)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .scrollDismissesKeyboard(.interactively)
-        .safeAreaBar(edge: .bottom) { bottomBar.chatColumn() }
+        .palSafeAreaBar(edge: .bottom) { bottomBar.chatColumn() }
         #if os(macOS)
-        .safeAreaBar(edge: .top) { header }
+        .palSafeAreaBar(edge: .top) { header }
         .background(PalTokens.content)
         #else
         .background(Color(theme.palette.canvas))
+        .palPrincipalToolbarItem { titleCapsule }
         .toolbar {
-            ToolbarItem(placement: .principal) { titleCapsule }.sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .trailingBar) { stopButton }
         }
         .toolbarTitleDisplayMode(.inline)
@@ -182,7 +182,7 @@ struct RoomView: View {
     }
 
     private var header: some View {
-        GlassEffectContainer(spacing: 24) {
+        PalGlassContainer(spacing: 24) {
             ZStack {
                 titleCapsule
                 HStack {

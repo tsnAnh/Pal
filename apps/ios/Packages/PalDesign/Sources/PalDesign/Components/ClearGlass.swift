@@ -1,8 +1,17 @@
 import SwiftUI
 
 public extension View {
+    @ViewBuilder
     func palClearGlass<S: Shape>(_ shape: S, interactive: Bool = true) -> some View {
+        #if os(macOS)
+        if #available(macOS 26, *) {
+            glassEffect(interactive ? Glass.clear.interactive() : Glass.clear, in: shape)
+        } else {
+            background(.ultraThinMaterial, in: shape)
+        }
+        #else
         glassEffect(interactive ? Glass.clear.interactive() : Glass.clear, in: shape)
+        #endif
     }
 }
 

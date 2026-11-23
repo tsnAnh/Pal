@@ -25,7 +25,7 @@ struct MacModelProvidersSection: View {
                     section: .providers,
                     accessory: {
                         Button("Refresh") { Task { await model.load() } }
-                            .buttonStyle(.glass)
+                            .glassButtonStyle()
                             .disabled(model.isLoading)
                             .accessibilityIdentifier("providersRefreshButton")
                     },
@@ -191,7 +191,7 @@ private struct MacProviderAddressEditor: View {
             HStack(spacing: 6) {
                 if provider.baseURL != nil {
                     Button("Use Default") { Task { await finish { await model.useDefaultAddress(provider) } } }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .disabled(model.isWorking(provider.id))
                         .accessibilityIdentifier("modelProvider-\(provider.id)-address-default")
                 }

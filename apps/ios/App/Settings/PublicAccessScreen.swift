@@ -129,7 +129,7 @@ struct PublicAccessContent: View {
                 Button { copy(route) } label: {
                     Text(copiedRoute == route.name ? "Copied" : "Copy address")
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(route.publicURL == nil)
                 .accessibilityIdentifier("publicRouteCopy-\(route.name)")
                 Button { Task { await model.probe(route.name) } } label: {
@@ -142,7 +142,7 @@ struct PublicAccessContent: View {
                 .disabled(model.probes[route.name] == .running)
                 .accessibilityIdentifier("publicRouteProbe-\(route.name)")
                 Button("Remove") { removing = route }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("publicRouteRemove-\(route.name)")
             }
             .padding(.horizontal, SettingsSurface.rowInset)
@@ -363,7 +363,7 @@ private struct AddPublicRouteSheet: View {
                 .glassButtonStyle(prominent: true)
                 .accessibilityIdentifier("publicAccessCopySecret")
                 Button("Done", action: close)
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("publicAccessSecretDone")
             }
             .padding(.horizontal, PalMetrics.rowInset)

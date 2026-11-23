@@ -82,7 +82,7 @@ struct ChatInstallStatus<Secondary: View>: View {
                 }
                 Spacer(minLength: 0)
                 Button(String(localized: "Copy")) { Pasteboard.string = copy.details }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("\(identifierPrefix)CopyDetails")
             }
             .padding(.top, 8)

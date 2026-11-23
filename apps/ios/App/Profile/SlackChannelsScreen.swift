@@ -103,7 +103,7 @@ struct SlackChannelsScreen: View {
                     .foregroundStyle(PalTokens.textTertiary)
                     .multilineTextAlignment(.center)
                 Button { Task { await chat.refreshSpaces() } } label: { Label("Try again", palIcon: "arrow.clockwise") }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("slackChannelsRetry")
             }
             .multilineTextAlignment(.center)
@@ -203,7 +203,7 @@ struct SlackChannelsScreen: View {
     private func availableRow(_ row: ChatSpaceRow) -> some View {
         channelRow(row) {
             Button("Join") { Task { await chat.join(row.id) } }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .accessibilityIdentifier("slackChannelJoin-\(row.id)")
         }
     }
@@ -254,7 +254,7 @@ struct SlackChannelsScreen: View {
                 }
                 if let link = invite.link.flatMap(URL.init(string:)) {
                     Button { ExternalLink.open(link) } label: { Label("Open in Slack", palIcon: "arrow.up.right") }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .accessibilityIdentifier("slackOpenChannel-\(row.id)")
                 }
             }

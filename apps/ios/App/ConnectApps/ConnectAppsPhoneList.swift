@@ -20,7 +20,7 @@ extension ConnectAppsList {
                         Label("Add a custom connector", palIcon: "plus")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("addCustomConnectorButton")
                     .padding(.top, PalMetrics.cardGap)
                     .padding(.horizontal, PalMetrics.screenMargin)
@@ -34,7 +34,7 @@ extension ConnectAppsList {
     }
 
     private var phoneSearch: some View {
-        GlassEffectContainer {
+        PalGlassContainer {
             ClearGlassSearchField(
                 text: $model.query, prompt: String(localized: "Search across apps and skills"),
                 accessibilityLabel: String(localized: "Search apps and skills"), accessibilityIdentifier: "connectAppsSearch",
@@ -135,11 +135,11 @@ extension ConnectAppsList {
             switch look.action {
             case .allow:
                 Button(localized) { Task { await model.devices.allow(id) } }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("\(identifier)-action")
             case .openSettings:
                 Button(localized) { model.devices.openSettings(for: id) }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("\(identifier)-action")
             case nil:
                 EmptyView()

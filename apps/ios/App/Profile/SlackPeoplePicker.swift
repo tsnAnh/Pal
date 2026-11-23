@@ -130,7 +130,7 @@ struct SlackPeoplePicker: View {
             Text(detail).hermesText(.rowSubtitle).foregroundStyle(PalTokens.textTertiary).multilineTextAlignment(.center)
             if retry {
                 Button { Task { await search.retry() } } label: { Label("Try again", palIcon: "arrow.clockwise") }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("slackPeopleRetry")
             }
         }

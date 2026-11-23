@@ -23,7 +23,7 @@ struct NewChatIntro: View {
                     .frame(maxWidth: 280)
             }
             Button(suggestion, action: send)
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .padding(.top, 4)
                 .accessibilityHint(Text("Sends this message"))
                 .accessibilityIdentifier("newChatSuggestion")

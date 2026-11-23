@@ -260,13 +260,13 @@ private struct MacGeneralSection: View {
                         }
                     }
                     Spacer()
-                    GlassEffectContainer(spacing: 6) {
+                    PalGlassContainer(spacing: 6) {
                         HStack(spacing: 6) {
                             Button("Add account") { confirmingAdd = true }
-                                .buttonStyle(.glass)
+                                .glassButtonStyle()
                                 .accessibilityIdentifier("accountAddRow")
                             Button("Sign Out") { confirmingSignOut = true }
-                                .buttonStyle(.glass)
+                                .glassButtonStyle()
                                 .accessibilityIdentifier("settingsSignOutRow")
                         }
                     }
@@ -457,7 +457,7 @@ private struct MacComputerSection: View {
                     identifier: "botComputerResetRow"
                 ) {
                     Button("Reset") { confirmingReset = true }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .disabled(computer.isResetting)
                         .accessibilityIdentifier("botComputerResetButton")
                 }
@@ -497,7 +497,7 @@ private struct MacComputerSection: View {
             Spacer()
             if !device.isThisDevice {
                 Button("Remove") { removing = device }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("deviceRemove-\(device.id)")
             }
         }
@@ -584,7 +584,7 @@ private struct MacPermissionsSection: View {
                 }
                 Spacer()
                 Button("Add Rule") { addingTo = list }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("permissionsAddRule-\(list.rawValue)")
             }
             .padding(.horizontal, 13)
@@ -593,7 +593,7 @@ private struct MacPermissionsSection: View {
                     ForEach(rules) { rule in
                         MacRow(title: rule.text, identifier: "permissionsRule-\(rule.id)") {
                             Button("Remove") { removing = rule }
-                                .buttonStyle(.glass)
+                                .glassButtonStyle()
                                 .accessibilityIdentifier("permissionsRemove-\(rule.id)")
                         }
                     }
@@ -784,12 +784,12 @@ private struct MacVaultSection: View {
             Spacer()
             if entry.isEditable {
                 Button("Edit") { editing = entry }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("vaultEditButton-\(entry.id)")
             }
             if entry.isRemovable {
                 Button("Remove") { removing = entry }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("vaultRemove-\(entry.id)")
             }
         }
@@ -815,7 +815,7 @@ private struct MacUsageSection: View {
             section: .usage,
             accessory: {
                 Button("Refresh") { Task { await model.refresh(api: hub.api) } }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .disabled(model.isRefreshing)
                     .accessibilityIdentifier("usageRefreshButton")
             },
@@ -931,7 +931,7 @@ private struct MacUpdatesSection: View {
                         identifier: "updatesVersionRow"
                     ) {
                         Button("Check for Updates") {}
-                            .buttonStyle(.glass)
+                            .glassButtonStyle()
                             .disabled(true)
                             .accessibilityIdentifier("updatesCheckButton")
                     }

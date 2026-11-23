@@ -14,8 +14,7 @@ Three workflows, all on GitHub-hosted runners. `python.yml` (named CI) holds one
 - `swift-build`: XcodeGen, `xcodebuild build-for-testing` for the iOS Simulator and macOS, and
   `xcodebuild build-for-testing -scheme PalKit-Package` for `Packages/PalKit`; every Swift build reads and writes
   Xcode's content-addressed compile cache (`COMPILATION_CACHE_CAS_PATH`, restored from the latest cache of the week,
-  saved on pushes to `main`), which needs the fixed `-derivedDataPath` the jobs pass. Builds only; the packages target macOS 26,
-  which a `macos-15` host cannot launch.
+  saved on pushes to `main`), which needs the fixed `-derivedDataPath` the jobs pass. Builds only.
 - `kit`: `scripts/link-skills.sh --check .`.
 
 Composite actions used: `.github/actions/setup-pm`, `.github/actions/retry`.

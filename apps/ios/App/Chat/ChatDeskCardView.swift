@@ -126,7 +126,7 @@ struct ChatDeskCardView: View {
             }
             Spacer(minLength: 8)
             Button("Deny") { decide(.decline) }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(isSending)
                 .accessibilityIdentifier("deskDecline-\(item.id)")
             Button { decide(.approve) } label: {

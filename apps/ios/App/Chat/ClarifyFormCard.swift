@@ -131,11 +131,11 @@ struct ClarifyFormCard: View {
                 .disabled(sending)
                 .accessibilityIdentifier("clarifySkip")
             Button("Back") { goBack() }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(form.isFirst || sending)
                 .accessibilityIdentifier("clarifyBack")
             Button(primaryTitle) { advanceOrSubmit() }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(!primaryEnabled)
                 .accessibilityIdentifier("clarifyNext")
         }

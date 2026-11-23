@@ -175,6 +175,7 @@ struct PalTextModifier: ViewModifier {
 public struct ChatLineBox: Equatable, Sendable {
     public let height: CGFloat
     public let baselineOffset: CGFloat
+    public let leading: CGFloat
 
     public init(fontSize: CGFloat) {
         #if os(macOS)
@@ -184,6 +185,7 @@ public struct ChatLineBox: Equatable, Sendable {
         #endif
         height = (fontSize * ChatMetrics.bodyLineHeight / PalTextStyle.chatBody.size).rounded()
         baselineOffset = (height - font.ascender + font.descender) / 2
+        leading = max(0, height - (font.ascender - font.descender + font.leading).rounded(.up))
     }
 }
 
@@ -198,10 +200,22 @@ struct ChatTextModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let line = ChatLineBox(fontSize: size)
-        content
-            .font(.system(size: size, weight: style.weight))
+        let text = content.font(.system(size: size, weight: style.weight))
+        #if os(macOS)
+        if #available(macOS 26, *) {
+            text
+                .lineHeight(.exact(points: line.height))
+                .baselineOffset(-line.baselineOffset)
+        } else {
+            text
+                .lineSpacing(line.leading)
+                .padding(.vertical, line.leading / 2)
+        }
+        #else
+        text
             .lineHeight(.exact(points: line.height))
             .baselineOffset(-line.baselineOffset)
+        #endif
     }
 }
 

@@ -25,7 +25,7 @@ struct BotProfileView: View {
             }
             .padding(.bottom, 32)
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .palSoftScrollEdge(for: .top)
         .environment(\.groupedCardDividers, true)
         .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
         .accessibilityIdentifier("botProfileScreen")
@@ -102,7 +102,7 @@ struct BotProfileView: View {
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("profileName")
             Button("Edit") { model.beginEditing() }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(model.profile == nil)
                 .padding(.top, ProfileMetrics.nameToEdit)
                 .accessibilityIdentifier("profileEditButton")

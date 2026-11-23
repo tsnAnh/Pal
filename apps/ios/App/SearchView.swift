@@ -43,7 +43,7 @@ struct SearchView: View {
             results
         }
         .background(Color(theme.palette.canvas).ignoresSafeArea())
-        .safeAreaBar(edge: .bottom) {
+        .palSafeAreaBar(edge: .bottom) {
             FloatingSearchBar(
                 text: $model.query,
                 accessibilityLabel: String(localized: "Search"),

@@ -6,6 +6,7 @@ import PalDiagnostics
 struct AnswerBotIntent: AppIntent {
     static let title: LocalizedStringResource = "Answer a Bot's Question"
     static let description = IntentDescription("Answer the question one of your bots is waiting on and hear what it does next.")
+    @available(iOS 26, macOS 26, *)
     static let supportedModes: IntentModes = [.background, .foreground(.dynamic)]
 
     @Parameter(title: "Bot")
@@ -34,10 +35,7 @@ struct AnswerBotIntent: AppIntent {
         } else {
             report = try await Self.answer(reply, for: target, deadline: AskBotIntent.replyDeadline, in: environment)
         }
-        if report.offersChat, systemContext.currentMode.canContinueInForeground {
-            try await continueInForeground(report.dialog)
-            environment.open(target)
-        }
+        try await continueInChat(report, for: target, in: environment)
         return .result(value: report.spoken, dialog: report.dialog)
     }
 

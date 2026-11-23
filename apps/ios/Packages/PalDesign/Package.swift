@@ -5,7 +5,7 @@ let package = Package(
     name: "PalDesign",
     platforms: [
         .iOS("26.0"),
-        .macOS("26.0"),
+        .macOS("15.0"),
     ],
     products: [
         .library(name: "PalDesign", targets: ["PalDesign"]),

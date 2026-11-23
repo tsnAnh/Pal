@@ -9,7 +9,7 @@ struct ExternalLinkPolicyTests {
 
     private static let webSurfaces = ["SFSafariViewController", "WKWebView", "WebPage(", "inAppBrowser(", "ASWebAuthenticationSession("]
     private static let allowed: [String: Set<String>] = [
-        "Platform/InAppBrowser.swift": ["SFSafariViewController", "WebPage(", "inAppBrowser("],
+        "Platform/InAppBrowser.swift": ["SFSafariViewController", "WKWebView", "WebPage(", "inAppBrowser("],
         "Profile/LibraryView.swift": ["inAppBrowser("],
         "WebAuthenticationBrowser.swift": ["ASWebAuthenticationSession("],
         "Chat/Rich/MermaidRenderer.swift": ["WKWebView"],

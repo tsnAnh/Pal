@@ -3,7 +3,7 @@
 
 The Pal apps use the system back and close controls, one way out per screen: the
 NavigationStack back, a ``ToolbarItem(placement: .cancellationAction)`` or a
-``Button(role: .close)``. A custom one is a ``Button`` whose label is
+``PalCloseButton``. A custom one is a ``Button`` whose label is
 ``Image(systemName: "chevron.left")``, ``PalIcon("chevron.left")`` (or any helper taking the glyph name first) or the same with ``xmark``, and
 whose accessibility label or identifier names it a back or close. An in-content dismiss,
 a clear-search glyph (``xmark.circle.fill``) or any other glyph does not match. No opt-out
@@ -132,7 +132,7 @@ def main(argv: list[str]) -> int:
         print(entry)
     if found:
         print(f"\n{len(found)} nav chrome finding(s). Use the system control: the NavigationStack back, "
-              "a ToolbarItem(placement: .cancellationAction), or Button(role: .close); one way out per screen. "
+              "a ToolbarItem(placement: .cancellationAction), or PalCloseButton; one way out per screen. "
               "On macOS draw the header in content (SheetChrome) below MacMetrics.topBarHeight, never in the window toolbar. "
               f'The Mac window-chrome findings take "// {OPT_OUT}" when justified; a back or close never does.')
         return 1

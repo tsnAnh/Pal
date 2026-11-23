@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "PalKit",
-    platforms: [.iOS("26.0"), .macOS("26.0")],
+    platforms: [.iOS("26.0"), .macOS("15.0")],
     products: [
         .library(name: "PalProtocol", targets: ["PalProtocol"]),
         .library(name: "PalDiagnostics", targets: ["PalDiagnostics"]),

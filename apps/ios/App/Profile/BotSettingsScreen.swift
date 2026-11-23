@@ -44,7 +44,7 @@ struct BotSettingsScreen<Content: View>: View {
                 .padding(.top, 8)
                 .padding(.bottom, 32)
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .palSoftScrollEdge(for: .top)
         .safeAreaInset(edge: .top, spacing: 0) { header }
         .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
         .accessibilityElement(children: .contain)
@@ -55,17 +55,14 @@ struct BotSettingsScreen<Content: View>: View {
                 .padding(.top, 16)
                 .padding(.bottom, 32)
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .palSoftScrollEdge(for: .top)
         .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
         .accessibilityIdentifier(identifier)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(title)
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-            }
-            .sharedBackgroundVisibility(.hidden)
+        .palPrincipalToolbarItem {
+            Text(title)
+                .hermesText(.sheetTitle)
+                .foregroundStyle(Color(theme.palette.textPrimary))
+                .accessibilityAddTraits(.isHeader)
         }
         .toolbarTitleDisplayMode(.inline)
         #endif
@@ -82,7 +79,7 @@ struct BotSettingsScreen<Content: View>: View {
     }
 
     private var header: some View {
-        GlassEffectContainer {
+        PalGlassContainer {
             ZStack {
                 titlePill
                 HStack {
@@ -143,7 +140,7 @@ struct BotSettingsBanner: View {
                 .accessibilityIdentifier(identifier)
             if let retry {
                 Button("Try again", action: retry)
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("\(identifier)-retry")
             }
         }

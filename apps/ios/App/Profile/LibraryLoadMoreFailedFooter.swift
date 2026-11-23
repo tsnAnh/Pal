@@ -11,7 +11,7 @@ struct LibraryLoadMoreFailedFooter: View {
         VStack(spacing: 8) {
             message
             Button(String(localized: "Try again"), action: retry)
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .accessibilityIdentifier("libraryLoadMoreRetry")
         }
         .padding(.top, 24)

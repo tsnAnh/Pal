@@ -57,7 +57,7 @@ struct MacAboutYouCard: View {
             HStack(spacing: 12) {
                 InitialAvatar(initial: owner.initial(fallback: ""), diameter: 36, photo: owner.photo)
                     .accessibilityHidden(true)
-                GlassEffectContainer(spacing: 8) {
+                PalGlassContainer(spacing: 8) {
                     HStack(spacing: 8) {
                         if owner.photo == nil {
                             pill("Add photo", icon: "camera", identifier: "settingsAboutYouAddPhoto", action: choosePhoto)
@@ -78,7 +78,7 @@ struct MacAboutYouCard: View {
                 Text(title).font(.system(size: 12.5))
             }
         }
-        .buttonStyle(.glass)
+        .glassButtonStyle()
         .buttonBorderShape(.capsule)
         .disabled(isWorking)
         .accessibilityIdentifier(identifier)

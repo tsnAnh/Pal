@@ -49,7 +49,7 @@ struct BotThreadView: View {
             }
             .scrollPosition($scrollPosition)
             .scrollDismissesKeyboard(.interactively)
-            .scrollEdgeEffectStyle(.soft, for: .top)
+            .palSoftScrollEdge(for: .top)
             .accessibilityIdentifier("threadScreen")
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.visibleRect.maxY >= geometry.contentSize.height - 160
@@ -84,12 +84,7 @@ struct BotThreadView: View {
             }
         }
         .background(Color(theme.palette.canvas))
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                participantsCapsule
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
+        .palPrincipalToolbarItem { participantsCapsule }
         .toolbarTitleDisplayMode(.inline)
         .task { model.start() }
         .onDisappear { model.stop() }
