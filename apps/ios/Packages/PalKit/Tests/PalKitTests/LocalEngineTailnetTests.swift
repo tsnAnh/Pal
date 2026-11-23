@@ -9,7 +9,7 @@ final class CapturingLog: EngineLogging {
     func write(_ line: String) { storage.withLock { $0.append(line) } }
 }
 
-private let secret = "S3cr3t-pw-canary-9f2c"
+private let secret = "fixture-password-marker"
 private let onJSON = "{\"enabled\":true,\"url\":\"http://100.64.0.7:9120\",\"username\":\"pal\",\"password\":\"\(secret)\",\"reachable\":true}"
 private let statusOnJSON = "{\"enabled\":true,\"url\":\"http://100.64.0.7:9120\",\"username\":\"pal\",\"reachable\":false}"
 private let offJSON = "{\"enabled\":false,\"url\":null,\"username\":null,\"reachable\":null}"
