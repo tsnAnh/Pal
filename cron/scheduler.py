@@ -3378,17 +3378,9 @@ def _run_one_job_body(
         return finish_completed_run(d, fire_owner, execution_id)
 
     except BaseException as e:
-        from cron.scheduler_authority import CronExecutionUnknown
-        if isinstance(e, CronExecutionUnknown):
-            from cron.executions import give_up_execution
-            from cron.jobs_error_text import sanitize_persisted_error
-            from cron.scheduler_authority import pause_for_unknown
-            # One sanitized string for both stores: _lift_pause matches the pause by its reason.
-            reason = sanitize_persisted_error(str(e)) or "unverified admission"
-            pause_for_unknown(job["id"], execution_id, reason)
-            give_up_execution(execution_id, reason=reason)
-            logger.error("Cron %s paused with unverified admission: %s", job["id"], e)
-            return False
+        from cron.scheduler_authority import CronDeferred, CronExecutionUnknown, settle_unverified_fire
+        if isinstance(e, (CronDeferred, CronExecutionUnknown)):
+            return settle_unverified_fire(job, execution_id, e)
         # BaseException, not Exception: CancelledError/KeyboardInterrupt/SystemExit propagate here.
         # Without mark_job_run(False) a finite one-shot is wedged: claim_dispatch consumed
         # repeat.completed but last_run_at is never written. Record first, then re-raise
