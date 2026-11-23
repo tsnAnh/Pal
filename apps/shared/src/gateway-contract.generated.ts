@@ -3229,18 +3229,35 @@ export interface LibraryItem {
   occurred_at: string
 }
 export type LibraryItemKind = 'link' | 'media' | 'file'
-/** ``max_bytes`` defaults to 8 MB (max 16 MB). Images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false. */
+/** Three call shapes. Whole file (old apps, unchanged): ``max_bytes`` defaults to 8 MB (max 16 MB); images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false. ``preview`` returns a JPEG or PNG of at most 512 px (video poster frame, first PDF page, still image) capped by ``max_bytes``, or an empty ``data_base64`` with ``preview_reason``; sources up to 200 MB for video and 32 MB for images and PDF. ``offset`` and/or ``length`` read one range of the file, up to 2 MB per call, for files up to 200 MB. ``preview`` and ranges do not combine. */
 export interface LibraryAssetParams {
   profile?: string | null
   asset_ref: string
   max_bytes?: number | null
   thumbnail?: boolean
+  preview?: boolean
+  offset?: number | null
+  length?: number | null
 }
+/** ``size`` is always the bytes in ``data_base64``; ``total`` is the file's true size. ``kind``, ``sniffed_mime`` and ``previewable`` come from the file's first 4 KB, not its name: ``previewable`` is false for HTML, SVG, archives, executables, scripts and anything unrecognised. ``mime`` stays the name-based type (the preview's own type when a preview image is returned). ``offset`` and ``length`` echo the range served; ``length`` can be below the request, and 0 past the end. */
 export interface LibraryAssetResult {
   mime: string
   data_base64: string
   size: number
+  total?: number | null
+  kind?: LibraryAssetKind | null
+  sniffed_mime?: string | null
+  previewable?: boolean | null
+  preview_reason?: LibraryPreviewReason | null
+  duration_seconds?: number | null
+  width?: number | null
+  height?: number | null
+  offset?: number | null
+  length?: number | null
 }
+export type LibraryAssetKind = 'image' | 'video' | 'audio' | 'pdf' | 'document' | 'archive' | 'other'
+/** Why a preview request returned no image. The app falls back to its own thumbnail or an icon card. */
+export type LibraryPreviewReason = 'not_previewable' | 'unsupported_kind' | 'too_large' | 'heic_decoder_missing' | 'ffmpeg_missing' | 'pdf_renderer_missing' | 'render_failed' | 'timed_out' | 'busy'
 /** ``machine_kind`` is ``Spark``, ``Mac``, ``PC`` or ``computer``. ``nvidia_platform`` is ``products.nvidia_platform()``: ``rtx_spark``, ``dgx_spark``, ``discrete`` or null. ``locale`` is the OS account's first UI language, null when the OS has none. */
 export interface MachineFactsResult {
   machine: MachineInfo
@@ -9016,7 +9033,7 @@ export interface RpcMethods {
   'learning.edit': { params: LearningEditParams; result: LearningMutationResult }
   /** Pre-render the /journey timeline (frames + legend/summary) so the TUI walks it locally. */
   'learning.frames': { params: LearningFramesParams; result: LearningFramesResult }
-  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
+  /** Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }
@@ -9984,7 +10001,7 @@ export interface CanonicalRpcMethods {
   'kanban.evidence.list': { params: KanbanEvidenceParams; result: KanbanEvidenceResult }
   /** Native-owner only: admit the dispatcher's current claim on a kanban task. */
   'kanban.run': { params: KanbanRunParams; result: KanbanRunResult }
-  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
+  /** Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }

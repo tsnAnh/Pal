@@ -3248,7 +3248,7 @@
     },
     {
       "name": "library.asset",
-      "summary": "Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
+      "summary": "Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
       "params": [
         {
           "name": "params",
@@ -35237,9 +35237,22 @@
         "title": "LegacyPluginRow",
         "type": "object"
       },
+      "LibraryAssetKind": {
+        "enum": [
+          "image",
+          "video",
+          "audio",
+          "pdf",
+          "document",
+          "archive",
+          "other"
+        ],
+        "title": "LibraryAssetKind",
+        "type": "string"
+      },
       "LibraryAssetParams": {
         "additionalProperties": false,
-        "description": "``max_bytes`` defaults to 8 MB (max 16 MB). Images come back as a thumbnail of at most 512 px\nunless ``thumbnail`` is false.",
+        "description": "Three call shapes. Whole file (old apps, unchanged): ``max_bytes`` defaults to 8 MB (max 16 MB);\nimages come back as a thumbnail of at most 512 px unless ``thumbnail`` is false.\n``preview`` returns a JPEG or PNG of at most 512 px (video poster frame, first PDF page, still image)\ncapped by ``max_bytes``, or an empty ``data_base64`` with ``preview_reason``; sources up to 200 MB for\nvideo and 32 MB for images and PDF. ``offset`` and/or ``length`` read one range of the file, up to\n2 MB per call, for files up to 200 MB. ``preview`` and ranges do not combine.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -35273,6 +35286,37 @@
             "default": true,
             "title": "Thumbnail",
             "type": "boolean"
+          },
+          "preview": {
+            "default": false,
+            "title": "Preview",
+            "type": "boolean"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Offset"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Length"
           }
         },
         "required": [
@@ -35283,6 +35327,7 @@
       },
       "LibraryAssetResult": {
         "additionalProperties": false,
+        "description": "``size`` is always the bytes in ``data_base64``; ``total`` is the file's true size.\n``kind``, ``sniffed_mime`` and ``previewable`` come from the file's first 4 KB, not its name:\n``previewable`` is false for HTML, SVG, archives, executables, scripts and anything unrecognised.\n``mime`` stays the name-based type (the preview's own type when a preview image is returned).\n``offset`` and ``length`` echo the range served; ``length`` can be below the request, and 0 past the end.",
         "properties": {
           "mime": {
             "title": "Mime",
@@ -35295,6 +35340,124 @@
           "size": {
             "title": "Size",
             "type": "integer"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LibraryAssetKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "sniffed_mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sniffed Mime"
+          },
+          "previewable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Previewable"
+          },
+          "preview_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LibraryPreviewReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Seconds"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Width"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Height"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Offset"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Length"
           }
         },
         "required": [
@@ -35486,6 +35649,22 @@
         ],
         "title": "LibraryListResult",
         "type": "object"
+      },
+      "LibraryPreviewReason": {
+        "description": "Why a preview request returned no image. The app falls back to its own thumbnail or an icon card.",
+        "enum": [
+          "not_previewable",
+          "unsupported_kind",
+          "too_large",
+          "heic_decoder_missing",
+          "ffmpeg_missing",
+          "pdf_renderer_missing",
+          "render_failed",
+          "timed_out",
+          "busy"
+        ],
+        "title": "LibraryPreviewReason",
+        "type": "string"
       },
       "ListedSkill": {
         "additionalProperties": false,
@@ -70001,7 +70180,7 @@
     },
     {
       "name": "library.asset",
-      "summary": "Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
+      "summary": "Bytes, a preview image or one range of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure.",
       "params": [
         {
           "name": "params",
