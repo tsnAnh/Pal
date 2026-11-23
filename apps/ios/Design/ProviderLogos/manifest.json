@@ -1,0 +1,431 @@
+{
+  "package": "@lobehub/icons-static-svg",
+  "version": "1.106.0",
+  "license": "MIT",
+  "providers": {
+    "actual": {
+      "slug": null,
+      "variant": "monogram",
+      "source": null,
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": "no-logo-found: monogram fallback"
+    },
+    "ai-gateway": {
+      "slug": "vercel",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/vercel.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "alibaba": {
+      "slug": "alibaba-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/alibaba-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "alibaba-cn": {
+      "slug": "alibaba-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/alibaba-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "alibaba-coding-plan": {
+      "slug": "alibaba-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/alibaba-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "alibaba-coding-plan-cn": {
+      "slug": "alibaba-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/alibaba-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "alibaba-token-plan": {
+      "slug": "alibaba-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/alibaba-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "alibaba-token-plan-cn": {
+      "slug": "alibaba-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/alibaba-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "anthropic": {
+      "slug": "anthropic",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/anthropic.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "arcee": {
+      "slug": "arcee-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/arcee-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "azure-foundry": {
+      "slug": "azure-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/azure-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "bedrock": {
+      "slug": "bedrock-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/bedrock-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "claude-subscription-directsdk-experimental": {
+      "slug": "claude-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/claude-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "commandcode": {
+      "slug": "commandcode",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/commandcode.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "commandcode-anthropic": {
+      "slug": "commandcode",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/commandcode.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "custom": {
+      "slug": null,
+      "variant": "monogram",
+      "source": null,
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": "no-logo-found: monogram fallback"
+    },
+    "deepinfra": {
+      "slug": "deepinfra-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/deepinfra-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "deepseek": {
+      "slug": "deepseek-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/deepseek-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "fireworks": {
+      "slug": "fireworks-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/fireworks-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "gemini": {
+      "slug": "gemini-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/gemini-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "gmi": {
+      "slug": "gmicloud",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/gmicloud.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "huggingface": {
+      "slug": "huggingface-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/huggingface-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "kilocode": {
+      "slug": "kilocode",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/kilocode.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "kimi-coding": {
+      "slug": "kimi-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/kimi-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "kimi-coding-cn": {
+      "slug": "kimi-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/kimi-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "lmstudio": {
+      "slug": "lmstudio",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/lmstudio.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "local": {
+      "slug": "desktopcomputer",
+      "variant": "symbol",
+      "source": null,
+      "license": null,
+      "version": null,
+      "flag": null
+    },
+    "meta-ai": {
+      "slug": "meta-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/meta-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "minimax": {
+      "slug": "minimax-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/minimax-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "minimax-cn": {
+      "slug": "minimax-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/minimax-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "minimax-oauth": {
+      "slug": "minimax-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/minimax-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "nebius-token-factory": {
+      "slug": "nebius",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/nebius.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "nous": {
+      "slug": "nousresearch",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/nousresearch.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "novita": {
+      "slug": "novita-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/novita-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "nvidia": {
+      "slug": "nvidia-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/nvidia-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "ollama-cloud": {
+      "slug": "ollama",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/ollama.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "openai-api": {
+      "slug": "openai",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/openai.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "openai-codex": {
+      "slug": "openai",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/openai.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "opencode-go": {
+      "slug": "opencode",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/opencode.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "opencode-zen": {
+      "slug": "opencode",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/opencode.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "openrouter": {
+      "slug": "openrouter",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/openrouter.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "qwen-oauth": {
+      "slug": "qwen-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/qwen-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "router": {
+      "slug": null,
+      "variant": "monogram",
+      "source": null,
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": "no-logo-found: monogram fallback"
+    },
+    "solstice": {
+      "slug": null,
+      "variant": "monogram",
+      "source": null,
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": "no-logo-found: monogram fallback"
+    },
+    "stepfun": {
+      "slug": "stepfun-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/stepfun-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "tencent-tokenhub": {
+      "slug": "tencent-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/tencent-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "tencent-tokenplan": {
+      "slug": "tencent-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/tencent-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "upstage": {
+      "slug": "upstage-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/upstage-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "vertex": {
+      "slug": "vertexai-color",
+      "variant": "color",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/vertexai-color.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "xai": {
+      "slug": "xai",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/xai.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "xai-oauth": {
+      "slug": "xai",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/xai.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "xiaomi": {
+      "slug": "xiaomimimo",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/xiaomimimo.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    },
+    "zai": {
+      "slug": "zai",
+      "variant": "mono-dark",
+      "source": "https://unpkg.com/@lobehub/icons-static-svg@1.106.0/icons/zai.svg",
+      "license": "MIT",
+      "version": "1.106.0",
+      "flag": null
+    }
+  }
+}
