@@ -34,7 +34,7 @@ struct StepConfirmList: View {
         let ticked = model.engine.isConfirmed(item.id)
         return Button { model.setConfirmed(item.id, !ticked) } label: {
             HStack(spacing: 12) {
-                PalIcon(ticked ? "checkmark.square.fill" : "square", ink: ticked ? .custom(PalTokens.toggleOn) : .tertiary)
+                PalIcon(ticked ? "checkmark.square.fill" : "square", ink: ticked ? .primary : .tertiary)
                     .font(.system(size: 20))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: PalMetrics.rowTextSpacing) {

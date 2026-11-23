@@ -1,5 +1,6 @@
 import Foundation
 import PalBotProfile
+import PalConnect
 import PalProtocol
 import Observation
 
@@ -30,6 +31,8 @@ final class SlackModel {
     private(set) var failure: SlackFailureReason?
     private(set) var detail: String?
     private(set) var checkFailed = false
+    private var stalled = false
+    private(set) var isRechecking = false
     private(set) var tokenEntry = TokenEntry.connect
     var isEnteringTokens = false
     var confirmsDisconnect = false
@@ -90,6 +93,17 @@ final class SlackModel {
         }
     }
 
+    var link: SlackLinkProgress? {
+        switch phase {
+        case .ready(.starting):
+            SlackLinkProgress(displayName: displayName, phase: .connecting, reason: nil)
+        case .ready(.failed):
+            SlackLinkProgress(displayName: displayName, phase: isRechecking ? .connecting : (stalled ? .stalled : .failed), reason: detail)
+        case .loading, .ready, .busy, .unavailable:
+            nil
+        }
+    }
+
     private func failToCheck() {
         switch phase {
         case .ready(.starting):
@@ -103,10 +117,11 @@ final class SlackModel {
     }
 
     func recheck() async {
-        phase = .busy(.checking)
         notice = nil
         checkFailed = false
+        if case .ready = phase { isRechecking = true } else { phase = .busy(.checking) }
         await refresh()
+        isRechecking = false
     }
 
     func beginConnect() async {
@@ -207,13 +222,15 @@ final class SlackModel {
     private func show(_ status: SlackStatus) {
         failure = status.failure
         detail = status.detail
+        stalled = false
         phase = .ready(status.connection)
         if status.connection.isSettled { services.surfaces.persist(status, surfaceKey) }
     }
 
-    private func settle(_ status: SlackStatus) {
+    private func settle(_ status: SlackStatus, stalled: Bool = false) {
         failure = status.failure
         detail = status.detail
+        self.stalled = stalled
         phase = .ready(status.connection)
     }
 
@@ -243,7 +260,7 @@ final class SlackModel {
     private func finish(_ outcome: SlackWatchOutcome) {
         switch outcome {
         case .settled(let status): apply(status)
-        case .timedOut(let last): settle(.stalled(last: last, botName: displayName))
+        case .timedOut(let last): settle(.stalled(last: last, botName: displayName), stalled: true)
         case .unreachable: settle(.unreachable)
         case .cancelled: return
         }

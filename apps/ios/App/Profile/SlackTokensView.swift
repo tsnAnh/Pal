@@ -5,6 +5,7 @@ import SwiftUI
 
 struct SlackTokensView: View {
     @State private var model: SlackModel
+    @Environment(\.hermesTheme) private var theme
 
     init(model: SlackModel) {
         _model = State(initialValue: model)
@@ -39,8 +40,6 @@ struct SlackTokensView: View {
         .navigationTitle(Text("Slack"))
         .toolbarTitleDisplayMode(.inline)
         .accessibilityIdentifier("slackScreen")
-        .task { await model.load() }
-        .onDisappear { model.stop() }
         .macConfirm(isPresented: $model.confirmsDisconnect) {
             MacDialogContent(
                 String(localized: "Disconnect Slack?"),
@@ -74,16 +73,7 @@ struct SlackTokensView: View {
     private var status: some View {
         switch model.connection {
         case .connected: statusLine(String(localized: "Connected"), "slackStatusConnected")
-        case .starting: statusLine(String(localized: "Connecting…"), "slackStatusStarting")
-        case .failed:
-            statusLine(String(localized: "Couldn't connect"), "slackStatusFailed")
-            if let detail = model.detail {
-                Text(detail)
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .accessibilityIdentifier("slackFailureReason")
-            }
-        case .notConnected, nil: EmptyView()
+        case .notConnected, .starting, .failed, nil: EmptyView()
         }
         if let notice = model.notice {
             Text(notice)
@@ -133,12 +123,15 @@ struct SlackTokensView: View {
                 .background(PalTokens.control, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
-                        .strokeBorder(shape.isValid ? Color.green.opacity(0.5) : (shape == .empty ? Color.clear : Color.red), lineWidth: 1.5)
+                        .strokeBorder(
+                            shape.isValid ? PalTokens.borderStrong : (shape == .empty ? Color.clear : Color(theme.palette.destructive)),
+                            lineWidth: 1.5
+                        )
                 }
             if showsShape, let message = shape.message(label: field.label) {
                 Text(message)
                     .hermesText(.rowSubtitle)
-                    .foregroundStyle(shape.isValid ? Color.green : Color.red)
+                    .foregroundStyle(shape.isValid ? PalTokens.textSecondary : Color(theme.palette.destructive))
                     .accessibilityIdentifier("\(identifier)Hint")
             }
         }
@@ -177,7 +170,7 @@ struct SlackTokensView: View {
             SetupQuietButton(title: String(localized: "Cancel"), identifier: "slackTokenCancel") { model.cancelTokenEntry() }
         } else {
             primary(connection)
-            if model.checkFailed, connection != .failed {
+            if model.checkFailed {
                 SetupButton(title: String(localized: "Retry"), fillsWidth: true, identifier: "slackRetryButton") {
                     Task { await model.recheck() }
                 }
@@ -197,19 +190,12 @@ struct SlackTokensView: View {
             SetupButton(title: String(localized: "Connect Slack workspace"), kind: .primary, fillsWidth: true, identifier: "slackConnectButton") {
                 Task { await model.beginConnect() }
             }
-        case .failed:
-            SetupButton(title: String(localized: "Retry"), kind: .primary, fillsWidth: true, identifier: "slackRetryButton") {
-                Task { await model.recheck() }
-            }
-            SetupButton(title: String(localized: "Connect Slack workspace"), fillsWidth: true, identifier: "slackConnectButton") {
-                Task { await model.beginConnect() }
-            }
         case .connected:
             SetupButton(title: String(localized: "Disconnect"), fillsWidth: true, identifier: "slackDisconnectButton") {
                 model.confirmsDisconnect = true
             }
-        case .starting:
-            SetupButton(title: String(localized: "Connecting…"), kind: .primary, isBusy: true, fillsWidth: true, identifier: "slackStartingButton") {}
+        case .starting, .failed:
+            EmptyView()
         }
     }
 
