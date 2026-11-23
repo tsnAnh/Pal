@@ -281,6 +281,7 @@ private struct AddPublicRouteSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(blocking: .unsavedInput, when: model.issuedSecret == nil && draft != WebhookRouteDraft()))
     }
 
     @ViewBuilder

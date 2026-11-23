@@ -35,7 +35,8 @@ private struct MacDialogPanel: View {
         .background(PalTokens.content, in: shape)
         .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 20, y: 12)
-        .background { keyEquivalents }
+        .background { returnKey }
+        .palEscape(.dialog) { request.press(.escape) }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
         .accessibilityIdentifier("macDialog")
@@ -87,14 +88,12 @@ private struct MacDialogPanel: View {
             .accessibilityIdentifier(action.identifier ?? "macDialogAction-\(action.title)")
     }
 
-    private var keyEquivalents: some View {
-        ZStack {
-            Button("") { request.press(.returnKey) }.keyboardShortcut(.defaultAction)
-            Button("") { request.press(.escape) }.keyboardShortcut(.cancelAction)
-        }
-        .frame(width: 0, height: 0)
-        .opacity(0)
-        .accessibilityHidden(true)
+    private var returnKey: some View {
+        Button("") { request.press(.returnKey) }
+            .keyboardShortcut(.defaultAction)
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
     }
 }
 

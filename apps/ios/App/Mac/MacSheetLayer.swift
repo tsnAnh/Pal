@@ -8,7 +8,7 @@ struct MacSheetLayer: View {
     var body: some View {
         ZStack {
             ForEach(center.stack) { request in
-                MacSheetPanel(request: request, isTop: request.id == center.stack.last?.id)
+                MacSheetPanel(request: request)
             }
         }
         .animation(.snappy(duration: 0.2), value: center.stack.map(\.id))
@@ -17,31 +17,18 @@ struct MacSheetLayer: View {
 
 private struct MacSheetPanel: View {
     let request: MacSheetRequest
-    let isTop: Bool
-
-    @State private var dismissLocked = false
 
     var body: some View {
         MacModalScrim {}
         MacModalPanel(
-            size: request.size, identifier: "macSheet", closeIdentifier: "macSheetClose", close: request.dismiss,
+            size: request.size, layer: .sheet, identifier: "macSheet", closeIdentifier: "macSheetClose", close: request.dismiss,
             content: {
                 request.content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.sheetClose, request.dismiss)
                     .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
-                    .onPreferenceChange(MacSheetDismissLockKey.self) { dismissLocked = $0 }
-                    .background { if isTop, !dismissLocked { escapeKey } }
             }
         )
-    }
-
-    private var escapeKey: some View {
-        Button("") { request.dismiss() }
-            .keyboardShortcut(.cancelAction)
-            .frame(width: 0, height: 0)
-            .opacity(0)
-            .accessibilityHidden(true)
     }
 }
 #endif

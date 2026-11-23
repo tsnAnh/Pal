@@ -116,6 +116,10 @@ struct MacModalHost: View {
         }
     }
 
+    private var createBotEscape: EscapePolicy {
+        createBot.isCreating ? .blocked(.inFlight) : EscapePolicy(blocking: .unsavedInput, when: !createBot.name.isEmpty)
+    }
+
     @ViewBuilder
     private func panel(for sheet: AppSheet) -> some View {
         switch sheet {
@@ -128,11 +132,10 @@ struct MacModalHost: View {
             MacModalPanel(
                 size: .form,
                 closePlacement: .trailing,
-                closeDisabled: createBot.isCreating,
                 identifier: "createBotSheet",
                 closeIdentifier: "createBotClose",
                 close: { router.dismissSheet() },
-                content: { MacCreateBot(model: createBot, roster: roster, router: router) }
+                content: { MacCreateBot(model: createBot, roster: roster, router: router).palEscapePolicy(createBotEscape) }
             )
         case .connectApps:
             MacModalPanel(
@@ -187,13 +190,7 @@ struct MacAccountMenu: View {
         .palGlass(shape, interactive: false)
         .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 23, y: 10)
-        .background {
-            Button("") { shell.showsAccountMenu = false }
-                .keyboardShortcut(.cancelAction)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
+        .palEscape(.menu) { shell.showsAccountMenu = false }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("accountMenu")
     }

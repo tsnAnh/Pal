@@ -102,12 +102,7 @@ private struct MacActionMenu: View {
         .palGlass(shape, interactive: false)
         .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
         .shadow(color: .black.opacity(0.35), radius: 22, y: 10)
-        .background {
-            Button("", action: dismiss)
-                .keyboardShortcut(.cancelAction)
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
+        .palEscape(.menu, dismiss: dismiss)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
