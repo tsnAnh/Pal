@@ -106,6 +106,15 @@ def test_hardline_still_refuses(interactive_gateway):
     _assert_no_card(interactive_gateway)
 
 
+@pytest.mark.parametrize("mode", ["manual", "smart", "off"])
+def test_hardline_still_refuses_whatever_mode_the_profile_stored(interactive_gateway, config_home, mode):
+    config_home(f"  mode: {mode}\n")
+    for command in ("rm -rf /", "shutdown -h now", "mkfs.ext4 /dev/sda"):
+        result = check_all_command_guards(command, "local")
+        assert result["approved"] is False and result["hardline"] is True, command
+    _assert_no_card(interactive_gateway)
+
+
 def test_user_deny_rule_still_refuses(interactive_gateway, config_home):
     config_home("  deny:\n    - 'git push*'\n")
     result = check_all_command_guards("git push origin main", "local")

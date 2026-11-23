@@ -132,6 +132,20 @@ def test_rpc_carries_authority_to_real_dispatch(child_env, monkeypatch, transpor
     assert len(seen) == 2
 
 
+@pytest.mark.platforms("posix")
+def test_terminal_inside_a_script_still_meets_the_command_floors(child_env, monkeypatch):
+    from tests.tools._child_env_fixtures import run_code
+
+    victim = child_env / "victim"
+    victim.mkdir()
+    command = f"rm -rf {victim}"
+    code = f"import json\nfrom hermes_tools import terminal\nprint(json.dumps(terminal({command!r})))"
+    monkeypatch.setattr(A, "_match_user_deny_rule", lambda cmd: "rm -rf *" if "victim" in cmd else None)
+    result = run_code(code, enabled_tools=("terminal",))
+    assert victim.is_dir(), result
+    assert "approvals.deny" in json.dumps(result), result
+
+
 # ---------------------------------------------------------------------------
 # 3. check_execute_code_guard decision matrix
 # ---------------------------------------------------------------------------

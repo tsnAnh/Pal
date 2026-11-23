@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from hermes_cli.profile_admin_guard import CREATE_REFUSED_MESSAGE
-from tests.e2e.core.bots._creation import CREATE_COMMANDS, CREATE_IDS, launch_world
+from tests.e2e.core.bots._creation import CREATE_COMMANDS, CREATE_IDS, LAUNCH_MODEL, launch_world
 from tests.e2e.core.bots._world import World
 from tests.e2e.core.history._helpers import InProcessSession
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall
@@ -96,3 +96,16 @@ def test_a_profile_delete_runs_without_asking(attached) -> None:
     run_attached_turn(w, srv, "hermes profile delete victim --yes", human)
     assert human.asked == []
     assert not w.profile_exists("victim")
+
+
+def test_a_bot_created_by_the_owner_from_the_cli_carries_the_launching_profiles_model_and_nothing_else(tmp_path: Path) -> None:
+    with FakeLLMServer() as srv:
+        w = launch_world(tmp_path, srv.base_url)
+        w.hermes_ok("default", "bot", "create", "evo", "--display-name", "Evo Bot")
+    assert w.profile_exists("evo")
+    cfg = w.config("evo")
+    assert cfg["model"]["default"] == LAUNCH_MODEL
+    servers = cfg.get("mcp_servers") or {}
+    assert not any((entry or {}).get("enabled", True) for entry in servers.values()), servers
+    memory_files = [p for p in (w.home_of("evo") / "memories").rglob("*") if p.is_file()]
+    assert all("launch-profile-private-fact" not in p.read_text(encoding="utf-8") for p in memory_files)

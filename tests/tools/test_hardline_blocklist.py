@@ -583,6 +583,17 @@ def test_check_all_command_guards_blocks_hardline(clean_session):
     assert result.get("hardline") is True
 
 
+@pytest.mark.parametrize("command", [
+    'rm -rf /', 'rm -rf "/"', 'rm -rf "$HOME"', "rm -rf ${HOME}",
+    "shutdown -h now", "mkfs.ext4 /dev/sda", "reboot",
+])
+def test_hardline_commands_are_refused_by_both_guards(command, clean_session):
+    for guard in (check_dangerous_command, check_all_command_guards):
+        result = guard(command, "local")
+        assert result["approved"] is False, f"{guard.__name__} let {command!r} through"
+        assert result.get("hardline") is True
+
+
 def test_root_collapse_pattern_leaves_real_paths_alone(clean_session):
     """The broadened root token must not over-match real trailing segments.
 
@@ -695,6 +706,15 @@ def test_sudo_stdin_guard_detects_without_password():
         is_blocked, desc = approval_mod._check_sudo_stdin_guard(cmd)
         assert is_blocked, f"expected sudo stdin guard to block {cmd!r}"
         assert "sudo" in desc.lower()
+
+
+@pytest.mark.parametrize("command", _SUDO_STDIN_BLOCK_YOLO)
+def test_sudo_stdin_is_refused_by_the_full_guard_without_a_configured_password(command, clean_session, monkeypatch):
+    monkeypatch.delenv("SUDO_PASSWORD", raising=False)
+    result = check_all_command_guards(command, "local")
+    assert result["approved"] is False and "sudo -S" in result["message"]
+    monkeypatch.setenv("SUDO_PASSWORD", "configured")
+    assert check_all_command_guards(command, "local")["approved"] is True
 
 
 def test_sudo_stdin_guard_container_bypass(clean_session):

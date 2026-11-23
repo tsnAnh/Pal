@@ -8,9 +8,9 @@ strings are only passed to the detectors, never run.
 """
 import pytest
 
-from tools import approval_context
+from tools import approval, approval_context
 from tools.approval import check_all_command_guards, check_dangerous_command
-from tools.approval_detection import detect_hardline_command, hardline_scan_incomplete
+from tools.approval_detection import _SCAN_INCOMPLETE_DESCRIPTION, detect_hardline_command, hardline_scan_incomplete
 
 SESSION = "scan-incomplete-human-only"
 GREP = 'v=$(grep -o "[^\\"]*" f)'
@@ -76,6 +76,34 @@ def test_single_query_approve_mode_refuses_an_unread_command(guard, gate, monkey
     result = guard(GREP_500, "local")
     assert result["approved"] is False and "too long or complex" in result["message"]
     assert guard("rm -rf build/", "local")["approved"] is True
+
+
+@pytest.mark.parametrize("unattended_mode", ["deny", "approve"])
+@pytest.mark.parametrize(("platform", "notifier"), [("api_server", True), ("api_server", False), ("webhook", True)])
+def test_unattended_platform_refuses_an_unread_command_in_either_mode(platform, notifier, unattended_mode, gate,
+                                                                    monkeypatch):
+    monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
+    monkeypatch.setenv("HERMES_EXEC_ASK", "1")
+    monkeypatch.setenv("HERMES_SESSION_PLATFORM", platform)
+    monkeypatch.setattr(approval_context, "_get_unattended_approval_mode", lambda: unattended_mode)
+    if notifier:
+        approval.register_gateway_notify(SESSION, lambda data: pytest.fail("a card was sent to an unattended platform"))
+    try:
+        result = check_all_command_guards(GREP_500, "local")
+    finally:
+        approval.unregister_gateway_notify(SESSION)
+    assert result["approved"] is False and "too long or complex" in result["message"]
+    assert approval.pending_gateway_approval_count() == 0
+
+
+def test_a_detection_scan_incomplete_finding_is_refused_in_cron_deny(gate, monkeypatch):
+    monkeypatch.setenv("HERMES_CRON_SESSION", "1")
+    monkeypatch.setattr(approval_context, "_get_cron_approval_mode", lambda: "deny")
+    monkeypatch.setattr(approval, "detect_dangerous_command", lambda command: (
+        True, _SCAN_INCOMPLETE_DESCRIPTION, _SCAN_INCOMPLETE_DESCRIPTION))
+    assert hardline_scan_incomplete("echo ok") is False
+    result = check_all_command_guards("echo ok", "local")
+    assert result["approved"] is False and "approvals.cron_mode" in result["message"]
 
 
 @pytest.mark.parametrize("command", [GREP_500, BEAR_800 + "\nrm -rf build/"], ids=["grep-500", "bear-800-rm"])
