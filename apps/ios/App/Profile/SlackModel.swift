@@ -28,6 +28,8 @@ final class SlackModel {
     private(set) var phase: Phase = .loading
     private(set) var notice: String?
     private(set) var failure: SlackFailureReason?
+    private(set) var detail: String?
+    private(set) var checkFailed = false
     private(set) var tokenEntry = TokenEntry.connect
     var isEnteringTokens = false
     var confirmsDisconnect = false
@@ -38,9 +40,6 @@ final class SlackModel {
     let displayName: String
     private let services: BotsServices
     private var polling: Task<Void, Never>?
-
-    static let pollInterval: Duration = .seconds(2)
-    static let pollLimit = 8
 
     init(botName: String, displayName: String, services: BotsServices) {
         self.botName = botName
@@ -67,9 +66,13 @@ final class SlackModel {
     private var surfaceKey: SurfaceKey { .screen("slack", bot: botName) }
 
     func load() async {
-        guard case .loading = phase else { return }
+        guard case .loading = phase else {
+            if connection == .starting, polling == nil { startPolling() }
+            return
+        }
         if let cached = await services.surfaces.value(SlackStatus.self, surfaceKey), case .loading = phase {
             failure = cached.failure
+            detail = cached.detail
             phase = .ready(cached.connection)
         }
         await refresh()
@@ -78,11 +81,23 @@ final class SlackModel {
     func refresh() async {
         do {
             let status = try await services.slack.status(profile: botName)
+            checkFailed = false
             show(status)
             if !status.connection.isSettled { startPolling() }
         } catch is CancellationError {
         } catch {
-            if case .ready = phase { return }
+            failToCheck()
+        }
+    }
+
+    private func failToCheck() {
+        switch phase {
+        case .ready(.starting):
+            settle(.unreachable)
+        case .ready:
+            checkFailed = true
+            notice = String(localized: "Couldn't refresh Slack's status. This may be out of date.")
+        case .loading, .busy, .unavailable:
             phase = .unavailable
         }
     }
@@ -90,6 +105,7 @@ final class SlackModel {
     func recheck() async {
         phase = .busy(.checking)
         notice = nil
+        checkFailed = false
         await refresh()
     }
 
@@ -139,7 +155,7 @@ final class SlackModel {
     private func send(_ tokens: SlackTokenUpdate, fallback: SlackConnection) async {
         isEnteringTokens = false
         clearTokens()
-        let previous = (connection: fallback, failure: failure)
+        let previous = Snapshot(connection: fallback, failure: failure, detail: detail)
         phase = .busy(.connecting)
         notice = nil
         do {
@@ -156,8 +172,15 @@ final class SlackModel {
         }
     }
 
-    private func restore(_ previous: (connection: SlackConnection, failure: SlackFailureReason?)) {
+    private struct Snapshot {
+        let connection: SlackConnection
+        let failure: SlackFailureReason?
+        let detail: String?
+    }
+
+    private func restore(_ previous: Snapshot) {
         failure = previous.failure
+        detail = previous.detail
         phase = .ready(previous.connection)
     }
 
@@ -183,33 +206,48 @@ final class SlackModel {
 
     private func show(_ status: SlackStatus) {
         failure = status.failure
+        detail = status.detail
         phase = .ready(status.connection)
         if status.connection.isSettled { services.surfaces.persist(status, surfaceKey) }
+    }
+
+    private func settle(_ status: SlackStatus) {
+        failure = status.failure
+        detail = status.detail
+        phase = .ready(status.connection)
     }
 
     private func apply(_ status: SlackStatus) {
         switch status.connection {
         case .starting: startPolling()
         case .failed:
-            if status.failure == nil { notice = String(localized: "Slack saved your tokens but the connection didn't start.") }
+            if status.detail == nil { notice = String(localized: "Slack saved your tokens but the connection didn't start.") }
         case .notConnected, .connected: break
         }
     }
 
     private func startPolling() {
         polling?.cancel()
+        let slack = services.slack
+        let botName = botName
         polling = Task { [weak self] in
-            for _ in 0..<Self.pollLimit {
-                try? await Task.sleep(for: Self.pollInterval)
-                guard let self, !Task.isCancelled else { return }
-                guard let status = try? await services.slack.status(profile: botName) else { continue }
-                show(status)
-                if status.connection.isSettled {
-                    apply(status)
-                    return
-                }
-            }
+            let outcome = await SlackStatusWatch().run(
+                clock: ContinuousClock(),
+                check: { try await slack.status(profile: botName) },
+                onStatus: { [weak self] in self?.show($0) }
+            )
+            self?.finish(outcome)
         }
+    }
+
+    private func finish(_ outcome: SlackWatchOutcome) {
+        switch outcome {
+        case .settled(let status): apply(status)
+        case .timedOut(let last): settle(.stalled(last: last, botName: displayName))
+        case .unreachable: settle(.unreachable)
+        case .cancelled: return
+        }
+        polling = nil
     }
 
     private func clearTokens() {

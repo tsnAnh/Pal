@@ -77,8 +77,8 @@ struct SlackTokensView: View {
         case .starting: statusLine(String(localized: "Connecting…"), "slackStatusStarting")
         case .failed:
             statusLine(String(localized: "Couldn't connect"), "slackStatusFailed")
-            if let failure = model.failure {
-                Text(failure.message)
+            if let detail = model.detail {
+                Text(detail)
                     .hermesText(.rowSubtitle)
                     .foregroundStyle(PalTokens.textSecondary)
                     .accessibilityIdentifier("slackFailureReason")
@@ -177,6 +177,11 @@ struct SlackTokensView: View {
             SetupQuietButton(title: String(localized: "Cancel"), identifier: "slackTokenCancel") { model.cancelTokenEntry() }
         } else {
             primary(connection)
+            if model.checkFailed, connection != .failed {
+                SetupButton(title: String(localized: "Retry"), fillsWidth: true, identifier: "slackRetryButton") {
+                    Task { await model.recheck() }
+                }
+            }
             if model.showsUpdateTokens {
                 SetupButton(title: String(localized: "Update tokens"), fillsWidth: true, identifier: "slackUpdateTokensButton") {
                     model.beginUpdateTokens()
@@ -188,8 +193,15 @@ struct SlackTokensView: View {
     @ViewBuilder
     private func primary(_ connection: SlackConnection) -> some View {
         switch connection {
-        case .notConnected, .failed:
+        case .notConnected:
             SetupButton(title: String(localized: "Connect Slack workspace"), kind: .primary, fillsWidth: true, identifier: "slackConnectButton") {
+                Task { await model.beginConnect() }
+            }
+        case .failed:
+            SetupButton(title: String(localized: "Retry"), kind: .primary, fillsWidth: true, identifier: "slackRetryButton") {
+                Task { await model.recheck() }
+            }
+            SetupButton(title: String(localized: "Connect Slack workspace"), fillsWidth: true, identifier: "slackConnectButton") {
                 Task { await model.beginConnect() }
             }
         case .connected:
