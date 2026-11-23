@@ -14,8 +14,7 @@ struct EmojiPickerView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            TextField(String(localized: "Search emoji"), text: $query)
-                .textFieldStyle(.plain)
+            PalTextField(String(localized: "Search emoji"), text: $query)
                 .font(.system(size: MessageMenuMetrics.textSize))
                 .padding(.horizontal, 10)
                 .frame(height: PlatformVariant.pick(mac: 28, iOS: 36))

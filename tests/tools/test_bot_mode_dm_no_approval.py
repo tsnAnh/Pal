@@ -24,10 +24,16 @@ def delivery_command(tmp_path, monkeypatch):
     return calls[0]["command"]
 
 
-@pytest.mark.parametrize("client_attached", [False, True], ids=["no-client-in-bot-chat", "client-attached-in-bot-chat"])
-def test_delivery_runner_command_raises_no_approval_event(delivery_command, client_attached):
+@pytest.mark.parametrize(
+    "client_attached,gateway_turn",
+    [(False, False), (True, False), (True, True)],
+    ids=["no-client-in-bot-chat", "client-attached-in-bot-chat", "client-attached-in-gateway-bot-chat-turn"])
+def test_delivery_runner_command_raises_no_approval_event(delivery_command, client_attached, gateway_turn, monkeypatch):
     events = []
     session_key = "bot-chat-session"
+    if gateway_turn:
+        monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
+        monkeypatch.setenv("HERMES_EXEC_ASK", "1")
     token = set_current_session_key(session_key)
     if client_attached:
         register_gateway_notify(session_key, events.append)

@@ -31,7 +31,9 @@ def test_held_draft_in_a_plain_chat_turn_is_blocked_without_waiting(plain_chat_t
         draft={"kind": "outbound_message", "text": "Hello"})
 
     assert result["approved"] is False
-    assert result["status"] == "blocked"
+    assert result["outcome"] == "notify_failed"
+    assert result["user_consent"] is False
+    assert result["message"].startswith("BLOCKED")
     assert approval.pending_gateway_approval_count() == 0
 
 

@@ -3,20 +3,20 @@ import PalChat
 import PalDiagnostics
 import PalProtocol
 
-struct ConversationCache: Sendable {
-    let store: CacheStore
-    let account: String
+struct ConversationTimelineStore: TimelineStore {
+    let bot: String
+    let resolve: @Sendable @MainActor () -> (store: CacheStore, account: String)
 
-    func load(bot: String) -> CachedTimeline? {
-        store.load(CachedTimeline.self, name: CachedTimeline.cacheName(forBot: bot), account: account)
+    func load() async -> CachedTimeline? {
+        let target = await resolve()
+        return await target.store.loadDetached(CachedTimeline.self, name: CachedTimeline.cacheName(forBot: bot), account: target.account)
     }
 
-    func save(_ timeline: CachedTimeline, bot: String) {
-        store.save(timeline, name: CachedTimeline.cacheName(forBot: bot), account: account)
-    }
-
-    func remove(bot: String) {
-        store.remove(name: CachedTimeline.cacheName(forBot: bot), account: account)
+    func save(_ timeline: CachedTimeline) {
+        Task { @MainActor in
+            let target = resolve()
+            target.store.save(timeline, name: CachedTimeline.cacheName(forBot: bot), account: target.account)
+        }
     }
 }
 
@@ -27,10 +27,6 @@ struct LastOpenedBot: Codable, Sendable {
 }
 
 extension RosterModel {
-    var conversationCache: ConversationCache {
-        ConversationCache(store: connection.cache, account: connection.accountKey)
-    }
-
     func rememberOpened(bot name: String) {
         connection.cache.save(LastOpenedBot(name: name), name: LastOpenedBot.cacheName, account: connection.accountKey)
     }

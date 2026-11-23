@@ -628,8 +628,8 @@ private struct MacVaultSection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 6) {
                 PalIcon("magnifyingglass", ink: .secondary).font(.system(size: 11))
-                TextField("Search Vault", text: $query)
-                    .textFieldStyle(.plain)
+                PalTextField("Search Vault",
+                             text: $query)
                     .font(.system(size: 12))
                     .accessibilityIdentifier("vaultSearchField")
             }

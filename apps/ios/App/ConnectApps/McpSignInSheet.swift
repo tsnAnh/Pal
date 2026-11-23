@@ -9,6 +9,7 @@ struct McpSignInSheet: View {
 
     @State private var address = ""
     @State private var clipboardMark: Int?
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -29,6 +30,8 @@ struct McpSignInSheet: View {
         StepFlowLayout(sizeClass: sizeClass)
         #endif
     }
+
+    private var footerLayout: StepFlowLayout { layout.footerLayout(at: dynamicTypeSize) }
 
     private var progress: StepFlowEngine? { showsProgress ? controller.engine : nil }
 
@@ -112,7 +115,6 @@ struct McpSignInSheet: View {
                         String(localized: "Address"), prompt: String(localized: "Paste the address here"), text: $address,
                         identifier: "mcpSignInPasteField"
                     )
-                    .textFieldStyle(.plain)
                     .disabled(controller.isSubmitting)
                     .onSubmit(submit)
                     .onChange(of: address) { old, new in
@@ -153,31 +155,29 @@ struct McpSignInSheet: View {
     private var footer: some View {
         if hasFooter {
             Group {
-                switch layout {
+                switch footerLayout {
                 case .stacked:
-                    VStack(spacing: 10) {
+                    VStack(spacing: SetupFooterMetrics.phone.buttonSpacing) {
                         primary
                         secondary
                         quiet
                     }
                 case .rail:
-                    HStack(spacing: 10) {
+                    HStack(spacing: SetupFooterMetrics.mac.buttonSpacing) {
                         Spacer(minLength: 0)
                         secondary
                         quiet
                         primary
                     }
                 case .stepper:
-                    HStack(spacing: 10) {
+                    HStack(spacing: SetupFooterMetrics.mac.buttonSpacing) {
                         Spacer(minLength: 0)
                         quiet
                         primary
                     }
                 }
             }
-            .padding(PalMetrics.screenMargin)
-            .frame(maxWidth: .infinity)
-            .overlay(alignment: .top) { PalHairline() }
+            .setupFooter(fillsWidth: footerLayout.fillsWidth)
         }
     }
 
@@ -190,16 +190,18 @@ struct McpSignInSheet: View {
 
     @ViewBuilder
     private var primary: some View {
-        let phone = layout.fillsWidth
+        let phone = footerLayout.fillsWidth
         switch phase {
         case .pasteAddress:
             SetupButton(
                 title: String(localized: "Finish sign-in"), kind: .primary, isBusy: controller.isSubmitting, fillsWidth: phone,
                 identifier: "mcpSignInPrimary", action: submit
             )
+            .keyboardShortcut(.defaultAction)
             .disabled(McpPasteShape.of(address) != .valid)
         case .signedIn:
             SetupButton(title: String(localized: "Done"), kind: .primary, fillsWidth: phone, identifier: "mcpSignInPrimary", action: close)
+                .keyboardShortcut(.defaultAction)
         default:
             EmptyView()
         }
@@ -209,7 +211,7 @@ struct McpSignInSheet: View {
     private var secondary: some View {
         if phase == .pasteAddress {
             SetupButton(
-                title: String(localized: "Open the sign-in page again"), fillsWidth: layout.fillsWidth, identifier: "mcpSignInReopen"
+                title: String(localized: "Open the sign-in page again"), fillsWidth: footerLayout.fillsWidth, identifier: "mcpSignInReopen"
             ) { controller.reopen() }
             .disabled(controller.isSubmitting)
         }
@@ -219,7 +221,7 @@ struct McpSignInSheet: View {
     private var quiet: some View {
         switch phase {
         case .inBrowser, .pasteAddress:
-            SetupQuietButton(title: String(localized: "Cancel"), identifier: "mcpSignInCancel") {
+            SetupQuietButton(title: String(localized: "Cancel"), fillsWidth: footerLayout.fillsWidth, identifier: "mcpSignInCancel") {
                 address = ""
                 scrubClipboard()
                 Task { await controller.cancel() }

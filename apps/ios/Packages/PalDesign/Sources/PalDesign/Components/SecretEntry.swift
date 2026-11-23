@@ -102,14 +102,13 @@ public struct SecretField: View {
     }
 
     public var body: some View {
-        SecureField(label, text: $text, prompt: Text(prompt))
+        PalTextField(label, text: $text, prompt: Text(prompt), isSecure: true)
             .textContentType(nil)
             .autocorrectionDisabled()
             #if os(iOS)
             .textInputAutocapitalization(.never)
             #endif
             .privacySensitive()
-            .accessibilityLabel(Text(label))
             .accessibilityIdentifier(identifier)
             .onChange(of: scenePhase) { _, phase in
                 if clearsOnBackground, phase != .active { text = "" }
@@ -181,7 +180,6 @@ public struct SecretEntryView: View {
             }
             if showsField {
                 SecretField(fieldLabel, prompt: fieldPrompt, text: $text, identifier: identifiers.field)
-                    .textFieldStyle(.plain)
                     .padding(12)
                     .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .disabled(!state.acceptsInput)

@@ -1,0 +1,24 @@
+# <path relative to apps/ios>:<substring of the flagged line>  <reason>. Two spaces before the reason; a stale entry fails the check.
+App/Profile/BotManagementDialogs.swift:TextField("Name", text: $proposedName)  iOS alert action: SwiftUI alerts only host a direct TextField, a wrapper view drops the field; the alert draws the surface
+App/Chat/ClarifyFormCard.swift:PalTextField(  chipFill card is the only surface, no glass behind the field
+App/Chat/ClarifyCards.swift:PalTextField(  chipFill card is the only surface, no glass behind the field
+App/ConnectApps/McpSignInSheet.swift:SecretField(  control fill is the only surface, no glass behind the field
+App/ConnectApps/PasteAddressEntry.swift:SecretField(  control fill is the only surface, no glass behind the field
+App/CreateBotSheet.swift:PalTextField(  elevated fill is the only surface, no glass behind the field
+App/Mac/LocalEngine/LocalEngineProviderStep.swift:SecretField(  content fill is the only surface, no glass behind the field
+App/Mac/MacAboutYou.swift:PalTextField("Your name", text: $nameDraft)  control fill inside MacCard is the only surface
+App/Mac/MacCreateBot.swift:PalTextField("", text: $model.name)  chipFill field shape is the only surface
+App/Mac/MacModelProviders.swift:PalTextField(  control fill in the popover is the only surface
+App/Mac/MacOwnerIntro.swift:PalTextField("Your name", text: $model.name)  control fill is the only surface
+App/Mac/MacRenameBot.swift:PalTextField("", text: $name)  the rename panel field has one outline surface and no glass behind it
+App/Profile/BotModelView.swift:PalTextField("Search models", text: $query)  groupedCard capsule is the only surface
+App/Profile/EditBotSheet.swift:PalTextField("", text: $model.name, prompt: Text("Name"))  groupedCard fill is the only surface
+App/Profile/NewRoutineSheet.swift:PalTextField("", text: text, prompt: Text(prompt))  groupedCard fill is the only surface
+App/Profile/NewRoutineSheet.swift:PalTextField("", text: $model.prompt  groupedCard fill is the only surface
+App/Profile/SlackTokensView.swift:SecretField(  control fill is the only surface, no glass behind the field
+App/Profile/TelegramView.swift:SecretField(  card fill is the only surface, no glass behind the field
+App/Rooms/RoomSheets.swift:PalTextField("", text: $text, prompt: Text(prompt))  groupedCard fill is the only surface
+App/ServiceSignIn/ServiceSignInView.swift:PalTextField("Address from the browser",  control fill is the only surface
+App/Settings/ModelProvidersScreen.swift:PalTextField("Search providers", text: $model.query)  groupedCard capsule is the only surface
+App/Settings/PreferenceScreens.swift:PalTextField("Search time zones", text: $query)  groupedCard fill is the only surface
+Packages/PalDesign/Sources/PalDesign/Components/SecretEntry.swift:SecretField(fieldLabel  control fill of the secret sheet is the only surface

@@ -19,6 +19,7 @@ struct AssistantBubble: View {
 
     var body: some View {
         let segments = parsed.segments
+        let (media, otherFiles) = MediaReference.split(files)
         let leadsAlone = failureLead != nil && !startsWithText(segments)
         let carrier = leadsAlone ? nil : (segments.first(where: isText) ?? segments.first)?.id
         VStack(alignment: .leading, spacing: ChatMetrics.sameSenderGap) {
@@ -34,7 +35,8 @@ struct AssistantBubble: View {
                     )
                 }
             }
-            if !files.isEmpty { ChatFileStack(files: files, isStreaming: filesPending).bubbleWidth(.leading) }
+            if !media.isEmpty { MediaGrid(media: media).bubbleWidth(.leading) }
+            if !otherFiles.isEmpty { ChatFileStack(files: otherFiles, isStreaming: filesPending).bubbleWidth(.leading) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .environment(\.openURL, links.action(files: files, open: openFile))

@@ -90,17 +90,19 @@ struct ConnectRowDivider: View {
 
 struct ConnectFlatRows<Data: RandomAccessCollection, Row: View>: View where Data.Element: Identifiable {
     let data: Data
+    let dividers: Bool
     let row: (Data.Element) -> Row
 
-    init(_ data: Data, @ViewBuilder row: @escaping (Data.Element) -> Row) {
+    init(_ data: Data, dividers: Bool = true, @ViewBuilder row: @escaping (Data.Element) -> Row) {
         self.data = data
+        self.dividers = dividers
         self.row = row
     }
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(data.enumerated()), id: \.element.id) { index, element in
-                if index > 0 { ConnectRowDivider() }
+                if dividers, index > 0 { ConnectRowDivider() }
                 row(element)
             }
         }

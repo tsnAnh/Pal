@@ -40,6 +40,7 @@ struct ChatRowView: View {
         .padding(.top, leadingGap)
         .environment(\.chatImageOpener) { reference in model.openImage(reference, inRow: row.id) }
         .environment(\.chatFileOpener) { file in model.openFile(file) }
+        .environment(\.mediaRowID, row.id)
     }
 
     private func timeSeparator(_ date: Date) -> some View {
@@ -51,7 +52,10 @@ struct ChatRowView: View {
         switch row.kind {
         case .user(let text, let delivery):
             let actions = userActions(text: text, delivery: delivery)
-            UserBubble(text: text, images: row.images, delivery: delivery, accent: context.accent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
+            UserBubble(
+                text: text, images: row.images, files: row.files, delivery: delivery, accent: context.accent,
+                highlight: findQuery, isCurrentMatch: isCurrentMatch
+            ) { id in
                 model.retry(id)
             }
             .environment(\.messageActions, actions)
@@ -110,6 +114,7 @@ extension ChatRowView: @preconcurrency Equatable {
 struct UserBubble: View {
     let text: String
     var images: [ImageReference] = []
+    var files: [FileReference] = []
     let delivery: BubbleDelivery
     let accent: BotAccent?
     let highlight: String
@@ -130,6 +135,14 @@ struct UserBubble: View {
                 HStack(spacing: 0) {
                     Spacer(minLength: 0)
                     ChatImageGrid(images: images)
+                }
+                .bubbleWidth(.trailing)
+            }
+            let media = MediaReference.split(files).media
+            if !media.isEmpty {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    MediaGrid(media: media)
                 }
                 .bubbleWidth(.trailing)
             }

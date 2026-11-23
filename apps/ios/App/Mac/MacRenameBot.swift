@@ -39,8 +39,7 @@ struct MacRenameBot: View {
                 .accessibilityAddTraits(.isHeader)
             PalHairline(color: PalTokens.panelBorder)
             VStack(alignment: .leading, spacing: 8) {
-                TextField("", text: $name)
-                    .textFieldStyle(.plain)
+                PalTextField("", text: $name)
                     .font(.system(size: 13))
                     .foregroundStyle(PalTokens.textPrimary)
                     .focused($focused)
