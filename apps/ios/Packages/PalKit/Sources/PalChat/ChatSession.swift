@@ -282,7 +282,7 @@ public actor ChatSession: OutboxSubmitter {
 
     private static let fileDownloadLimit = FileLoadFailure.downloadLimitBytes
 
-    private func assetAPI() async throws -> SessionAPI {
+    func assetAPI() async throws -> SessionAPI {
         if api == nil { _ = await awaitState { if case .live = $0.phase { true } else { false } } }
         try Task.checkCancellation()
         guard let api else { throw ChatError.notConnected }
