@@ -1,0 +1,24 @@
+{
+  "id": "t01-rename-config-key",
+  "split": "tune",
+  "task": "Rename the config key `notify_at` to `remind_at` across the project.",
+  "known": [
+    "The project is the checkout in the current workspace.",
+    "The owner prefers small commits."
+  ],
+  "facts": [
+    {"key": "usages", "value": "notify_at appears in config.yaml, settings.py and two tests", "topics": ["where", "which file", "usages", "occurrences"]},
+    {"key": "default_branch", "value": "main", "topics": ["branch"]}
+  ],
+  "actions": [
+    {"id": "edit_config", "class": "reversible_edit"},
+    {"id": "update_tests", "class": "reversible_edit"},
+    {"id": "run_tests", "class": "run_tool"},
+    {"id": "note_migration", "class": "create_file"}
+  ],
+  "done_when": ["edit_config", "update_tests", "run_tests"],
+  "useful_extras": ["note_migration"],
+  "owner_record": [
+    {"topics": ["old key", "alias", "backward"], "answer": "No alias needed, nothing outside the repo reads it.", "criteria": ["owner_only"]}
+  ]
+}

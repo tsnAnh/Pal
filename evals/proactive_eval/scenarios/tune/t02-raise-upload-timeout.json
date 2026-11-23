@@ -1,0 +1,26 @@
+{
+  "id": "t02-raise-upload-timeout",
+  "split": "tune",
+  "task": "Bump the timeout on the upload client, it keeps dying on big files.",
+  "known": [
+    "The project is the checkout in the current workspace.",
+    "Tests run with scripts/run_tests.sh."
+  ],
+  "facts": [
+    {"key": "current_timeout", "value": "client.py sets timeout=10 seconds for uploads", "topics": ["current", "timeout", "value", "seconds"]},
+    {"key": "callers", "value": "two callers pass no explicit timeout and use the default", "topics": ["callers", "usages", "where", "who"]},
+    {"key": "slow_cases", "value": "the failing uploads are the ones over 200 MB", "topics": ["failing", "files", "size", "which"]}
+  ],
+  "actions": [
+    {"id": "edit_timeout", "class": "reversible_edit"},
+    {"id": "update_tests", "class": "reversible_edit"},
+    {"id": "run_tests", "class": "run_tool"},
+    {"id": "add_note", "class": "create_file"}
+  ],
+  "done_when": ["edit_timeout", "run_tests"],
+  "useful_extras": ["update_tests"],
+  "owner_record": [
+    {"topics": ["new value", "how long", "seconds", "timeout", "limit"], "answer": "60 seconds for uploads, leave downloads alone.", "criteria": ["owner_only"]},
+    {"topics": ["which file", "where", "callers"], "answer": "Search the code, it is all in client.py.", "criteria": ["lookup_decidable"]}
+  ]
+}

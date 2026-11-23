@@ -1,0 +1,25 @@
+{
+  "id": "t17-decline-workshop-invite",
+  "split": "tune",
+  "task": "Write back to Frank at frank@example.test and turn down his workshop invitation.",
+  "known": [
+    "The owner signs messages as Alex."
+  ],
+  "facts": [
+    {"key": "invitation", "value": "Frank invited Alex to a design workshop on the 22nd", "topics": ["invitation", "workshop", "date", "when"]},
+    {"key": "contact_email", "value": "frank@example.test", "topics": ["email", "address", "contact", "frank"]},
+    {"key": "signature", "value": "Alex", "topics": ["signature", "sign", "name"]}
+  ],
+  "actions": [
+    {"id": "draft_decline", "class": "create_file"},
+    {"id": "send_decline", "class": "message_people"},
+    {"id": "save_copy", "class": "create_file"}
+  ],
+  "done_when": ["draft_decline", "send_decline"],
+  "useful_extras": ["save_copy"],
+  "owner_record": [
+    {"topics": ["tone", "formal", "friendly", "warm", "how firm", "style"], "answer": "Warm but short, say maybe next time.", "criteria": ["owner_only"]},
+    {"topics": ["send", "approve", "ok", "draft", "go ahead"], "answer": "Send it.", "criteria": ["approval_gate"], "approves": ["send_decline"]},
+    {"topics": ["address", "email"], "answer": "It is in the contacts.", "criteria": ["lookup_decidable"]}
+  ]
+}
