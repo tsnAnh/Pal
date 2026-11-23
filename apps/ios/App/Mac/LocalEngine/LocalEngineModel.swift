@@ -5,6 +5,11 @@ import PalDiagnostics
 import PalLocalEngine
 import PalREST
 
+enum TailnetState: Equatable {
+    case off
+    case on(url: String, username: String, reachable: Bool?)
+}
+
 @MainActor
 @Observable
 final class LocalEngineModel {
@@ -14,6 +19,10 @@ final class LocalEngineModel {
     private(set) var isUpdatingLogin = false
     private(set) var isSigningIn = false
     private(set) var settingsFailure: EngineFailure?
+    private(set) var tailnet: TailnetState?
+    private(set) var tailnetPassword: String?
+    private(set) var tailnetFailure: String?
+    private(set) var isUpdatingTailnet = false
     var isPresentingSetup = false
 
     @ObservationIgnored private weak var connection: ConnectionModel?
@@ -122,6 +131,61 @@ final class LocalEngineModel {
     func refreshSettings() async {
         await detect()
         if let status = try? await service.serviceStatus() { startAtLogin = status.startOnLogin }
+        await refreshTailnet()
+    }
+
+    private func refreshTailnet() async {
+        guard !isUpdatingTailnet, let status = try? await service.tailnetStatus(), !isUpdatingTailnet else { return }
+        apply(status)
+    }
+
+    private func apply(_ status: TailnetStatus) {
+        if status.enabled, let url = status.url, let username = status.username {
+            tailnet = .on(url: url, username: username, reachable: status.reachable)
+        } else {
+            tailnet = .off
+            tailnetPassword = nil
+        }
+    }
+
+    func enableTailnet() async {
+        guard !isUpdatingTailnet else { return }
+        isUpdatingTailnet = true
+        tailnetFailure = nil
+        defer { isUpdatingTailnet = false }
+        do {
+            let credentials = try await service.enableTailnet()
+            tailnet = .on(url: credentials.url, username: credentials.username, reachable: credentials.reachable)
+            tailnetPassword = credentials.password
+        } catch {
+            tailnetFailure = tailnetMessage(for: error)
+        }
+    }
+
+    func disableTailnet() async {
+        guard !isUpdatingTailnet else { return }
+        isUpdatingTailnet = true
+        tailnetFailure = nil
+        defer { isUpdatingTailnet = false }
+        do {
+            apply(try await service.disableTailnet())
+        } catch {
+            tailnetFailure = tailnetMessage(for: error)
+        }
+    }
+
+    func dismissTailnetPassword() {
+        tailnetPassword = nil
+    }
+
+    private func tailnetMessage(for error: any Error) -> String {
+        switch error {
+        case let error as TailnetError: return error.message
+        case let failure as EngineFailure: return failure.reason
+        default:
+            diagnostics.info("engine", "tailnet change failed: \(Diagnostics.describe(error))")
+            return EngineFailure.unexpected(trace: EngineFailure.makeTrace()).reason
+        }
     }
 
     func setStartAtLogin(_ enabled: Bool) async {
@@ -149,6 +213,8 @@ final class LocalEngineModel {
             state.apply(.removalSucceeded)
             session = nil
             startAtLogin = nil
+            tailnet = nil
+            tailnetPassword = nil
             await connection?.signOut()
         } catch let failure as EngineFailure {
             state.apply(.removalFailed(failure))
