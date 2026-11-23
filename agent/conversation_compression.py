@@ -3198,10 +3198,9 @@ def _publish_rotated_compaction(
                  else agent._session_db.get_session_title(agent.session_id))
     new_session_id = mint_session_id()
     from agent.context_compressor import _DB_PERSISTED_MARKER
-    from tools.approval_yolo import with_session_yolo
     child = dict(
         source=_compression_child_source(agent, old_session_id), model=agent.model,
-        model_config=with_session_yolo(agent._session_init_model_config, old_session_id),
+        model_config=agent._session_init_model_config,
         system_prompt=new_system_prompt, cwd=getattr(agent, "working_directory", None), profile_name=_profile_for_child,
     )
     lease_terms = dict(

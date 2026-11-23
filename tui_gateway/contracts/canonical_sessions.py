@@ -42,7 +42,6 @@ class CanonicalCreateParams(ProfileParams):
     reasoning: str | None = None
     max_turns: int | str | None = None
     ignore_rules: bool = False
-    yolo: bool = False
     safe_mode: bool = False
     ignore_user_config: bool = False
     skills: list[str] | None = None
@@ -175,7 +174,6 @@ class CanonicalSnapshotInfo(SessionInventoryFields):
     archived: bool | None = None
     started_at: float | None = None
     last_active_at: float | None = None
-    yolo: bool | None = None
     api_mode: str | None = None
     tool_count: int | None = None
     credential_hint: str | None = None

@@ -780,11 +780,6 @@ def execute_code(
     if not _guard.get("approved", False):
         return _error_result(_guard.get("message") or "execute_code blocked by approval guard.",
                              user_summary=_guard.get("user_summary"))
-    # Clear a stale interrupt bit that landed during the blocking approval-wait so it can't
-    # kill the just-approved run on the first poll. A genuine post-clear interrupt re-sets it.
-    if _guard.get("user_approved"):
-        from tools.interrupt import clear_current_thread_interrupt
-        clear_current_thread_interrupt()
     from hermes_cli.observability.shared_metrics_loop import record_execution_backend
     from tools.environments.sandbox_scope import hosted_scope
     # A hosted agent's code runs only in its sandbox, never in a kernel on this host.
@@ -795,7 +790,6 @@ def execute_code(
     from tools.interrupt import is_interrupted as _is_interrupted
     # Session kernels are always on locally (one interpreter per conversation); the guards above
     # already ran for this cell, and the kernel path shares env builder, RPC server and redaction.
-    from hermes_cli.profile_admin_guard import tool_turn_id, verified_grant
     from tools.code_kernel import execute_in_session_kernel
     _cfg = _load_config()
     _mode = _get_execution_mode()
@@ -806,7 +800,6 @@ def execute_code(
         timeout=_cfg.get("timeout", DEFAULT_TIMEOUT),
         max_tool_calls=_cfg.get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS),
         reset=bool(reset), is_interrupted=_is_interrupted,
-        grant=verified_grant(_guard.get("profile_admin_grant"), code), grant_turn_id=tool_turn_id(),
         session_id=session_id, turn_id=turn_id, conversation_id=conversation_id,
     ))
 

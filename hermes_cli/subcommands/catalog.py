@@ -4,16 +4,9 @@ import argparse
 
 
 def cmd_catalog_migrate(args: argparse.Namespace) -> int:
-    from hermes_cli.profile_admin_guard import ProfileAdminDenied, require_profile_admin_grant
     from hermes_cli.shared_catalog_migrate import migrate
     from hermes_cli.shared_catalog_rollback import rollback
 
-    if not args.dry_run:
-        try:
-            require_profile_admin_grant("catalog_migrate")
-        except ProfileAdminDenied as denied:
-            print(denied)
-            return 1
     if args.rollback:
         if args.dry_run:
             print("--dry-run cannot be combined with --rollback")

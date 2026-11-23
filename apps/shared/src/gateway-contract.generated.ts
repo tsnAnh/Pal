@@ -1097,7 +1097,7 @@ export interface ConfigProviderRef {
   authenticated?: boolean
   [key: string]: unknown
 }
-/** ``key`` picks the setter (``_CONFIG_SETTERS``, ``details_mode.<section>``, display toggles); ``value`` is the raw word/string the setter normalises (falsy non-strings are reported back in the error). ``scope`` applies to ``yolo`` / ``reasoning``; ``confirm_expensive_model`` to ``model``. */
+/** ``key`` picks the setter (``_CONFIG_SETTERS``, ``details_mode.<section>``, display toggles); ``value`` is the raw word/string the setter normalises (falsy non-strings are reported back in the error). ``scope`` applies to ``reasoning``; ``confirm_expensive_model`` to ``model``. */
 export interface ConfigSetParams {
   profile?: string | null
   key: string
@@ -1106,7 +1106,7 @@ export interface ConfigSetParams {
   scope?: string | null
   confirm_expensive_model?: boolean
 }
-/** ``{key, value}`` plus the setter's extras: model switches add ``warning`` / ``confirm_required`` / ``confirm_message`` / ``scope`` / ``deferred``; ``focus`` adds ``tool_progress``; ``cwd`` adds ``cwd`` / ``branch``; ``personality`` adds ``history_reset`` / ``info``; ``yolo`` reports its ``scope``. ``value`` is a bool only for the display toggles. */
+/** ``{key, value}`` plus the setter's extras: model switches add ``warning`` / ``confirm_required`` / ``confirm_message`` / ``scope`` / ``deferred``; ``focus`` adds ``tool_progress``; ``cwd`` adds ``cwd`` / ``branch``; ``personality`` adds ``history_reset`` / ``info``. ``value`` is a bool only for the display toggles. */
 export interface ConfigSetResult {
   key: string
   value?: string | boolean | null
@@ -1129,8 +1129,6 @@ export interface SessionLiveInfo {
   reasoning_effort_wire?: string
   service_tier?: string
   fast?: boolean
-  yolo?: boolean
-  approval_mode?: string
   tools?: Record<string, string[]>
   skills?: Record<string, string[]>
   cwd?: string
@@ -2688,7 +2686,6 @@ export interface RoomExecutionPolicy {
   version: number
   target_profile: string
   enabled_toolsets: string[]
-  approval_mode: string
   max_iterations: number
   policy_digest: string
 }
@@ -2917,7 +2914,7 @@ export interface GroupsApproveParams {
   choice: ApprovalChoice
   request_id: string
 }
-export type ApprovalChoice = 'once' | 'session' | 'always' | 'deny'
+export type ApprovalChoice = 'once' | 'deny'
 /** ``result`` is the local ``approval.respond`` answer or the peer's run-action receipt. */
 export interface GroupsApproveResult {
   approved?: boolean
@@ -3302,37 +3299,6 @@ export interface ModelProviderBaseUrlResult {
   provider?: ModelProvider | null
 }
 export type ModelProviderBaseUrlOutcome = 'saved' | 'reset' | 'invalid' | 'unsupported' | 'failed'
-/** ``auto_review`` is true only under the smart guardian; ``approval_mode`` is the profile's real setting so a client can say approvals are off, in which case rules are stored and not applied. */
-export interface PermissionsState {
-  auto_review: boolean
-  approval_mode: PermissionsApprovalMode
-  ask: PermissionRule[]
-  allow: PermissionRule[]
-}
-export type PermissionsApprovalMode = 'manual' | 'smart' | 'off'
-/** A short sentence the user typed; ``created_at`` is ISO 8601 UTC. */
-export interface PermissionRule {
-  id: string
-  text: string
-  created_at: string
-}
-export interface PermissionsSetAutoReviewParams {
-  profile?: string | null
-  enabled: boolean
-}
-export interface PermissionsRuleAddParams {
-  profile?: string | null
-  list: PermissionRuleList
-  text: string
-}
-export type PermissionRuleList = 'ask' | 'allow'
-export interface PermissionsRuleRemoveParams {
-  profile?: string | null
-  id: string
-}
-export interface PermissionsRuleRemoveResult {
-  removed: boolean
-}
 /** ``word`` is the token under the cursor (``@`` prefix = context reference); ``cwd`` / ``session_id`` pick the directory the listing resolves against. */
 export interface CompletePathParams {
   profile?: string | null
@@ -4532,11 +4498,7 @@ export interface PendingApproval {
   description?: string | null
   pattern_key?: string | null
   pattern_keys?: string[] | null
-  allow_permanent?: boolean | null
-  allow_session?: boolean | null
-  smart_denied?: boolean | null
   choices?: string[] | null
-  scope?: string | null
   draft?: ApprovalDraft | null
   tool_name?: string | null
   [key: string]: unknown
@@ -4562,7 +4524,7 @@ export interface ApprovalReceivedParams {
 export interface ApprovalReceivedResult {
   acknowledged: boolean
 }
-/** ``choice`` is one of the offered ``approval`` choices (once / session / always / deny); ``all`` resolves every pending approval, ``request_id`` a specific one, neither the oldest. */
+/** ``choice`` is one of the offered ``approval`` choices (once / deny); ``all`` resolves every pending approval, ``request_id`` a specific one, neither the oldest. */
 export interface ApprovalRespondParams {
   session_id: string
   profile?: string | null
@@ -4999,8 +4961,6 @@ export interface SessionCwdSetResult {
   reasoning_effort_wire?: string
   service_tier?: string
   fast?: boolean
-  yolo?: boolean
-  approval_mode?: string
   tools?: Record<string, string[]>
   skills?: Record<string, string[]>
   cwd?: string
@@ -6595,7 +6555,6 @@ export interface CanonicalSessionInfo {
   archived?: boolean | null
   started_at?: number | null
   last_active_at?: number | null
-  yolo?: boolean | null
   api_mode?: string | null
   tool_count?: number | null
   credential_hint?: string | null
@@ -6892,7 +6851,6 @@ export interface CanonicalCreateParams {
   reasoning?: string | null
   max_turns?: number | string | null
   ignore_rules?: boolean
-  yolo?: boolean
   safe_mode?: boolean
   ignore_user_config?: boolean
   skills?: string[] | null
@@ -7023,7 +6981,6 @@ export interface CanonicalSnapshotInfo {
   archived?: boolean | null
   started_at?: number | null
   last_active_at?: number | null
-  yolo?: boolean | null
   api_mode?: string | null
   tool_count?: number | null
   credential_hint?: string | null
@@ -7235,7 +7192,7 @@ export interface CanonicalConfigGetResult {
   scope?: string | null
   options?: ('normal' | 'fast' | 'auto' | 'cold' | 'ultrafast')[] | null
 }
-/** Session controls (``busy`` / ``verbose`` / ``yolo`` / ``show_reasoning`` / ``service_tier``, which need ``session_id``) and the TUI's profile preferences (``gateway/session_tui_config.py``; ``session_id`` optional). ``model`` is recognised only to be refused with ``use_session_mutation_model``: a model pick is the revision-fenced ``session.mutate`` operation, never a config write. */
+/** Session controls (``busy`` / ``verbose`` / ``show_reasoning`` / ``service_tier``, which need ``session_id``) and the TUI's profile preferences (``gateway/session_tui_config.py``; ``session_id`` optional). ``model`` is recognised only to be refused with ``use_session_mutation_model``: a model pick is the revision-fenced ``session.mutate`` operation, never a config write. */
 export interface CanonicalConfigSetParams {
   profile?: string | null
   session_id?: string | null
@@ -7960,10 +7917,6 @@ export interface ApprovalRequestParams {
   command?: string
   description?: string
   choices?: ApprovalChoice[]
-  allow_permanent?: boolean | null
-  allow_session?: boolean | null
-  smart_denied?: boolean | null
-  scope?: 'bot_chat' | null
   draft?: ApprovalDraft | null
   tool_name?: string | null
   gateway_session_id?: string | null
@@ -8664,7 +8617,7 @@ export interface RpcMethods {
   'approval.pending': { params: ApprovalPendingParams; result: ApprovalPendingResult }
   /** Tell the backend the card is on screen, so its timeout clock starts. */
   'approval.received': { params: ApprovalReceivedParams; result: ApprovalReceivedResult }
-  /** Deliver the user's decision on a dangerous command (falls back to durable identity on a stale sid). */
+  /** Deliver the user's decision on a held draft or consent (falls back to durable identity on a stale sid). */
   'approval.respond': { params: ApprovalRespondParams; result: ApprovalRespondResult }
   /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
@@ -9096,14 +9049,6 @@ export interface RpcMethods {
   'paste.collapse': { params: PasteCollapseParams; result: PasteCollapseResult }
   /** Render a PDF's pages to PNG and queue them as images for the next turn. */
   'pdf.attach': { params: PdfAttachParams; result: PdfAttachResult }
-  /** Auto-Review state and both rule lists of one profile. */
-  'permissions.get': { params: ProfileParams; result: PermissionsState }
-  /** Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule. */
-  'permissions.rules.add': { params: PermissionsRuleAddParams; result: PermissionRule }
-  /** Remove a rule from whichever list holds it; an unknown id answers removed false, so a retry converges. */
-  'permissions.rules.remove': { params: PermissionsRuleRemoveParams; result: PermissionsRuleRemoveResult }
-  /** Turn Auto-Review on (smart guardian) or off (manual prompts); idempotent, never writes the mode that skips approvals, and leaves an already-off profile as it is. */
-  'permissions.set_auto_review': { params: PermissionsSetAutoReviewParams; result: PermissionsState }
   /** Stop an in-flight pet generate/hatch by token (idempotent). */
   'pet.cancel': { params: PetCancelParams; result: PetCancelResult }
   /** Half-block cell frames (or a kitty placement) for one pet state. */
@@ -9643,10 +9588,6 @@ export const RPC_METHODS = [
   'onboarding.state',
   'paste.collapse',
   'pdf.attach',
-  'permissions.get',
-  'permissions.rules.add',
-  'permissions.rules.remove',
-  'permissions.set_auto_review',
   'pet.cancel',
   'pet.cells',
   'pet.disable',
@@ -10032,14 +9973,6 @@ export interface CanonicalRpcMethods {
   'messaging.telegram.disconnect': { params: ProfileParams; result: MessagingTelegramConnectResult }
   /** Telegram connection state of one bot (never carries the token). */
   'messaging.telegram.status': { params: ProfileParams; result: MessagingTelegramStatus }
-  /** Auto-Review state and both rule lists of one profile. */
-  'permissions.get': { params: ProfileParams; result: PermissionsState }
-  /** Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule. */
-  'permissions.rules.add': { params: PermissionsRuleAddParams; result: PermissionRule }
-  /** Remove a rule from whichever list holds it; an unknown id answers removed false, so a retry converges. */
-  'permissions.rules.remove': { params: PermissionsRuleRemoveParams; result: PermissionsRuleRemoveResult }
-  /** Turn Auto-Review on (smart guardian) or off (manual prompts); idempotent, never writes the mode that skips approvals, and leaves an already-off profile as it is. */
-  'permissions.set_auto_review': { params: PermissionsSetAutoReviewParams; result: PermissionsState }
   /** Editor Save: apply any subset of a profile's sections and report each one. */
   'profiles.configure': { params: ProfilesConfigureParams; result: ProfilesConfigureResult }
   /** Create a profile (ws twin of POST /api/profiles), mirroring launch credentials by default. */
@@ -10260,10 +10193,6 @@ export const CANONICAL_RPC_METHODS = [
   'messaging.telegram.connect',
   'messaging.telegram.disconnect',
   'messaging.telegram.status',
-  'permissions.get',
-  'permissions.rules.add',
-  'permissions.rules.remove',
-  'permissions.set_auto_review',
   'profiles.configure',
   'profiles.create',
   'profiles.delete',
@@ -10330,7 +10259,7 @@ export type CanonicalRpcNamespace = keyof CanonicalRpcNamespaces
 
 // ── Server→client requests ──
 export interface ServerRequestMap {
-  /** A dangerous command awaits the user's decision. */
+  /** A held draft or a spend or payment consent awaits the user's decision. */
   approval: { params: ApprovalRequestParams; result: ApprovalResult }
   /** The clarify tool: ask the user 1-5 questions. */
   clarify: { params: ClarifyRequestParams; result: ClarifyResult }

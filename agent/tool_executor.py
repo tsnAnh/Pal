@@ -752,8 +752,6 @@ def _dispatch_authorized_once(
     elif ref.name == "skill_manage":
         agent._iters_since_skill = 0
 
-    from agent.terminal_approval_batch import prepare_current_terminal
-    prepare_current_terminal(ref)
     _advance_start_order(lambda: _begin_tool_execution(agent, ref, display_index))
     from agent.tool_progress_relay import bound_tool_progress
     from tools.connectors.data_use import collect_data_use
@@ -820,9 +818,6 @@ def _run_agent_tool_execution_middleware(
             begin_execution=begin_execution,
             authorization_gate=authorization_gate,
         )
-
-    from agent.terminal_approval_batch import bind_prepared_dispatch
-    _authorized_dispatch = bind_prepared_dispatch(_authorized_dispatch)
 
     def _hermes_pipeline(relay_args: dict[str, Any]) -> Any:
         request_result = apply_tool_request_middleware(
@@ -944,23 +939,13 @@ def _run_sequential_tool_execution_middleware(
     timeout_s = _extend_tool_timeout(function_name, timeout_s)
     ref = _ToolCallRef(function_name, function_args, effective_task_id, tool_call_id, middleware_trace)
     kwargs = dict(ref.middleware_kwargs(), execute=execute, scope_block=scope_block, display_index=display_index)
-    from agent.terminal_approval_batch import take_prepared_call
-    prepared = take_prepared_call(tool_call_id)
-    if prepared is not None:
-        authorization_gate = prepared.batch.authorization_gate
-        executor = prepared.batch.executor
-        worker_tid = prepared.tids
-        future = prepared.future
-    else:
-        authorization_gate = None
     if function_name in _NEVER_PARALLEL_TOOLS:
         return _run_agent_tool_execution_middleware(agent, **kwargs)
 
     from tools.daemon_pool import DaemonThreadPoolExecutor
 
-    if prepared is None:
-        authorization_gate = _ConcurrentToolAuthorizationGate()
-        worker_tid: list[int] = []
+    authorization_gate = _ConcurrentToolAuthorizationGate()
+    worker_tid: list[int] = []
 
     def _run() -> _ManagedToolResult:
         with _registered_tool_worker(agent) as tid:
@@ -969,9 +954,8 @@ def _run_sequential_tool_execution_middleware(
 
     if ref.trace is None:
         ref.trace = []
-    if prepared is None:
-        executor = DaemonThreadPoolExecutor(max_workers=1)
-        future = executor.submit(propagate_context_to_thread(_run))
+    executor = DaemonThreadPoolExecutor(max_workers=1)
+    future = executor.submit(propagate_context_to_thread(_run))
     deadline = time.monotonic() + timeout_s if timeout_s is not None else None
     started = time.monotonic()
     abandoned = False
@@ -1005,24 +989,13 @@ def _run_sequential_tool_execution_middleware(
                 duration_ms=int(timeout_s * 1000), status="timeout", error_type="tool_timeout", error_message=message,
             )
         abandoned = True
-        if prepared is not None:
-            # A timed-out shell may still be unwinding. Never release a later
-            # prepared command into overlapping execution.
-            prepared.batch.close()
-            if state == "timeout":
-                # Label the abort as the batch guard's own, not a user stop (#130207). No message:
-                # ``_interrupt_message`` is what gateway/CLI re-queue as the user's next turn. On the
-                # interrupted branch the stop is already published; re-interrupting would rebook it
-                # and null the user's queued message and redirect.
-                agent.interrupt(tool_reason="terminal batch timeout")
         future.cancel()
         if state == "timeout":
             _interrupt_worker_tids(agent, worker_tid)
         return _abandoned_sequential_result(agent, ref, message, result_cls, **outcome)
     finally:
         # Never join a wedged worker (daemon pool also keeps it out of the atexit join).
-        if prepared is None:
-            executor.shutdown(wait=not abandoned, cancel_futures=abandoned)
+        executor.shutdown(wait=not abandoned, cancel_futures=abandoned)
 
 
 def _safe_callback(callback, label: str, *args, **kwargs) -> None:
@@ -1881,13 +1854,6 @@ def _publish_sequential_result(agent, messages: list, ref: _ToolCallRef, managed
         return False
     function_result, display_function_result, risk_metadata = committed
 
-    # Terminal approval batching (#113158): once this slot's failure is
-    # published, the informed consent collected for later slots describes a
-    # batch state that no longer holds — flag it so consume_prepared_guard
-    # drops their pre-made decisions and the live guard flow re-runs.
-    from agent.terminal_approval_batch import mark_batch_outcome
-    mark_batch_outcome(_is_error_result or bool(managed.blocked))
-
     _emit_tool_complete_and_risk(agent, ref, display_function_result, risk_metadata, managed.blocked)
     if _tool_progress_enabled(agent):
         _print_tool_completed(agent, index, tool_duration, function_result)
@@ -1895,13 +1861,9 @@ def _publish_sequential_result(agent, messages: list, ref: _ToolCallRef, managed
 
 
 def execute_tool_calls_sequential(agent, assistant_message, messages: list, effective_task_id: str, api_call_count: int = 0, *, finalize: bool = True) -> None:
-    from types import SimpleNamespace
-    from agent.terminal_approval_batch import terminal_approval_batch, terminal_approval_runs
-    for calls in terminal_approval_runs(agent, assistant_message.tool_calls):
-        with terminal_approval_batch(agent, calls, messages, effective_task_id):
-            _execute_tool_calls_sequential(agent, SimpleNamespace(tool_calls=calls), messages, effective_task_id, api_call_count, finalize=False)
-        if getattr(agent, "_incremental_persistence_failed", False):
-            return
+    _execute_tool_calls_sequential(agent, assistant_message, messages, effective_task_id, api_call_count, finalize=False)
+    if getattr(agent, "_incremental_persistence_failed", False):
+        return
     if finalize:
         _finalize_tool_batch(agent, messages, effective_task_id, len(assistant_message.tool_calls), _budget_for_agent(agent))
 

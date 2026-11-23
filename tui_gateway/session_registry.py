@@ -122,10 +122,9 @@ def _wire_session_agent(sid: str, key: str, agent) -> bool:
     display.memory_notifications."""
     notify_registered = False
     with contextlib.suppress(Exception):
-        from tools.approval import load_permanent_allowlist, register_gateway_notify
+        from tools.approval import register_gateway_notify
         register_gateway_notify(key, lambda data: _emit_approval_request(sid, data))
         notify_registered = True
-        load_permanent_allowlist()
     _wire_callbacks(sid)
     with contextlib.suppress(Exception):  # bare agents without the attribute must not break startup
         agent.background_review_callback = lambda message, _sid=sid: _emit("review.summary", _sid, {"text": str(message)})

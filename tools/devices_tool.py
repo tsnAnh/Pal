@@ -167,15 +167,6 @@ def _failure_message(failure, spec, view, detail: str, now: float) -> str:
     return messages[failure] + (f" ({detail})" if detail else "")
 
 
-def _approved(spec, parsed, name: str) -> str | None:
-    from tools.approval import request_tool_approval
-    result = request_tool_approval(DEVICE_TOOL_NAME, f"{spec.describe(parsed)} on {name}.")
-    if result.get("approved"):
-        return None
-    return tool_error(result.get("message") or f"The user did not approve this change to {name}.",
-                      code="approval_denied", action=spec.name)
-
-
 def _request_timeouts(spec, parsed, home):
     from gateway import device_tools
     base = device_tools.settings(home)
@@ -318,13 +309,9 @@ def device_tool(args: dict[str, Any], *, session_id: str | None = None) -> str |
         return refusal
     if (refusal := _rate_limited(spec, view, now)) is not None:
         return refusal
-    from tui_gateway.contracts.canonical_device import DeviceConnectorState
     if spec.asks_every_time:
         if (blocked := device_messages.approve_send(parsed, view.label)) is not None:
             return tool_error(blocked[1], code=blocked[0], action=spec.name)
-    elif spec.write and view.connectors[spec.connector.value] is not DeviceConnectorState.ALLOWED:
-        if (denied := _approved(spec, parsed, view.label)) is not None:
-            return denied
     if spec.rate_limited and (wait := device_rate.claim(home_key, view.device_id)) is not None:
         return tool_error(f"Too many notifications from this bot on {view.label}; wait {int(wait) + 1} seconds "
                           "before posting another.", code="rate_limited", action=spec.name,

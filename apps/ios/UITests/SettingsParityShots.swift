@@ -54,13 +54,6 @@ final class SettingsParityShots: SettingsE2ETestCase {
         parityShot("30-vault")
     }
 
-    func test32Permissions() throws {
-        let app = darkSettings()
-        openRow(app, "settingsPermissionsRow", screen: "permissionsScreen")
-        waitFor(element(app, "permissionsAddRule-ask"), timeout: 20, "rules")
-        parityShot("32-permissions")
-    }
-
     func test33BotComputer() throws {
         let app = darkSettings()
         openRow(app, "settingsBotComputerRow", screen: "botComputerScreen")

@@ -10,7 +10,6 @@ from typing import Any, Callable, Iterator, TypeVar
 from urllib.parse import parse_qsl, urlsplit
 
 import hermes_yaml as yaml
-from hermes_cli.profile_admin_guard import require_profile_admin_grant
 from hermes_constants import (
     CATALOG_MIGRATED_MARKER, get_default_hermes_root, get_hermes_home, get_shared_catalog_dir, get_shared_root,
     hermes_home_key)
@@ -361,8 +360,6 @@ def _guard_shared_rewrite(definitions: dict[str, dict], name: str, definition: d
 
 def save_server(bot_servers: dict, name: str, server_config: dict, *, force_shared: bool = False) -> dict:
     definition, bot_only = split_bot_secrets(server_config)
-    if force_shared:
-        require_profile_admin_grant("mcp_replace_shared", name)
 
     def store(definitions: dict[str, dict]) -> None:
         if not force_shared:
@@ -377,9 +374,6 @@ def save_server(bot_servers: dict, name: str, server_config: dict, *, force_shar
 
 def replace_servers(servers: dict[str, dict], *, force_shared: bool = False) -> dict:
     split = {name: split_bot_secrets(cfg) for name, cfg in servers.items()}
-    if force_shared:
-        require_profile_admin_grant("mcp_replace_shared")
-
     def store(definitions: dict[str, dict]) -> None:
         if not force_shared:
             for name, (shared, _) in split.items():
@@ -392,7 +386,6 @@ def replace_servers(servers: dict[str, dict], *, force_shared: bool = False) -> 
 
 def remove_server(bot_servers: dict, name: str, *, everywhere: bool = False) -> tuple[dict, bool]:
     if everywhere:
-        require_profile_admin_grant("mcp_remove_everywhere", name)
         existed = update_mcp_definitions(lambda definitions: definitions.pop(name, None) is not None)
     else:
         existed = name in read_mcp_definitions()

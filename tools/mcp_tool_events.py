@@ -40,7 +40,7 @@ _FORBIDDEN, _NOT_FOUND, _UNSUPPORTED, _INVALID_PARAMS = -32024, -32023, -32026, 
 # gone, its arguments no longer validate, or the server no longer offers what the subscription asks for.
 _TERMINAL_REFRESH_CODES = frozenset({_FORBIDDEN, _NOT_FOUND, _UNSUPPORTED, _INVALID_PARAMS})
 _MAX_LIST_PAGES = 20
-# The approval prompt shows the instructions in full, so they are bounded.
+# Each event starts an unattended run that follows the instructions, so they are bounded.
 _MAX_INSTRUCTIONS_CHARS = 2000
 # Refresh loops by server name, each as (its event loop, its wake-up event). A new subscription wakes them
 # so its first refresh is scheduled from its own grant, not after the loop's current sleep (up to an hour).
@@ -410,7 +410,7 @@ async def _unsubscribe_event(session, args: dict, server_name: str) -> dict:
 
 
 def _subscribe_args_error(args: dict) -> Optional[str]:
-    """Validation for ``subscribe_event`` that runs before the user is asked to approve it."""
+    """Validation for ``subscribe_event`` arguments."""
     instructions = args.get("instructions")
     if instructions is not None and not isinstance(instructions, str):
         return "'instructions' must be a string"
@@ -422,30 +422,8 @@ def _subscribe_args_error(args: dict) -> Optional[str]:
     return None
 
 
-def _consent_error(server_name: str, args: dict) -> Optional[str]:
-    """Subscribing installs a standing trigger that starts unattended agent runs: ask the user
-    every time (fail closed), whatever the server's trust tier. The prompt shows the whole standing
-    contract: the event, its arguments, the instructions each run follows, and where results go."""
-    deliver = args.get("deliver") or "log"
-    target = f"'{deliver}' chat {args['deliver_chat_id']}" if args.get("deliver_chat_id") else f"'{deliver}'"
-    try:
-        from tools.approval_prompt import request_elicitation_consent
-        answer = request_elicitation_consent(
-            f"Subscribe to MCP event '{args['name']}' from server '{server_name}'? Each event starts an "
-            f"unattended agent run that follows the instructions below and sends its result to {target}.",
-            f"Instructions: {args.get('instructions') or 'Summarize what happened.'}\n"
-            f"Arguments: {json.dumps(args.get('arguments') or {})[:500]}",
-            surface=f"mcp-events/{server_name}", title=f"MCP server '{server_name}' event subscription")
-    except Exception as exc:
-        logger.error("MCP events: approval check failed for %s: %s", server_name, exc, exc_info=True)
-        return tool_error("The event subscription was blocked: the approval system was unavailable.")
-    if answer == "accept":
-        return None
-    return tool_error("The user did not approve this event subscription. Do not retry without explicit user direction.")
-
-
-def _make_events_handler(op: str, label: str, rpc, *, needs_name: bool = True, needs_consent: bool = False):
-    """Like ``mcp_tool_handlers._make_utility_handler``, with ``name`` required and an optional consent gate."""
+def _make_events_handler(op: str, label: str, rpc, *, needs_name: bool = True, validates_subscription: bool = False):
+    """Like ``mcp_tool_handlers._make_utility_handler``, with ``name`` required and optional subscription validation."""
     def _factory(server_name: str, tool_timeout: float):
         def _handler(args: dict, **kwargs) -> str:
             from tools import mcp_tool_discovery as _discovery  # lazy: import cycle
@@ -457,11 +435,8 @@ def _make_events_handler(op: str, label: str, rpc, *, needs_name: bool = True, n
                 return tool_error("Missing required parameter 'name'")
             if args.get("arguments") is not None and not isinstance(args["arguments"], dict):
                 return tool_error("'arguments' must be an object")
-            if needs_consent:
-                if invalid := _subscribe_args_error(args):
-                    return tool_error(invalid)
-                if error := _consent_error(server_name, args):
-                    return error
+            if validates_subscription and (invalid := _subscribe_args_error(args)):
+                return tool_error(invalid)
 
             async def _call():
                 async with server._rpc_lock.exclusive():
@@ -479,5 +454,5 @@ def _make_events_handler(op: str, label: str, rpc, *, needs_name: bool = True, n
 _make_list_event_types_handler = _make_events_handler(
     "events/list", "list_event_types", _list_event_types, needs_name=False)
 _make_subscribe_event_handler = _make_events_handler(
-    "events/subscribe", "subscribe_event", _subscribe_event, needs_consent=True)
+    "events/subscribe", "subscribe_event", _subscribe_event, validates_subscription=True)
 _make_unsubscribe_event_handler = _make_events_handler("events/unsubscribe", "unsubscribe_event", _unsubscribe_event)

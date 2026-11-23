@@ -1,6 +1,6 @@
 """Contract suite for session flags and facets on ``SessionRepository``.
 
-Runs against every registered backend through public protocol operations only; mutation cases assert pre-state, result, and post-state, and refused or no-op operations prove non-mutation. Race cases run two contenders in two threads, each with its own event loop, so a backend must hold its own lock across each read-then-write verb (the GIL does not make multi-statement verbs atomic). The activity labels, the prompt snapshot and the YOLO flag are read off the :class:`SessionRecord` ``get`` returns.
+Runs against every registered backend through public protocol operations only; mutation cases assert pre-state, result, and post-state, and refused or no-op operations prove non-mutation. Race cases run two contenders in two threads, each with its own event loop, so a backend must hold its own lock across each read-then-write verb (the GIL does not make multi-statement verbs atomic). The activity labels and the prompt snapshot are read off the :class:`SessionRecord` ``get`` returns.
 
 The session facets section covers the facet verbs and the gateway listing's :class:`SessionRecencyEntry`.
 """
@@ -25,7 +25,6 @@ from persistence.conversation.sessions import (
     MAX_TITLE_LENGTH,
     RUNTIME_LOCK_KEY,
     SKILL_SCAFFOLD_PREFIX,
-    YOLO_KEY,
     NewSession,
     RecentBrowseQuery,
     RecentBrowseTimeout,
@@ -37,7 +36,6 @@ from persistence.conversation.sessions import (
     SessionWindow,
     is_explicit_close_reason,
     sanitize_title,
-    session_yolo_enabled,
 )
 from persistence.conversation.usage import TokenCounts, UsageDelta
 from tests.contracts._concurrency import run_concurrently
@@ -78,12 +76,6 @@ def _prompt(backend, scope, session_id: str):
     store = backend.open(scope)
     row = store.sessions.get(SessionId(session_id))
     return None if row is None else (row.system_prompt, row.tool_pin)
-
-
-def _yolo(backend, scope, session_id: str) -> bool:
-    store = backend.open(scope)
-    row = store.sessions.get(SessionId(session_id))
-    return session_yolo_enabled(row.model_config if row is not None else None)
 
 
 # ── activity heartbeat ────────────────────────────────────────────────────────
@@ -267,7 +259,7 @@ def test_prompt_and_tool_pin_are_independent(backend, scope_a):
     assert _prompt(backend, scope_a, "sf-pr3") == (None, {"version": "v1", "tools": []})
 
 
-# ── runtime lock and YOLO ─────────────────────────────────────────────────────
+# ── runtime lock ─────────────────────────────────────────────────────
 
 
 def test_runtime_lock_merges_coalesces_model_and_keeps_the_prompt(backend, scope_a):
@@ -301,39 +293,15 @@ def test_runtime_lock_merges_coalesces_model_and_keeps_the_prompt(backend, scope
     assert store_a.sessions.get(SessionId("sf-ghost")) is None
 
 
-def test_runtime_lock_and_yolo_keep_typed_lineage(backend, scope_a):
+def test_runtime_lock_keeps_typed_lineage(backend, scope_a):
     store_a = backend.open(scope_a)
     store_a.sessions.create(_new("sf-lk-par"))
     store_a.sessions.create(_new("sf-lk-kid", parent_session_id=SessionId("sf-lk-par"), lineage_kind=SessionLineageKind.DELEGATE))
     store_a.sessions.set_runtime_lock(SessionId("sf-lk-kid"), RuntimeLock(model="m"))
-    store_a.sessions.set_yolo(SessionId("sf-lk-kid"), True)
     kid = store_a.sessions.get(SessionId("sf-lk-kid"))
     # CONTRACT: the merge never disturbs typed lineage; the delete cascade still classifies the child as a delegate.
     assert kid is not None and kid.lineage_kind is SessionLineageKind.DELEGATE
     assert store_a.sessions.delete_targets(SessionId("sf-lk-par")) == (SessionId("sf-lk-par"), SessionId("sf-lk-kid"))
-
-
-def test_yolo_round_trip_and_false_on_absence(backend, scope_a):
-    store_a = backend.open(scope_a)
-    store_a.sessions.create(_new("sf-y1", model_config={"keep": 1}))
-    assert _yolo(backend, scope_a, "sf-y1") is False
-    store_a.sessions.set_yolo(SessionId("sf-y1"), True)
-    assert _yolo(backend, scope_a, "sf-y1") is True
-    row = store_a.sessions.get(SessionId("sf-y1"))
-    # CONTRACT: rides model_config under YOLO_KEY; other keys survive.
-    assert row is not None and row.model_config[YOLO_KEY] is True and row.model_config["keep"] == 1
-    store_a.sessions.set_yolo(SessionId("sf-y1"), False)
-    assert _yolo(backend, scope_a, "sf-y1") is False
-    # CONTRACT: Python truth over whatever a raw patch stored; never raises.
-    store_a.sessions.patch_model_config(SessionId("sf-y1"), {YOLO_KEY: "yes"})
-    assert _yolo(backend, scope_a, "sf-y1") is True
-    store_a.sessions.patch_model_config(SessionId("sf-y1"), {YOLO_KEY: 0})
-    assert _yolo(backend, scope_a, "sf-y1") is False
-    # CONTRACT: unknown ids read False and a set creates nothing.
-    assert _yolo(backend, scope_a, "sf-ghost") is False
-    store_a.sessions.set_yolo(SessionId("sf-ghost"), True)
-    assert store_a.sessions.get(SessionId("sf-ghost")) is None
-    assert _yolo(backend, scope_a, "sf-ghost") is False
 
 
 # ── lifecycle statuses ────────────────────────────────────────────────────────

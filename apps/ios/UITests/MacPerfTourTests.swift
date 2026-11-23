@@ -44,7 +44,6 @@ final class MacPerfTourTests: MacPerfTourCase {
             ("settings-general", { try self.settingsPane("general") }),
             ("appearance-switch", appearanceSwitch),
             ("settings-computer", { try self.settingsPane("computer") }),
-            ("settings-permissions", { try self.settingsPane("permissions") }),
             ("settings-vault", settingsVault),
             ("settings-model-providers", settingsProviders),
             ("settings-usage", { try self.settingsPane("usage") }),

@@ -1194,15 +1194,9 @@ class GatewayACPAgent(GatewayReplyMixin, acp.Agent):
             _build_permission_options, _build_permission_tool_call, _OPTION_ID_TO_HERMES,
         )
         choices = prompt["choices"]
-        options = [option for option in _build_permission_options(
-            allow_permanent="always" in choices, allow_session="session" in choices)
-            if _OPTION_ID_TO_HERMES[option.option_id] in choices]
+        options = [option for option in _build_permission_options() if _OPTION_ID_TO_HERMES[option.option_id] in choices]
         try:
-            if 'edit' in prompt:
-                from acp_adapter.edit_approval import EditProposal, build_acp_edit_tool_call
-                tool_call = build_acp_edit_tool_call(EditProposal(**prompt['edit']))
-            else:
-                tool_call = _build_permission_tool_call(prompt.get('command', ''), prompt.get('description', ''))
+            tool_call = _build_permission_tool_call(prompt.get('command', ''), prompt.get('description', ''))
             response = await self._conn.request_permission(session_id=self._editor_id(session_id),
                 tool_call=tool_call, options=options)
             await self._close_card(self._editor_id(session_id), tool_call, options, response)

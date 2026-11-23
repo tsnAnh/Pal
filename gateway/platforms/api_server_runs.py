@@ -268,8 +268,7 @@ def _initialize_run_state(self, *, store_factory) -> None:
         self._run_owner_started = 0
     # All keyed by run_id: SSE fanout streams (+creation time for the TTL sweep), live
     # agent/task refs for cooperative stop (the executor thread may outlive the request,
-    # hence the separate stopping set), pollable statuses, and approval session keys
-    # (approval core resolves by session key, clients by run_id).
+    # hence the separate stopping set) and pollable statuses.
     self._run_idempotency_ids: set[str] = set()
     self._stopping_run_ids: set[str] = set()
     self._shutdown_interrupted_run_ids: set[str] = set()
@@ -278,15 +277,14 @@ def _initialize_run_state(self, *, store_factory) -> None:
     self._run_admission_aliases: dict[str, str] = {}
     (
         self._run_owners, self._run_streams, self._run_streams_created, self._active_run_agents,
-        self._active_run_tasks, self._run_statuses, self._run_approval_sessions,
-    ) = ({} for _ in range(7))
+        self._active_run_tasks, self._run_statuses,
+    ) = ({} for _ in range(6))
 
 
 def _http_routes(self) -> list[tuple[str, str, Any]]:
     return [
         ("POST", "/v1/runs", self._handle_runs), ("GET", "/v1/runs/{run_id}", self._handle_get_run),
         ("GET", "/v1/runs/{run_id}/events", self._handle_run_events),
-        ("POST", "/v1/runs/{run_id}/approval", self._handle_run_approval),
         ("POST", "/v1/runs/{run_id}/clarify", self._handle_run_clarify),
         ("POST", "/v1/runs/{run_id}/steer", self._handle_steer_run),
         ("POST", "/v1/runs/{run_id}/resolve-unknown", self._handle_resolve_unknown_run),
@@ -321,8 +319,6 @@ def _set_run_status(self, run_id: str, status: str, **fields: Any) -> dict[str, 
     shutdown_requested_at = getattr(self, "_run_shutdown_requested_at", None)
     if shutdown_requested_at is not None and status not in TERMINAL_STATUSES:
         current.setdefault("shutdown_requested_at", shutdown_requested_at)
-    if status != "waiting_for_approval":
-        current.pop("approval", None)
     self._run_statuses[run_id] = current
     should_persist = (
         status != previous_status
@@ -403,11 +399,10 @@ def _make_run_event_callback(self, run_id: str, loop: asyncio.AbstractEventLoop,
     return _callback
 
 
-# Answering a prompt the run raised is one capability whichever tool asked: approvals
-# and clarify share the grant's ``approve`` permission. Acknowledging a lost owner epoch
+# Answering a prompt the run raised is the grant's ``approve`` permission. Acknowledging a lost owner epoch
 # ends the run like a stop, so ``/resolve-unknown`` rides the ``stop`` permission.
 _ROOM_CONTROL_PERMISSIONS = {
-    "/stop": "stop", "/resolve-unknown": "stop", "/approval": "approve", "/clarify": "approve"}
+    "/stop": "stop", "/resolve-unknown": "stop", "/clarify": "approve"}
 
 
 def _room_permission_for(request: web.Request) -> str:
@@ -610,8 +605,8 @@ def _forget_run(self, run_id: str, *tables) -> None:
 
 
 def _retire_live_run(self, run_id: str) -> None:
-    """Retire agent/task/approval control state once the executor-backed task is done."""
-    _forget_run(self, run_id, self._active_run_agents, self._active_run_tasks, self._run_approval_sessions,
+    """Retire agent/task control state once the executor-backed task is done."""
+    _forget_run(self, run_id, self._active_run_agents, self._active_run_tasks,
                 self._stopping_run_ids, self._shutdown_interrupted_run_ids)
 
 
@@ -757,7 +752,7 @@ async def _admit_run_to_authority(
         # A refused admission owns no run: drop every reservation so an exact
         # retry is refused again instead of replaying a run nobody executes.
         _forget_run(
-            self, run_id, self._run_streams, self._run_streams_created, self._run_approval_sessions,
+            self, run_id, self._run_streams, self._run_streams_created,
             self._run_statuses, self._run_owners, self._run_idempotency_ids)
         if idempotency_key:
             self._run_idempotency_store.forget(idempotency_scope, idempotency_key)
@@ -852,7 +847,6 @@ async def _handle_runs(self, request: web.Request, *, _api_server) -> web.Respon
         conversation_history = await self._conversation_history_for_session(str(selected_session_id))
     q = self._run_streams[run_id] = _RunStream()
     created_at = self._run_streams_created[run_id] = time.time()
-    self._run_approval_sessions[run_id] = run_id  # approval session key (see _RunLaunch)
     initial_status = self._set_run_status(
         run_id, "queued", created_at=created_at, session_id=session_id, model=body.get("model", self._model_name))
     if idempotency_key:
@@ -862,7 +856,7 @@ async def _handle_runs(self, request: web.Request, *, _api_server) -> web.Respon
             retention_until=_room_retention_until(request))
         if outcome != "created":
             _forget_run(
-                self, run_id, self._run_streams, self._run_streams_created, self._run_approval_sessions,
+                self, run_id, self._run_streams, self._run_streams_created,
                 self._run_statuses, self._run_owners)
             return _replay_or_conflict(self, request, outcome, record, gateway_session_key, _openai_error)
         self._run_idempotency_ids.add(run_id)
@@ -932,7 +926,7 @@ def _served_runtime(agent) -> dict[str, str]:
     return pair
 
 
-def _run_agent_sync(self, run: _RunLaunch, agent, approval_notify, *, _api_server):
+def _run_agent_sync(self, run: _RunLaunch, agent, *, _api_server):
     """Executor-thread body of one run; returns ``(result, usage, served_runtime)``."""
     from gateway.session_context import clear_session_vars
     from gateway.hosted_room_execution_policy import (
@@ -943,7 +937,6 @@ def _run_agent_sync(self, run: _RunLaunch, agent, approval_notify, *, _api_serve
     # a config with a few stdio servers — even for sessions that never run a worker-routed command. Sessions
     # held by a live transport are never reaped, so with the desktop app open for days those fleets
     # accumulate until the OS refuses new process spawns.
-    from tools.approval import register_gateway_notify, unregister_gateway_notify
     from tools.approval_context import reset_current_session_key, set_current_session_key
     session_id = run.session_id
     effective_task_id = session_id or run.run_id
@@ -973,7 +966,6 @@ def _run_agent_sync(self, run: _RunLaunch, agent, approval_notify, *, _api_serve
             if run.agent_kwargs["room_dispatch"] is not None:
                 policy = RoomExecutionPolicy.from_mapping(run.agent_kwargs["room_execution_policy"] or {})
                 resets.append((bind_room_execution_policy(policy), reset_room_execution_policy))
-            register_gateway_notify(run.approval_session_key, approval_notify)
             # /v1/runs owns its agent lifecycle (no TurnRunner): record process ownership
             # so stop/cancel reaps only the background processes this run created.
             _api_server._publish_turn_process_ownership(agent, effective_task_id)
@@ -990,27 +982,10 @@ def _run_agent_sync(self, run: _RunLaunch, agent, approval_notify, *, _api_serve
             if run.declared_selected:
                 self._bind_declared_conversation(
                     getattr(agent, "session_id", None) or session_id, run.gateway_session_key)
-            try:
-                unregister_gateway_notify(run.approval_session_key)
-            finally:
-                for token, reset in resets:
-                    with suppress(Exception):
-                        reset(token)
+            for token, reset in resets:
+                with suppress(Exception):
+                    reset(token)
         return r, _run_usage(agent), _served_runtime(agent)
-
-
-def _make_approval_notify(self, run: _RunLaunch, *, _api_server) -> Callable[[dict[str, Any]], None]:
-    """Approval-request bridge: redact, stamp the event envelope, park the run status, enqueue."""
-    run_id, q, loop = run.run_id, run.queue, asyncio.get_running_loop()
-
-    def _approval_notify(approval_data: dict[str, Any]) -> None:
-        # Clients must never receive the raw flagged command (#48456): the shared builder redacts.
-        event = _api_server._approval_request_event(run_id, approval_data)
-        self._set_run_status(run_id, "waiting_for_approval", last_event="approval.request", approval=event)
-        with suppress(Exception):
-            loop.call_soon_threadsafe(q.put_nowait, event)
-
-    return _approval_notify
 
 
 async def _execute_run_via_live_owner(self, run: _RunLaunch, home, record: dict[str, Any], *, _api_server) -> None:
@@ -1142,9 +1117,8 @@ async def _execute_run(self, run: _RunLaunch, *, _api_server) -> None:
                     stream_delta_callback=_text_cb, tool_progress_callback=self._make_run_event_callback(run_id, loop),
                     interim_assistant_callback=_interim_cb, **run.agent_kwargs)
             self._active_run_agents[run_id] = agent
-            approval_notify = _make_approval_notify(self, run, _api_server=_api_server)
             result, usage, served_runtime = await _submit_api_worker(
-                loop, lambda: _run_agent_sync(self, run, agent, approval_notify, _api_server=_api_server))
+                loop, lambda: _run_agent_sync(self, run, agent, _api_server=_api_server))
         # Publish request metrics (daily counters + latency) with each completed run (#52323).
         self._record_api_metrics(usage, time.perf_counter() - _run_started_at)
         if not isinstance(result, dict):
@@ -1184,27 +1158,15 @@ async def _execute_run(self, run: _RunLaunch, *, _api_server) -> None:
         logger.exception("[api_server] run %s failed", run_id)
         _finish("failed", error=_redact_api_error_text(exc))
     finally:
-        # On cancellation (/stop) the executor thread may still block on an approval
-        # Event; unregistering releases it. Idempotent on normal completion.
-        _unregister_approval_notify(run.approval_session_key)
         with suppress(Exception):
             loop.call_soon(run.put_event, None)  # close after the queued events
         _retire_live_run(self, run_id)
 
 
-def _unregister_approval_notify(approval_session_key: Optional[str]) -> None:
-    """Best-effort release of a run's approval waiter (no-op without a key)."""
-    with suppress(Exception):
-        from tools.approval import unregister_gateway_notify
-        if approval_session_key:
-            unregister_gateway_notify(approval_session_key)
-
-
 def _release_run_owner_if_forgotten(self, run_id: str) -> None:
     """Drop the owner stamp only once nothing keyed by *run_id* survives: ownership must
     outlive every surface it protects (retired on different clocks); ownerless = fail-closed."""
-    live = (self._run_statuses, self._active_run_agents, self._active_run_tasks, self._run_streams,
-            self._run_approval_sessions)
+    live = (self._run_statuses, self._active_run_agents, self._active_run_tasks, self._run_streams)
     if not any(run_id in table for table in live):
         self._run_owners.pop(run_id, None)
 
@@ -1353,63 +1315,6 @@ def _mark_run_event(self, run_id: str, name: str, **fields: Any) -> None:
     if q is not None:
         with suppress(Exception):
             q.put_nowait(_run_event(run_id, name, **fields))
-
-
-async def _handle_run_approval(self, request: web.Request, *, _api_server) -> web.Response:
-    """POST /v1/runs/{run_id}/approval — resolve a pending run approval."""
-    _openai_error = _api_server._openai_error
-    run_id, _, _, _, err = _load_owned_run(
-        self, request, _api_server=_api_server, permission="approve", active_fallback=False)
-    if err is not None:
-        return err
-    try:
-        body = await request.json()
-    except Exception:
-        return _json_error(_openai_error, "Invalid JSON", status=400)
-    if getattr(self.gateway_runner, 'session_authority', None) is not None:
-        if self._room_grant_token(request) and body.get('choice') not in {'once', 'deny'}:
-            return _json_error(_openai_error, 'Room approvals require once or deny', status=400)
-        return await _respond_authority_run(self, run_id, body, kind='approval', _api_server=_api_server)
-    # Normalize before the allow-list check below so aliases ("approve") aren't rejected here; the
-    # alias map lives in tools.approval (lazy import: this module must not pull it in at load time).
-    from tools.approval import canonical_approval_choice
-    choice = canonical_approval_choice(body.get("choice", ""))
-    room_scoped = bool(self._room_grant_token(request))
-    raw_request_id = body.get("request_id")
-    request_id = raw_request_id.strip() if isinstance(raw_request_id, str) else ""
-    # Room grants may resolve exactly one request and never widen to session/always.
-    allowed = {"once", "deny"} if room_scoped else {"once", "session", "always", "deny"}
-    resolve_all = any(_api_server._coerce_request_bool(body.get(k), default=False) for k in ("all", "resolve_all"))
-    approval_session_key = self._run_approval_sessions.get(run_id)
-    for failed, message, code, status in (
-        (raw_request_id is not None and (not request_id or len(request_id) > 256),
-         "Approval request_id is invalid.", "invalid_approval_request", 400),
-        (choice not in allowed,
-         "Invalid approval choice; expected one of: " + ", ".join(sorted(allowed)),
-         "invalid_approval_choice", 400),
-        (room_scoped and resolve_all,
-         "Room approvals can resolve only one exact request", "invalid_approval_scope", 400),
-        (room_scoped and not request_id,
-         "Room approvals require the exact request_id.", "approval_request_required", 400),
-        (not approval_session_key,
-         f"Run has no active approval session: {run_id}", "approval_not_active", 409)):
-        if failed:
-            return _json_error(_openai_error, message, code=code, status=status)
-    try:
-        from tools.approval import resolve_gateway_approval
-        resolved = resolve_gateway_approval(
-            approval_session_key, choice, resolve_all=resolve_all, request_id=request_id or None)
-    except Exception as exc:
-        logger.exception("[api_server] approval resolution failed for run %s", run_id)
-        return _json_error(_openai_error, str(exc), status=500)
-    if resolved <= 0:
-        return _json_error(
-            _openai_error, f"Run has no pending approval: {run_id}", code="approval_not_pending", status=409)
-    request_id_field = {"request_id": request_id} if request_id else {}
-    _mark_run_event(self, run_id, "approval.responded", choice=choice, **request_id_field, resolved=resolved)
-    return web.json_response({
-        "object": "hermes.run.approval_response", "run_id": run_id, "choice": choice, **request_id_field,
-        "resolved": resolved})
 
 
 async def _respond_authority_run(self, run_id, body, *, kind, _api_server):
@@ -1564,7 +1469,6 @@ def _sweep_orphaned_runs_once(self, now: Optional[float] = None) -> None:
         # Transport TTL bounds buffering; live control state survives until the task returns.
         _drop_run_transport(self, run_id)
         if task is None or task.done():
-            _unregister_approval_notify(self._run_approval_sessions.get(run_id))
             _retire_live_run(self, run_id)
     for run_id, status in list(self._run_statuses.items()):
         if (status.get("status") in {"completed", "failed", "cancelled"}

@@ -22,7 +22,7 @@ from typing import Any, Awaitable, Callable, Dict, NamedTuple, Optional, Tuple, 
 
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import (
-    BasePlatformAdapter, ExecApprovalPrompt, SendResult,
+    BasePlatformAdapter, SendResult,
 )
 from gateway.platforms.event import ProcessingOutcome
 from gateway.platforms.helpers import clarify_text_with_choices
@@ -73,12 +73,6 @@ _FALSY = {"0", "false", "no", "off"}
 _SLACK = Platform.SLACK.value
 
 # Prompt option id -> in-channel ack label (the option set doubles as the choice allowlist).
-_EXEC_APPROVAL_LABELS = {
-    "once": "✅ Approved once",
-    "session": "✅ Approved for session",
-    "always": "✅ Approved permanently",
-    "deny": "❌ Denied",
-}
 _SLASH_CONFIRM_LABELS = {"once": "✅ Approved once", "always": "🔒 Always approve", "cancel": "❌ Cancelled"}
 
 
@@ -1902,21 +1896,6 @@ class RelayAdapter(RelayDiscordInteractionMixin, BasePlatformAdapter):
 
     _PROMPT_UNAVAILABLE = SendResult(success=False, error="relay prompt op unavailable")
 
-    _EA_CMD_BUDGET = 1500
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Native-button exec approval over the relay (the press resolves via
-        tools.approval.resolve_gateway_approval). When the lane is unavailable the send FAILS
-        (success=False) so run.py's button→text fallback runs."""
-        options = [{"id": choice, "label": label, **({"style": style} if style else {})}
-                   for label, choice, style in prompt.actions]
-        result = await self._mint_and_send_prompt(
-            "exec_approval", {"session_key": prompt.session_key, "request_id": prompt.request_id},
-            prompt.chat_id, prompt_kind="approval",
-            text=prompt.text, options=options, metadata=prompt.metadata,
-        )
-        return result if result is not None else self._PROMPT_UNAVAILABLE
-
     async def send_slash_confirm(
         self,
         chat_id: str,
@@ -1999,7 +1978,7 @@ class RelayAdapter(RelayDiscordInteractionMixin, BasePlatformAdapter):
             return True
         pending = self._pending_prompts.get(str(prompt_id)) or {}
         from gateway.relay.prompt_resolvers import prompt_actor, prompt_refusal
-        actor = prompt_actor(self, event) if pending.get("kind") in ("exec_approval", "slash_confirm", "clarify") else None
+        actor = prompt_actor(self, event) if pending.get("kind") in ("slash_confirm", "clarify") else None
         if actor and (refusal := prompt_refusal(pending, actor, option_id)):
             # Left pending: only the requester (or an approver) can consume it.
             self._send_lifecycle_ack(str(pending.get("chat_id") or getattr(event.source, "chat_id", "")),

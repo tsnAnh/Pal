@@ -53,8 +53,6 @@ _TYPING_CHARS = string.digits + string.ascii_letters + "-_.:/ "
 # Approval-choice identifiers (protocol tokens, never translated) → catalog keys for their labels.
 _APPROVAL_CHOICE_KEYS = {
     "once": "cli.tui.approval_once",
-    "session": "cli.tui.approval_session",
-    "always": "cli.tui.approval_always",
     "deny": "cli.tui.approval_deny",
     "view": "cli.tui.approval_view"}
 
@@ -146,7 +144,7 @@ class CLITuiMixin:
         return panel.close()
 
     def _get_approval_display_fragments(self):
-        """Render the dangerous-command approval panel.
+        """Render the owner-consent panel (once / deny).
 
         Layout priority: title + command + choices must always render, even in a short terminal
         or with a long multi-paragraph description. The description sits at the bottom
@@ -162,7 +160,7 @@ class CLITuiMixin:
         choices = state["choices"]
         selected = state.get("selected", 0)
         show_full = state.get("show_full", False)
-        title = t("cli.tui.approval_title")
+        title = state.get("title") or t("cli.tui.approval_title")
 
         preview_lines = wrap(description, 60)
         preview_lines.extend(wrap(command, 60))
@@ -2270,7 +2268,6 @@ class CLITuiMixin:
             'status-bar-warn': 'bg:#1a1a2e #FFD700 bold',
             'status-bar-bad': 'bg:#1a1a2e #FF8C00 bold',
             'status-bar-critical': 'bg:#1a1a2e #FF6B6B bold',
-            'status-bar-yolo': 'bg:#1a1a2e #FF4444 bold',
             'status-bar-session-title': 'bg:#FFD700 #1a1a2e bold',
             'input-rule': '#CD7F32',
             'image-badge': '#87CEEB bold',

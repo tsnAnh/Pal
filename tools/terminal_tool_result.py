@@ -218,7 +218,7 @@ def _verification_evidence(command, cwd, session_id, returncode, output, pipelin
 def finalize_foreground_result(
     *, command: str, result: dict, env: Any, env_type: str, effective_task_id: str,
     task_id: Optional[str], session_id: Optional[str], session_key: str,
-    workdir: Optional[str], command_cwd: Optional[str], approval_note: Optional[str],
+    workdir: Optional[str], command_cwd: Optional[str],
 ) -> str:
     """Turn a raw ``env.execute`` result into the tool's JSON result string."""
     from tools.terminal_tool import record_session_cwd
@@ -261,12 +261,6 @@ def finalize_foreground_result(
     with _quiet("cwd comparison"):
         if observed_cwd and command_cwd and os.path.realpath(str(observed_cwd)) != os.path.realpath(str(command_cwd)):
             changed_cwd = str(observed_cwd)
-    # rc=130 is an interrupt only with the executor's marker — a command can
-    # legitimately `exit 130` itself. An interrupted approved run keeps the
-    # audit note but must never imply success.
-    if approval_note and returncode == 130 and "[Command interrupted]" in output:
-        approval_note = approval_note.rstrip(".") + ", then interrupted."
-
     result_dict = {"output": output, "exit_code": returncode, "error": None}
     # Optional fields in observable JSON key order; None means "omit". Spill
     # metadata is present only when output overflowed the capture window.
@@ -278,7 +272,6 @@ def finalize_foreground_result(
         ("verification_evidence", _verification_evidence(
             command, command_cwd, session_id or task_id or effective_task_id or "default",
             returncode, output, result.get("pipeline_status"))),
-        ("approval", approval_note or None),
         ("exit_code_meaning", exit_note or None),
         ("hint", failure_hint or None),
         ("sudo_auth_failed", True if sudo_auth_failed else None),

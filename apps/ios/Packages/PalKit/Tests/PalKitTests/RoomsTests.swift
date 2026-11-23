@@ -20,15 +20,6 @@ struct RoomsTests {
         ["seq": .int(seq), "event_id": .string("e\(seq)"), "kind": .string(kind), "actor": actor, "payload": ["text": .string(text)], "created_at": .int(200)]
     }
 
-    private func approval(requestID: String? = "req1", command: String = "ls", choices: [String] = ["once", "deny"]) -> JSONValue {
-        var action: [String: JSONValue] = [
-            "kind": "approval", "member_id": "a", "task_id": "t1", "execution_generation": 2,
-            "approval": ["command": .string(command), "description": "list files", "choices": .array(choices.map(JSONValue.string))],
-        ]
-        if let requestID { action["request_id"] = .string(requestID) }
-        return .object(action)
-    }
-
     @Test("a roster needs two to six distinct seats and never the reserved handles")
     func rosterRules() throws {
         #expect(throws: RoomError.invalidRoster(.groupSize)) { try RoomRoster.members(for: [.init(profile: "a")], seatable: nil) }
@@ -160,32 +151,11 @@ struct RoomsTests {
         #expect(params["payload"]?["attachments"]?[0]?["attachment_id"] == "x1")
     }
 
-    @Test("approval is offered only for the exact pending request with a reviewable command")
-    func approvalGate() throws {
-        let ok = try #require(RoomPendingAction(approval()))
-        #expect(ok.canAllowOnce && ok.canDeny)
-        #expect(try #require(RoomPendingAction(approval(requestID: nil))).canAllowOnce == false)
-        #expect(try #require(RoomPendingAction(approval(command: "", choices: ["once", "deny"]))).canAllowOnce == false)
-        #expect(try #require(RoomPendingAction(approval(command: "<tool> (x)"))).canAllowOnce)
-        #expect(try #require(RoomPendingAction(approval(choices: ["deny"]))).canAllowOnce == false)
-        #expect(try #require(RoomPendingAction(approval(choices: ["once"]))).canDeny == false)
-    }
-
-    @Test("approve sends the exact request and choice, and refuses a stale action without a call")
-    func approveCalls() async throws {
-        let bots = ScriptedBots()
-        bots.script("groups.approve", ["approved": true, "result": [:]])
-        let service = RoomsService(gateway: bots.gateway, profile: "default")
-        let action = try #require(RoomPendingAction(approval()))
-        try await service.approve(roomID: "r1", action: action, allow: true)
-        try await service.approve(roomID: "r1", action: action, allow: false)
-        let choices = bots.calls(to: "groups.approve").compactMap { $0.params["choice"]?.stringValue }
-        #expect(choices == ["once", "deny"])
-        let first = try #require(bots.calls.first?.params)
-        #expect(first["request_id"] == "req1" && first["task_id"] == "t1" && first["execution_generation"] == 2)
-        let stale = try #require(RoomPendingAction(approval(requestID: nil)))
-        await #expect(throws: RoomError.unavailable) { try await service.approve(roomID: "r1", action: stale, allow: true) }
-        #expect(bots.calls(to: "groups.approve").count == 2)
+    @Test("a legacy approval pending action is dropped while retry actions are kept")
+    func approvalActionsAreDropped() {
+        let legacy: JSONValue = ["kind": "approval", "member_id": "a", "task_id": "t1", "execution_generation": 2, "request_id": "req1"]
+        #expect(RoomPendingAction(legacy) == nil)
+        #expect(RoomPendingAction(["kind": "retry", "member_id": "a", "task_id": "t2", "execution_generation": 1]) != nil)
     }
 
     @Test("stop, retry and discard address the room and task")

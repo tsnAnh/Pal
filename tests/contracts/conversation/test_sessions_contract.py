@@ -2,7 +2,7 @@
 
 Runs the real fixture backend end to end with the following validity predicate: records are seeded and observed through public protocol operations only, mutation tests assert pre-state, returned result, and post-state, refused operations prove non-mutation, and two-profile cases seed colliding domain ids with distinct sentinels in both scopes.
 
-The behaviours this suite leaves out are documented in ``persistence/conversation/sessions.py``'s module docstring (durability across handle reopen, profile stamping and the key-namespace fence, the YOLO projection, message-derived listing facets including preview / min_message_count / MRU ordering / the message-blocks arms of the empty-session surfaces, ``compact_rows``, and unknown title-provenance strings, which ``TitleSource`` makes unrepresentable). The reopened-reset-parent child staying listable is held structurally by ``SessionLineageKind`` and still covered behaviorally below; ``set_auto_title`` rejecting USER provenance keeps the provenance ladder's behavioral arm tested.
+The behaviours this suite leaves out are documented in ``persistence/conversation/sessions.py``'s module docstring (durability across handle reopen, profile stamping and the key-namespace fence, message-derived listing facets including preview / min_message_count / MRU ordering / the message-blocks arms of the empty-session surfaces, ``compact_rows``, and unknown title-provenance strings, which ``TitleSource`` makes unrepresentable). The reopened-reset-parent child staying listable is held structurally by ``SessionLineageKind`` and still covered behaviorally below; ``set_auto_title`` rejecting USER provenance keeps the provenance ladder's behavioral arm tested.
 """
 
 from __future__ import annotations

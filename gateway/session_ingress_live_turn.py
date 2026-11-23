@@ -70,5 +70,4 @@ async def _route(runner, event) -> bool:
         return True
     if not runner._is_session_running(key):
         return False
-    return bool(await runner._route_plaintext_approval_while_busy(event, key)
-                or await runner._hm_busy_preempt(event, source, key))
+    return bool(await runner._hm_busy_preempt(event, source, key))

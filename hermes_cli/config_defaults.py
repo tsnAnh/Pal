@@ -963,7 +963,7 @@ DEFAULT_CONFIG = {
         # config controls visibility not ordering); empty = default set. Available: model,
         # context_detail, context_pct, cache_hit, latency, tps, compressions, bg_tasks,
         # bg_processes, bg_subagents, goal, git_branch (⎇ current branch, opt-in only), duration,
-        # prompt_elapsed, idle_since, focus, yolo,
+        # prompt_elapsed, idle_since, focus,
         # stash, battery, title, total_tokens (session Σ, opt-in only). Narrow terminals still drop
         # context_detail/prompt_elapsed/idle_since.
         "status_bar": {
@@ -1603,15 +1603,11 @@ DEFAULT_CONFIG = {
         "free_response_rooms": "",  # comma-separated room IDs answered without mention
         "allowed_rooms": "",  # if set, ONLY respond in these room IDs (whitelist)
     },
-    # Approvals for dangerous commands.
-    # mode: manual (always prompt) | smart (aux LLM auto-approves low-risk) | off (= --yolo)
-    # cron_mode / single_query_mode / unattended_mode: deny | approve — what to do when a
-    #   cron job, a -q session (HERMES_INTERACTIVE=1 but nobody to answer), or an unattended
-    #   platform (webhook, msgraph_webhook, api_server; no /approve channel) hits one.
-    #   deny blocks instantly so the agent finds another way instead of waiting out the
-    #   timeout and failing closed.
-    # timeout: seconds before an unanswered prompt fails closed (CLI and gateway). 60s
-    #   proved too tight for Telegram/Discord push notifications, hence 300.
+    # Commands run without a prompt. cron_mode / single_query_mode / unattended_mode: deny | approve —
+    #   what a cron job, a -q session, or an unattended platform (webhook, msgraph_webhook, api_server)
+    #   does when it hits a dangerous-command pattern. deny blocks instantly so the agent finds another way.
+    # deny: operator rules that block matching commands.
+    # timeout: seconds before an unanswered owner consent (held draft, payment, spend limit) fails closed.
     "approvals": {
         # single_query_mode — what to do when a single-query (-q) session hits a dangerous command. -q runs
         # export HERMES_INTERACTIVE=1 (for interactive sudo prompts) but have NO user waiting to answer
@@ -1623,19 +1619,12 @@ DEFAULT_CONFIG = {
         # channel — a pending approval there just blocks for the full timeout with nobody to answer (#37284,
         # #87509): deny    — block the command instantly and let the agent find another way (default, safe;
         # mirrors cron_mode deny) approve — auto-approve all dangerous commands on unattended platforms
-        "mode": "smart",
         "timeout": 300,
         "discord_prompt_timeout": 300,  # Discord buttons stay clickable (min 30 s, cap MAX_SAFE_TIMEOUT_S)
         "cron_mode": "deny",
         "single_query_mode": "deny",
         "unattended_mode": "deny",
-        # Extra rules appended to the smart-approval guardian's SYSTEM prompt, e.g. "Always ESCALATE
-        # commands touching /etc".
-        "smart_policy": "",
-        # After this many consecutive guardian DENYs in a session, the deny message escalates to a
-        # hard-stop (report to user / ask for /approve). Approval resets; 0 off.
-        "denial_breaker_threshold": 3,
-        # Case-insensitive fnmatch globs against terminal commands; a match blocks even under --yolo / mode=off.
+        # Case-insensitive fnmatch globs against terminal commands; a match blocks the command.
         # Quote in YAML when starting with * or containing {}/!/: e.g. "git push --force*".
         "deny": [],
         # Who may answer a chat approval/slash confirm/clarify: ["*"] any admitted member; [] requester + admins (+ ids).
@@ -1647,8 +1636,6 @@ DEFAULT_CONFIG = {
         # Approve" → false. HERMES_TUI_NO_CONFIRM=1 skips the TUI modal.
         "destructive_slash_confirm": True,
     },
-    # Permanently allowed dangerous command patterns (added via "always" approval).
-    "command_allowlist": [],
     # User-defined quick commands that bypass the agent loop (type: exec only).
     "quick_commands": {},
     # Per-platform system-prompt hint overrides, keyed by platform name (whatsapp, slack, telegram,
@@ -1724,16 +1711,6 @@ DEFAULT_CONFIG = {
         "redact_phone_numbers": True,  # false: E.164 numbers shown in replies/chat only, never other secrets
         # Ack for unattended model overrides on a vendor-trains-on-prompts tier (startup still warns).
         "allow_data_training_tiers_noninteractive": False,
-        # Human-approval presentation transport. "builtin" = CLI/TUI/gateway/ACP surfaces; a plugin
-        # transport is used only when named explicitly. Transport timeout/error/invalid response
-        # DENIES unless transport_fallback is "builtin". Presentation only: plugins cannot detect,
-        # suppress, or auto-approve commands outside a correlated human response.
-        "approval": {"transport": "builtin", "transport_fallback": "deny"},
-        # Writes to agent-instruction files (AGENTS.md/CLAUDE.md/SOUL.md/.cursorrules, project-local
-        # .hermes config) always need human approval, even under yolo. Extra patterns are fnmatch
-        # globs on the basename (e.g. "*.mdc").
-        "protected_instruction_files": True,
-        "protected_instruction_extra_patterns": [],
         "website_blocklist": {"enabled": False, "domains": [], "shared_files": []},
         # IDs of supply-chain advisories the user has read and acted on; acked ones stop the startup
         # banner. Add via `hermes doctor --ack <id>`; remove by editing the list. Catalog:
@@ -2503,8 +2480,7 @@ DEFAULT_CONFIG = {
         # set_agent_cursor_enabled(false) after start_session when this is on.
         "no_overlay": None,
         # standard = cua-driver's own approval boundary; bounded = no runtime prompts, anything
-        # outside capability_manifest fails closed. `unrestricted` is NOT accepted here: it stays on
-        # the per-session YOLO toggle so config can't bypass approvals.
+        # outside capability_manifest fails closed. `unrestricted` is NOT accepted here.
         "permission_mode": "standard",
         # Path (~ ok) to the reviewed manifest for permission_mode bounded; passed as
         # --capability-manifest. See cua.ai/docs/reference/cua-driver/permission-modes

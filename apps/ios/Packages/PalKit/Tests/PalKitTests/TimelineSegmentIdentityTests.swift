@@ -68,7 +68,6 @@ private struct Chat {
         case .assistant(let text, _, _): "A:" + text.trimmingCharacters(in: .whitespacesAndNewlines)
         case .clarify: "clarify-card"
         case .clarifyAnswered(let record): "answered:" + record.question
-        case .approval, .approvalAnswered: "approval-card"
         case .tool(let call): "tool:" + call.toolID
         case .connection: "connection"
         case .botThread: "thread"
@@ -213,15 +212,15 @@ struct TimelineSegmentIdentityTests {
         expectSteady(chat)
     }
 
-    @Test func anAnsweredApprovalCardStaysAboveTheReplyOnceTheTurnSettles() {
+    @Test func aSettledApprovalFormLeavesNoCardBehindOnceTheTurnSettles() {
         var chat = Chat()
         chat.echo("clean up", submission: "s-1")
         chat.start("t1")
         chat.send("tool.start", ["tool_id": "call-x", "name": "terminal"])
         chat.send("approval.request", [
-            "kind": "approval", "prompt_id": "p2", "execution_generation": 1, "command": "rm -rf build", "choices": ["once", "deny"],
+            "kind": "approval", "prompt_id": "p2", "execution_generation": 1, "question": "Send this message?", "command": "hi",
+            "draft": ["text": "hi"], "choices": ["once", "deny"],
         ])
-        chat.timeline.noteApprovalChoice("deny", promptID: "p2")
         chat.send("approval.settled", ["prompt_id": "p2"])
         chat.send("tool.complete", ["tool_id": "call-x", "name": "terminal", "result": "{\"error\": \"denied\"}"])
         chat.delta("Skipped it.", turn: "t1", segment: 0, offset: 0)
@@ -231,7 +230,7 @@ struct TimelineSegmentIdentityTests {
             assistant("u2", "", row: 2, tools: [TimelineToolWire(callID: "call-x", name: "terminal")]),
             assistant("u4", "Skipped it.", row: 4),
         ])
-        #expect(chat.labels == ["U:clean up", "approval-card", "A:Skipped it."])
+        #expect(chat.labels == ["U:clean up", "A:Skipped it."])
         expectSteady(chat)
     }
 

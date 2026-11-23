@@ -14,7 +14,6 @@ from persistence.conversation.sessions import (
     END_REASON_COMPRESSION,
     RECOVERABLE_END_REASONS,
     RUNTIME_LOCK_KEY,
-    YOLO_KEY,
     ArchiveChange,
     CanonicalTitleLocked,
     ONBOARDING_RUN_KEY,
@@ -333,12 +332,6 @@ class SessionTitlesConfigMixin:
         self._set_config(row, {**row["model_config"], RUNTIME_LOCK_KEY: payload})
         if lock.model is not None:
             row["model"] = lock.model
-
-    def set_yolo(self, session_id: SessionId, enabled: bool) -> None:
-        scope = self._backend.scope
-        row = self._table(scope).get(session_id) if session_id else None
-        if row is not None:
-            self._set_config(row, {**row["model_config"], YOLO_KEY: bool(enabled)})
 
     def update_system_prompt(self, session_id: SessionId, system_prompt: Optional[str]) -> None:
         scope = self._backend.scope

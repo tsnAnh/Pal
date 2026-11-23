@@ -117,6 +117,7 @@ public actor ChatSession: OutboxSubmitter {
     private var olderFetch: Task<OlderFetch, Never>?
     private var newestRefresh: Task<Void, Never>?
     private var newestStale = false
+    private var reportedIgnoredPrompts: Set<String> = []
 
     private enum OlderFetch: Sendable {
         case loaded
@@ -296,22 +297,15 @@ public actor ChatSession: OutboxSubmitter {
         return try await api.react(sessionID: sessionID, target: target, emoji: emoji)
     }
 
-    public func answerApproval(_ prompt: PendingPrompt, choice: String) async throws {
+    public func answerApproval(_ prompt: PendingPrompt, choice: String, editedText: String? = nil) async throws {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
-        transcript.noteApprovalChoice(choice, promptID: prompt.promptID)
-        timeline.noteApprovalChoice(choice, promptID: prompt.promptID)
-        do {
-            _ = try await api.respondToApproval(
-                sessionID: sessionID,
-                executionGeneration: prompt.executionGeneration,
-                promptID: prompt.promptID,
-                choice: choice
-            )
-        } catch {
-            transcript.noteApprovalChoice(nil, promptID: prompt.promptID)
-            timeline.noteApprovalChoice(nil, promptID: prompt.promptID)
-            throw error
-        }
+        _ = try await api.respondToApproval(
+            sessionID: sessionID,
+            executionGeneration: prompt.executionGeneration,
+            promptID: prompt.promptID,
+            choice: choice,
+            editedText: editedText
+        )
     }
 
     public func answerConnection(
@@ -821,7 +815,15 @@ public actor ChatSession: OutboxSubmitter {
         notifyWaiters()
     }
 
+    private func reportIgnoredPrompts() {
+        let fresh = transcript.ignoredPromptIDs.subtracting(reportedIgnoredPrompts)
+        guard !fresh.isEmpty else { return }
+        reportedIgnoredPrompts.formUnion(fresh)
+        for _ in fresh { diagnostics.info("chat", "ignored an approval request with no question; the gateway is older than this app") }
+    }
+
     func publishLive() {
+        reportIgnoredPrompts()
         if let cursor = transcript.cursor {
             phase = .live(lastSequence: cursor.lastSequence, replayEpoch: cursor.replayEpoch)
             continuation.yield(.phase(phase))

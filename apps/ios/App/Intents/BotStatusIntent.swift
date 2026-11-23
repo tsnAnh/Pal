@@ -30,7 +30,7 @@ enum BotStatus: String, AppEnum {
         case .idle: String(localized: "\(botName) isn't working on anything right now.")
         case .working: String(localized: "\(botName) is working on something.")
         case .needsInput:
-            String(localized: "\(botName) is waiting for you. Say “\(VoicePhrase.answer(botName))” to reply to a question, or “\(VoicePhrase.approval(botName))” to decide on a request.")
+            String(localized: "\(botName) is waiting for you. Say “\(VoicePhrase.answer(botName))” to reply, or open the chat to decide.")
         case .offline: String(localized: "Pal can't reach \(botName) right now.")
         }
     }

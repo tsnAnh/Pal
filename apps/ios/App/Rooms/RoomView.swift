@@ -37,7 +37,6 @@ struct RoomView: View {
                 ForEach(model.pendingActions) { action in
                     RoomActionCard(
                         action: action, room: model.room, isBusy: model.busyActions.contains(action.id),
-                        approve: { model.approve(action, allow: $0) },
                         retry: { model.retry(action) },
                         discard: { model.discard(action) }
                     )

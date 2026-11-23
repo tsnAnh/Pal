@@ -641,13 +641,7 @@ def _broadcast_global_event(event: str, payload: dict | None = None, *, skip=fro
 def _approval_request_payload(data: dict | None) -> dict:
     """Build the client-safe representation of a pending approval."""
     payload = dict(data or {})
-    if "choices" not in payload:
-        choices = ["once"]
-        if not payload.get("smart_denied") and payload.get("allow_session") is not False:
-            choices.append("session")
-            if payload.get("allow_permanent") is not False:
-                choices.append("always")
-        payload["choices"] = choices + ["deny"]
+    payload["choices"] = ["once", "deny"]
     from gateway.run import _redact_approval_command  # description too: consent prompts carry MCP/vault text
     payload.update({k: _redact_approval_command(payload[k]) for k in ("command", "description") if k in payload})
     return payload
@@ -1242,7 +1236,6 @@ def _write_config_keys(updates: dict) -> None:
 
 
 _STATUSBAR_MODES = frozenset({"off", "top", "bottom"})
-_APPROVAL_MODES = frozenset({"manual", "smart", "off"})
 
 # Switches the renderer owns but the AGENT must see (each gates a tool's `check_fn`, or a Bot Mode policy). `config.set`
 # answers 4002 for unlisted keys — a mirrored switch missing here writes nothing and its tool stays dark.
@@ -1367,7 +1360,7 @@ def _current_profile_name() -> str:
 # one-click "update to align" prompt. The desktop also warns in the reverse direction: a backend reporting
 # MORE than the GUI's required value means the GUI build predates this backend (e.g. a long-running app
 # across a backend update) and should be updated. Bump whenever the desktop's backend contract changes.
-# v2 file.attach; v3 approvals.mode RPCs + session.info reconciliation; v4 session.create fast=false = explicit normal tier;
+# v2 file.attach; v3 session.info reconciliation; v4 session.create fast=false = explicit normal tier;
 # v5 ws_max_size >16 MiB file.attach frames; v6 plugins.manage rows carry the canonical registry key;
 # v7 blocking prompts are JSON-RPC server->client requests (`srq-<n>` frames, `open_requests` replay) — a v6
 # backend still emits `<kind>.request` notifications the renderer no longer listens for.
@@ -1454,15 +1447,6 @@ def _session_info(agent, session: dict | None = None) -> dict:
         # Disabled must differ from unset ("" = provider default) or the desktop loses "thinking off" after turn 1.
         reasoning_effort = "none" if reasoning_config.get("enabled") is False else str(reasoning_config.get("effort", "") or "")
     service_tier = getattr(agent, "service_tier", None) or mirror.get("service_tier") or ""
-    # yolo ORs the same three sources check_all_command_guards() does (approvals.mode=off, the process
-    # --yolo env, the per-session flag): the session flag alone would show "off" while config auto-approves.
-    try:
-        from tools.approval import _YOLO_MODE_FROZEN, is_session_yolo_enabled
-        session_yolo = bool(is_session_yolo_enabled(session_key)) if session_key else False
-        approval_mode = _load_approval_mode()
-        yolo = bool(_YOLO_MODE_FROZEN) or session_yolo or approval_mode == "off"
-    except Exception:
-        yolo, approval_mode = False, "manual"
     # A switch queued mid-turn applies at next turn start (agent.model still reads the OLD model); report the
     # pending pick so the end-of-turn settle doesn't blip the UI back first.
     pending_switch = sess.get("pending_model_switch") or {}
@@ -1486,7 +1470,6 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "service_tier": service_tier,
         "fast": service_tier in STATIC_TIERS and _fast_tier_applies(agent, model, pending_provider or provider,
                                                                     route_known=not pending_provider, tier=service_tier),
-        "yolo": yolo, "approval_mode": approval_mode,
         "tools": dict(mirror.get("tools") or {}) if isinstance(mirror.get("tools"), dict) else {},
         "skills": dict(mirror.get("skills") or {}) if isinstance(mirror.get("skills"), dict) else {},
         "cwd": cwd, "branch": git_probe.branch(cwd), "project": _project_info_for_cwd(cwd),
@@ -2012,7 +1995,7 @@ from . import (
     methods_connectors_portal as _methods_connectors_portal,
     methods_mcp_accounts as _methods_mcp_accounts,
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
-    methods_teach as _methods_teach, methods_library as _methods_library, methods_permissions as _methods_permissions,
+    methods_teach as _methods_teach, methods_library as _methods_library,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
     methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog,
     methods_account as _methods_account, methods_gateway_service as _methods_gateway_service, methods_github_token as _methods_github_token, methods_google_workspace as _methods_google_workspace, methods_guards as _methods_guards, methods_webhook_routes as _methods_webhook_routes, methods_bot_keys as _methods_bot_keys, methods_chat as _methods_chat, methods_chat_audience as _methods_chat_audience, methods_diag as _methods_diag, methods_public_url as _methods_public_url, methods_host_kit as _methods_host_kit, methods_host as _methods_host, methods_host_update as _methods_host_update,
@@ -2029,7 +2012,7 @@ for _m in (
     _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_tools_plugin_activation, _methods_profiles, _methods_profile_templates, _methods_profile_admin, _methods_messaging_slack, _methods_messaging_settings, _methods_messaging_telegram, _methods_capabilities, _methods_memory_import, _methods_account_session, _methods_images,
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
-    _methods_connectors_account, _methods_connectors_portal, _methods_mcp_accounts, _methods_display, _methods_display_watch, _methods_teach, _methods_library, _methods_permissions, _methods_onboarding,
+    _methods_connectors_account, _methods_connectors_portal, _methods_mcp_accounts, _methods_display, _methods_display_watch, _methods_teach, _methods_library, _methods_onboarding,
     _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog, _methods_account, _methods_gateway_service, _methods_github_token, _methods_google_workspace, _methods_guards, _methods_webhook_routes, _methods_bot_keys, _methods_chat, _methods_chat_audience, _methods_diag, _methods_public_url, _methods_host_kit, _methods_host, _methods_host_update, _methods_model_providers,
     _methods_speech_memory):
     _m.register(sys.modules[__name__])

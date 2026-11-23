@@ -276,8 +276,6 @@ _CONFIG_GETTERS = {
     "fast": _cfg_get_fast,
     "daybreak": lambda params: {"value": (_load_cfg().get("agent") or {}).get("daybreak") is True},
     "busy": lambda params: {"value": _load_busy_input_mode()},
-    "approval_mode": lambda params: {"value": _load_approval_mode()},
-    "approvals.mode": lambda params: {"value": _load_approval_mode()},
     "details_mode": lambda params: {"value": _display_word("details_mode", "collapsed", _DETAIL_MODES)},
     "thinking_mode": _cfg_get_thinking_mode,
     "density": lambda params: {"value": "on" if bool(_display_raw().get("tui_compact", False)) else "off"},
@@ -289,7 +287,7 @@ _CONFIG_GETTERS = {
     "bot_mode.drafts": lambda params: {"value": _bot_mode_drafts_ask()},
     "mtime": _cfg_get_mtime}
 # Getters whose failure is a JSON-RPC error of this code (others propagate to dispatch).
-_CONFIG_GET_ERR = {"provider": 5013, "approval_mode": 5001, "approvals.mode": 5001}
+_CONFIG_GET_ERR = {"provider": 5013}
 
 
 @method("config.get")

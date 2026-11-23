@@ -928,7 +928,7 @@ def _runner_policy(label: str) -> Any:
 _NOTIFY_ONLY_DETAIL = "Sent as notify-only: no reply comes back and nothing will wake you. Do not resend."
 # What a sender should tell its user when the teammate's turn is parked on that teammate's own user.
 _BLOCKED_DETAIL = {
-    "waiting_approval": "is waiting for its user to approve a command in its own Bot Chat",
+    "waiting_approval": "is waiting for its user to answer a pending request in its own Bot Chat",
     "waiting_clarify": "is waiting for its user to answer a question in its own Bot Chat",
     "paused": "is not starting new turns right now (its gateway is restarting or updating)",
 }
@@ -973,12 +973,6 @@ def _spawn_delivery(command: str, label: str, *, dm_file: Optional[str] = None, 
         proc_id = parsed.get("session_id") or ""
         if parsed.get("error"):
             return _err(f"Delivery to {label} failed to start: {parsed['error']}")
-        if parsed.get("status") == "pending_approval":
-            # terminal_tool's approval gate answers with an EMPTY error and no session_id: the runner
-            # never launched because nobody in this turn could approve its command.
-            return _err(f"Delivery to {label} failed to start: its command needs terminal approval that nobody "
-                        "in this turn can grant" + (", so nothing was sent. Approve it (or add it to "
-                                                    "command_allowlist) and send again." if dm_file else "."))
         if not proc_id:
             return _err(f"Delivery to {label} failed to start: no process id returned")
         # From here the background runner owns the file (removed after the consumer finishes).

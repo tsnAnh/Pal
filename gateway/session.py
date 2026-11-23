@@ -557,11 +557,6 @@ class SessionEntry:
     # Exact session-context/channel inputs from the last human turn. Append-only dataclass field so
     # older positional construction of transport_profile keeps its meaning.
     prompt_pin: Optional[dict[str, Any]] = None
-    # Gateway ``/yolo`` bypass for this lane, mirrored from ``tools.approval``'s in-memory set so a restart
-    # keeps it. Tri-state: True/False is an explicit toggle (an OFF stays off, even over a ``--yolo`` launch);
-    # None means nobody toggled it (new, branched, reset, migrated, cron entries, and every conversation
-    # boundary, ``_clear_session_boundary_security_state``), so the session's launch policy applies.
-    yolo: Optional[bool] = None
 
     # Fields (de)serialized verbatim, in wire order (``from_dict`` reads them with
     # ``data.get(name, <dataclass default>)``), split around the three ISO-datetime/token keys.
@@ -584,8 +579,6 @@ class SessionEntry:
             "chat_type": self.chat_type, "metadata": self.metadata,
         }
         result.update((name, getattr(self, name)) for name in self._PLAIN_FIELDS)
-        # ``yolo`` keeps the pre-tri-state meaning (ON only) for older readers; ``yolo_toggle`` is authoritative.
-        result["yolo"], result["yolo_toggle"] = self.yolo is True, self.yolo
         result["last_resume_marked_at"] = _iso(self.last_resume_marked_at)
         result["active_turn_token"] = self.active_turn_token
         result["active_turn_started_at"] = _iso(self.active_turn_started_at)
@@ -629,9 +622,6 @@ class SessionEntry:
         defaults = {f.name: f.default for f in fields(cls)}
         plain = {n: data.get(n, defaults[n]) for n in cls._PLAIN_FIELDS + cls._RESET_FIELDS}
         plain["expiry_finalized"] = data.get("expiry_finalized", data.get("memory_flushed", False))
-        # Rows written before the tri-state stored a bare ``yolo`` bool where False also meant "never
-        # toggled": only their ON is a real toggle; False follows the launch policy, as it did then.
-        plain["yolo"] = data["yolo_toggle"] if "yolo_toggle" in data else (True if data.get("yolo") is True else None)
         transport_profile = data.get("transport_profile")
         return cls(
             session_key=session_key, session_id=session_id,
@@ -1197,15 +1187,6 @@ class SessionStore(
             self._persist_routing_data(data, generation)
             entry.model_override = cleaned
 
-    def set_session_yolo(self, session_key: str, enabled: Optional[bool]) -> bool:
-        """Persist the lane's ``/yolo`` bypass (None: back to the launch policy); False when the key has no
-        entry yet or it is unchanged."""
-        def _apply(entry: SessionEntry):
-            if entry.yolo is enabled:
-                return False
-            entry.yolo = enabled
-        return self._update_entry(session_key, _apply)
-
     def get_model_override(self, session_key: str) -> Optional[dict[str, str]]:
         """Return the persisted /model override for *session_key*, if any."""
         with self._lock:
@@ -1390,7 +1371,6 @@ class SessionStore(
                 new_entry = self._replace_route_locked(
                     session_key, old_entry, target_session_id, _now(),
                     display_name=old_entry.display_name, model_override=old_entry.model_override,
-                    yolo=old_entry.yolo,
                     prompt_pin=(
                         dict(old_entry.prompt_pin)
                         if preserve_prompt_pin and old_entry.prompt_pin is not None else None

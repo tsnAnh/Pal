@@ -71,8 +71,7 @@ def _cua_telemetry_disabled() -> bool:
 
 def _cua_configured_permission_mode() -> str:
     """``computer_use.permission_mode``: ``standard`` (default) or ``bounded``; unknown values fall closed to
-    ``standard``. ``unrestricted`` is deliberately NOT a config value — it stays tied to the per-session YOLO
-    toggle so a stale config line can never silently bypass approvals."""
+    ``standard``. ``unrestricted`` is deliberately NOT a config value."""
     raw = str(_computer_use_cfg().get("permission_mode", "standard") or "").strip().lower()
     return "bounded" if raw == "bounded" else "standard"
 

@@ -94,36 +94,6 @@ public enum SettingsWire {
         public var subscriptions: [Subscription]
     }
 
-    public struct PermissionRule: Decodable, Sendable, Equatable {
-        public var id: String
-        public var text: String
-        public var createdAt: String
-
-        public init(id: String, text: String, createdAt: String = "") {
-            self.id = id
-            self.text = text
-            self.createdAt = createdAt
-        }
-    }
-
-    public struct PermissionsState: Decodable, Sendable, Equatable {
-        public var autoReview: Bool
-        public var approvalMode: String
-        public var ask: [PermissionRule]
-        public var allow: [PermissionRule]
-
-        public init(autoReview: Bool, approvalMode: String, ask: [PermissionRule] = [], allow: [PermissionRule] = []) {
-            self.autoReview = autoReview
-            self.approvalMode = approvalMode
-            self.ask = ask
-            self.allow = allow
-        }
-    }
-
-    public struct RuleRemoval: Decodable, Sendable, Equatable {
-        public var removed: Bool
-    }
-
     public struct VaultItem: Decodable, Sendable, Equatable {
         public var id: String
         public var kind: String

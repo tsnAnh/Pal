@@ -80,7 +80,7 @@
     },
     {
       "name": "approval.respond",
-      "summary": "Deliver the user's decision on a dangerous command (falls back to durable identity on a stale sid).",
+      "summary": "Deliver the user's decision on a held draft or consent (falls back to durable identity on a stale sid).",
       "params": [
         {
           "name": "params",
@@ -3967,78 +3967,6 @@
       }
     },
     {
-      "name": "permissions.get",
-      "summary": "Auto-Review state and both rule lists of one profile.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/ProfileParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionsState"
-        }
-      }
-    },
-    {
-      "name": "permissions.rules.add",
-      "summary": "Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/PermissionsRuleAddParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionRule"
-        }
-      }
-    },
-    {
-      "name": "permissions.rules.remove",
-      "summary": "Remove a rule from whichever list holds it; an unknown id answers removed false, so a retry converges.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/PermissionsRuleRemoveParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionsRuleRemoveResult"
-        }
-      }
-    },
-    {
-      "name": "permissions.set_auto_review",
-      "summary": "Turn Auto-Review on (smart guardian) or off (manual prompts); idempotent, never writes the mode that skips approvals, and leaves an already-off profile as it is.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/PermissionsSetAutoReviewParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionsState"
-        }
-      }
-    },
-    {
       "name": "pet.cancel",
       "summary": "Stop an in-flight pet generate/hatch by token (idempotent).",
       "params": [
@@ -7723,8 +7651,6 @@
       "ApprovalChoice": {
         "enum": [
           "once",
-          "session",
-          "always",
           "deny"
         ],
         "title": "ApprovalChoice",
@@ -7935,55 +7861,6 @@
             "title": "Choices",
             "type": "array"
           },
-          "allow_permanent": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Allow Permanent"
-          },
-          "allow_session": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Allow Session"
-          },
-          "smart_denied": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Smart Denied"
-          },
-          "scope": {
-            "anyOf": [
-              {
-                "const": "bot_chat",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Scope"
-          },
           "draft": {
             "anyOf": [
               {
@@ -8029,7 +7906,7 @@
       },
       "ApprovalRespondParams": {
         "additionalProperties": false,
-        "description": "``choice`` is one of the offered ``approval`` choices (once / session / always / deny); ``all``\nresolves every pending approval, ``request_id`` a specific one, neither the oldest.",
+        "description": "``choice`` is one of the offered ``approval`` choices (once / deny); ``all``\nresolves every pending approval, ``request_id`` a specific one, neither the oldest.",
         "properties": {
           "session_id": {
             "title": "Session Id",
@@ -13117,7 +12994,7 @@
       },
       "CanonicalConfigSetParams": {
         "additionalProperties": false,
-        "description": "Session controls (``busy`` / ``verbose`` / ``yolo`` / ``show_reasoning`` / ``service_tier``, which\nneed ``session_id``) and the TUI's profile preferences (``gateway/session_tui_config.py``;\n``session_id`` optional). ``model`` is recognised only to be refused with\n``use_session_mutation_model``: a model pick is the revision-fenced ``session.mutate`` operation,\nnever a config write.",
+        "description": "Session controls (``busy`` / ``verbose`` / ``show_reasoning`` / ``service_tier``, which\nneed ``session_id``) and the TUI's profile preferences (``gateway/session_tui_config.py``;\n``session_id`` optional). ``model`` is recognised only to be refused with\n``use_session_mutation_model``: a model pick is the revision-fenced ``session.mutate`` operation,\nnever a config write.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -13470,11 +13347,6 @@
           "ignore_rules": {
             "default": false,
             "title": "Ignore Rules",
-            "type": "boolean"
-          },
-          "yolo": {
-            "default": false,
-            "title": "Yolo",
             "type": "boolean"
           },
           "safe_mode": {
@@ -15381,18 +15253,6 @@
             "default": null,
             "title": "Last Active At"
           },
-          "yolo": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Yolo"
-          },
           "api_mode": {
             "anyOf": [
               {
@@ -16297,18 +16157,6 @@
             ],
             "default": null,
             "title": "Last Active At"
-          },
-          "yolo": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Yolo"
           },
           "api_mode": {
             "anyOf": [
@@ -19598,7 +19446,7 @@
       },
       "ConfigSetParams": {
         "additionalProperties": false,
-        "description": "``key`` picks the setter (``_CONFIG_SETTERS``, ``details_mode.<section>``, display toggles);\n``value`` is the raw word/string the setter normalises (falsy non-strings are reported back in\nthe error). ``scope`` applies to ``yolo`` / ``reasoning``; ``confirm_expensive_model`` to ``model``.",
+        "description": "``key`` picks the setter (``_CONFIG_SETTERS``, ``details_mode.<section>``, display toggles);\n``value`` is the raw word/string the setter normalises (falsy non-strings are reported back in\nthe error). ``scope`` applies to ``reasoning``; ``confirm_expensive_model`` to ``model``.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -19658,7 +19506,7 @@
       },
       "ConfigSetResult": {
         "additionalProperties": false,
-        "description": "``{key, value}`` plus the setter's extras: model switches add ``warning`` /\n``confirm_required`` / ``confirm_message`` / ``scope`` / ``deferred``; ``focus`` adds\n``tool_progress``; ``cwd`` adds ``cwd`` / ``branch``; ``personality`` adds ``history_reset`` /\n``info``; ``yolo`` reports its ``scope``. ``value`` is a bool only for the display toggles.",
+        "description": "``{key, value}`` plus the setter's extras: model switches add ``warning`` /\n``confirm_required`` / ``confirm_message`` / ``scope`` / ``deferred``; ``focus`` adds\n``tool_progress``; ``cwd`` adds ``cwd`` / ``branch``; ``personality`` adds ``history_reset`` /\n``info``. ``value`` is a bool only for the display toggles.",
         "properties": {
           "key": {
             "title": "Key",
@@ -41371,42 +41219,6 @@
             "default": null,
             "title": "Pattern Keys"
           },
-          "allow_permanent": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Allow Permanent"
-          },
-          "allow_session": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Allow Session"
-          },
-          "smart_denied": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Smart Denied"
-          },
           "choices": {
             "anyOf": [
               {
@@ -41421,18 +41233,6 @@
             ],
             "default": null,
             "title": "Choices"
-          },
-          "scope": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Scope"
           },
           "draft": {
             "anyOf": [
@@ -41459,179 +41259,6 @@
           }
         },
         "title": "PendingApproval",
-        "type": "object"
-      },
-      "PermissionRule": {
-        "additionalProperties": false,
-        "description": "A short sentence the user typed; ``created_at`` is ISO 8601 UTC.",
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          },
-          "created_at": {
-            "title": "Created At",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "text",
-          "created_at"
-        ],
-        "title": "PermissionRule",
-        "type": "object"
-      },
-      "PermissionRuleList": {
-        "enum": [
-          "ask",
-          "allow"
-        ],
-        "title": "PermissionRuleList",
-        "type": "string"
-      },
-      "PermissionsApprovalMode": {
-        "enum": [
-          "manual",
-          "smart",
-          "off"
-        ],
-        "title": "PermissionsApprovalMode",
-        "type": "string"
-      },
-      "PermissionsRuleAddParams": {
-        "additionalProperties": false,
-        "properties": {
-          "profile": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Profile"
-          },
-          "list": {
-            "$ref": "#/components/schemas/PermissionRuleList"
-          },
-          "text": {
-            "title": "Text",
-            "type": "string"
-          }
-        },
-        "required": [
-          "list",
-          "text"
-        ],
-        "title": "PermissionsRuleAddParams",
-        "type": "object"
-      },
-      "PermissionsRuleRemoveParams": {
-        "additionalProperties": false,
-        "properties": {
-          "profile": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Profile"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "title": "PermissionsRuleRemoveParams",
-        "type": "object"
-      },
-      "PermissionsRuleRemoveResult": {
-        "additionalProperties": false,
-        "properties": {
-          "removed": {
-            "title": "Removed",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "removed"
-        ],
-        "title": "PermissionsRuleRemoveResult",
-        "type": "object"
-      },
-      "PermissionsSetAutoReviewParams": {
-        "additionalProperties": false,
-        "properties": {
-          "profile": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Profile"
-          },
-          "enabled": {
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "enabled"
-        ],
-        "title": "PermissionsSetAutoReviewParams",
-        "type": "object"
-      },
-      "PermissionsState": {
-        "additionalProperties": false,
-        "description": "``auto_review`` is true only under the smart guardian; ``approval_mode`` is the profile's real setting so a\nclient can say approvals are off, in which case rules are stored and not applied.",
-        "properties": {
-          "auto_review": {
-            "title": "Auto Review",
-            "type": "boolean"
-          },
-          "approval_mode": {
-            "$ref": "#/components/schemas/PermissionsApprovalMode"
-          },
-          "ask": {
-            "items": {
-              "$ref": "#/components/schemas/PermissionRule"
-            },
-            "title": "Ask",
-            "type": "array"
-          },
-          "allow": {
-            "items": {
-              "$ref": "#/components/schemas/PermissionRule"
-            },
-            "title": "Allow",
-            "type": "array"
-          }
-        },
-        "required": [
-          "auto_review",
-          "approval_mode",
-          "ask",
-          "allow"
-        ],
-        "title": "PermissionsState",
         "type": "object"
       },
       "PersistedTurn": {
@@ -52191,10 +51818,6 @@
             "title": "Enabled Toolsets",
             "type": "array"
           },
-          "approval_mode": {
-            "title": "Approval Mode",
-            "type": "string"
-          },
           "max_iterations": {
             "title": "Max Iterations",
             "type": "integer"
@@ -52208,7 +51831,6 @@
           "version",
           "target_profile",
           "enabled_toolsets",
-          "approval_mode",
           "max_iterations",
           "policy_digest"
         ],
@@ -54772,16 +54394,6 @@
             "title": "Fast",
             "type": "boolean"
           },
-          "yolo": {
-            "default": false,
-            "title": "Yolo",
-            "type": "boolean"
-          },
-          "approval_mode": {
-            "default": "manual",
-            "title": "Approval Mode",
-            "type": "string"
-          },
           "tools": {
             "additionalProperties": {
               "items": {
@@ -55779,16 +55391,6 @@
             "default": false,
             "title": "Fast",
             "type": "boolean"
-          },
-          "yolo": {
-            "default": false,
-            "title": "Yolo",
-            "type": "boolean"
-          },
-          "approval_mode": {
-            "default": "manual",
-            "title": "Approval Mode",
-            "type": "string"
           },
           "tools": {
             "additionalProperties": {
@@ -70432,78 +70034,6 @@
       }
     },
     {
-      "name": "permissions.get",
-      "summary": "Auto-Review state and both rule lists of one profile.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/ProfileParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionsState"
-        }
-      }
-    },
-    {
-      "name": "permissions.rules.add",
-      "summary": "Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/PermissionsRuleAddParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionRule"
-        }
-      }
-    },
-    {
-      "name": "permissions.rules.remove",
-      "summary": "Remove a rule from whichever list holds it; an unknown id answers removed false, so a retry converges.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/PermissionsRuleRemoveParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionsRuleRemoveResult"
-        }
-      }
-    },
-    {
-      "name": "permissions.set_auto_review",
-      "summary": "Turn Auto-Review on (smart guardian) or off (manual prompts); idempotent, never writes the mode that skips approvals, and leaves an already-off profile as it is.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/PermissionsSetAutoReviewParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/PermissionsState"
-        }
-      }
-    },
-    {
       "name": "profiles.configure",
       "summary": "Editor Save: apply any subset of a profile's sections and report each one.",
       "params": [
@@ -71517,7 +71047,7 @@
   "x-server-requests": [
     {
       "name": "approval",
-      "summary": "A dangerous command awaits the user's decision.",
+      "summary": "A held draft or a spend or payment consent awaits the user's decision.",
       "params": [
         {
           "name": "params",

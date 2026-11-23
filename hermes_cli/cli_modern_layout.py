@@ -327,7 +327,7 @@ def _status_line_fragments(cli) -> list:
         return field_set is None or name in field_set
 
     left: list = []
-    for seg in cli._status_bar_segments(snapshot, width, field_set, cli._is_session_yolo_active(), styled=True):
+    for seg in cli._status_bar_segments(snapshot, width, field_set, styled=True):
         if left:
             left.append((dim, " · "))
         left.extend(seg)

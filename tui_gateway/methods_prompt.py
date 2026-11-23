@@ -1398,14 +1398,19 @@ def _(rid, params: dict) -> dict:
             return err
     if str(params.get("request_id") or "").startswith("draft:"):
         return _respond_held_draft(rid, session, params)
+    choice = params.get("choice", "deny")
+    if choice not in _APPROVAL_CHOICES:
+        return _err(rid, 4133, "an approval is answered once or deny")
     edited = params.get("edited_text")
     if isinstance(edited, str) and not params.get("request_id"):
         return _err(rid, 4135, "an edit applies to one draft; name it with request_id")
+    if isinstance(edited, str) and choice != "once":
+        return _err(rid, 4135, "an edit applies only when the draft is sent")
     extra = {"edited_text": edited} if isinstance(edited, str) else {}
     return _approval_reply(
         rid, "resolved",
         lambda a: a.resolve_gateway_approval(
-            session["session_key"], params.get("choice", "deny"),
+            session["session_key"], choice,
             resolve_all=params.get("all", False), request_id=params.get("request_id"), **extra))
 
 
@@ -1570,6 +1575,9 @@ _PREVIEW_RESTART_HISTORY_NOTE = (
 
 # ── approvals ───────────────────────────────────────────────────────────────
 
+_APPROVAL_CHOICES = ("once", "deny")
+
+
 def _approval_reply(rid, result_key, call):
     """``_ok({result_key: call(tools.approval)})``, 5004 on any failure."""
     try:
@@ -1590,7 +1598,7 @@ def _respond_held_draft(rid, session: dict, params: dict) -> dict:
     from tools import bot_mode_draft_store
     from tools.bot_mode_drafts import profile_is_bot_managed
     choice, draft_id = params.get("choice"), str(params.get("request_id"))[len("draft:"):]
-    if choice not in ("once", "deny"):
+    if choice not in _APPROVAL_CHOICES:
         return _err(rid, 4133, "a draft is either sent or discarded")
     edited = params.get("edited_text")
     try:

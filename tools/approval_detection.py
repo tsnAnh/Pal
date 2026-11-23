@@ -37,8 +37,6 @@ from tools.approval_applescript import OSASCRIPT_OPAQUE_DESCRIPTION, OSASCRIPT_R
 from tools.approval_quoted_newlines import _mask_quoted_newlines
 from tools.approval_variation_selectors import _EMOJI_RANGE, _HIDDEN_VARIATION_SELECTOR_RE
 from tools.approval_wmic import WmicShadowDeleteMatcher
-from hermes_cli.shared_catalog_guard_patterns import flagged_verb_description
-from tools.approval_detection_grant import GRANT_BINDINGS, bound_name
 
 logger = logging.getLogger("tools.approval")
 
@@ -110,9 +108,8 @@ _COMMAND_TAIL = r'(?:\s*(?:&&|\|\||;).*)?$'
 _WRITE_TARGET_BOUNDARY = r'(?=[\s;&|<>"\']|$)'
 
 # ---- Hardline (unconditional) blocklist ---------------------------------------------------
-# Commands that NEVER run via the agent, regardless of --yolo, approvals.mode=off, or cron approve
-# mode — a floor below yolo. Applies only to environments that can damage the host (local, ssh,
-# container-host cron); containerized backends already bypass the dangerous-command layer.
+# Commands that NEVER run via the agent, regardless of cron or unattended approve mode. Applies only to
+# environments that can damage the host (local, ssh, container-host cron); containerized backends already bypass the dangerous-command layer.
 # Deliberately tiny: only things with no recovery path (root wipe, raw block device writes,
 # shutdown, DoS). Recoverable operations (git reset --hard, chmod -R 777, curl|sh) stay in
 # DANGEROUS_PATTERNS.
@@ -625,14 +622,14 @@ DANGEROUS_PATTERNS = [
     # Shell -c is parsed structurally by _execution_flag_findings(); a regex searching a dash-token
     # for "c" also matched --norc/--rcfile/--restricted.
     # Not compiled: DANGEROUS_PATTERNS_COMPILED swaps in _PipeRemoteToShellMatcher for this description;
-    # the string only feeds the legacy approval-key alias below, so editing it changes no verdict.
+    # the string only names the finding, so editing the regex changes no verdict.
     (rf'\b(curl|wget)\b.*(?:\|&?\s*{_PIPE_WRAPPERS_RE}|>\(\s*){_PIPE_SHELL_TOKEN_RE}', "pipe remote content to shell"),
     (rf'(?<![\w.-])(?:{_SHELL_NAMES_RE})\s+<\s*<?\s*\(\s*(curl|wget)\b', "execute remote script via process substitution"),
     (_CMDPOS + r'(?:source|\.)\s+<\s*\(\s*(curl|wget)\b', "execute remote script via process substitution"),
     # eval/source/. $(curl ...) — equivalent to piping remote content to a shell.
     (r'(?:\beval\b|\bsource\b|\.)\s*["\']?(?:\$\(\s*|`\s*)(?:curl|wget)\b', "execute remote content via command substitution"),
     # Not compiled: DANGEROUS_PATTERNS_COMPILED swaps in DownloadThenRunMatcher (linear two-step
-    # match, tools/approval_fetch_exec.py); the string only feeds the legacy approval-key alias.
+    # match, tools/approval_fetch_exec.py); the string only names the finding.
     (r'\b(?:curl|wget)\b.*(?:\s-[a-z]*o|--output|>).*(?:;|&&|\|\||\n)',
      _DOWNLOAD_THEN_RUN_DESCRIPTION),
     # Reverse shells (parity with Skills Guard's network rows). Not compiled: DANGEROUS_PATTERNS_COMPILED swaps in
@@ -894,50 +891,12 @@ _PS_QUOTED_SCRIPT_LAUNCHERS = frozenset({
 
 # Content-level rules (ported from tirith in #133832, where they were separate findings with their own
 # keys). They describe WHAT the command carries rather than which verb runs it, so a command that also
-# matches one of them needs consent for it even when its first, verb-level rule is already approved.
+# matches one of them is reported for it even when its first, verb-level rule is already reported.
 _CONTENT_RULE_DESCRIPTIONS = frozenset({
     "upload a secret or credential file via curl/wget (possible exfiltration)",
     "pipe a credential file into a curl/wget upload (possible exfiltration)",
     "invisible or bidirectional Unicode control character (possible obfuscation)",
 })
-
-# Descriptions whose blast radius is the OPERATOR's own work rather than anything the session
-# owns, so an auxiliary-LLM APPROVE is not consent for them: smart mode asks the human instead of
-# consulting the guardian, and the answer covers that one command (no session/always grant).
-# Keep this list to actions that destroy state the agent did not create and cannot recreate.
-SMART_MANUAL_ONLY_DESCRIPTIONS = frozenset({OSASCRIPT_RISKY_DESCRIPTION, OSASCRIPT_OPAQUE_DESCRIPTION})
-
-# Preserve approvals stored under the removed interpreter regex rules.
-_REMOVED_PATTERN_KEY_ALIASES = {
-    "script execution via -e/-c flag": "(python[23]?|perl|ruby|node)\\s+-[ec]\\s+",
-    "script execution via heredoc": "(python[23]?|perl|ruby|node)\\s+<<",
-}
-# description <-> legacy regex-derived key (the old approval key, kept for backwards compatibility
-# with stored allowlist/session entries), both ways.
-_PATTERN_KEY_ALIASES: dict[str, set[str]] = {}
-for _canonical_key, _legacy_key in [
-    (d, p.split(r'\b')[1] if r'\b' in p else p[:20]) for p, d in ((p.replace(_GIT, r'\bgit\s+'), d) for p, d in DANGEROUS_PATTERNS)
-] + list(_REMOVED_PATTERN_KEY_ALIASES.items()):
-    _PATTERN_KEY_ALIASES.setdefault(_canonical_key, set()).update({_canonical_key, _legacy_key})
-    _PATTERN_KEY_ALIASES.setdefault(_legacy_key, set()).update({_legacy_key, _canonical_key})
-
-# Regex edits change a pattern's regex-derived legacy key; keep each pre-change spelling resolvable so
-# approvals stored under it still match: (?-i:-D) scoping, the optional drive letter (#38964), and
-# `git reset --hard` accepting abbreviated `--h`/`--ha`/`--har`.
-for _canonical_key, _old_key in [
-    ("git branch force delete", r"git\s+branch\s+-D"),
-    ("delete in root path", r"rm\s+(-[^\s]*\s+)*/"),
-    ("git reset --hard (destroys uncommitted changes)", r"git\s+reset\s+--hard"),
-]:
-    _PATTERN_KEY_ALIASES.setdefault(_canonical_key, set()).add(_old_key)
-    _PATTERN_KEY_ALIASES.setdefault(_old_key, set()).add(_canonical_key)
-
-
-def _approval_key_aliases(pattern_key: str) -> set[str]:
-    """All approval keys for this pattern: the description plus the historical regex-derived key
-    older allowlist/session entries may still use."""
-    return _PATTERN_KEY_ALIASES.get(pattern_key, {pattern_key})
-
 
 # ---- Detection ----------------------------------------------------------------------------
 def _normalize_command_for_detection(command: str) -> str:
@@ -1077,8 +1036,7 @@ _PARSER_LIMIT_DESCRIPTION = "command parser limit exceeded"
 # Each nested eval re-parses the rest of the command, so every level is a full rescan.
 _MAX_EVAL_NESTING = 8
 _MALFORMED_EXEC_DESCRIPTION = "command parser limit or malformed executable payload"
-# A scan that ran out of its step budget: approval, never remembered (a session or always grant
-# would wave every later unscanned command through), and not a hardline refusal.
+# A scan that ran out of its step budget: unattended contexts refuse it, and it is not a hardline refusal.
 _SCAN_INCOMPLETE_DESCRIPTION = "command too complex to scan fully; review before running"
 # A refusal from the budget-trip fallback, which also reads quoted text as code: say so, so the block
 # message can point at splitting the command instead of claiming the operation was seen.
@@ -1920,12 +1878,12 @@ def detect_dangerous_command(command: str) -> tuple:
 
 def detect_content_rule_keys(command: str) -> list[str]:
     """Pattern keys of every content-level rule (``_CONTENT_RULE_DESCRIPTIONS``) the command matches,
-    wherever they fall in detection order. The approval gates require consent for these on top of
-    the first match, so an approved pipe-to-shell cannot wave through a credential upload."""
+    wherever they fall in detection order. Unattended deny modes report these on top of the first
+    match, so a pipe-to-shell cannot hide a credential upload in the same command."""
     try:
         with _parser_budget.parser_budget(command):
             return list(dict.fromkeys(_iter_dangerous_descriptions(command, only=_CONTENT_RULE_DESCRIPTIONS)))
     except (_parser_budget.ParserBudgetExceeded, RecursionError):
         # Safe only because the hardline scan walks every variant under an equal budget, so it ran
-        # out too, and the gates then require a one-shot approval for the whole command (pinned).
+        # out too, and unattended contexts then refuse the whole command (pinned).
         return []

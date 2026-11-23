@@ -8,7 +8,6 @@ enum SettingsRoute: Hashable {
     case account
     case usage
     case vault
-    case permissions
     case timeZone
     case botComputer
     case devices
@@ -54,7 +53,6 @@ final class SettingsHub {
     private(set) var usageOverview: UsageOverview?
     private var usageDismissals = 0
     private var lastUsageRefresh: Date?
-    private(set) var permissions: PermissionsSummary?
     private(set) var aboutYou: SettingsWire.AboutYou?
     var message: String?
 
@@ -121,11 +119,7 @@ final class SettingsHub {
     }
 
     private func refreshAccountState() async {
-        let api = api
-        async let permissions = try? api.permissions()
-        async let facts = try? api.aboutYou()
-        let (permissionState, aboutYou) = await (permissions, facts)
-        self.permissions = permissionState.map(PermissionsSummary.init)
+        let aboutYou = try? await api.aboutYou()
         self.aboutYou = aboutYou
         if let aboutYou { owner.adopt(aboutYou) }
         await keepTimeZoneInStep()
@@ -153,10 +147,6 @@ final class SettingsHub {
             aboutYou = previous
             message = SettingsFailure(error).message
         }
-    }
-
-    func updatePermissions(_ summary: PermissionsSummary) {
-        permissions = summary
     }
 
     private func keepTimeZoneInStep() async {

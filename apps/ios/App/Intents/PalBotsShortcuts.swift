@@ -57,24 +57,6 @@ struct PalBotsShortcuts: AppShortcutsProvider {
             systemImageName: "arrowshape.turn.up.left"
         )
         AppShortcut(
-            intent: ReviewApprovalIntent(),
-            phrases: [
-                "Review \(\.$bot) approval in \(.applicationName)",
-                "Review approval for \(\.$bot) in \(.applicationName)",
-            ],
-            shortTitle: "Review a Request",
-            systemImageName: "checkmark.shield"
-        )
-        AppShortcut(
-            intent: ReviewApprovalIntent(choice: .deny),
-            phrases: [
-                "Deny \(\.$bot) request in \(.applicationName)",
-                "Deny the request from \(\.$bot) in \(.applicationName)",
-            ],
-            shortTitle: "Deny a Request",
-            systemImageName: "xmark.shield"
-        )
-        AppShortcut(
             intent: StopBotIntent(),
             phrases: [
                 "Stop \(\.$bot) in \(.applicationName)",

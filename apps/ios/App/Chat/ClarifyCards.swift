@@ -109,6 +109,80 @@ struct ClarifyAnsweredCard: View {
     }
 }
 
+struct ClarifyEditField: View {
+    @Binding var text: String
+    var focused: FocusState<Bool>.Binding
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        let placeholder = String(localized: "Edit your message…")
+        TextField(
+            "",
+            text: $text,
+            prompt: Text(placeholder).foregroundStyle(Color(theme.palette.textTertiary)),
+            axis: .vertical
+        )
+        .lineLimit(1...8)
+        .textFieldStyle(.plain)
+        .focusEffectDisabled()
+        .font(.body)
+        .foregroundStyle(Color(theme.palette.textPrimary))
+        .focused(focused)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: ChatMetrics.minimumHitTarget, alignment: .leading)
+        .background(Color(theme.palette.chipFill), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Color(theme.palette.cardStroke), lineWidth: 1))
+        .padding(.vertical, 2)
+        .accessibilityLabel(Text(verbatim: placeholder))
+        .accessibilityIdentifier("clarifyEditField")
+    }
+}
+
+struct ClarifyAnsweredFormCard: View {
+    let records: [ClarifyRecord]
+    var accent: BotAccent?
+
+    @Environment(\.hermesTheme) private var theme
+
+    private func spoken(_ record: ClarifyRecord) -> String {
+        if case .answered(let picks) = record.answer, !picks.isEmpty { return picks.joined(separator: ", ") }
+        return String(localized: "Skipped")
+    }
+
+    private var spokenSummary: String {
+        records.map { "\($0.question), \(spoken($0))" }.joined(separator: ". ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Answers sent")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color(theme.palette.textPrimary))
+                .padding(.bottom, 2)
+            ForEach(Array(records.enumerated()), id: \.offset) { _, record in
+                let skipped = spoken(record) == String(localized: "Skipped")
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    ClarifyBadge(letter: skipped ? "–" : nil, style: skipped ? .choice : .chosen, accent: accent)
+                    Text(record.question)
+                        .font(.footnote)
+                        .foregroundStyle(Color(theme.palette.textSecondary))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(spoken(record))
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(skipped ? theme.palette.textTertiary : theme.palette.textPrimary))
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        }
+        .clarifySurface()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(spokenSummary))
+        .accessibilityIdentifier("clarifyAnsweredForm")
+    }
+}
+
 struct ClarifyHeadline: View {
     let text: String
 

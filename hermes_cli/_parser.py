@@ -199,8 +199,7 @@ def _add_top_level_flags(parser: argparse.ArgumentParser) -> None:
         "runs that can't prompt."))
     inherited(parser, "--skills", "-s", action="append", default=None,
               help="Preload one or more skills for the session (repeat flag or comma-separate)")
-    inherited(parser, "--yolo", action="store_true", default=False,
-              help="Bypass all dangerous command approval prompts (use at your own risk)")
+    inherited(parser, "--yolo", action="store_true", default=False, help=SUPPRESS)
     inherited(parser, "--pass-session-id", action="store_true", default=False,
               help="Include the session ID in the agent's system prompt")
     inherited(parser, "--checkpoints", action="store_true", default=False,
@@ -309,8 +308,7 @@ def _build_chat_parser(subparsers) -> argparse.ArgumentParser:
         "budget so one hung call can't consume the run. Unset = off. "
         "Also configurable as agent.run_budget_seconds in config.yaml. "
         "Intended for one-shot/eval invocations with a hard ceiling."))
-    inherited(chat_parser, "--yolo", action="store_true", default=SUPPRESS,
-              help="Bypass all dangerous command approval prompts (use at your own risk)")
+    inherited(chat_parser, "--yolo", action="store_true", default=SUPPRESS, help=SUPPRESS)
     inherited(chat_parser, "--pass-session-id", action="store_true", default=SUPPRESS,
               help="Include the session ID in the agent's system prompt")
     inherited(chat_parser, "--ignore-user-config", action="store_true", default=SUPPRESS,

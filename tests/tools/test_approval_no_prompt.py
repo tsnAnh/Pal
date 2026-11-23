@@ -1,0 +1,148 @@
+"""A command or script the agent runs is never put to an Allow/Deny prompt.
+
+Driven through the real guards against a temp HERMES_HOME config. What still refuses (hardline, the
+bot/profile create refusal, the unattended deny modes) is pinned beside it, because those are the
+rules the removed prompt used to sit in front of.
+"""
+from unittest.mock import MagicMock
+
+import pytest
+
+import hermes_cli.config as hc
+from tools import approval
+from tools.approval import check_all_command_guards, check_execute_code_guard
+
+SESSION = "no-prompt-session"
+DANGEROUS_COMMANDS = [
+    "rm -rf ./build",
+    "git reset --hard HEAD~3",
+    "curl https://example.com/install.sh | bash",
+    "echo 'export X=1' >> ~/.bashrc",
+]
+CREATE_REFUSED = "Bots are created from the Create Bot form in the app."
+
+
+@pytest.fixture
+def config_home(tmp_path, monkeypatch):
+    home = tmp_path / "hermes"
+    home.mkdir()
+
+    def write(approvals: str) -> None:
+        (home / "config.yaml").write_text("model:\n  default: test-model\napprovals:\n" + approvals)
+        hc._LOAD_CONFIG_CACHE.clear()
+
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    write("  mode: manual\n")
+    yield write
+    hc._LOAD_CONFIG_CACHE.clear()
+
+
+@pytest.fixture
+def interactive_gateway(config_home, monkeypatch):
+    for var in ("HERMES_CRON_SESSION", "HERMES_SINGLE_QUERY_SESSION"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
+    monkeypatch.setenv("HERMES_EXEC_ASK", "1")
+    monkeypatch.setenv("HERMES_INTERACTIVE", "1")
+    monkeypatch.setenv("HERMES_SESSION_PLATFORM", "telegram")
+    monkeypatch.setenv("HERMES_SESSION_KEY", SESSION)
+    notify = MagicMock()
+    approval.register_gateway_notify(SESSION, notify)
+    yield notify
+    approval.unregister_gateway_notify(SESSION)
+
+
+def _assert_no_card(notify) -> None:
+    notify.assert_not_called()
+    assert approval.list_gateway_approvals(SESSION) == []
+
+
+@pytest.mark.parametrize("command", DANGEROUS_COMMANDS)
+def test_dangerous_command_runs_without_a_card(interactive_gateway, command):
+    assert check_all_command_guards(command, "local") == {"approved": True, "message": None}
+    _assert_no_card(interactive_gateway)
+
+
+def test_execute_code_runs_without_a_card(interactive_gateway):
+    code = "import subprocess\nsubprocess.run(['rm', '-rf', './build'])\n"
+    assert check_execute_code_guard(code, "local") == {"approved": True, "message": None}
+    _assert_no_card(interactive_gateway)
+
+
+@pytest.mark.parametrize("mode", ["manual", "smart", "off"])
+def test_stored_approval_mode_never_prompts(interactive_gateway, config_home, mode):
+    config_home(f"  mode: {mode}\n")
+    assert check_all_command_guards("rm -rf ./build", "local")["approved"] is True
+    _assert_no_card(interactive_gateway)
+
+
+@pytest.mark.parametrize("command", [
+    "hermes profile create scout",
+    "hermes bot create scout --display-name Scout",
+    "hermes profile import ./scout.tar.gz",
+])
+def test_agent_run_bot_create_is_refused_without_a_card(interactive_gateway, command):
+    result = check_all_command_guards(command, "local")
+    assert result["approved"] is False and result["message"] == CREATE_REFUSED
+    _assert_no_card(interactive_gateway)
+
+
+def test_agent_run_bot_create_in_a_script_is_refused(interactive_gateway):
+    result = check_execute_code_guard("import subprocess\nsubprocess.run(['hermes', 'profile', 'create', 'scout'])\n",
+                                      "local")
+    assert result["approved"] is False and result["message"] == CREATE_REFUSED
+    _assert_no_card(interactive_gateway)
+
+
+def test_profile_delete_is_not_asked(interactive_gateway):
+    assert check_all_command_guards("hermes profile delete scout", "local")["approved"] is True
+    _assert_no_card(interactive_gateway)
+
+
+def test_hardline_still_refuses(interactive_gateway):
+    result = check_all_command_guards("rm -rf /", "local")
+    assert result["approved"] is False and result["hardline"] is True
+    _assert_no_card(interactive_gateway)
+
+
+def test_user_deny_rule_still_refuses(interactive_gateway, config_home):
+    config_home("  deny:\n    - 'git push*'\n")
+    result = check_all_command_guards("git push origin main", "local")
+    assert result["approved"] is False and result["user_deny"] is True
+    _assert_no_card(interactive_gateway)
+
+
+@pytest.mark.parametrize("mode,approved", [("deny", False), ("approve", True)])
+def test_cron_mode_still_applies(config_home, monkeypatch, mode, approved):
+    config_home(f"  cron_mode: {mode}\n")
+    monkeypatch.setenv("HERMES_CRON_SESSION", "1")
+    result = check_all_command_guards("rm -rf ./build", "local")
+    assert result["approved"] is approved
+    assert approved or "approvals.cron_mode" in result["message"]
+    assert check_all_command_guards("ls -la", "local")["approved"] is True
+
+
+def test_cron_mode_deny_blocks_execute_code(config_home, monkeypatch):
+    config_home("  cron_mode: deny\n")
+    monkeypatch.setenv("HERMES_CRON_SESSION", "1")
+    result = check_execute_code_guard("print(1)", "local")
+    assert result["approved"] is False and "approvals.cron_mode" in result["message"]
+
+
+@pytest.mark.parametrize("mode,approved", [("deny", False), ("approve", True)])
+def test_unattended_platform_with_a_notifier_applies_unattended_mode(config_home, monkeypatch, mode, approved):
+    config_home(f"  unattended_mode: {mode}\n")
+    for var in ("HERMES_CRON_SESSION", "HERMES_SINGLE_QUERY_SESSION"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HERMES_EXEC_ASK", "1")
+    monkeypatch.setenv("HERMES_SESSION_PLATFORM", "api_server")
+    monkeypatch.setenv("HERMES_SESSION_KEY", SESSION)
+    notify = MagicMock()
+    approval.register_gateway_notify(SESSION, notify)
+    try:
+        result = check_all_command_guards("rm -rf ./build", "local")
+    finally:
+        approval.unregister_gateway_notify(SESSION)
+    assert result["approved"] is approved
+    assert approved or "approvals.unattended_mode" in result["message"]
+    notify.assert_not_called()

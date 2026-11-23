@@ -2229,7 +2229,7 @@ cli:
     approval_always: "Add to permanent allowlist"
     approval_deny: "Deny"
     approval_view: "Show full command"
-    approval_title: "⚠️  Dangerous Command"
+    approval_title: "Approval needed"
     approval_choose_full: "… (choose {label})"
     approval_command_truncated: "… (command truncated — use /logs or /debug for full text)"
     approval_description_truncated: "… (description truncated)"

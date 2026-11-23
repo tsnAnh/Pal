@@ -108,6 +108,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
     public var command: String?
     public var description: String?
     public var timeoutSeconds: Int?
+    public var draft: JSONValue?
     public var questions: [ClarifyQuestion]
 
     public init(
@@ -120,6 +121,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
         command: String? = nil,
         description: String? = nil,
         timeoutSeconds: Int? = nil,
+        draft: JSONValue? = nil,
         questions: [ClarifyQuestion] = []
     ) {
         self.kind = kind
@@ -131,6 +133,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
         self.command = command
         self.description = description
         self.timeoutSeconds = timeoutSeconds
+        self.draft = draft
         self.questions = questions
     }
 
@@ -145,6 +148,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
         command = try container.decodeIfPresent(String.self, forKey: .command)
         description = try container.decodeIfPresent(String.self, forKey: .description)
         timeoutSeconds = try container.decodeIfPresent(Int.self, forKey: .timeoutSeconds)
+        draft = try? container.decodeIfPresent(JSONValue.self, forKey: .draft)
         questions = try container.decodeIfPresent([ClarifyQuestion].self, forKey: .questions) ?? []
     }
 
@@ -159,6 +163,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
         case command
         case description
         case timeoutSeconds = "timeout_s"
+        case draft
     }
 }
 

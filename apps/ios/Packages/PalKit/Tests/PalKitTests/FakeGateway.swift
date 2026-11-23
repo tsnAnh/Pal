@@ -215,6 +215,19 @@ final class BotScript: Sendable {
         return .object(object)
     }
 
+    var snapshotWithHeldDraft: JSONValue {
+        var object = snapshot.objectValue ?? [:]
+        object["running"] = true
+        object["prompts"] = [
+            [
+                "kind": "approval", "prompt_id": "d1", "execution_generation": 1, "question": "Send this message to Sam?",
+                "command": "Running late.", "draft": ["channel": "messages"], "choices": ["once", "deny"],
+            ],
+            ["kind": "approval", "prompt_id": "old", "execution_generation": 1, "command": "rm -rf build", "choices": ["once", "deny"]],
+        ]
+        return .object(object)
+    }
+
     func handle(_ method: String, _ params: JSONValue?, _ connection: Int) -> FakeGateway.Reply {
         let number = counts.withLock { counts -> Int in
             counts[method, default: 0] += 1

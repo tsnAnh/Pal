@@ -254,14 +254,6 @@ def _persist_live_session_runtime(session: dict | None) -> None:
     except Exception:
         logger.debug("failed to persist live session runtime", exc_info=True)
 
-def _load_approval_mode() -> str:
-    """Effective ``approvals.mode`` via the gate's own ``_get_approval_mode`` (a raw re-read missed the
-    managed overlay and ``${VAR}`` expansion)."""
-    from tools.approval_context import _get_approval_mode
-    mode = _get_approval_mode()
-    return mode if mode in _APPROVAL_MODES else "manual"
-
-
 def _coerce_statusbar(raw) -> str:
     if raw is False:
         return "off"

@@ -49,7 +49,6 @@ private struct SettingsDestination: View {
         case .account: AccountScreen(hub: hub, connection: connection, back: back)
         case .usage: UsageScreen(hub: hub, back: back)
         case .vault: VaultScreen(hub: hub, back: back)
-        case .permissions: PermissionsScreen(hub: hub, back: back)
         case .timeZone: TimeZoneScreen(hub: hub, back: back)
         case .botComputer: BotComputerScreen(hub: hub, back: back)
         case .devices: DevicesScreen(hub: hub, connection: connection, back: back)
@@ -157,10 +156,6 @@ struct SettingsRootView: View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionCaption("Bot", accessibilityIdentifier: "settingsBotCaption")
             GroupedCard(accessibilityIdentifier: "settingsBotCard") {
-                SettingsRow.navigate(
-                    "Permissions", subtitle: hub.permissions?.rowSubtitle ?? " ",
-                    accessibilityIdentifier: "settingsPermissionsRow", action: { open(.permissions) }
-                )
                 SettingsRow.toggle(
                     SettingsCopy.timeZoneAutoTitle, subtitle: SettingsCopy.timeZoneAutoSubtitle,
                     isOn: Binding(

@@ -119,7 +119,6 @@ def flush_open_tool_calls(
 def make_tool_progress_cb(
     conn: acp.Client, session_id: str, loop: asyncio.AbstractEventLoop, tool_call_ids: dict[str, deque[str]],
     tool_call_meta: dict[str, dict[str, Any]],
-    edit_approval_policy_getter: Callable[[], tuple[str, str | None]] | None = None,
     turn_state: dict[str, Any] | None = None,
 ) -> Callable:
     """Create a ``tool_progress_callback`` for AIAgent.
@@ -160,17 +159,13 @@ def make_tool_progress_cb(
         tool_call_meta[tc_id] = {"args": args, "snapshot": snapshot}
 
         edit_diff = None
-        if name in {"write_file", "patch"} and edit_approval_policy_getter is not None:
+        if name in {"write_file", "patch"}:
             try:
-                from acp_adapter.edit_approval import build_edit_proposal, should_auto_approve_edit
+                from acp_adapter.edit_approval import build_edit_proposal
 
-                proposal = build_edit_proposal(name, args)
-                if proposal is not None:
-                    policy, cwd = edit_approval_policy_getter()
-                    if should_auto_approve_edit(proposal, policy, cwd):
-                        edit_diff = proposal
+                edit_diff = build_edit_proposal(name, args)
             except Exception:
-                logger.debug("Failed to prepare auto-approved ACP edit diff for %s", name, exc_info=True)
+                logger.debug("Failed to prepare ACP edit diff for %s", name, exc_info=True)
 
         _send_update(conn, session_id, loop, build_tool_start(tc_id, name, args, edit_diff=edit_diff))
 

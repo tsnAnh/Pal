@@ -82,8 +82,6 @@ class SessionLiveInfo(OpenModel):
     reasoning_effort_wire: str = ""
     service_tier: str = ""
     fast: bool = False
-    yolo: bool = False
-    approval_mode: str = "manual"
     tools: dict[str, list[str]] = Field(default_factory=dict)
     skills: dict[str, list[str]] = Field(default_factory=dict)
     cwd: str = ""
@@ -228,11 +226,7 @@ class PendingApproval(OpenModel):
     description: str | None = None
     pattern_key: str | None = None
     pattern_keys: list[str] | None = None
-    allow_permanent: bool | None = None
-    allow_session: bool | None = None
-    smart_denied: bool | None = None
     choices: list[str] | None = None
-    scope: str | None = None
     draft: ApprovalDraft | None = None
     tool_name: str | None = None
 

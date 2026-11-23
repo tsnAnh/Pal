@@ -5,7 +5,7 @@
    "undecided": 353
   },
   "rpc": {
-   "authority": 230,
+   "authority": 226,
    "keep-host-wide": 1,
    "undecided": 211
   },
@@ -640,10 +640,6 @@
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "onboarding.state", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "paste.collapse", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "pdf.attach", "kind": "rpc", "ref": "D3"},
-  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "permissions.get", "kind": "rpc", "ref": ""},
-  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "permissions.rules.add", "kind": "rpc", "ref": ""},
-  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "permissions.rules.remove", "kind": "rpc", "ref": ""},
-  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "permissions.set_auto_review", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "pet.cancel", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "pet.cells", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "pet.disable", "kind": "rpc", "ref": "D3"},

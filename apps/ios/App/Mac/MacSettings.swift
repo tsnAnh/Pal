@@ -5,7 +5,7 @@ import PalSettings
 import SwiftUI
 
 enum MacSettingsSection: String, CaseIterable, Identifiable {
-    case general, computer, permissions, vault
+    case general, computer, vault
     case publicAccess, server
     case providers
     case shortcuts
@@ -19,7 +19,6 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: String(localized: "General")
         case .computer: String(localized: "Computer")
-        case .permissions: String(localized: "Permissions")
         case .vault: String(localized: "Vault")
         case .publicAccess: String(localized: "Public access")
         case .server: String(localized: "Server")
@@ -35,7 +34,6 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape"
         case .computer: "display"
-        case .permissions: "shield"
         case .vault: "circle.square"
         case .publicAccess: "network"
         case .server: "server.rack"
@@ -61,7 +59,6 @@ struct MacSettingsModal: View {
                 switch section {
                 case .general: MacGeneralSection(hub: hub, connection: connection)
                 case .computer: MacComputerSection(hub: hub, connection: connection)
-                case .permissions: MacPermissionsSection(hub: hub)
                 case .vault: MacVaultSection(hub: hub)
                 case .publicAccess: MacPublicAccessSection(hub: hub)
                 case .server: MacServerSection(hub: hub)
@@ -505,101 +502,6 @@ private struct MacComputerSection: View {
         .frame(minHeight: 53)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("device-\(device.id)")
-    }
-}
-
-private struct MacPermissionsSection: View {
-    let hub: SettingsHub
-
-    @LazyState private var model: PermissionsModel
-    @State private var addingTo: PermissionList?
-    @State private var removing: PermissionRuleEntry?
-
-    init(hub: SettingsHub) {
-        self.hub = hub
-        _model = LazyState { PermissionsModel(surfaces: hub.connection.surfaces) }
-    }
-
-    var body: some View {
-        MacSectionPage(section: .permissions) {
-            switch model.state {
-            case .loading: MacCard { MacLoading() }
-            case .failed(let message): MacFailure(message: message) { Task { await model.load(hub: hub) } }
-            case .loaded(let summary): content(summary)
-            }
-        }
-        .task { await model.load(hub: hub) }
-        .macSheet(item: $addingTo, size: .compact) { list in
-            AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
-        }
-        .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
-            MacDialogContent(String(localized: "Remove this rule?"), message: removing?.text ?? "", actions: [
-                MacDialogAction("Remove", role: .destructive) {
-                    if let rule = removing { Task { await model.remove(rule, hub: hub) } }
-                    removing = nil
-                },
-                MacDialogAction("Cancel", role: .cancel) { removing = nil }
-            ])
-        }
-        .macAlert(isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
-            MacDialogContent(String(localized: "Permissions"), message: model.actionFailure ?? "", actions: [
-                MacDialogAction("OK", role: .cancel)
-            ])
-        }
-    }
-
-    @ViewBuilder
-    private func content(_ summary: PermissionsSummary) -> some View {
-        MacGroup {
-            MacCard(identifier: "permissionsAutoReviewCard") {
-                MacRow(
-                    title: String(localized: "Auto-Review"), subtitle: String(localized: "Review your Bots' actions based on custom rules"),
-                    identifier: "permissionsAutoReviewRow"
-                ) {
-                    Toggle("Auto-Review", isOn: Binding(
-                        get: { summary.autoReview },
-                        set: { enabled in Task { await model.setAutoReview(enabled, hub: hub) } }
-                    ))
-                    .labelsHidden()
-                    .palSwitch()
-                    .accessibilityIdentifier("permissionsAutoReviewToggle")
-                }
-            }
-            if summary.approvalsAreOff {
-                MacFootnote(text: String(localized: "Approvals are turned off for this Bot, so rules are saved but not applied."), identifier: "permissionsApprovalsOff")
-            }
-        }
-        VStack(alignment: .leading, spacing: 16) {
-            ruleSection(.ask, title: String(localized: "Always Ask"), subtitle: String(localized: "Stop and ask when an action matches these rules"), rules: summary.ask)
-            ruleSection(.allow, title: String(localized: "Allow without Asking"), subtitle: String(localized: "Continue automatically when an action matches these rules"), rules: summary.allow)
-        }
-    }
-
-    private func ruleSection(_ list: PermissionList, title: String, subtitle: String, rules: [PermissionRuleEntry]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 11.5)).foregroundStyle(PalTokens.textTertiary)
-                    Text(subtitle).font(.system(size: 11)).foregroundStyle(PalTokens.textTertiary)
-                }
-                Spacer()
-                Button("Add Rule") { addingTo = list }
-                    .glassButtonStyle()
-                    .accessibilityIdentifier("permissionsAddRule-\(list.rawValue)")
-            }
-            .padding(.horizontal, 13)
-            if !rules.isEmpty {
-                MacCard(identifier: "permissionsRules-\(list.rawValue)") {
-                    ForEach(rules) { rule in
-                        MacRow(title: rule.text, identifier: "permissionsRule-\(rule.id)") {
-                            Button("Remove") { removing = rule }
-                                .glassButtonStyle()
-                                .accessibilityIdentifier("permissionsRemove-\(rule.id)")
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 

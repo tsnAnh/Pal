@@ -34,11 +34,8 @@ _HANDLER_CONTROLS = frozenset({'goal', 'subgoal', 'loop', 'heartbeat', 'review',
 _PROMPT_COMMANDS = frozenset({'plan', 'learn', 'init', 'moa', 'blueprint', 'egress'})
 # Per-session settings: the messaging handler itself, made session-correct for a local session
 # (gateway/session_setting_commands.py). Admission-fenced like any control.
-_SETTING_COMMANDS = frozenset({'reasoning', 'voice', 'approvals', 'codex-runtime', 'footer', 'busy', 'verbose',
-                               'yolo', 'fast', 'personality'})
-# Typed `/approve` / `/deny`: the messaging handler resolves THIS session's waiting approval (its
-# route is the session key), the same waiter `approval.respond` answers by prompt id.
-_APPROVAL_COMMANDS = frozenset({'approve', 'deny'})
+_SETTING_COMMANDS = frozenset({'reasoning', 'voice', 'codex-runtime', 'footer', 'busy', 'verbose',
+                               'fast', 'personality'})
 # Reports with no messaging handler: the classic CLI's own text, built by the owner for this
 # session (gateway/session_info_reads.py).
 _INFO_READS = frozenset({'toolsets', 'platforms'})
@@ -137,7 +134,7 @@ def command_verdict(name, arg=''):
     if name in _OWNER_COMMANDS:
         return 'read' if cron_read(_split(arg)) is not None else 'control'  # main's /cron handler shlex-splits
     if (name in _CONTROL_COMMANDS or name in _HANDLER_CONTROLS or name in _PROMPT_COMMANDS
-            or name in _SETTING_COMMANDS or name in _APPROVAL_COMMANDS
+            or name in _SETTING_COMMANDS
             or _CONTROL_ARGUMENTS.get(name, lambda _a: False)(arg)):
         return 'control'
     if name in _INFO_READS or (name in _READ_COMMANDS and _READ_ARGUMENTS.get(name, lambda _arg: True)(arg)):
@@ -272,9 +269,9 @@ async def _tui_read(authority, actor, ref, name, arg, before):
     return await run_tui_read(authority, ref, live, policy, render, arg)
 
 
-# Messaging's running-agent escape hatches (hooks.md ``pre_command``: ``/stop``, approval controls):
+# Messaging's running-agent escape hatches (hooks.md ``pre_command``: ``/stop``):
 # while a turn runs no plugin observer sits in front of them. Every other command that runs fires.
-_ESCAPE_HATCHES = frozenset({'stop'}) | _APPROVAL_COMMANDS
+_ESCAPE_HATCHES = frozenset({'stop'})
 _PRE_COMMAND_PENDING = 32  # one session's queued deliveries; past it a delivery is dropped (logged)
 _PRE_COMMAND_TAILS = {}  # (profile, session id) -> (that session's last queued delivery, pending count)
 
@@ -453,7 +450,6 @@ async def execute_command(connection, ref, params, *, dispatch=False):
                 return _runner_command(name)
         runner_command = await asyncio.to_thread(lookup)
     capability = ('session:read' if verdict == 'read' else
-                  'session:approve' if canonical in _APPROVAL_COMMANDS else
                   'session:control' if definition or runner_command else 'session:submit')
     authority.authorize(actor, ref, capability)
     live = authority.sessions[ref.session_id]
@@ -516,11 +512,6 @@ async def execute_command(connection, ref, params, *, dispatch=False):
                                                *GatewayConfigLoadersMixin._parse_reasoning_command_args(arg))
             handler = runner._command_handler_table((canonical,))[canonical]
             output = await handler(event)
-    if canonical in _APPROVAL_COMMANDS:
-        # Settle the answered prompt for every viewer now (`approval.settled`), as approval.respond does.
-        handle = authority._handle(ref)
-        live.controls.snapshot(ref.session_id, handle.execution_generation
-                               if handle.execution_state == 'running' else None)
     if canonical in _AUTOMATION_COMMANDS:
         from gateway.session_control_actions import publish
         publish(authority, ref.session_id)

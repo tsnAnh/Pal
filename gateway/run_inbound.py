@@ -263,7 +263,7 @@ class GatewayInboundMixin(
         """Whether a turn may bypass the global emergency stop: pause blocks NEW agent turns, never
         running work or control traffic — recognized slash commands (incl. /pause off, the in-band
         resume) and replies owned by in-flight work (pending update prompt, running session,
-        pending slash-confirm, dangerous-command approval) all pass through."""
+        pending slash-confirm, held-draft approval) all pass through."""
         with suppress(Exception):
             _estop_cmd = event.get_command()
             if _estop_cmd:
@@ -537,16 +537,11 @@ class GatewayInboundMixin(
 
     async def _hm_slash_confirm_reply(self, event: MessageEvent, _quick_key: str) -> Optional[str]:
         """Resolve a reply (/approve, /always, /cancel + aliases) to a pending slash-confirm prompt;
-        None when it falls through — a stale pending confirm does NOT block other commands. A pending
-        dangerous-command approval takes precedence: /approve there unblocks the waiting tool thread."""
+        None when it falls through — a stale pending confirm does NOT block other commands."""
         from tools import slash_confirm as _slash_confirm_mod
         _pending_confirm = _slash_confirm_mod.get_pending(_quick_key)
         if not _pending_confirm:
             return None
-        with suppress(Exception):
-            from tools.approval import has_blocking_approval
-            if has_blocking_approval(_quick_key):
-                return None
         # Accept bang-prefixed replies (`!always`, `!cancel`) verbatim: Slack/Matrix show the `!`
         # prefix (typed `/` is blocked in Slack threads) and adapters only rewrite
         # `!<known-command>` — confirm keywords aren't commands, so the `!` survives to here.
@@ -1333,11 +1328,8 @@ class GatewayInboundMixin(
         # does to the RUNNING one (steer into it, redirect it, or end it so the FIFO advances).
         # Without this, ``interrupt`` degrades to ``queue`` behind a turn that may hang for
         # its whole request timeout.
-        # A bare "yes"/"no" to a blocking dangerous-command approval answers it (#46866):
-        # never an interrupt (read as deny) nor a queued turn (auto-deny deadlock).
         # A turn a slash command produced (``/queue yes``) is never live typing.
-        if busy and (await self._route_plaintext_approval_while_busy(event, _quick_key)
-                     or await self._hm_busy_preempt(event, source, _quick_key)):
+        if busy and await self._hm_busy_preempt(event, source, _quick_key):
             return True, None
         _consumed, _consumer_reply = await self._hm_post_admission_consume(event, source, _quick_key)
         if _consumed:
@@ -1401,8 +1393,6 @@ class GatewayInboundMixin(
         if _handled:
             return _result
 
-        # Pending exec approvals go through /approve and /deny only — no bare-text matching, or a
-        # conversational "yes" would execute a dangerous command.
         if not is_internal:
             if await asyncio.to_thread(self._is_telegram_topic_root_lobby, source):
                 # Debounced so a user who forgets about topic mode doesn't get ten reminders.

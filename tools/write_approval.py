@@ -7,8 +7,7 @@ origin (**foreground** turn or **background_review** fork). The gate is enforced
 by the subsystem tools that own these writes (``memory``, ``skill_manage``);
 the generic file tools (``write_file``/``patch``) do not consult it (#60440
 tracks closing that gap). ``false`` (default) writes freely; ``true`` never
-commits directly: it prompts inline (memory, interactive CLI only) or **stages**
-the write under
+commits directly: it **stages** the write under
 ``<HERMES_HOME>/pending/{memory,skills}/<id>.json`` for out-of-band review.
 """
 
@@ -157,11 +156,9 @@ def current_origin() -> str:
 @dataclass(slots=True, kw_only=True)
 class GateDecision:
     """Result of evaluating the write gate; exactly one flag is True. ``allow``: do the real write;
-    ``blocked``: user denied the inline prompt (``message`` says why); ``stage``: caller must
-    ``stage_write`` the payload (``message`` is the user-facing "staged for approval" note)."""
+    ``stage``: caller must ``stage_write`` the payload (``message`` is the user-facing "staged for review" note)."""
 
     allow: bool = False
-    blocked: bool = False
     stage: bool = False
     message: str = ""
 
@@ -170,7 +167,7 @@ def _slash_review_surface() -> bool:
     """Whether the ACTIVE turn has a human who can type ``/<subsystem> pending``: the interactive
     CLI, TUI/desktop (exec route), and chat-gateway sessions all answer it now. Headless worker
     contexts — cron (``HERMES_CRON_SESSION``), kanban (``HERMES_KANBAN_TASK``) and the unattended
-    programmatic platforms (api_server, webhook delivery) — have nobody at a prompt, so the staged
+    programmatic platforms (api_server, webhook delivery) — have nobody at the keyboard, so the staged
     hint must not name a command nobody can deliver (#98330); it names the pending dir instead."""
     def _env(name: str) -> str:
         try:
@@ -201,54 +198,10 @@ def _staged(subsystem: str) -> GateDecision:
                                              f"Not yet saved — {where}."))
 
 
-def evaluate_gate(subsystem: str, *, inline_summary: str = "", inline_detail: str = "") -> GateDecision:
-    """Decide what to do with a pending write: gate off → allow; gate on + skills (any origin) or
-    background → stage; gate on + memory + foreground → inline prompt when an interactive channel
-    exists, else stage. The gate only ever delays a write, never silently refuses it; ``blocked``
-    is produced only when the user actively denies the inline prompt."""
-    if not write_approval_enabled(subsystem):
-        return GateDecision(allow=True)
-    # Skills are too big to review inline; a background write runs in a daemon thread with no user.
-    if subsystem == SKILLS or current_origin() == "background_review":
-        return _staged(subsystem)
-    granted = _prompt_inline_memory_approval(inline_summary, inline_detail)
-    if granted is None:
-        return _staged(MEMORY)
-    if granted:
-        return GateDecision(allow=True)
-    return GateDecision(blocked=True, message="Memory write denied by user. The change was not saved.")
-
-
-def _prompt_inline_memory_approval(summary: str, detail: str) -> Optional[bool]:
-    """Prompt inline for a memory write: True approved, False denied, None → stage. Uses the per-thread
-    CLI approval callback (``tools.terminal_tool.set_approval_callback``) directly, not
-    ``prompt_dangerous_approval``: that wrapper falls back to ``input()`` (deadlock-prone under
-    prompt_toolkit; silent deny in gateway sessions) and turns callback errors into a deny, whereas
-    here a missing channel or failed prompt must stage instead.
-
-    ``hermes chat -q`` (and so every kanban worker), cron and unattended platforms can register a callback too,
-    but nobody answers it: stage at once instead of waiting the approval timeout. See #15216.
-    """
-    from tools.approval_context import _no_user_can_answer
-    if _no_user_can_answer():
-        return None
-    try:
-        from tools.terminal_tool import _get_approval_callback
-    except Exception:
-        return None
-    callback = _get_approval_callback()
-    if callback is None:
-        return None
-    header = summary.strip() or "Save to memory?"
-    try:
-        from tools.approval_prompt import callback_accepts
-        extra = {"title": "Save to memory?"} if callback_accepts(callback, "title") else {}
-        choice = callback(detail.strip() or header, f"Save to memory: {header}", allow_permanent=False, **extra)
-    except Exception as e:
-        logger.error("Inline memory approval prompt failed: %s", e)
-        return None
-    # unknown outcome → stage rather than drop
-    return {"once": True, "session": True, "deny": False}.get(choice)
+def evaluate_gate(subsystem: str) -> GateDecision:
+    """Decide what to do with a pending write: gate off -> allow; gate on -> stage for review.
+    The gate only ever delays a write, never refuses it."""
+    return _staged(subsystem) if write_approval_enabled(subsystem) else GateDecision(allow=True)
 
 
 # --- Skill-specific helpers (gist + diff for the review affordances) ---

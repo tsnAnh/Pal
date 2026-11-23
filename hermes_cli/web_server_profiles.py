@@ -77,30 +77,6 @@ def _is_other_profile(profile: Optional[str]) -> bool:
     return target.resolve() != get_process_hermes_home().resolve()
 
 
-def _approval_mode_of(config: dict[str, Any]) -> str:
-    """Normalize approvals.mode from an in-memory config document. Both sides of the
-    broadcast comparison use in-memory documents: re-reading through the config cache after
-    a save can serve the pre-save document when the replacement file collides on the
-    (mtime_ns, size) cache key, suppressing the broadcast exactly when the mode changed."""
-    from tools.approval_context import _normalize_approval_mode
-    approvals = config.get("approvals")
-    default_mode = (DEFAULT_CONFIG.get("approvals") or {}).get("mode", "manual")
-    mode = approvals.get("mode", default_mode) if isinstance(approvals, dict) else default_mode
-    return _normalize_approval_mode(mode)
-
-
-def _broadcast_gateway_session_info() -> None:
-    """Broadcast session.info on the in-process gateway when it's loaded (``sys.modules``
-    guard, not an import: gateway never imported means no live sessions to notify)."""
-    server = sys.modules.get("tui_gateway.server")
-    if server is None:
-        return
-    try:
-        server.broadcast_session_info()
-    except Exception:
-        _log.exception("session.info broadcast after config save failed")
-
-
 _MODEL_ENTRY_METADATA = ("canonical_model", "reasoning_effort")
 
 

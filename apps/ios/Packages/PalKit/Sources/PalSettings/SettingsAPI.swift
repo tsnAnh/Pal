@@ -114,24 +114,6 @@ public struct SettingsAPI: Sendable {
         try await perform(SettingsWire.SubscriptionsResult.self, "account.subscriptions", ["refresh": .bool(refresh)]).subscriptions
     }
 
-    public func permissions() async throws -> SettingsWire.PermissionsState {
-        try await perform(SettingsWire.PermissionsState.self, "permissions.get")
-    }
-
-    public func setAutoReview(_ enabled: Bool) async throws -> SettingsWire.PermissionsState {
-        try await perform(SettingsWire.PermissionsState.self, "permissions.set_auto_review", ["enabled": .bool(enabled)])
-    }
-
-    public func addRule(_ list: PermissionList, text: String) async throws -> SettingsWire.PermissionRule {
-        try await perform(SettingsWire.PermissionRule.self, "permissions.rules.add", [
-            "list": .string(list.rawValue), "text": .string(text),
-        ])
-    }
-
-    public func removeRule(id: String) async throws {
-        _ = try await perform(SettingsWire.RuleRemoval.self, "permissions.rules.remove", ["id": .string(id)])
-    }
-
     public func vaultItems() async throws -> [SettingsWire.VaultItem] {
         try await perform(SettingsWire.VaultList.self, "vault.list").items
     }
@@ -252,13 +234,6 @@ public struct SettingsAPI: Sendable {
             "key": "bot_mode.notifications", "value": .string(enabled ? "on" : "off"), "profile": .string(bot),
         ], scoped: false)
     }
-}
-
-public enum PermissionList: String, Sendable, CaseIterable, Identifiable {
-    case ask
-    case allow
-
-    public var id: String { rawValue }
 }
 
 public enum NotificationFlag {

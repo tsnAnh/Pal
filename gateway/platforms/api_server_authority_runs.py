@@ -91,8 +91,6 @@ def run_projection(adapter, run_id):
     if live is not None and row['status'] == 'started':
         progress = live.event_stream.progress_for(row['generation'])
         pending = list(live.controls.snapshot(row['target_session_id'], row['generation']))
-        if any(prompt.get('kind') == 'approval' for prompt in pending):
-            status = 'waiting_for_approval'  # the documented run state main's run store reports
     return {**progress, 'pending_controls': pending, 'run_id': run_id, 'status': status, 'session_id': row['target_session_id'],
             'admission_id': row['admission_id'], 'execution_generation': row['generation'],
             'output': result.get('final_response', ''), 'usage': saved.get('usage', {}) if saved else {}}

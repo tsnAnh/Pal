@@ -313,14 +313,17 @@ struct ConnectionTranscriptTests {
     @Test func clarifyAndApprovalCardsAreUnaffected() throws {
         var transcript = try opened()
         let clarify: JSONValue = ["kind": "clarify", "prompt_id": "p1", "execution_generation": 1, "question": "Which flavor?", "choices": ["a", "b"]]
-        let approval: JSONValue = ["kind": "approval", "prompt_id": "p2", "execution_generation": 1, "command": "ls", "choices": ["once", "deny"]]
+        let approval: JSONValue = [
+            "kind": "approval", "prompt_id": "p2", "execution_generation": 1, "question": "Send this message?", "command": "hi",
+            "draft": ["text": "hi"], "choices": ["once", "deny"],
+        ]
         _ = transcript.apply(Fixture.frame("clarify.request", clarify, seq: 3))
         _ = transcript.apply(Fixture.frame("approval.request", approval, seq: 4))
         #expect(transcript.pendingPrompts.map(\.promptID) == ["p1", "p2"])
         _ = transcript.apply(Fixture.frame("clarify.settled", ["prompt_id": "p1"], seq: 5))
         #expect(transcript.pendingPrompts.map(\.promptID) == ["p2"])
         #expect(cards(transcript).count == 1)
-        #expect(transcript.summary().items.map(\.kind) == ["connection", "approval"])
+        #expect(transcript.summary().items.map(\.kind) == ["connection", "clarify"])
     }
 }
 

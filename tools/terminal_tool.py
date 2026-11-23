@@ -166,10 +166,8 @@ def _docker_has_host_access(config: dict[str, Any]) -> bool:
 
 def _check_all_guards(command: str, env_type: str,
                       has_host_access: bool = False) -> dict:
-    """Delegate to the consolidated command guard with the CLI callback."""
-    return _check_all_guards_impl(command, env_type,
-                                  approval_callback=_get_approval_callback(),
-                                  has_host_access=has_host_access)
+    """Delegate to the consolidated command guard."""
+    return _check_all_guards_impl(command, env_type, has_host_access=has_host_access)
 
 
 from tools.environments.base import EnvironmentConnectionError
@@ -1174,58 +1172,16 @@ class _Rejected(Exception):
         self.result_json = result_json
 
 
-@dataclass
-class _ApprovalVerdict:
-    """Outcome of the pre-exec guard pass.
-
-    ``note`` is the audit note attached to the result. ``approved_run`` is True
-    when the user explicitly approved (or pre-confirmed via ``force``); it drives
-    the clean-interrupt-slate clear before ``env.execute`` so an approved command
-    can't be SIGINT-killed by a bit that landed during the approval-wait.
-    """
-    note: Optional[str] = None
-    approved_run: bool = False
-    profile_admin_grant: Optional[str] = None
-
-
-def _run_approval_guards(command: str, env_type: str, config: dict[str, Any], *, force: bool) -> _ApprovalVerdict:
+def _run_approval_guards(command: str, env_type: str, config: dict[str, Any], *, force: bool) -> None:
     """Run the command guards; ``force`` skips them entirely.
-    Raises :class:`_Rejected` when the command may not run (denied, or pending
-    gateway approval)."""
+    Raises :class:`_Rejected` when the command may not run."""
     if force:
-        return _ApprovalVerdict(approved_run=True)
+        return
     approval = _check_all_guards(command, env_type, has_host_access=_docker_has_host_access(config))
     if not approval["approved"]:
-        if approval.get("status") == "pending_approval":  # gateway ask mode
-            raise _Rejected(_error_json(
-                "", status="pending_approval",
-                approval_pending=True,
-                command=approval.get("command", command),
-                description=approval.get("description", "command flagged"),
-                pattern_key=approval.get("pattern_key", ""),
-                smart_denied=approval.get("smart_denied", False),
-                allow_permanent=approval.get("allow_permanent", True),
-            ))
         desc = approval.get("description", "command flagged")
-        fallback_msg = (
-            f"Command denied: {desc}. "
-            "Use the approval prompt to allow it, or rephrase the command."
-        )
-        raise _Rejected(_error_json(approval.get("message", fallback_msg), status="blocked",
+        raise _Rejected(_error_json(approval.get("message", f"Command denied: {desc}."), status="blocked",
                                     **({"user_summary": approval["user_summary"]} if approval.get("user_summary") else {})))
-    desc = approval.get("description", "flagged as dangerous")
-    if approval.get("user_approved"):
-        return _ApprovalVerdict(
-            note=f"Command required approval ({desc}) and was approved by the user.",
-            approved_run=True,
-            profile_admin_grant=approval.get("profile_admin_grant"),
-        )
-    if approval.get("smart_approved"):
-        return _ApprovalVerdict(note=f"Command was flagged ({desc}) and auto-approved by smart approval.")
-    if approval.get("pre_approved"):
-        from tools.approval_provenance import preapproval_note
-        return _ApprovalVerdict(note=preapproval_note(approval["pre_approved"]))
-    return _ApprovalVerdict()
 
 
 @dataclass
@@ -1420,23 +1376,13 @@ def _yield_kwargs(command: str, **ctx) -> dict:
 def _run_foreground(
     command: str, env: Any, plan: _ExecPlan, *,
     task_id: Optional[str], session_id: Optional[str], session_key: str, cwd_key: str,
-    workdir: Optional[str], approval_note: Optional[str], clear_interrupt: bool,
-    metered: bool = True,
+    workdir: Optional[str], metered: bool = True,
 ) -> str:
     """Execute in the foreground with retry on transient errors, then finalize. ``metered``
     is False for Hermes' own control-plane commands (``_host_local``)."""
     from hermes_cli.observability.shared_metrics_harness import record_terminal_outcome
     max_retries = 3
     env_type, eff, effective_timeout = plan.env_type, plan.effective_task_id, plan.effective_timeout
-
-    # Clean interrupt slate for an approved command, ONCE before the retry
-    # loop: drop a stale bit that landed during the approval-wait so it
-    # can't SIGINT the just-approved run. Do NOT re-clear inside the loop —
-    # a genuine interrupt during the backoff sleep must survive and abort
-    # the next attempt (rc 130).
-    if clear_interrupt:
-        from tools.interrupt import clear_current_thread_interrupt
-        clear_current_thread_interrupt()
 
     for retry_count in range(max_retries + 1):
         try:
@@ -1483,7 +1429,7 @@ def _run_foreground(
     return finalize_foreground_result(
         command=command, result=result, env=env, env_type=env_type, effective_task_id=eff,
         task_id=task_id, session_id=session_id, session_key=cwd_key, workdir=workdir,
-        command_cwd=command_cwd, approval_note=approval_note,
+        command_cwd=command_cwd,
     )
 
 
@@ -1607,9 +1553,7 @@ def terminal_tool(
     children (kept in a separate env cache from the configured backend).
     """
     from hermes_cli.observability.shared_metrics_loop import record_terminal_backend as _metered
-    from hermes_cli.profile_admin_guard import bind_grant, unbind_grant
     plan = None
-    grant_binding = None
     try:
         plan = _plan_execution(
             command, task_id=task_id, timeout=timeout, background=background, _host_local=_host_local,
@@ -1672,8 +1616,7 @@ def terminal_tool(
                 ))
             # Pre-exec security checks (floors + dangerous command detection);
             # force=True means the user already confirmed.
-            verdict = _run_approval_guards(command, env_type, plan.config, force=force)
-            grant_binding = bind_grant(verdict.profile_admin_grant, command)
+            _run_approval_guards(command, env_type, plan.config, force=force)
 
             pty_disabled = pty and _command_requires_pipe_stdin(command)
             if plan.promoted_from_foreground_timeout is not None:
@@ -1686,7 +1629,7 @@ def terminal_tool(
                     task_id=task_id, session_key=session_key, cwd_key=cwd_key, workdir=workdir, cwd=cwd,
                     mounted_host=getattr(env, "host_cwd", None) or plan.host_cwd,
                     effective_pty=pty and not pty_disabled, notify_on_complete=notify_on_complete,
-                    watch_patterns=watch_patterns, approval_note=verdict.note,
+                    watch_patterns=watch_patterns,
                     pty_disabled_reason=_PTY_DISABLED_REASON if pty_disabled else None,
                     completion_output_chars=_completion_output_chars,
                     internal_policy=_internal,
@@ -1700,7 +1643,7 @@ def terminal_tool(
             return _metered(None if _host_local else plan, _run_foreground(
                 command, env, plan,
                 task_id=task_id, session_id=session_id, session_key=session_key, cwd_key=cwd_key,
-                workdir=workdir, approval_note=verdict.note, clear_interrupt=verdict.approved_run,
+                workdir=workdir,
                 metered=not _host_local,
             ))
     except _Rejected as r:
@@ -1709,8 +1652,6 @@ def terminal_tool(
         return _metered(None if _host_local else plan, _degraded_result(e, task_id), error_class="tool_error")
     except Exception as e:
         return _metered(None if _host_local else plan, _fatal_error_json(e), error_class="exception")
-    finally:
-        unbind_grant(grant_binding)
 
 
 def check_terminal_requirements() -> bool:
@@ -1782,8 +1723,6 @@ TERMINAL_SCHEMA = {
 
 
 def _handle_terminal(args, **kw):
-    from agent.terminal_approval_batch import validate_prepared_terminal
-    validate_prepared_terminal(args)
     # Models sometimes send execute_code's ``code`` here; name the stray
     # argument and the right tool instead of failing on command=None.
     if "command" not in args and "code" in args:

@@ -48,8 +48,6 @@ struct ChatRow: Identifiable, Equatable {
         case assistant(ParsedMarkdown)
         case clarifyAnswered([ClarifyRecord])
         case clarify(PendingPrompt)
-        case approval(PendingPrompt)
-        case approvalAnswered(ApprovalRecord)
         case connection(ConnectionCard), noProvider
         case notice(ChatNotice)
         case routine(RoutineMessage)
@@ -329,17 +327,6 @@ final class ChatModel {
         Task {
             do {
                 try await session.answerClarify(prompt, answer: text)
-            } catch {
-                sendError = String(localized: "Your answer could not be sent. Try again.")
-            }
-        }
-    }
-
-    func answerApproval(_ prompt: PendingPrompt, choice: String) {
-        guard let session else { return }
-        Task {
-            do {
-                try await session.answerApproval(prompt, choice: choice)
             } catch {
                 sendError = String(localized: "Your answer could not be sent. Try again.")
             }
@@ -883,10 +870,6 @@ final class ChatModel {
             return (.clarifyAnswered([record]), [], [])
         case .clarify(let card):
             return (.clarify(card.prompt), [], [])
-        case .approval(let card):
-            return (.approval(card.prompt), [], [])
-        case .approvalAnswered(let record):
-            return (.approvalAnswered(record), [], [])
         case .connection(let card):
             return (.connection(card), [], [])
         case .noProvider: return (.noProvider, [], [])

@@ -33,7 +33,7 @@ _READS = frozenset({
     "get_messages_as_conversation", "get_resume_conversations", "assert_resume_safe",
     "is_kanban_owned_session", "list_sessions_rich", "search_sessions", "get_next_title_in_lineage",
     "get_handoff_state", "get_meta", "get_compression_tip", "resolve_session_by_title", "get_messages",
-    "session_count", "sanitize_title", "session_yolo_enabled",
+    "session_count", "sanitize_title",
     "get_session_model_config_value",
 })
 # Writes the gateway already performs itself (persistence, accounting, maintenance).
@@ -117,9 +117,6 @@ class GatewaySessionStore:
             if name == "sanitize_title":
                 from persistence.conversation.sessions import sanitize_title
                 return sanitize_title
-            if name == "session_yolo_enabled":
-                from persistence.conversation.sessions import session_yolo_enabled
-                return lambda session_meta: session_yolo_enabled((session_meta or {}).get("model_config"))
             db = self._db()
             if db is None:
                 return _noop
@@ -321,11 +318,6 @@ class GatewaySessionStore:
             prefix=prefix, live_view=live_view,
             live_text=live_text if live_text is not None else flatten_message_text(live_view.get("content")),
             rewound_count=int(receipt.get("rewound_count") or 0), turns_undone=len(durable_user) - user_ordinal)
-
-    def set_session_yolo(self, session_id, enabled):
-        """Main's ``/yolo`` persist hook: the gateway session's own bypass (``config.set yolo``, persisted
-        on the route), since approvals run there. The CLI's in-process flag stays main's display state."""
-        self.call("config.set", session_id=session_id, key="yolo", value="1" if enabled else "0")
 
     def _row_revision(self, session_id, default):
         if self._db() is None:

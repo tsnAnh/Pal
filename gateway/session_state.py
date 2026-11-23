@@ -86,9 +86,8 @@ class ConversationState:
 @dataclass
 class PersistentState:
     """State with its own lifecycle — NOT cleared wholesale by turn or boundary resets
-    (approvals/update prompts ARE cleared, individually, by the boundary security funnel)."""
+    (update prompts ARE cleared by the boundary security funnel)."""
 
-    approvals: Optional[dict[str, Any]] = None  # {"command": ..., "pattern_key": ...}
     update_prompt_pending: bool = False  # /update prompt awaiting a reply
     native_image_paths: list[str] = field(default_factory=list)  # consumed one-shot
     # Legacy runner-level pending text (flushed on shutdown); not the adapter-level one.

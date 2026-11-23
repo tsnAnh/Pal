@@ -29,10 +29,9 @@ def _session() -> dict:
 
 @pytest.fixture
 def live_kernel(monkeypatch):
-    """A registered (unspawned) kernel owned by SESSION_KEY, plus per-session YOLO state."""
+    """A registered (unspawned) kernel owned by SESSION_KEY."""
     kernel = code_kernel.SessionKernel((SESSION_KEY, "project", "python", "/tmp", ()))
     monkeypatch.setitem(code_kernel._REGISTRY.kernels, kernel.key, kernel)
-    approval.enable_session_yolo(SESSION_KEY)
     monkeypatch.setattr(server, "_notify_session_boundary", lambda *a, **k: None)
     monkeypatch.setattr(server, "_get_db", lambda: None)
     monkeypatch.setattr(server, "_load_cfg", dict)
@@ -73,7 +72,6 @@ def test_tui_owned_finalize_disposes_the_sessions_kernels(monkeypatch, live_kern
 
     assert live_kernel.key not in code_kernel._REGISTRY.kernels
     assert live_kernel.stop_event.is_set()
-    assert not approval.is_session_yolo_enabled(SESSION_KEY)
 
 
 def test_viewer_finalize_keeps_a_gateway_owned_sessions_kernels(monkeypatch, live_kernel):
@@ -83,4 +81,3 @@ def test_viewer_finalize_keeps_a_gateway_owned_sessions_kernels(monkeypatch, liv
 
     assert code_kernel._REGISTRY.kernels.get(live_kernel.key) is live_kernel
     assert not live_kernel.stop_event.is_set()
-    assert approval.is_session_yolo_enabled(SESSION_KEY)

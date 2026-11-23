@@ -242,13 +242,6 @@ class CLISessionMixin:
                 msg = t("cli.session.cwd_enter_failed", path=recorded, error=e)
         _dim_notice(self, msg, quiet)
 
-    def _restore_session_yolo(self, session_meta: dict, *, quiet: bool = False) -> None:
-        """Re-arm the session row's persisted /yolo on every resume path (``tools.approval_yolo``)."""
-        from persistence.conversation.sessions import session_yolo_enabled
-        from tools.approval_yolo import restore_session_yolo
-        if restore_session_yolo(self.session_id or "default", session_yolo_enabled((session_meta or {}).get("model_config"))):
-            _dim_notice(self, t("cli.session.yolo_restored"), quiet)
-
     def _render_resume_history_panel_lines(self, panel) -> list[str]:
         """Render the resume panel at the current terminal width for resize replay."""
         from cli import _suspend_output_history
@@ -337,16 +330,6 @@ class CLISessionMixin:
             state = t("cli.shared.label_on") if show_r else t("cli.shared.label_off")
             reasoning_label += t("cli.session.reasoning_display_suffix", state=state)
 
-        approval_label = None
-        try:
-            from tools.approval import is_approval_bypass_active_for_session
-            from tools.approval_context import _get_approval_mode
-            approval_label = _get_approval_mode()
-            if is_approval_bypass_active_for_session(getattr(self, "session_key", "") or ""):
-                approval_label += t("cli.session.yolo_bypass_suffix")
-        except Exception:
-            pass
-
         # Context window usage: reuse the status-bar snapshot (tokens / max / percent).
         ctx_label = None
         try:
@@ -364,7 +347,6 @@ class CLISessionMixin:
 
         lines = [t("cli.session.status_title"), "", *status_lines(fields, "session_id", "path", "title", "model")]
         optional = ((t("cli.session.label_reasoning"), reasoning_label),
-                    (t("cli.session.label_approvals"), approval_label),
                     (t("cli.session.label_context"), ctx_label))
         for label, value in optional:
             if value:
@@ -920,51 +902,6 @@ class CLISessionMixin:
             return session_id
         return db.get_compression_tip(session_id) or session_id
 
-    def _is_session_yolo_active(self) -> bool:
-        """Whether YOLO bypass is on for this session: reads ``tools.approval._session_yolo``
-        (not a stale env var) and honors the frozen process-start ``--yolo`` flag."""
-        try:
-            from tools.approval import _YOLO_MODE_FROZEN, is_session_yolo_enabled
-        except Exception:
-            return False
-        if _YOLO_MODE_FROZEN:
-            return True
-        # getattr: __new__-built test fixtures skip __init__; the status-bar builders
-        # swallow exceptions but would lose every field after the failure.
-        return is_session_yolo_enabled(getattr(self, "session_id", None) or "default")
-
-    def _toggle_yolo(self):
-        """Toggle per-session YOLO mode (skip dangerous-command approvals).
-
-        Mirrors the gateway/TUI ``/yolo`` handlers. Deliberately does NOT touch
-        ``HERMES_YOLO_MODE``: that env var is frozen into ``tools.approval._YOLO_MODE_FROZEN``
-        at import (so prompt-injected skills can't flip the bypass), making a later set a
-        silent no-op. ``run_conversation`` binds ``self.session_id`` as the active approval
-        key, so the bypass applies to the very next dangerous command.
-        """
-        from cli import _cprint
-        from hermes_cli.colors import Colors as _Colors
-        from tools.approval import _YOLO_MODE_FROZEN
-
-        # A frozen process-level bypass short-circuits the approval gate ahead of the session
-        # check — toggling "OFF" would be a false safety claim. Say so instead.
-        if _YOLO_MODE_FROZEN:
-            state = f"{_Colors.BOLD}{_Colors.RED}{t('cli.session.yolo_state_locked_on')}{_Colors.RESET}"
-            _cprint(f"  {t('cli.session.yolo_locked', state=state)}")
-            return
-
-        from tools.approval_yolo import toggle_session_yolo
-        session_key = self.session_id or "default"
-        db = getattr(self, "_session_db", None)  # getattr: tests call this unbound against a stand-in
-        # The row is created lazily on the first turn; until then with_session_yolo records the toggle.
-        persist = (lambda on: db.set_session_yolo(session_key, on)) if db and session_key != "default" else None
-        if toggle_session_yolo(session_key, persist=persist):
-            state = f"{_Colors.BOLD}{_Colors.GREEN}{t('cli.shared.label_on_upper')}{_Colors.RESET}"
-            _cprint(f"  {t('cli.session.yolo_on', state=state)}")
-        else:
-            state = f"{_Colors.BOLD}{_Colors.RED}{t('cli.shared.label_off_upper')}{_Colors.RESET}"
-            _cprint(f"  {t('cli.session.yolo_off', state=state)}")
-
     def _manual_compress(self, cmd_original: str = ""):
         """Manually trigger context compression.
 
@@ -1018,8 +955,6 @@ class CLISessionMixin:
                 # generation point at the live continuation, not the ended parent.
                 agent_sid = getattr(self.agent, "session_id", None)
                 if agent_sid and agent_sid != self.session_id:
-                    from tools.approval_yolo import transfer_session_yolo
-                    transfer_session_yolo(self.session_id, agent_sid)
                     self.session_id = self.agent.session_id
                     self._write_terminal_breadcrumb()
                     self._pending_title = None

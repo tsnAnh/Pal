@@ -24,9 +24,6 @@ The check fails closed instead of parsing AppleScript. An ``osascript`` run is f
 A read-only call whose program is a literal ``-e`` argument (``get name of first application
 process whose frontmost is true``, ``get the name of every disk``, ``activate``, ``display
 notification``) is not flagged and behaves exactly as before.
-
-Both descriptions are in ``SMART_MANUAL_ONLY_DESCRIPTIONS``: smart mode never asks the guardian
-LLM about them, and a human answer covers this one command (no session/always grant).
 """
 
 import re

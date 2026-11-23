@@ -32,7 +32,7 @@ struct ErrandReport: Sendable {
             self.init(outcome: outcome, botName: botName)
         case .nothingToAnswer(let waiting?) where waiting.kind == .approval:
             let invitation = PromptWording.invitation(for: waiting, from: botName)
-            self.init(spoken: String(localized: "\(botName) isn't waiting for an answer, but needs your approval. \(invitation)"), offersChat: false)
+            self.init(spoken: String(localized: "\(botName) isn't waiting for an answer, but needs a decision from you. \(invitation)"), offersChat: true)
         case .nothingToAnswer:
             self.init(spoken: String(localized: "\(botName) isn't waiting for an answer."), offersChat: false)
         }

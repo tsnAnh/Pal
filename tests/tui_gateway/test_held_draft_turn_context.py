@@ -35,11 +35,10 @@ def turn(monkeypatch, tmp_path):
     (home / "profile.yaml").write_text("ui_meta:\n  hermes-bots:\n    shape: cloud\n", encoding="utf-8")
     (home / "config.yaml").write_text("approvals:\n  mode: manual\n  timeout: 2\n", encoding="utf-8")
     monkeypatch.setenv("HERMES_HOME", str(home))
-    for name in ("HERMES_CRON_SESSION", "HERMES_SINGLE_QUERY_SESSION", "HERMES_YOLO_MODE"):
+    for name in ("HERMES_CRON_SESSION", "HERMES_SINGLE_QUERY_SESSION"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
     monkeypatch.setenv("HERMES_EXEC_ASK", "1")
-    monkeypatch.setattr(approval, "_YOLO_MODE_FROZEN", False, raising=False)
     monkeypatch.setattr("tools.terminal_tool._get_approval_callback", lambda: None, raising=False)
     hc._LOAD_CONFIG_CACHE.clear()
     monkeypatch.setattr(server, "_emit", lambda *a, **k: None)

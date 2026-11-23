@@ -104,7 +104,10 @@ final class SettingsE2ETests: SettingsE2ETestCase {
     func test01RootShowsEveryRowAndHidesTheDroppedOnes() throws {
         let app = signedIn(resetCredentials: true)
         openSettings(app)
-        for identifier in ["settingsAccountRow", "settingsUsageRow", "settingsVaultRow", "settingsConnectAppsRow", "settingsPermissionsRow", "settingsTimeZoneAutoToggle", "settingsTimeZoneRow"] {
+        let identifiers = [
+            "settingsAccountRow", "settingsUsageRow", "settingsVaultRow", "settingsConnectAppsRow", "settingsTimeZoneAutoToggle", "settingsTimeZoneRow",
+        ]
+        for identifier in identifiers {
             waitFor(element(app, identifier), timeout: 15, identifier)
         }
         for identifier in ["settingsBotComputerRow", "settingsDevicesRow", "settingsImportMemoryRow", "settingsNotificationsToggle", "settingsAppearanceRow", "settingsLanguageRow", "settingsHapticsRow", "settingsDataSharingRow", "settingsFeedbackRow", "settingsSignOutRow"] {
@@ -199,46 +202,6 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         XCTAssertEqual(element(app, "botNotifications-cho-dinh").value as? String, otherInitial, "other bots are untouched")
         reloaded.flip()
         waitValue(reloaded, initial)
-    }
-
-    func test05PermissionsRuleAndAutoReviewPersist() throws {
-        var app = signedIn()
-        openSettings(app)
-        let before = app.buttons["settingsPermissionsRow"]
-        waitFor(before, timeout: 20, "permissions row")
-        let summaryBefore = before.label
-        openRow(app, "settingsPermissionsRow", screen: "permissionsScreen")
-        let rule = "Never delete files outside the workspace \(uniqueToken())"
-        let ruleRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "permissionsRule-", rule)).firstMatch
-        waitFor(element(app, "permissionsAddRule-ask"), timeout: 20, "add rule")
-        element(app, "permissionsAddRule-ask").tap()
-        let field = element(app, "permissionsRuleText")
-        waitFor(field, timeout: 10, "rule field")
-        field.tap()
-        field.typeText(rule)
-        element(app, "permissionsSaveRule").tap()
-        waitFor(ruleRow, timeout: 20, "saved rule")
-        let auto = element(app, "permissionsAutoReviewToggle")
-        let wasOn = auto.value as? String == "1"
-        auto.flip()
-        waitValue(auto, wasOn ? "0" : "1")
-        settle(2)
-        app = relaunchSignedIn()
-        openSettings(app)
-        let summary = app.buttons["settingsPermissionsRow"]
-        waitFor(summary, timeout: 20, "permissions row")
-        XCTAssertNotEqual(summary.label, summaryBefore, "the summary counts the new rule")
-        XCTAssertTrue(summary.label.contains(wasOn ? "Auto-review off" : "Auto-review on"), summary.label)
-        openRow(app, "settingsPermissionsRow", screen: "permissionsScreen")
-        let reloaded = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "permissionsRule-", rule)).firstMatch
-        waitFor(reloaded, timeout: 20, "rule after relaunch")
-        shot(app, "permissions-after-relaunch")
-        element(app, "permissionsAutoReviewToggle").flip()
-        reloaded.flip()
-        let remove = app.buttons["Remove"]
-        waitFor(remove, timeout: 10, "remove rule confirmation")
-        remove.tap()
-        waitGone(reloaded, timeout: 20, "rule removed")
     }
 
     func test06UsageRendersEverySeededSubscription() throws {

@@ -1196,9 +1196,6 @@ def test_sync_session_key_after_compress_reanchors_active_session_lease(
         "session_key": "session-old",
     }
     fake_approval = types.SimpleNamespace(
-        disable_session_yolo=lambda *_args, **_kwargs: None,
-        enable_session_yolo=lambda *_args, **_kwargs: None,
-        is_session_yolo_enabled=lambda *_args, **_kwargs: False,
         register_gateway_notify=lambda *_args, **_kwargs: None,
         unregister_gateway_notify=lambda *_args, **_kwargs: None,
     )

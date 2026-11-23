@@ -37,31 +37,11 @@ extension Transcript {
     }
 }
 
-public enum ApprovalDecision: Sendable, Equatable {
-    case approve
-    case deny
-
-    public func choice(in prompt: PendingPrompt) -> String? {
-        let wanted = self == .approve ? "once" : "deny"
-        guard !prompt.choices.isEmpty else { return wanted }
-        return prompt.choices.first { $0 == wanted }
-    }
-}
-
 extension PendingPrompt {
-    public static let spokenCommandLimit = 140
-
     public func canonicalAnswer(for spoken: String) -> String {
         let trimmed = spoken.trimmingCharacters(in: .whitespacesAndNewlines)
         let bare = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
         let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
         return choices.first { $0.compare(bare, options: options) == .orderedSame } ?? trimmed
-    }
-
-    public var shortCommand: String? {
-        guard let command, !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        let flat = command.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-        guard flat.count > Self.spokenCommandLimit else { return flat }
-        return flat.prefix(Self.spokenCommandLimit).trimmingCharacters(in: .whitespaces) + "…"
     }
 }

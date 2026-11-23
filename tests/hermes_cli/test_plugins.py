@@ -1758,108 +1758,57 @@ class TestPreToolCallDirective:
             "hermes_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [
                 {"action": "modify", "args": {"path": "/safe"}},
-                {"action": "approve", "message": "earlier plugin approves", "rule_key": "k"},
+                {"action": "approve", "message": "earlier plugin approves"},
                 {"action": "block", "message": "later security plugin blocks"},
             ],
         )
         details = _get_pre_tool_call_directive_details("write_file", {"path": "/unsafe"})
-        assert (details.action, details.message, details.rule_key) == (
-            "block", "later security plugin blocks", None)
+        assert (details.action, details.message) == ("block", "later security plugin blocks")
         assert details.modified_args == {"path": "/safe"}  # modify before the veto stays visible
 
     def test_first_approve_wins_among_approves_and_keeps_later_modify(self, monkeypatch):
-        """Holding approve back for a veto scan must not change which approve wins (first valid,
-        incl. its rule_key) and must keep accumulating modify directives that follow it."""
+        """Holding approve back for a veto scan must not change which approve wins (first valid)
+        and must keep accumulating modify directives that follow it."""
         from hermes_cli.plugins import _get_pre_tool_call_directive_details
         monkeypatch.setattr(
             "hermes_cli.plugins.invoke_hook",
             lambda hook_name, **kwargs: [
                 {"action": "block"},  # message-less block is invalid and ignored
-                {"action": "approve", "message": "first", "rule_key": " write_file:ssh "},
+                {"action": "approve", "message": "first"},
                 {"action": "modify", "args": {"content": "fixed"}},
-                {"action": "approve", "message": "second", "rule_key": "write_file:other"},
+                {"action": "approve", "message": "second"},
             ],
         )
         details = _get_pre_tool_call_directive_details("write_file", {"path": "/p"})
-        assert (details.action, details.message, details.rule_key) == ("approve", "first", "write_file:ssh")
+        assert (details.action, details.message) == ("approve", "first")
         assert details.modified_args == {"path": "/p", "content": "fixed"}
 
 
 class TestResolvePreToolBlock:
-    """Tests for the single dispatch-site chokepoint that resolves a
-    directive (incl. the approve→gate escalation) to a block message."""
+    """The single dispatch-site chokepoint that resolves a directive to a block message."""
 
-
-    def test_approve_gate_receives_tool_observability_context(self, monkeypatch):
-        from hermes_cli.plugins import resolve_pre_tool_block
-        from tools import approval_context
-
-        seen = {}
-        monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
-            lambda hook_name, **kwargs: [
-                {"action": "approve", "message": "why"}
-            ],
-        )
-
-        def _approve(*args, **kwargs):
-            seen["turn_id"] = approval_context._approval_turn_id.get()
-            seen["tool_call_id"] = approval_context._approval_tool_call_id.get()
-            return {"approved": True, "message": None}
-
-        monkeypatch.setattr("tools.approval.request_tool_approval", _approve)
-
-        assert resolve_pre_tool_block(
-            "write_file",
-            {},
-            turn_id="turn-1",
-            tool_call_id="call-1",
-        ) is None
-        assert seen == {"turn_id": "turn-1", "tool_call_id": "call-1"}
-
-    def test_approve_passes_plugin_rule_key_to_gate(self, monkeypatch):
+    def test_approve_directive_proceeds_without_any_approval_event(self, monkeypatch):
         from hermes_cli.plugins import resolve_pre_tool_block
 
-        seen = {}
+        fired = []
 
-        monkeypatch.setattr(
-            "hermes_cli.plugins.invoke_hook",
-            lambda hook_name, **kwargs: [
-                {
-                    "action": "approve",
-                    "message": "why",
-                    "rule_key": "write_file:ssh",
-                }
-            ],
-        )
+        def _hooks(hook_name, **kwargs):
+            fired.append(hook_name)
+            return [{"action": "approve", "message": "why"}] if hook_name == "pre_tool_call" else []
 
-        def _approve(tool_name, reason, **kwargs):
-            seen["tool_name"] = tool_name
-            seen["reason"] = reason
-            seen["rule_key"] = kwargs.get("rule_key")
-            return {"approved": True, "message": None}
+        monkeypatch.setattr("hermes_cli.plugins.invoke_hook", _hooks)
 
-        monkeypatch.setattr("tools.approval.request_tool_approval", _approve)
+        assert resolve_pre_tool_block("terminal", {"command": "rm -rf build"}, turn_id="turn-1",
+                                      tool_call_id="call-1") is None
+        assert "pre_approval_request" not in fired and "post_approval_response" not in fired
 
-        assert resolve_pre_tool_block("write_file", {}) is None
-        assert seen == {
-            "tool_name": "write_file",
-            "reason": "why",
-            "rule_key": "write_file:ssh",
-        }
-
-
-    def test_approve_gate_exception_fails_closed(self, monkeypatch):
+    def test_block_directive_still_blocks(self, monkeypatch):
         from hermes_cli.plugins import resolve_pre_tool_block
         monkeypatch.setattr(
             "hermes_cli.plugins.invoke_hook",
-            lambda hook_name, **kwargs: [{"action": "approve", "message": "why"}],
+            lambda hook_name, **kwargs: [{"action": "block", "message": "no"}],
         )
-        def _boom(*a, **k):
-            raise RuntimeError("gate crashed")
-        monkeypatch.setattr("tools.approval.request_tool_approval", _boom)
-        msg = resolve_pre_tool_block("terminal", {})
-        assert msg is not None and "gate failed" in msg  # fail-closed
+        assert resolve_pre_tool_block("terminal", {}) == "no"
 
 
 class TestPreToolCallModify:

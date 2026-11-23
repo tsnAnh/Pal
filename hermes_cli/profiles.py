@@ -24,7 +24,7 @@ from hermes_cli.profiles_config import _migrate_profile_config_if_outdated
 from hermes_cli.home_data_layout import CREDENTIAL_STORE_DIRS, HOME_ENV_FILES, PM_RUNTIME_ROOT_DIRS, SECRET_CACHE_STORES
 from hermes_cli.profiles_remove import (
     _rmtree_make_writable, _rmtree_with_retry, print_delete_summary as _print_delete_summary, wait_profile_unowned)
-from hermes_cli.profile_admin_guard import require_profile_admin_grant
+from hermes_cli.profile_admin_guard import refuse_agent_profile_creation
 from hermes_cli.profiles_export_scrub import (
     GATEWAY_CONNECTION_STORE_RE as _GATEWAY_CONNECTION_STORE_RE, GATEWAY_CONNECTION_STORES as _GATEWAY_CONNECTION_STORES,
     scrub_export_secrets as _scrub_export_secrets)
@@ -1355,7 +1355,7 @@ def create_profile(
     ``sync_imports`` (``--clone`` only; ``--clone-all`` copies the file anyway) also copies the
     ``import-agent`` sync manifest so the clone can keep pulling the same external agent trees.
     ``seed_model=False``: a fresh profile gets no launch model block (it may hold an inline api_key)."""
-    require_profile_admin_grant("create", name)
+    refuse_agent_profile_creation("create")
     if no_skills and (clone_from is not None or clone_config or clone_all):
         raise ValueError(
             "--no-skills is mutually exclusive with --clone / --clone-from / --clone-all "
@@ -1692,7 +1692,6 @@ class ProfileIdentitySettlementPending(RuntimeError):
 def delete_profile(name: str, yes: bool = False) -> Path:
     """Delete a profile, its wrapper script, and its gateway service (service disabled first
     to prevent auto-restart, gateway stopped if running)."""
-    require_profile_admin_grant("delete", name)
     canon = refuse_deleting_primary(normalize_profile_name(name))
     if canon == "default":
         raise ValueError("Cannot delete the default profile (~/.hermes).\nTo remove everything, use: hermes uninstall")
@@ -2149,7 +2148,7 @@ def export_profile(name: str, output_path: str, extra_files: Optional[dict[str, 
 def import_profile(archive_path: str, name: Optional[str] = None) -> Path:
     """Import a profile from a tar.gz archive."""
     import tempfile
-    require_profile_admin_grant("import", name or "")
+    refuse_agent_profile_creation("import")
     archive = Path(archive_path)
     if not archive.exists():
         raise FileNotFoundError(f"Archive not found: {archive}")

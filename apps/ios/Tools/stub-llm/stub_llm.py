@@ -44,7 +44,6 @@ FIXTURE_MCP_CALL = {
 CONNECTIONS_FINAL_PREFIX = "connections-result "
 TOOL_COMMANDS = {
     "TOOLCALL": "sleep 6",
-    "APPROVE": 'cd "$(mktemp -d)" && git reset --hard',
     "STEER": "echo hermes-stub-steer-probe",
     "NARRATE": "sleep 3; echo hermes-stub-narrate",
 }

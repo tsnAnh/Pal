@@ -121,20 +121,6 @@ final class MacModalVisibleE2ETests: BotProfileTestCase {
         assertSizeClass(.form, sheet, "vault add sheet", window: window)
         app.typeKey(.escape, modifierFlags: [])
         waitGone(sheet, timeout: 10, "vault add closes")
-
-        let permissions = app.buttons["macSettingsSection-permissions"]
-        permissions.hit()
-        let addRule = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "permissionsAddRule-")).firstMatch
-        waitFor(addRule, timeout: 15, "add rule button")
-        addRule.hit()
-        let ruleSheet = any(app, "macSheet")
-        waitFor(ruleSheet, timeout: 10, "add rule sheet")
-        waitFor(any(app, "permissionsAddSheet"), timeout: 10, "add rule content")
-        Thread.sleep(forTimeInterval: 1)
-        assertSizeClass(.compact, ruleSheet, "add rule sheet", window: window)
-        shot(app, "mac-size-compact-add-rule")
-        app.typeKey(.escape, modifierFlags: [])
-        waitGone(ruleSheet, timeout: 10, "add rule closes")
     }
 }
 #endif

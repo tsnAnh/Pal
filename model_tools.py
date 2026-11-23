@@ -812,18 +812,6 @@ def _pre_dispatch_guards(function_name: str, function_args: dict[str, Any], skip
             logger.debug("pre_tool_call hook error: %s", _hook_err)
         if block_message is not None:
             return function_args, (tool_error(block_message), "plugin_block", block_message)
-
-    # ACP/Zed edit approval before any file mutation. The requester is bound
-    # via ContextVar only for ACP sessions, so CLI/gateway paths are unaffected.
-    try:
-        from acp_adapter.edit_approval import maybe_require_edit_approval
-        edit_block_message = maybe_require_edit_approval(function_name, function_args)
-        if edit_block_message is not None:
-            return function_args, (edit_block_message, "edit_approval_denied", None)
-    except Exception as _edit_approval_err:
-        logger.debug("ACP edit approval guard error: %s", _edit_approval_err)
-        if function_name in {"write_file", "patch"}:
-            return function_args, (tool_error("Edit approval denied: approval guard failed"), "edit_approval_error", None)
     return function_args, None
 
 

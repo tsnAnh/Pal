@@ -22,7 +22,7 @@ from hermes_cli.web_server_config import (
     _validated_main_model_selection,
 )
 from hermes_cli.web_server_profiles import (
-    _approval_mode_of, _broadcast_gateway_session_info, _is_other_profile, _parse_model_entries,
+    _parse_model_entries,
 )
 from fastapi import HTTPException, Request
 from hermes_cli.config import DEFAULT_CONFIG, OPTIONAL_ENV_VARS, read_raw_config, require_readable_config_before_write, custom_endpoint_key_env, coerce_provider_id, find_provider_entry, get_compatible_custom_providers, _ENV_REF_RE, _deep_merge
@@ -142,7 +142,6 @@ async def update_config(
     body: ConfigUpdate, profile: Optional[str] = None, preserve_language: bool = False
 ):
     def _run():
-        approvals_mode_changed = False
         with _profile_scope(body.profile or profile):
             # The dashboard form is schema-driven; root keys absent from the
             # schema (``custom_providers``, ``agent.personalities``, ...) are not
@@ -155,25 +154,12 @@ async def update_config(
                 incoming = _denormalize_config_from_web(body.config)
                 merged = _deep_merge(existing, incoming)
                 _drop_carried_route_state(existing, merged)
-                # Compare normalized approvals.mode across the in-memory
-                # documents, not config blocks and not cache re-reads: the page
-                # PUTs the defaulted GET record while disk holds sparse YAML (a
-                # block compare is always-unequal), and a post-save reload can
-                # serve the pre-save cache on an (mtime_ns, size) collision.
-                # Only approvals.mode feeds session.info, so it is the trigger.
-                approvals_mode_changed = _approval_mode_of(merged) != _approval_mode_of(existing)
                 # Explicit English must survive default stripping: an absent
                 # language lets the desktop follow the OS on its next launch.
                 # Ordinary settings saves include merged defaults, not a choice.
                 save_config(
                     merged, preserve_keys={("display", "language")} if preserve_language else None
                 )
-        # REST saves bypass the config.set RPC (which re-emits itself), so
-        # refresh live sessions' cached approval/YOLO indicators after a mode
-        # change. Own-profile saves only: a profile-scoped save targets a
-        # different HERMES_HOME than this process's gateway sessions.
-        if approvals_mode_changed and not _is_other_profile(body.profile or profile):
-            _broadcast_gateway_session_info()
         return {"ok": True}
 
     with http_failure("PUT /api/config failed", 500, detail="Internal server error"):

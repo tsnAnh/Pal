@@ -97,21 +97,6 @@ def cancel_asks(runner: Any, session_key: str) -> None:
         logger.warning("Could not close the open questions of a session that ended", exc_info=True)
 
 
-def approval_destination(turn: Any, ctx: Any) -> tuple[Any, Optional[dict]]:
-    from gateway.desk.owner import owner_contact
-    from gateway.session_context import current_turn_event
-    event = current_turn_event()
-    if event is None or not (event.internal and event.carries_member_content):
-        return ctx._status_chat_id, ctx._status_thread_metadata
-    source = ctx.source
-    contact = owner_contact(source.platform.value, source.scope_id or "")
-    future = turn._schedule(ctx._status_adapter.desk_owner_channel(contact), "Owner approval destination") if contact else None
-    channel = future.result(timeout=15) if future is not None else None
-    if not channel:
-        raise RuntimeError("the owner's direct messages are not reachable for this approval")
-    return channel, {"scope_id": contact.scope_id} if contact.scope_id else None
-
-
 async def recover_missed_replies(runner: Any, adapter: Any, platform: str) -> int:
     from gateway.run import _async_profile_runtime_scope
     from hermes_constants import get_process_hermes_home

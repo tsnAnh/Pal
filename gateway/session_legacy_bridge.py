@@ -9,7 +9,7 @@ from gateway.session_busy_controls import authorize_profile
 from hermes_state_runtime import RuntimeStoreError
 
 SIBLINGS = (
-    'gateway.session_account_controls', 'gateway.session_library_controls', 'gateway.session_permissions_controls',
+    'gateway.session_account_controls', 'gateway.session_library_controls',
     'gateway.session_cron_controls', 'gateway.session_bot_settings_controls', 'gateway.session_bot_admin_controls',
     'gateway.session_display_controls', 'gateway.session_metrics_controls', 'gateway.session_connectors_controls',
     'gateway.session_mcp_controls', 'gateway.session_vault_controls', 'gateway.session_skills_controls',
