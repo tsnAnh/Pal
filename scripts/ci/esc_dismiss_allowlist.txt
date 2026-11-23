@@ -2,6 +2,7 @@
 App/Chat/ChatImages.swift:onKeyPress(.escape  owned by the media preview units, migrate after they merge
 App/Chat/ImageViewer/MacDocumentViewer.swift:onKeyPress(.escape  owned by the media preview units, migrate after they merge
 App/Chat/ImageViewer/MacImageViewer.swift:onKeyPress(.escape  owned by the media preview units, migrate after they merge
+App/Chat/ImageViewer/MacMediaViewer.swift:onKeyPress(.escape  owned by the media preview units, migrate after they merge
 Packages/PalDesign/Sources/PalDesign/Components/SecretEntry.swift:.keyboardShortcut(.cancelAction  glass input work in PRs 364 and 365, migrate after they merge
 App/Kanban/KanbanFilterBar.swift:onKeyPress(.escape  ESC clears the filter text first, the popup closes on the next ESC
 App/Chat/ChatComposer.swift:onKeyPress(.escape  ESC dismisses the slash and file-reference menu first, edit-first rule
@@ -12,3 +13,4 @@ App/Platform/InAppBrowser.swift:.sheet(  Mac browser sheet; its BrowserFrame con
 App/Profile/BotManagementDialogs.swift:.alert(  iOS-only system alert inside .iOSOnly; Mac uses macAlert, and a system alert's Cancel button closes on ESC
 App/Profile/BotModelView.swift:.sheet(  iOS system sheets; BotModelPicker's SheetChrome Close carries the shared cancel shortcut and the key-entry sheet closes through its page back
 App/Mac/MacModelProviders.swift:.popover(  Mac popover; its MacProviderAddressEditor content registers .palEscape(.native)
+App/Platform/MediaFileActions.swift:NSAlert  owned by the media preview units, migrate to PalAlert after they merge
