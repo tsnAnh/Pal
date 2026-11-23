@@ -172,6 +172,7 @@ struct MacShellView<Destination: View>: View {
         }
         .onChange(of: roster.bots, initial: true) { _, _ in openLaunchConversationIfNeeded() }
         .onChange(of: router.path.isEmpty) { _, _ in openLaunchConversationIfNeeded() }
+        .onChange(of: connection.holdsLaunchConversation) { _, _ in openLaunchConversationIfNeeded() }
         .onChange(of: router.currentBotName) { _, name in
             guard let name, roster.bot(named: name) != nil else { return }
             roster.rememberOpened(bot: name)
@@ -179,7 +180,7 @@ struct MacShellView<Destination: View>: View {
     }
 
     private func openLaunchConversationIfNeeded() {
-        guard router.path.isEmpty, let bot = roster.launchBot else { return }
+        guard router.path.isEmpty, !connection.holdsLaunchConversation, let bot = roster.launchBot else { return }
         router.openChat(botName: bot.name)
     }
 

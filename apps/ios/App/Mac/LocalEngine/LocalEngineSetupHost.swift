@@ -13,7 +13,7 @@ struct LocalEngineSetupHost: View {
                 MacModalScrim { engine.dismissSetup() }
                 MacModalPanel(
                     size: .full,
-                    closeDisabled: engine.isInstalling || engine.isSigningIn,
+                    closeDisabled: engine.isInstalling || engine.isSigningIn || engine.providerSignInBusy,
                     identifier: "localEngineSetupPanel",
                     closeIdentifier: "localEngineSetupClose",
                     close: { engine.dismissSetup() },
@@ -31,7 +31,7 @@ struct LocalEngineSetupHost: View {
 
     @ViewBuilder
     private var escapeKey: some View {
-        if !engine.isInstalling, !engine.isSigningIn {
+        if !engine.isInstalling, !engine.isSigningIn, !engine.providerSignInBusy {
             Button("") { engine.dismissSetup() }
                 .keyboardShortcut(.cancelAction)
                 .frame(width: 0, height: 0)

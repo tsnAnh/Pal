@@ -59,7 +59,7 @@ final class RosterModel {
     private var unread: Set<String> = []
     private var marksAccount: String?
     private var primaryOverride: String?
-    private var pendingIntros: [String: BotIntro] = [:]
+    var pendingIntros: [String: BotIntro] = [:]
     private var photoChecked: Set<String> = []
     private var lastSnapshot: RosterSnapshot?
     @ObservationIgnored private var appliedActivities: [String: BotActivity] = [:]

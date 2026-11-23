@@ -88,6 +88,18 @@ private struct ChatTranscriptRows: View {
     let router: AppRouter
     let desk: ChatDeskModel
     let connectionIsSlow: Bool
+    #if os(macOS)
+    @Environment(MacShell.self) private var shell
+    #endif
+
+    private func openModelProviders() {
+        #if os(macOS)
+        shell.settingsSection = .providers
+        router.present(.settings)
+        #else
+        router.presentSettings(route: .modelProviders)
+        #endif
+    }
 
     var body: some View {
         let _ = PalPerf.event("chat.list.body") // swiftlint:disable:this redundant_discardable_let
@@ -108,7 +120,7 @@ private struct ChatTranscriptRows: View {
                 .chatListRow()
                 .newestFirst()
             ForEach(model.rowsNewestFirst) { row in
-                ChatRowView(row: row, context: source.context(for: row), model: model) { link in
+                ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
                     router.push(.botThread(BotThreadRoute(
                         botName: model.bot.name,
                         threadID: link.threadID,

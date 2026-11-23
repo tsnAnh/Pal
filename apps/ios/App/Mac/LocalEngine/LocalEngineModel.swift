@@ -1,6 +1,7 @@
 #if os(macOS)
 import Foundation
 import Observation
+import PalBotProfile
 import PalDiagnostics
 import PalLocalEngine
 import PalREST
@@ -23,6 +24,7 @@ final class LocalEngineModel {
     private(set) var tailnetPassword: String?
     private(set) var tailnetFailure: String?
     private(set) var isUpdatingTailnet = false
+    private(set) var providerStep: ModelProvidersModel?
     @ObservationIgnored private var tailnetGeneration = 0
     var isPresentingSetup = false
 
@@ -77,7 +79,11 @@ final class LocalEngineModel {
     }
 
     func dismissSetup() {
-        guard !isInstalling, !isSigningIn else { return }
+        guard !isInstalling, !isSigningIn, !providerSignInBusy else { return }
+        if providerStep != nil {
+            finishProviderStep()
+            return
+        }
         isPresentingSetup = false
         if case .failed = state { Task { await detect() } }
     }
@@ -116,9 +122,7 @@ final class LocalEngineModel {
 
     func continueWithRunningEngine() async {
         guard let session, !isSigningIn else { return }
-        isSigningIn = true
-        defer { isSigningIn = false }
-        _ = await connection?.signInToLocalEngine(session, announcingOwnerIntro: false)
+        _ = await signInAndBeginFirstRun(session)
     }
 
     func startIfStopped() async {
@@ -233,6 +237,7 @@ final class LocalEngineModel {
             startAtLogin = nil
             tailnet = nil
             tailnetPassword = nil
+            providerStep = nil
             await connection?.signOut()
         } catch let failure as EngineFailure {
             state.apply(.removalFailed(failure))
@@ -248,11 +253,9 @@ final class LocalEngineModel {
     private func installSucceeded(_ session: EngineSession) async {
         self.session = session
         state.apply(.installSucceeded)
-        isSigningIn = true
-        let signedIn = await connection?.signInToLocalEngine(session, announcingOwnerIntro: true) ?? false
-        isSigningIn = false
+        let signedIn = await signInAndBeginFirstRun(session)
         if signedIn {
-            isPresentingSetup = false
+            isPresentingSetup = providerStep != nil
         } else {
             state.apply(.startFailed(.signInFailed(trace: EngineFailure.makeTrace())))
         }
@@ -272,5 +275,39 @@ final class LocalEngineModel {
         }()
         state.apply(.installFailed(failure))
     }
+}
+
+extension LocalEngineModel {
+    var isChoosingProvider: Bool { providerStep != nil }
+
+    var providerSignInBusy: Bool { providerStep?.isSigningInAny ?? false }
+
+    func finishProviderStep() {
+        guard let step = providerStep, !step.isSigningInAny else { return }
+        providerStep = nil
+        isPresentingSetup = false
+        connection?.finishLocalSetup(greets: step.hasConnectedProvider)
+    }
+
+    private func signInAndBeginFirstRun(_ session: EngineSession) async -> Bool {
+        isSigningIn = true
+        defer { isSigningIn = false }
+        guard let connection, await connection.signInToLocalEngine(session) else { return false }
+        let providers = providerSetupModel(connection)
+        await providers.load()
+        if providers.hasLoaded, providers.hasConnectedProvider {
+            connection.finishLocalSetup(greets: true)
+        } else {
+            providerStep = providers
+            isPresentingSetup = true
+        }
+        return true
+    }
+
+    private func providerSetupModel(_ connection: ConnectionModel) -> ModelProvidersModel {
+        let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
+        return ModelProvidersModel(client: ModelProvidersClient(gateway: gateway), surfaces: connection.surfaces)
+    }
+
 }
 #endif

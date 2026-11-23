@@ -9,15 +9,19 @@ struct LocalEngineSetupPanel: View {
 
     var body: some View {
         Group {
-            switch engine.state {
-            case .installing(let progress):
-                installing(progress)
-            case .failed(let failure):
-                failed(failure)
-            case .ready where engine.isSigningIn:
-                done
-            default:
-                intro
+            if let step = engine.providerStep {
+                LocalEngineProviderStep(engine: engine, model: step)
+            } else {
+                switch engine.state {
+                case .installing(let progress):
+                    installing(progress)
+                case .failed(let failure):
+                    failed(failure)
+                case .ready where engine.isSigningIn:
+                    done
+                default:
+                    intro
+                }
             }
         }
         .animation(.snappy(duration: 0.2), value: engine.isInstalling)
@@ -121,7 +125,7 @@ struct LocalEngineSetupPanel: View {
     }
 }
 
-private struct PanelColumn<Main: View, Action: View>: View {
+struct PanelColumn<Main: View, Action: View>: View {
     @ViewBuilder let main: Main
     @ViewBuilder let action: Action
 
@@ -219,7 +223,7 @@ private struct StepRow: View {
     }
 }
 
-private struct PanelButton: View {
+struct PanelButton: View {
     enum Kind {
         case primary
         case secondary

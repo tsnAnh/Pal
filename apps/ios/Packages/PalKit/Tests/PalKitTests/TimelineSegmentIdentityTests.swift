@@ -72,6 +72,7 @@ private struct Chat {
         case .tool(let call): "tool:" + call.toolID
         case .connection: "connection"
         case .botThread: "thread"
+        case .noProvider: "no-provider"
         }
     }
 }

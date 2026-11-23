@@ -12,6 +12,12 @@ import Observation
 import PalLocalEngine
 #endif
 
+enum LocalFirstRun: Equatable {
+    case inactive
+    case settingUp
+    case introducing(greets: Bool)
+}
+
 @MainActor
 @Observable
 final class ConnectionModel {
@@ -33,6 +39,7 @@ final class ConnectionModel {
     private(set) var userName = ""
     private(set) var isLocalEngine = false
     private(set) var ownerIntroPending = false
+    private(set) var localFirstRun = LocalFirstRun.inactive
     let localDeviceID: String?
     let cache: CacheStore
     @ObservationIgnored private(set) lazy var surfaces = SurfaceCache(store: cache) { [unowned self] in accountKey }
@@ -188,6 +195,7 @@ final class ConnectionModel {
         userInitial = "H"
         isLocalEngine = false
         ownerIntroPending = false
+        localFirstRun = .inactive
         phase = .signedOut
         if leavesLocalEngine { clearAddress() }
     }
@@ -203,6 +211,18 @@ final class ConnectionModel {
 
     func ownerIntroHandled() {
         ownerIntroPending = false
+    }
+
+    var holdsLaunchConversation: Bool { localFirstRun != .inactive }
+
+    func finishLocalSetup(greets: Bool) {
+        guard localFirstRun == .settingUp else { return }
+        localFirstRun = .introducing(greets: greets)
+        ownerIntroPending = true
+    }
+
+    func localFirstRunSettled() {
+        localFirstRun = .inactive
     }
 
     private func makeClient() -> PalClient {
@@ -353,20 +373,24 @@ extension ConnectionModel {
 
 #if os(macOS)
 extension ConnectionModel {
-    func signInToLocalEngine(_ session: EngineSession, announcingOwnerIntro: Bool) async -> Bool {
+    func signInToLocalEngine(_ session: EngineSession) async -> Bool {
         guard !isBusy else { return false }
         phase = .signingIn
+        localFirstRun = .settingUp
         do {
             let credentials = try LocalEngineCredential.credentials(port: session.port, home: session.home)
             try await auth.adopt(credentials)
             baseURLText = credentials.baseURL.displayString
         } catch {
+            localFirstRun = .inactive
             phase = .failed(Self.message(for: error))
             return false
         }
         await connect()
-        guard isConnected else { return false }
-        if announcingOwnerIntro { ownerIntroPending = true }
+        guard isConnected else {
+            localFirstRun = .inactive
+            return false
+        }
         return true
     }
 }

@@ -72,6 +72,7 @@ struct MacModalHost: View {
                     .padding(.bottom, MacMetrics.footerHeight - 12)
                     .transition(.scale(scale: 0.96, anchor: .bottomLeading).combined(with: .opacity))
             }
+            LocalEngineSetupHost(engine: connection.localEngine)
             if let sheets {
                 MacSheetLayer(center: sheets)
             }

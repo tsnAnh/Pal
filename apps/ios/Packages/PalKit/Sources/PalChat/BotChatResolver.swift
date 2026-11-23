@@ -22,6 +22,21 @@ public struct BotIntro: Sendable, Hashable {
         hidden: true
     )
 
+    public static func ownerWelcome(ownerName: String) -> BotIntro {
+        let name = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let address = name.isEmpty ? "You do not know their name, so greet them without one." : "Their name is \(name); greet them by it."
+        return BotIntro(
+            text: [
+                "Your owner has just finished setting you up on their Mac and opened this chat for the first time.",
+                address,
+                "Greet them in one or two short sentences, say you run right here on their Mac,",
+                "and ask what one thing they would like you to take off their plate.",
+                "Do not use em dashes.",
+            ].joined(separator: " "),
+            hidden: true
+        )
+    }
+
     public static func forGateway(greetsUnprompted: Bool) -> BotIntro? {
         greetsUnprompted ? .birthNotice : nil
     }

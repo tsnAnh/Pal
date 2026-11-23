@@ -125,7 +125,10 @@ public final class ServiceSignInCenter {
     public private(set) var dialogs: [ServiceSignInDialog] = []
     public private(set) var lastResolution: ServiceSignInResolution?
 
-    public var current: ServiceSignInDialog? { dialogs.first }
+    public private(set) var inlineServices: Set<String> = []
+    public var current: ServiceSignInDialog? { dialogs.first { !inlineServices.contains($0.service) } }
+    public func dialog(for service: String) -> ServiceSignInDialog? { dialogs.first { $0.service == service } }
+    public func answerInline(_ services: Set<String>) { inlineServices = services }
 
     public func pendingReason(for service: String) -> ServiceSignInReason? {
         guard let dialog = dialogs.first(where: { $0.service == service }), dialog.phase != .signedIn else { return nil }
@@ -299,8 +302,8 @@ public final class ServiceSignInCenter {
         }
     }
 
-    public func submitCredential(_ secret: SecretString) async {
-        guard let dialog = current, dialog.takesKey, dialog.acceptsKey, !secret.isEmpty else { return }
+    public func submitCredential(_ secret: SecretString, for service: String? = nil) async {
+        guard let dialog = service.map(dialog(for:)) ?? current, dialog.takesKey, dialog.acceptsKey, !secret.isEmpty else { return }
         let requestID = dialog.requestID
         let service = dialog.service
         setPhase(.signingIn, for: service)
@@ -317,8 +320,8 @@ public final class ServiceSignInCenter {
         }
     }
 
-    public func notNow() async {
-        guard let dialog = current else { return }
+    public func notNow(for service: String? = nil) async {
+        guard let dialog = service.map(dialog(for:)) ?? current else { return }
         nativeSignIns.removeValue(forKey: dialog.service)?.cancel()
         remove(service: dialog.service)
         await pasteSignIn?.cancel(dialog.service)
@@ -433,10 +436,7 @@ public final class ServiceSignInCenter {
         return url
     }
 
-    static let pageFailure = "We couldn't open the sign-in page."
-    static let startFailure = "We couldn't start sign-in. Please try again later."
     static let keyFailure = "Couldn't save that. Check it and try again."
     public static let callbackFailure = "That address didn't work. Copy it again from the browser and try again."
-    static let didNotFinish = "Sign-in didn't finish."
     static let timedOut = "Sign-in took too long and was stopped."
 }
