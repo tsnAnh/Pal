@@ -12,6 +12,7 @@ public final class StepFlowModel {
     public private(set) var continuation: SetupContinuation?
     public var openPage: @MainActor (URL) -> Void = { _ in }
     public var recovery: (@MainActor (SetupStatus) async -> Void)?
+    public var rewind: (@MainActor (_ from: FlowStep, _ to: FlowStep) async -> Bool)?
 
     @ObservationIgnored private let store: any StepFlowProgressStore
     @ObservationIgnored private let runner: Runner
@@ -98,7 +99,9 @@ public final class StepFlowModel {
     }
 
     public func back() async {
-        guard engine.back() else { return }
+        guard engine.canGoBack, let target = engine.previousStep else { return }
+        if let rewind, !(await rewind(engine.current, target)) { return }
+        guard engine.back(to: target.id) else { return }
         await persist()
         await prepareCurrentStep()
     }

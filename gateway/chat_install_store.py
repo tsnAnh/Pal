@@ -139,18 +139,21 @@ class ChatInstallStore:
         return SetupState.model_validate_json(row["state_json"]) if row else None
 
     def save(self, state: SetupState, expected_revision: int) -> None:
-        key = setup_key(state)
         with self._write() as conn:
-            row = conn.execute("SELECT revision FROM setup_states WHERE bot=? AND provider_id=? AND workspace=?",
-                               key).fetchone()
-            if (row["revision"] if row else 0) != expected_revision:
-                raise StaleRevision(key)
-            conn.execute(
-                "INSERT INTO setup_states (bot, provider_id, workspace, revision, installation_id, state_json) "
-                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(bot, provider_id, workspace) DO UPDATE SET "
-                "revision=excluded.revision, installation_id=excluded.installation_id, state_json=excluded.state_json",
-                (*key, state.revision, state.installation_id, state.model_dump_json()))
-            self._append(conn, state)
+            self._save(conn, state, expected_revision)
+
+    def _save(self, conn: sqlite3.Connection, state: SetupState, expected_revision: int) -> None:
+        key = setup_key(state)
+        row = conn.execute("SELECT revision FROM setup_states WHERE bot=? AND provider_id=? AND workspace=?",
+                           key).fetchone()
+        if (row["revision"] if row else 0) != expected_revision:
+            raise StaleRevision(key)
+        conn.execute(
+            "INSERT INTO setup_states (bot, provider_id, workspace, revision, installation_id, state_json) "
+            "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(bot, provider_id, workspace) DO UPDATE SET "
+            "revision=excluded.revision, installation_id=excluded.installation_id, state_json=excluded.state_json",
+            (*key, state.revision, state.installation_id, state.model_dump_json()))
+        self._append(conn, state)
 
     def _aux(self, column: str, key: SetupKey) -> str | None:
         with self._read() as conn:
@@ -198,13 +201,36 @@ class ChatInstallStore:
         return row["seq"] or 0
 
     def issue_nonce(self, key: SetupKey, app_scheme: AppScheme = AppScheme.release, ttl: float = NONCE_TTL_SECONDS) -> str:
-        raw = secrets.token_urlsafe(32)
         with self._write() as conn:
-            conn.execute("DELETE FROM nonces WHERE bot=? AND provider_id=? AND workspace=?", key)
-            conn.execute("DELETE FROM nonces WHERE expires_at <= ?", (self._clock(),))
-            conn.execute("INSERT INTO nonces (digest, bot, provider_id, workspace, expires_at, app_scheme)"
-                         " VALUES (?, ?, ?, ?, ?, ?)", (digest(raw), *key, self._clock() + ttl, app_scheme.value))
+            return self._insert_nonce(conn, key, app_scheme, ttl)
+
+    def _insert_nonce(self, conn: sqlite3.Connection, key: SetupKey, app_scheme: AppScheme, ttl: float) -> str:
+        raw = secrets.token_urlsafe(32)
+        conn.execute("DELETE FROM nonces WHERE bot=? AND provider_id=? AND workspace=?", key)
+        conn.execute("DELETE FROM nonces WHERE expires_at <= ?", (self._clock(),))
+        conn.execute("INSERT INTO nonces (digest, bot, provider_id, workspace, expires_at, app_scheme)"
+                     " VALUES (?, ?, ?, ?, ?, ?)", (digest(raw), *key, self._clock() + ttl, app_scheme.value))
         return raw
+
+    @staticmethod
+    def _issued_scheme(conn: sqlite3.Connection, key: SetupKey) -> AppScheme:
+        row = conn.execute("SELECT app_scheme FROM nonces WHERE bot=? AND provider_id=? AND workspace=?"
+                           " ORDER BY expires_at DESC LIMIT 1", key).fetchone()
+        return AppScheme.parse(row["app_scheme"]) if row else AppScheme.release
+
+    def save_with_nonce(self, key: SetupKey, expected_revision: int, build: Callable[[str], SetupState],
+                        ttl: float = NONCE_TTL_SECONDS) -> SetupState:
+        with self._write() as conn:
+            renewed = build(self._insert_nonce(conn, key, self._issued_scheme(conn, key), ttl))
+            self._save(conn, renewed, expected_revision)
+        return renewed
+
+    def nonce_live(self, raw: str, key: SetupKey) -> bool:
+        with self._read() as conn:
+            row = conn.execute("SELECT bot, provider_id, workspace, expires_at FROM nonces WHERE digest=?",
+                               (digest(raw),)).fetchone()
+        return row is not None and (row["bot"], row["provider_id"], row["workspace"]) == tuple(key) \
+            and row["expires_at"] > self._clock()
 
     def consume_nonce(self, raw: str, now: float | None = None) -> tuple[SetupKey, AppScheme] | None:
         wanted = digest(raw)

@@ -7,6 +7,7 @@ profile, never the launch profile's.
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
@@ -18,7 +19,8 @@ from fastapi.testclient import TestClient
 
 from agent.vault_store import VaultError, VaultStore
 from gateway import chat_install_runtime, control_socket
-from gateway.chat_install_store import ChatInstallStore
+from gateway.chat_install_store import DB_NAME, ChatInstallStore
+from gateway.device_registry import install_root
 from gateway.chat_slack.api import SlackApi
 from gateway.chat_slack.provider import SlackProvider
 from gateway.chat_slack.records import SlackRecords
@@ -457,6 +459,213 @@ def test_a_state_stuck_in_install_failed_by_a_lost_app_key_recovers_on_retry_at_
         "next_action": wire.NextAction(kind=wire.NextActionKind.button, action_id=wire.FixAction.retry.value)})
     ChatInstallStore(r.home).save(stuck, state.revision)
     finish_after_the_app_key_is_asked_again(r, r.state(r.advance(stuck, "retry")))
+
+
+def expire_nonces(r: Rig) -> None:
+    with sqlite3.connect(Path(install_root(r.home)) / DB_NAME) as conn:
+        conn.execute("UPDATE nonces SET expires_at = 0")
+
+
+def test_status_renews_an_allow_link_whose_nonce_expired_and_the_new_link_completes_the_install(rig):
+    r = rig()
+    stale = r.to_allow()
+    expire_nonces(r)
+    renewed = r.status()
+    assert renewed.step is wire.SetupStep.needs_allow
+    assert nonce_of(renewed.next_action.link) != nonce_of(stale.next_action.link)
+    assert renewed.revision == stale.revision + 1
+    assert ChatInstallStore(r.home).nonce_live(nonce_of(renewed.next_action.link), (BOT, "slack", "w1"))
+    assert r.allow(renewed).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+
+
+def test_status_renews_an_allow_link_whose_nonce_was_already_used(rig):
+    r = rig()
+    stale = r.to_allow()
+    assert ChatInstallStore(r.home).consume_nonce(nonce_of(stale.next_action.link)) is not None
+    renewed = r.status()
+    assert nonce_of(renewed.next_action.link) != nonce_of(stale.next_action.link)
+    assert r.allow(renewed).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+
+
+def test_status_returns_a_live_allow_link_unchanged(rig):
+    r = rig()
+    allowed = r.to_allow()
+    assert r.status() == allowed
+    assert r.status() == allowed
+    assert r.allow(allowed).status_code == 200
+
+
+def test_status_of_a_state_waiting_at_allow_returns_to_the_app_key_step_when_the_app_key_is_missing(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    lose_app_key(r)
+    asked = r.status()
+    assert asked.step is wire.SetupStep.needs_manual_step
+    assert asked.next_action.action_id == CAP.app_level_credential.value
+    assert CAP.app_level_credential not in asked.manual_steps_done
+    finish_after_the_app_key_is_asked_again(r, asked)
+    assert allowed.revision < asked.revision
+
+
+def reason_of(response: dict) -> str:
+    return response["error"]["data"]["reason"]
+
+
+def reopen(r: Rig, state: wire.SetupState, step: CAP | None = None) -> dict:
+    return r.advance(state, "reopen_step", **({"manual_step": step.value} if step else {}))
+
+
+def test_reopening_the_app_key_from_allow_asks_for_it_again_and_undoes_the_later_steps(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    assert allowed.manual_steps_done == [CAP.set_icon, CAP.app_level_credential, CAP.gateway_redirect]
+    reopened = r.state(reopen(r, allowed, CAP.app_level_credential))
+    assert reopened.step is wire.SetupStep.needs_manual_step
+    assert reopened.manual_steps_done == [CAP.set_icon]
+    assert reopened.next_action.action_id == CAP.app_level_credential.value
+    assert reopened.next_action.link == f"https://api.slack.com/apps/{allowed.app_id}/general"
+    assert reopened.revision == allowed.revision + 1 and r.status() == reopened
+    finish_after_the_app_key_is_asked_again(r, reopened)
+
+
+def test_reopening_the_first_guided_step_undoes_every_guided_step(rig):
+    r = rig(**GUIDED)
+    reopened = r.state(reopen(r, r.to_allow(), CAP.set_icon))
+    assert reopened.step is wire.SetupStep.needs_manual_step and reopened.manual_steps_done == []
+    assert reopened.next_action.action_id == CAP.set_icon.value
+    assert r.finish_manual_steps(reopened).step is wire.SetupStep.needs_allow
+
+
+def test_reopening_an_earlier_step_from_a_later_manual_step_moves_the_pending_step_back(rig):
+    r = rig(**GUIDED)
+    state = r.to_manual_or_allow()
+    while state.next_action.action_id != CAP.gateway_redirect.value:
+        extra = {"vault_item_id": r.app_key_item} if state.next_action.action_id == CAP.app_level_credential.value else {}
+        state = r.state(r.advance(state, "manual_step_done", **extra))
+    reopened = r.state(reopen(r, state, CAP.app_level_credential))
+    assert reopened.step is wire.SetupStep.needs_manual_step
+    assert reopened.next_action.action_id == CAP.app_level_credential.value
+    assert reopened.manual_steps_done == [CAP.set_icon]
+
+
+def test_reopening_a_step_the_workspace_handles_automatically_is_refused_and_changes_nothing(rig):
+    r = rig(icon_ok=True, app_token_ok=False, redirect_ok=False)
+    allowed = r.to_allow()
+    assert CAP.set_icon not in allowed.manual_steps_done
+    assert reason_of(reopen(r, allowed, CAP.set_icon)) == "invalid_event"
+    assert r.status() == allowed
+
+
+def test_reopening_a_step_that_was_not_reached_yet_is_refused(rig):
+    r = rig(**GUIDED)
+    state = r.to_manual_or_allow()
+    assert state.next_action.action_id == CAP.set_icon.value
+    assert reason_of(reopen(r, state, CAP.gateway_redirect)) == "invalid_event"
+    assert reason_of(reopen(r, state, CAP.set_icon)) == "invalid_event"
+    assert r.status() == state
+
+
+@pytest.mark.parametrize("step", [None, CAP.unattended_refresh, CAP.join_public_space])
+def test_reopening_something_that_is_not_a_guided_setup_step_is_refused(rig, step):
+    r = rig(**GUIDED)
+    state = r.to_manual_or_allow()
+    assert reason_of(reopen(r, state, step)) == "invalid_event"
+    assert r.status() == state
+
+
+def test_reopening_with_a_stale_revision_is_refused_with_the_current_state(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    response = r.rpc("chat.install.advance", event="reopen_step", expected_revision=allowed.revision - 1,
+                     manual_step=CAP.app_level_credential.value)
+    assert reason_of(response) == "stale_revision"
+    assert r.status() == allowed
+
+
+def test_reopening_a_step_before_the_app_exists_is_refused(rig):
+    r = rig(**GUIDED)
+    begun = r.state(r.rpc("chat.install.begin"))
+    assert begun.step is wire.SetupStep.needs_credential
+    assert reason_of(reopen(r, begun, CAP.set_icon)) == "invalid_event"
+    assert r.status() == begun
+
+
+def test_reopening_a_step_after_the_install_is_refused(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    assert r.allow(allowed).status_code == 200
+    ready = r.status()
+    assert ready.step is wire.SetupStep.ready
+    assert reason_of(reopen(r, ready, CAP.set_icon)) == "invalid_event"
+    assert r.status() == ready
+
+
+def test_reopening_from_a_rejected_app_key_error_goes_back_to_the_earlier_step_and_clears_the_error(rig):
+    r = rig(**GUIDED)
+    state = r.to_manual_or_allow()
+    while state.next_action.action_id != CAP.app_level_credential.value:
+        state = r.state(r.advance(state, "manual_step_done"))
+    wrong = r._secret("Slack app key", BOT_TOKEN)
+    failed = r.state(r.advance(state, "manual_step_done", vault_item_id=wrong))
+    assert failed.step is wire.SetupStep.error and failed.resume_step is wire.SetupStep.needs_manual_step
+    reopened = r.state(reopen(r, failed, CAP.set_icon))
+    assert reopened.step is wire.SetupStep.needs_manual_step
+    assert reopened.error is None and reopened.resume_step is None
+    assert reopened.next_action.action_id == CAP.set_icon.value and reopened.manual_steps_done == []
+    assert r.finish_manual_steps(reopened).step is wire.SetupStep.needs_allow
+
+
+def test_reopening_from_a_denied_allow_error_goes_back_to_the_app_key_step(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    r.client.get(REDIRECT_PATH, params={"error": "access_denied", "state": nonce_of(allowed.next_action.link)})
+    denied = r.status()
+    assert denied.step is wire.SetupStep.error and denied.resume_step is wire.SetupStep.needs_allow
+    reopened = r.state(reopen(r, denied, CAP.app_level_credential))
+    assert reopened.step is wire.SetupStep.needs_manual_step and reopened.error is None
+    assert reopened.manual_steps_done == [CAP.set_icon]
+    finish_after_the_app_key_is_asked_again(r, reopened)
+
+
+def test_reopening_from_an_error_that_is_not_in_the_manual_or_allow_steps_is_refused(rig):
+    r = rig(**GUIDED)
+    state = r.to_allow()
+    stuck = state.model_copy(update={
+        "step": wire.SetupStep.error, "resume_step": wire.SetupStep.installing, "revision": state.revision + 1,
+        "error": wire.SetupError(code=wire.SetupErrorCode.install_failed, fix=wire.FixAction.retry),
+        "next_action": wire.NextAction(kind=wire.NextActionKind.button, action_id=wire.FixAction.retry.value)})
+    ChatInstallStore(r.home).save(stuck, state.revision)
+    assert reason_of(reopen(r, stuck, CAP.set_icon)) == "invalid_event"
+
+
+def test_reopening_allow_from_allow_issues_a_fresh_link_that_completes_the_install(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    fresh = r.state(reopen(r, allowed))
+    assert fresh.step is wire.SetupStep.needs_allow and fresh.manual_steps_done == allowed.manual_steps_done
+    assert nonce_of(fresh.next_action.link) != nonce_of(allowed.next_action.link)
+    assert fresh.revision == allowed.revision + 1
+    assert r.allow(fresh).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+
+
+def test_reopening_allow_from_a_denied_allow_error_returns_to_allow_with_a_fresh_link(rig):
+    r = rig(**GUIDED)
+    allowed = r.to_allow()
+    r.client.get(REDIRECT_PATH, params={"error": "access_denied", "state": nonce_of(allowed.next_action.link)})
+    denied = r.status()
+    fresh = r.state(reopen(r, denied))
+    assert fresh.step is wire.SetupStep.needs_allow and fresh.error is None and fresh.resume_step is None
+    assert r.allow(fresh).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+
+
+def test_reopening_allow_before_every_guided_step_is_done_is_refused(rig):
+    r = rig(**GUIDED)
+    state = r.to_manual_or_allow()
+    assert reason_of(reopen(r, state)) == "invalid_event"
 
 
 def slack_adapter(team_bot_user: str = "UBOT") -> SlackAdapter:
