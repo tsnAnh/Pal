@@ -16,6 +16,8 @@ SLOW_DELAY = 0.25
 HOLD_SECONDS = 12
 CLARIFY_QUESTION = "Which flavor do you want?"
 CLARIFY_CHOICES = ["vanilla", "chocolate"]
+CLARIFY_VARIANTS = {"CLARIFYMULTI": "multi", "CLARIFYBATCH": "batch", "CLARIFYFLOW": "flow"}
+CLARIFY_OPEN_QUESTION = "Anything else to add?"
 CLARIFY_SECOND_QUESTION = "Which size?"
 CLARIFY_SECOND_CHOICES = ["small", "large"]
 DM_PROMPT_PREFIX = "MESSAGE_AGENT "
@@ -267,10 +269,9 @@ def plan(body):
         return "final", clarify_reply(text_of(last.get("content"))), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and NARRATED_CLARIFY_TRIGGER in last_user:
         return "clarify", {"preamble": COMMENTARY}, COMMENTARY_DELAY
-    if "clarify" in names and last_role == "user" and "CLARIFYMULTI" in last_user:
-        return "clarify", {"variant": "multi"}, 0
-    if "clarify" in names and last_role == "user" and "CLARIFYBATCH" in last_user:
-        return "clarify", {"variant": "batch"}, 0
+    variant = next((name for trigger, name in CLARIFY_VARIANTS.items() if trigger in last_user), None)
+    if "clarify" in names and last_role == "user" and variant:
+        return "clarify", {"variant": variant}, 0
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
         return "clarify", None, 0
     if names and last_role == "user" and "HOLD" in last_user:
@@ -406,6 +407,9 @@ class Handler(BaseHTTPRequestHandler):
         questions = [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES, "multi_select": variant == "multi"}]
         if variant == "batch":
             questions.append({"question": CLARIFY_SECOND_QUESTION, "choices": CLARIFY_SECOND_CHOICES})
+        if variant == "flow":
+            questions.append({"question": CLARIFY_SECOND_QUESTION, "choices": CLARIFY_SECOND_CHOICES, "multi_select": True})
+            questions.append({"question": CLARIFY_OPEN_QUESTION})
         return json.dumps({"questions": questions})
 
     def scripted_call(self, call):
