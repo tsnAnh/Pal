@@ -6,16 +6,17 @@ import SwiftUI
 struct ClarifyFormCard: View {
     let prompt: PendingPrompt
     var accent: BotAccent?
-    let submit: ([(qid: String, answer: ClarifyForm.Answer)]) async -> Bool
+    let submit: ([(qid: String, answer: ClarifyForm.Answer)]) async throws -> Void
 
     @State private var form: ClarifyForm
-    @State private var sending = false
+    @State private var settling = false
     @FocusState private var otherFocused: Bool
     @FocusState private var cardFocused: Bool
     @Environment(\.hermesTheme) private var theme
     @Environment(\.composerActivity) private var composer
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(prompt: PendingPrompt, accent: BotAccent? = nil, submit: @escaping ([(qid: String, answer: ClarifyForm.Answer)]) async -> Bool) {
+    init(prompt: PendingPrompt, accent: BotAccent? = nil, submit: @escaping ([(qid: String, answer: ClarifyForm.Answer)]) async throws -> Void) {
         self.prompt = prompt
         self.accent = accent
         self.submit = submit
@@ -30,8 +31,12 @@ struct ClarifyFormCard: View {
         !form.currentDraft.typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var primaryTitle: LocalizedStringKey { form.isLast ? "Submit" : "Next" }
-    private var primaryEnabled: Bool { !sending && (form.isLast ? form.canSubmit : form.canAdvance) }
+    private var confirmTitle: LocalizedStringKey? {
+        if form.failure != nil { return "Retry" }
+        return form.needsConfirm ? "Done" : nil
+    }
+
+    private var locked: Bool { form.isSending || settling }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -41,22 +46,30 @@ struct ClarifyFormCard: View {
             textEntry
             footer
         }
+        .id(form.page)
+        .transition(.opacity)
         .clarifySurface()
+        .animation(reduceMotion ? nil : .easeInOut(duration: Self.pageFade), value: form.page)
         .focusable()
         .focused($cardFocused)
         .focusEffectDisabled()
-        .onKeyPress(.return) { handleKey { advanceOrSubmit() } }
-        .onKeyPress(.leftArrow) { handleKey { form.back() } }
-        .onKeyPress(.rightArrow) { handleKey { advanceOrSubmit() } }
+        .onKeyPress(.return) { handleKey { apply(form.confirm()) } }
+        .onKeyPress(.leftArrow) { handleKey { goBack() } }
+        .onKeyPress(.rightArrow) { handleKey { _ = form.advance() } }
         .onKeyPress(characters: .letters, phases: .down) { press in
             guard let letter = press.characters.first, let index = ClarifyForm.choiceIndex(forLetter: letter), form.hasChoices else { return .ignored }
-            return handleKey { pick(index) }
+            return handleKey { choose(index) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAction(named: Text("Skip")) { skip() }
         .accessibilityAction(named: Text("Back")) { goBack() }
-        .accessibilityAction(named: Text(primaryTitle)) { advanceOrSubmit() }
+        .accessibilityActions {
+            if let confirmTitle { Button(confirmTitle) { confirm() } }
+        }
         .accessibilityIdentifier("clarifyForm")
+        .onChange(of: form.page) { _, page in
+            AccessibilityNotification.Announcement(String(localized: "Question \(page + 1) of \(form.count), \(form.current.question)")).post()
+        }
         .onAppear { cardFocused = ClarifyFocusPolicy.claimsFocus(composerFocused: composer.focused, draft: composer.draft) }
     }
 
@@ -64,7 +77,7 @@ struct ClarifyFormCard: View {
         ForEach(Array(form.current.choices.enumerated()), id: \.offset) { index, choice in
             let picked = form.currentDraft.picked.contains(index)
             let showsCheck = picked && form.current.multiSelect
-            Button { pick(index) } label: {
+            Button { choose(index) } label: {
                 ClarifyRow(
                     letter: showsCheck ? nil : ClarifyRow.letter(index),
                     text: choice,
@@ -88,15 +101,20 @@ struct ClarifyFormCard: View {
                 focused: $otherFocused,
                 hasText: hasTyped,
                 accent: accent
-            ) { advanceOrSubmit() }
+            ) { confirm() }
         } else {
-            ClarifyOpenField(text: typedBinding, focused: $otherFocused) { advanceOrSubmit() }
+            ClarifyOpenField(text: typedBinding, focused: $otherFocused) { confirm() }
         }
     }
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if form.isLast {
+            if let failure = form.failure {
+                Text(failure)
+                    .font(.footnote)
+                    .foregroundStyle(Color(theme.palette.textSecondary))
+                    .accessibilityIdentifier("clarifyFailure")
+            } else if form.isLast {
                 Text(recapText)
                     .font(.footnote)
                     .foregroundStyle(Color(theme.palette.textSecondary))
@@ -104,12 +122,12 @@ struct ClarifyFormCard: View {
             }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
-                    ClarifyPageDots(count: form.count, current: form.page)
+                    ClarifyPageDots(count: form.count, current: form.page, canJump: form.canJump(to:), jump: jump)
                     Spacer(minLength: 8)
                     controls
                 }
                 VStack(alignment: .leading, spacing: 0) {
-                    ClarifyPageDots(count: form.count, current: form.page)
+                    ClarifyPageDots(count: form.count, current: form.page, canJump: form.canJump(to:), jump: jump)
                     HStack(spacing: 8) {
                         Spacer(minLength: 0)
                         controls
@@ -128,16 +146,18 @@ struct ClarifyFormCard: View {
                 .foregroundStyle(Color(theme.palette.textTertiary))
                 .frame(minHeight: ChatMetrics.minimumHitTarget)
                 .padding(.horizontal, 6)
-                .disabled(sending)
+                .disabled(locked)
                 .accessibilityIdentifier("clarifySkip")
             Button("Back") { goBack() }
                 .glassButtonStyle()
-                .disabled(form.isFirst || sending)
+                .disabled(form.isFirst || locked)
                 .accessibilityIdentifier("clarifyBack")
-            Button(primaryTitle) { advanceOrSubmit() }
-                .glassButtonStyle()
-                .disabled(!primaryEnabled)
-                .accessibilityIdentifier("clarifyNext")
+            if let confirmTitle {
+                Button(confirmTitle) { confirm() }
+                    .glassButtonStyle()
+                    .disabled(locked || (form.failure == nil && !form.canAdvance))
+                    .accessibilityIdentifier(form.failure == nil ? "clarifyConfirm" : "clarifyRetry")
+            }
         }
     }
 
@@ -148,20 +168,30 @@ struct ClarifyFormCard: View {
     }
 
     private func handleKey(_ action: () -> Void) -> KeyPress.Result {
-        guard !otherFocused, !sending else { return .ignored }
+        guard !otherFocused, !locked else { return .ignored }
         action()
         return .handled
     }
 
-    private func pick(_ index: Int) {
+    private func choose(_ index: Int) {
+        guard !locked else { return }
         cardFocused = true
+        guard form.advancesOnPick, !reduceMotion else {
+            apply(form.choose(index))
+            return
+        }
         form.pick(index)
+        settling = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(Self.settleMilliseconds))
+            settling = false
+            apply(form.choose(index))
+        }
     }
 
     private func skip() {
-        guard !sending else { return }
-        cardFocused = true
-        form.skip()
+        guard !locked else { return }
+        apply(form.skipPage())
     }
 
     private func goBack() {
@@ -169,34 +199,56 @@ struct ClarifyFormCard: View {
         form.back()
     }
 
-    private func advanceOrSubmit() {
-        guard primaryEnabled else { return }
+    private func jump(_ index: Int) {
+        guard !locked else { return }
+        cardFocused = true
+        form.jump(to: index)
+    }
+
+    private func confirm() {
+        apply(form.failure == nil ? form.confirm() : form.retry())
+    }
+
+    private func apply(_ step: ClarifyForm.Step) {
+        guard step != .ignored, step != .stayed else { return }
         otherFocused = false
         cardFocused = true
-        guard form.isLast else {
-            form.advance()
-            return
-        }
-        guard let payload = form.payload else { return }
-        sending = true
+        guard step == .submit, let payload = form.payload else { return }
         Task {
-            if await submit(payload) == false { sending = false }
+            do {
+                try await submit(payload)
+            } catch {
+                form.submitFailed(error)
+            }
         }
     }
+
+    private static let settleMilliseconds = 150
+    private static let pageFade = 0.15
 }
 
 private struct ClarifyPageDots: View {
     let count: Int
     let current: Int
+    let canJump: (Int) -> Bool
+    let jump: (Int) -> Void
 
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 0) {
             ForEach(0..<count, id: \.self) { index in
-                Circle()
-                    .fill(Color(index == current ? theme.palette.textPrimary : theme.palette.textTertiary))
-                    .frame(width: 7, height: 7)
+                Button { jump(index) } label: {
+                    Circle()
+                        .fill(Color(index == current ? theme.palette.textPrimary : theme.palette.textTertiary))
+                        .frame(width: 7, height: 7)
+                        .padding(.horizontal, 5)
+                        .frame(minHeight: ChatMetrics.minimumHitTarget)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canJump(index))
+                .accessibilityIdentifier("clarifyDot-\(index)")
             }
         }
         .accessibilityHidden(true)
@@ -290,7 +342,7 @@ struct ClarifyRowContent: View {
         case .clarifyAnswered(let records):
             ClarifyAnsweredFormCard(records: records, accent: accent).bubbleWidth(.leading)
         case .clarify(let prompt) where prompt.isForm:
-            ClarifyFormCard(prompt: prompt, accent: accent) { answers in await model.answerForm(prompt, answers) }.bubbleWidth(.leading)
+            ClarifyFormCard(prompt: prompt, accent: accent) { answers in try await model.answerForm(prompt, answers) }.bubbleWidth(.leading)
         case .clarify(let prompt):
             ClarifyCard(prompt: prompt, accent: accent) { answer in model.answer(prompt, with: answer) }.bubbleWidth(.leading)
         default:

@@ -6,14 +6,8 @@ extension ChatModel {
         snapshot?.pendingPrompts.contains { $0.kind == .clarify } ?? false
     }
 
-    func answerForm(_ prompt: PendingPrompt, _ answers: [(qid: String, answer: ClarifyForm.Answer)]) async -> Bool {
-        guard let session else { return false }
-        do {
-            try await session.answerClarifyForm(prompt, answers: answers)
-            return true
-        } catch {
-            sendError = String(localized: "Your answer could not be sent. Try again.")
-            return false
-        }
+    func answerForm(_ prompt: PendingPrompt, _ answers: [(qid: String, answer: ClarifyForm.Answer)]) async throws {
+        guard let session else { throw ChatError.notConnected }
+        try await session.answerClarifyForm(prompt, answers: answers)
     }
 }

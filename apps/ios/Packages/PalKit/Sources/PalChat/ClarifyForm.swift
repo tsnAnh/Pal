@@ -1,5 +1,6 @@
 import Foundation
 import PalProtocol
+import PalTransport
 
 public struct ClarifyForm: Sendable, Equatable {
     public struct Draft: Sendable, Equatable {
@@ -24,9 +25,23 @@ public struct ClarifyForm: Sendable, Equatable {
         public var skipped: Int
     }
 
+    public enum Phase: Sendable, Equatable {
+        case answering
+        case sending
+        case failed(String)
+    }
+
+    public enum Step: Sendable, Equatable {
+        case ignored
+        case stayed
+        case advanced
+        case submit
+    }
+
     public let questions: [ClarifyQuestion]
     public private(set) var drafts: [Draft]
     public private(set) var page = 0
+    public private(set) var phase = Phase.answering
 
     public init(questions: [ClarifyQuestion]) {
         self.questions = questions
@@ -42,6 +57,17 @@ public struct ClarifyForm: Sendable, Equatable {
     public var hasChoices: Bool { !current.choices.isEmpty }
     public var canAdvance: Bool { isAnswered(page) }
     public var canSubmit: Bool { drafts.indices.allSatisfy(isAnswered) }
+    public var isSending: Bool { phase == .sending }
+    public var advancesOnPick: Bool { hasChoices && !current.multiSelect }
+    public var needsConfirm: Bool { !advancesOnPick }
+
+    public var failure: String? {
+        if case .failed(let reason) = phase { reason } else { nil }
+    }
+
+    public func canJump(to index: Int) -> Bool {
+        !isSending && index != page && isAnswered(index)
+    }
 
     public var recap: Recap {
         var recap = Recap(answered: 0, skipped: 0)
@@ -76,7 +102,8 @@ public struct ClarifyForm: Sendable, Equatable {
     }
 
     public mutating func pick(_ index: Int) {
-        guard current.choices.indices.contains(index) else { return }
+        guard !isSending, current.choices.indices.contains(index) else { return }
+        resumeAnswering()
         var draft = drafts[page]
         draft.skipped = false
         if current.multiSelect {
@@ -89,6 +116,8 @@ public struct ClarifyForm: Sendable, Equatable {
     }
 
     public mutating func setTyped(_ text: String) {
+        guard !isSending else { return }
+        resumeAnswering()
         var draft = drafts[page]
         draft.typed = text
         if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -99,21 +128,97 @@ public struct ClarifyForm: Sendable, Equatable {
     }
 
     public mutating func skip() {
+        guard !isSending else { return }
+        resumeAnswering()
         drafts[page] = Draft(skipped: true)
     }
 
     @discardableResult
     public mutating func advance() -> Bool {
-        guard canAdvance, !isLast else { return false }
+        guard !isSending, canAdvance, !isLast else { return false }
         page += 1
         return true
     }
 
     @discardableResult
     public mutating func back() -> Bool {
-        guard !isFirst else { return false }
+        guard !isSending, !isFirst else { return false }
+        resumeAnswering()
         page -= 1
         return true
+    }
+
+    @discardableResult
+    public mutating func jump(to index: Int) -> Bool {
+        guard canJump(to: index) else { return false }
+        resumeAnswering()
+        page = index
+        return true
+    }
+
+    @discardableResult
+    public mutating func choose(_ index: Int) -> Step {
+        guard !isSending, current.choices.indices.contains(index) else { return .ignored }
+        pick(index)
+        return advancesOnPick ? move() : .stayed
+    }
+
+    @discardableResult
+    public mutating func confirm() -> Step {
+        guard !isSending, canAdvance else { return .ignored }
+        return move()
+    }
+
+    @discardableResult
+    public mutating func skipPage() -> Step {
+        guard !isSending else { return .ignored }
+        skip()
+        return move()
+    }
+
+    @discardableResult
+    public mutating func retry() -> Step {
+        guard case .failed = phase, canSubmit else { return .ignored }
+        phase = .sending
+        return .submit
+    }
+
+    public mutating func submitFailed(_ error: Error) {
+        guard isSending else { return }
+        page = count - 1
+        phase = .failed(Self.failureReason(for: error))
+    }
+
+    private mutating func move() -> Step {
+        resumeAnswering()
+        guard isLast else {
+            page += 1
+            return .advanced
+        }
+        guard canSubmit else { return .stayed }
+        phase = .sending
+        return .submit
+    }
+
+    private mutating func resumeAnswering() {
+        if case .failed = phase { phase = .answering }
+    }
+
+    public static func failureReason(for error: Error) -> String {
+        switch error {
+        case ChatError.notConnected:
+            "Pal is not connected right now."
+        case ChatError.clarifyExpired:
+            "This question is no longer waiting for an answer."
+        case let rpc as RPCError:
+            rpc.message
+        case GatewayTransportError.rpc(let rpc):
+            rpc.message
+        case let url as URLError where url.code == .notConnectedToInternet:
+            "You are offline."
+        default:
+            error.localizedDescription
+        }
     }
 
     public static func letter(_ index: Int) -> String {
