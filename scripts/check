@@ -124,6 +124,7 @@ _GUARDS = {
     "swift-bot-tint": ["scripts/ci/check_swift_bot_tint.py"],
     "swift-chat-drop": ["scripts/ci/check_swift_chat_drop.py"],
     "swift-chat-scroll": ["scripts/ci/check_swift_chat_scroll.py"],
+    "chat-scroll-single-writer": ["scripts/ci/check_swift_chat_scroll_writer.py"],
     "swift-scroll-gesture": ["scripts/ci/check_swift_scroll_gesture.py"],
     "swift-chat-row-alignment": ["scripts/ci/check_swift_chat_row_alignment.py"],
     "swift-mac-layout": ["scripts/ci/check_swift_mac_layout.py"],

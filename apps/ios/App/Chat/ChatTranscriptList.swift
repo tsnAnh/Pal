@@ -11,7 +11,6 @@ struct ChatTranscriptList: View {
     let teach: TeachModel
     let router: AppRouter
 
-    @State private var chrome = EdgeInsets()
     @State private var connectionIsSlow = false
     @LazyState private var desk: ChatDeskFeed
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -30,25 +29,19 @@ struct ChatTranscriptList: View {
             ChatTranscriptRows(model: model, scroll: scroll, router: router, desk: desk.desk, connectionIsSlow: connectionIsSlow)
         }
         .scrollPosition($scroll.position)
+        .defaultScrollAnchor(.bottom)
+        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .safeAreaPadding(.bottom, ChatMetrics.composerClearance)
         .task(id: model.bot.name) { await desk.run() }
-        .contentMargins(.top, max(0, chrome.bottom - chrome.top) + ChatMetrics.composerClearance, for: .automatic)
-        .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
-        .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
-        .newestFirst()
         .overlay { ChatOpeningOverlay(model: model, hidesIntro: !desk.desk.cards.isEmpty) }
         .scrollDismissesKeyboard(.interactively)
         .palHiddenScrollEdge(for: .all)
         .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
         .safeAreaInset(edge: .top, spacing: 0) { ChatAutoApproveBanner(model: model) }
         .teachPresentations(teach, surface: .chat)
-        .onScrollGeometryChange(for: ChatViewport.self, of: ChatViewport.init) { old, new in
-            scroll.observe(new, tracksOpen: model.isOpenWindow)
-            if new.contentHeight > old.contentHeight { scroll.contentGrew() }
-        }
+        .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }, action: { _, new in scroll.observe(new) })
         .onScrollPhaseChange { _, phase in scroll.observe(phase) }
         .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { scroll.visibleRowsChanged($0) }
-        .onChange(of: chrome) { scroll.contentGrew(.keepNewestChrome) }
-        .modifier(ChatScrollTraceProbe(chrome: chrome))
         .modifier(ChatRowsSync(model: model, scroll: scroll))
         .modifier(ChatOlderPaging(model: model, scroll: scroll))
         .modifier(ChatScreenAccessibility(model: model))
@@ -106,20 +99,12 @@ private struct ChatTranscriptRows: View {
         let source = model.rowContextSource
         let ink = BubblePalette.ink(accent: source.accent)
         LazyVStack(alignment: .leading, spacing: 0) {
-            ForEach(desk.newestFirst) { card in
-                ChatDeskCardView(card: card, botName: model.bot.displayName) { choice in
-                    Task { await desk.decide(card.id, choice) }
-                }
-                .padding(.top, ChatMetrics.senderSwitchGap)
-                .frame(maxWidth: ChatDeskCardView.maxWidth)
-                .frame(maxWidth: .infinity)
-                .chatListRow()
-                .newestFirst()
+            if !model.rows.isEmpty {
+                OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
+                    .chatListRow()
+                    .padding(.top, 8)
             }
-            VStack(spacing: 0) { footer(ink: ink) }
-                .chatListRow()
-                .newestFirst()
-            ForEach(model.rowsNewestFirst) { row in
+            ForEach(model.rows) { row in
                 ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
                     router.push(.botThread(BotThreadRoute(
                         botName: model.bot.name,
@@ -129,14 +114,18 @@ private struct ChatTranscriptRows: View {
                 }
                 .equatable()
                 .chatListRow()
-                .newestFirst()
-                .background { ChatPinProbe(id: row.id, scroll: scroll, slot: scroll.pinSlots.slot(for: row.id)) }
+                .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row)) { scroll.rowLaidOut(row.id, frame: $0) })
             }
-            if !model.rows.isEmpty {
-                OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
-                    .chatListRow()
-                    .newestFirst()
-                    .padding(.bottom, 8)
+            VStack(spacing: 0) { footer(ink: ink) }
+                .chatListRow()
+            ForEach(desk.cards) { card in
+                ChatDeskCardView(card: card, botName: model.bot.displayName) { choice in
+                    Task { await desk.decide(card.id, choice) }
+                }
+                .padding(.top, ChatMetrics.senderSwitchGap)
+                .frame(maxWidth: ChatDeskCardView.maxWidth)
+                .frame(maxWidth: .infinity)
+                .chatListRow()
             }
         }
         .scrollTargetLayout()
@@ -171,6 +160,30 @@ private struct ChatTranscriptRows: View {
                     .accessibilityIdentifier("chatStatusLine")
             }
         }
+    }
+}
+
+private struct ChatRowHeightFloor: ViewModifier {
+    let floor: CGFloat?
+    let laidOut: (CGRect) -> Void
+    @State private var settled = false
+
+    private static let settleLimit = Duration.seconds(1)
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) { // perf-lint: ok
+                $0.frame(in: .named(ChatScrollController.contentSpace))
+            } action: { frame in
+                laidOut(frame)
+                if let floor, !settled, frame.height >= floor - 0.5 { settled = true }
+            }
+            .frame(minHeight: settled ? nil : floor, alignment: .top)
+            .task {
+                guard floor != nil, !settled else { return }
+                try? await Task.sleep(for: Self.settleLimit)
+                settled = true
+            }
     }
 }
 

@@ -1,0 +1,24 @@
+{
+  "id": "t12-them-co-quiet",
+  "split": "tune",
+  "task": "Thêm cờ --quiet cho lệnh export.",
+  "known": [
+    "The project is the checkout in the current workspace."
+  ],
+  "facts": [
+    {"key": "parser", "value": "export.py defines the argparse parser in build_parser()", "topics": ["parser", "file", "where", "argparse", "export"]},
+    {"key": "style", "value": "other flags are long kebab-case names and no short flags exist", "topics": ["style", "short", "flag", "naming", "kebab"]},
+    {"key": "tests", "value": "tests/test_export.py covers the options", "topics": ["tests", "test"]}
+  ],
+  "actions": [
+    {"id": "edit_cli", "class": "reversible_edit"},
+    {"id": "add_test", "class": "create_file"},
+    {"id": "run_tests", "class": "run_tool"}
+  ],
+  "done_when": ["edit_cli", "run_tests"],
+  "useful_extras": ["add_test"],
+  "owner_record": [
+    {"topics": ["short flag", "-q", "viet tat"], "answer": "Không cần cờ ngắn.", "criteria": ["safe_default"]},
+    {"topics": ["file", "o dau", "where"], "answer": "Tự tìm trong export.py.", "criteria": ["lookup_decidable"]}
+  ]
+}

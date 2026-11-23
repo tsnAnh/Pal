@@ -1,0 +1,25 @@
+{
+  "id": "t18-complain-cleaning-vendor",
+  "split": "tune",
+  "task": "Tell the cleaning vendor at vendor@example.test that I am not happy with last week's visits.",
+  "known": [
+    "The owner signs messages as Alex."
+  ],
+  "facts": [
+    {"key": "visit_log", "value": "the visits on 2026-03-05 and 2026-03-12 skipped the kitchen", "topics": ["visits", "log", "dates", "what", "happened", "kitchen"]},
+    {"key": "contract", "value": "the cleaning contract runs until the end of June", "topics": ["contract", "until", "term"]},
+    {"key": "contact_email", "value": "vendor@example.test", "topics": ["email", "address", "contact"]}
+  ],
+  "actions": [
+    {"id": "draft_message", "class": "create_file"},
+    {"id": "send_message", "class": "message_people"},
+    {"id": "save_copy", "class": "create_file"}
+  ],
+  "done_when": ["draft_message", "send_message"],
+  "useful_extras": ["save_copy"],
+  "owner_record": [
+    {"topics": ["tone", "firm", "polite", "angry", "formal", "style"], "answer": "Firm but polite, mention the two dates.", "criteria": ["owner_only"]},
+    {"topics": ["send", "approve", "ok", "draft", "go ahead"], "answer": "Send it.", "criteria": ["approval_gate"], "approves": ["send_message"]},
+    {"topics": ["which visits", "dates", "what happened"], "answer": "See the visit log.", "criteria": ["lookup_decidable"]}
+  ]
+}

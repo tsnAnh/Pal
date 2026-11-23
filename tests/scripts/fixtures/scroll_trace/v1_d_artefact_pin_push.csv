@@ -1,0 +1,7 @@
+epoch_s,kind,reason,mode,phase,offset_y,inset_top,inset_bottom,content_h,container_h,distance,safe_top,safe_bottom,pin,pin_min_y,rows
+53.700,geo,,following,idle,-92,92,0,40000,800,0,52,80,7,0,150
+53.777,rows,,following,idle,-92,92,0,40000,800,0,52,80,7,0,151
+53.778,pin,,following,idle,-92,92,0,40000,800,0,52,80,7,44,151
+53.790,pin,,following,idle,-92,92,0,40000,800,0,52,80,9,0,151
+59.446,pin,,following,idle,-92,92,0,40000,800,0,52,80,9,44,152
+59.460,pin,,following,idle,-92,92,0,40000,800,0,52,80,11,0,152

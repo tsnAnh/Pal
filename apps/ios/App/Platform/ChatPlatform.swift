@@ -7,10 +7,6 @@ enum ChatLoading {
 }
 
 extension View {
-    func newestFirst() -> some View {
-        scaleEffect(x: 1, y: -1, anchor: .center)
-    }
-
     func chatListRow() -> some View {
         padding(.horizontal, ChatMetrics.edgeMargin).chatColumn()
     }

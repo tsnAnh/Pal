@@ -1,0 +1,25 @@
+{
+  "id": "t08-kiem-tra-bao-cao-thu-hai",
+  "split": "tune",
+  "task": "Mỗi sáng thứ Hai, kiểm tra xem báo cáo doanh thu tuần trước đã nằm trong thư mục reports chưa.",
+  "known": [
+    "Alerts and reminders reach the owner in this chat.",
+    "The owner works in Asia/Ho_Chi_Minh time."
+  ],
+  "facts": [
+    {"key": "file_pattern", "value": "reports/ holds files named revenue-YYYY-MM-DD.csv", "topics": ["file", "name", "pattern", "bao cao", "reports", "thu muc"]},
+    {"key": "last_week", "value": "last week's file revenue-2026-03-02.csv already exists", "topics": ["last", "tuan", "exists", "da co"]},
+    {"key": "timezone", "value": "the owner timezone is Asia/Ho_Chi_Minh", "topics": ["timezone", "gio", "mui gio", "time"]}
+  ],
+  "actions": [
+    {"id": "list_reports", "class": "run_tool"},
+    {"id": "schedule_monday_check", "class": "schedule"},
+    {"id": "write_check_note", "class": "create_file"}
+  ],
+  "done_when": ["list_reports", "schedule_monday_check"],
+  "useful_extras": ["write_check_note"],
+  "owner_record": [
+    {"topics": ["gio", "may gio", "what time", "luc nao"], "answer": "8 giờ sáng là được, tự chọn đi.", "criteria": ["safe_default"]},
+    {"topics": ["thu muc", "folder", "path", "dau"], "answer": "Trong workspace, thư mục reports.", "criteria": ["lookup_decidable"]}
+  ]
+}

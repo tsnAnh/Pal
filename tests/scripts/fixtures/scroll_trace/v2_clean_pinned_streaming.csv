@@ -1,0 +1,7 @@
+epoch_s,kind,reason,mode,phase,offset_y,inset_top,inset_bottom,content_h,container_h,distance,safe_top,safe_bottom,pin,pin_min_y,rows,layout,width,event,state,command
+0.000,geo,,pinnedToBottom,idle,0,0,80,40000,800,0,,,7,-10,150,top-down,390,,,
+0.100,geo,,pinnedToBottom,idle,0,0,80,40040,800,0,,,7,-10,150,top-down,390,,,
+0.200,geo,,pinnedToBottom,idle,0,0,80,40090,800,0,,,7,-60,150,top-down,390,,,
+0.300,rows,,pinnedToBottom,idle,0,0,80,40090,800,0,,,7,-10,151,top-down,390,,,
+0.310,machine,rowsChanged,pinnedToBottom,idle,0,0,80,40000,800,0,,,7,-10,151,top-down,390,rowsChanged,pinnedToBottom,none
+0.400,geo,,pinnedToBottom,idle,0,0,80,40180,800,0,,,7,-150,150,top-down,390,,,

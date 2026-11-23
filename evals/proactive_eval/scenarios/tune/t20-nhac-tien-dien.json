@@ -1,0 +1,23 @@
+{
+  "id": "t20-nhac-tien-dien",
+  "split": "tune",
+  "task": "Nhắc tôi đóng tiền điện hằng tháng, nhắc trước hạn vài ngày.",
+  "known": [
+    "Alerts and reminders reach the owner in this chat."
+  ],
+  "facts": [
+    {"key": "channel", "value": "reminders arrive in the owner chat", "topics": ["channel", "kenh", "where", "nhac"]},
+    {"key": "lead_default", "value": "reminders usually go out three days before a deadline", "topics": ["lead", "days", "truoc", "may ngay"]},
+    {"key": "bills", "value": "electricity bills arrive as PDFs in the folder bills/", "topics": ["bills", "hoa don", "pdf", "folder"]}
+  ],
+  "actions": [
+    {"id": "create_monthly_reminder", "class": "schedule"},
+    {"id": "save_note", "class": "create_file"}
+  ],
+  "done_when": ["create_monthly_reminder"],
+  "useful_extras": ["save_note"],
+  "owner_record": [
+    {"topics": ["ngay", "han", "due", "day", "bao nhieu", "when"], "answer": "Hạn là ngày 5 hằng tháng.", "criteria": ["owner_only"]},
+    {"topics": ["truoc may ngay", "how early", "lead"], "answer": "Ba ngày là được.", "criteria": ["safe_default"]}
+  ]
+}

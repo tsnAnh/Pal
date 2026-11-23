@@ -1,0 +1,5 @@
+App/Chat/ChatComposerParts.swift:ScrollViewReader -- the suggestion list above the composer is its own list, not the transcript
+App/Chat/ChatComposerParts.swift:proxy.scrollTo( -- keeps the highlighted suggestion visible in that list, not the transcript
+App/Chat/BotThread/BotThreadView.swift:ScrollViewReader -- the bot thread sheet is a separate list from the chat transcript
+App/Chat/BotThread/BotThreadView.swift:proxy.scrollTo( -- positions the bot thread list, not the chat transcript
+App/Chat/BotThread/BotThreadView.swift:scrollPosition -- the bot thread list owns its own scroll position, not the chat transcript
