@@ -45,12 +45,53 @@ struct MessageFilesTests {
         }
     }
 
-    @Test("images and videos keep their own handling")
-    func imagesAndVideosUnchanged() {
+    @Test("images keep their own renderer, local videos become file cards")
+    func imagesStayVideosBecomeCards() {
         let content = MessageImages.extract(from: "MEDIA:/h/cache/images/chart.png\nMEDIA:/home/agent/out/clip.mp4\nMEDIA:\(csv)", role: .assistant)
         #expect(content.images.map(\.name) == ["chart.png"])
-        #expect(content.text == "MEDIA:/home/agent/out/clip.mp4")
-        #expect(content.files.map(\.name) == ["app-audit.csv"])
+        #expect(content.text.isEmpty)
+        #expect(content.files.map(\.name) == ["clip.mp4", "app-audit.csv"])
+    }
+
+    @Test("every local video extension is a file card with its type label")
+    func localVideosAreCards() {
+        for ext in ["mp4", "mov", "webm", "mkv", "m4v", "avi", "MP4"] {
+            let path = "/home/agent/out/clip.\(ext)"
+            let content = MessageImages.extract(from: "Rendered.\nMEDIA:\(path)", role: .assistant)
+            #expect(content.text == "Rendered.")
+            #expect(content.images.isEmpty)
+            #expect(content.files.map(\.name) == ["clip.\(ext)"])
+            #expect(content.files.map(\.typeLabel) == [ext.uppercased()])
+        }
+    }
+
+    @Test("a preview directive for a local video is a file card too")
+    func previewVideoCard() {
+        let content = MessageImages.extract(from: "::preview{file=\"/home/agent/out/clip.mp4\"}", role: .assistant)
+        #expect(content.files.map(\.name) == ["clip.mp4"])
+    }
+
+    @Test("https video links are not host paths and stay with the inline player")
+    func remoteVideosAreNotCards() {
+        for url in ["https://cdn.example.com/clip.mp4", "https://cdn.example.com/live/index.m3u8"] {
+            let content = MessageImages.extract(from: "MEDIA:\(url)", role: .assistant)
+            #expect(content.files.isEmpty)
+            #expect(content.text == url)
+        }
+        #expect(MessageFiles.extract(from: "MEDIA:https://cdn.example.com/clip.mp4", isStreaming: false).files.isEmpty)
+    }
+
+    @Test("a video path still being streamed waits, and a repeated video makes one card")
+    func videoStreamingAndDuplicates() {
+        let partial = "Done\nMEDIA:/home/agent/out/cl"
+        #expect(MessageImages.extract(from: partial, role: .assistant, isStreaming: true).files.isEmpty)
+        #expect(MessageImages.extract(from: partial + "ip.mp4", role: .assistant).files.map(\.name) == ["clip.mp4"])
+        #expect(MessageImages.extract(from: "MEDIA:/h/clip.mov MEDIA:/h/clip.mov", role: .assistant).files.count == 1)
+    }
+
+    @Test("an mp3 stays a file card")
+    func mp3StaysCard() {
+        #expect(MessageImages.extract(from: "MEDIA:/h/out/note.mp3", role: .assistant).files.map(\.typeLabel) == ["MP3"])
     }
 
     @Test("a path cut off by streaming is not turned into a card")
@@ -67,10 +108,12 @@ struct MessageFilesTests {
         #expect(MessageImages.extract(from: "MEDIA:\(csv)", role: .user).files.isEmpty)
     }
 
-    @Test("audio files share the gateway's media id kind")
-    func audioKind() {
-        let file = FileReference(path: "/h/out/note.mp3", directive: "MEDIA:/h/out/note.mp3")
-        #expect(file.id == ImageReference.assetRef(forHostPath: "/h/out/note.mp3"))
+    @Test("audio and video files share the gateway's media id kind")
+    func mediaKind() {
+        for path in ["/h/out/note.mp3", "/h/out/clip.mp4", "/h/out/clip.MOV"] {
+            #expect(FileReference(path: path, directive: "MEDIA:\(path)").id == ImageReference.assetRef(forHostPath: path))
+        }
+        #expect(FileReference(path: "/h/out/a.csv", directive: "").id != ImageReference.assetRef(forHostPath: "/h/out/a.csv"))
     }
 
     private let page = "/home/tsnanh/chief-checks/mockup-connect-apps-iphone-colours.html"
