@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -30,7 +32,9 @@ class DiscordRpcError(Exception):
 NOT_OWNER = (4030, ConnectorErrorReason.not_owner, "Only the owner can set up this app.")
 NEEDS_TOKEN = (4090, ConnectorErrorReason.needs_setup, "Paste your Discord bot token first.")
 UNAVAILABLE = (5034, ConnectorErrorReason.check_unavailable, "Couldn't reach Discord. Try again.")
-REJECTED = (4000, ConnectorErrorReason.invalid_token, "Discord didn't accept the saved bot token. Paste it again.")
+REJECTED = (4000, ConnectorErrorReason.invalid_token,
+            "Discord didn't accept the saved bot token. Open the Discord developer portal, reset the token and paste it again.")
+RETRY_AFTER_CAP_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -98,10 +102,13 @@ def save_token(item: str) -> DiscordBotResult:
 
     from gateway import oauth_client_setup as setup_mod
     from hermes_cli.shared_catalog_connectors import requested_profile_home
-    from tui_gateway.connector_setup_guide import _secret
+    from tui_gateway.connector_setup_guide import SetupCheckRpcError, _secret
 
     _require_owner()
-    token = _secret(setup_mod.vault_for(requested_profile_home()), item)
+    try:
+        token = _secret(setup_mod.vault_for(requested_profile_home()), item)
+    except SetupCheckRpcError as exc:
+        raise DiscordRpcError(exc.code, exc.reason, exc.message) from None
     bot = _bot(token)
     save_env_value(TOKEN_VAR, token)
     path = _bot_path()
@@ -110,22 +117,84 @@ def save_token(item: str) -> DiscordBotResult:
     return DiscordBotResult(bot_name=bot.name, application_id=bot.id)
 
 
-def _live_guilds(token: str) -> list[DiscordGuildRow]:
-    try:
-        with _client() as client:
-            response = client.get(f"{checks.DISCORD_API}/users/@me/guilds", params={"limit": 200},
-                                  headers=checks.discord_headers(token))
-    except httpx.HTTPError as exc:
-        logger.warning("discord guild list unavailable error=%s", type(exc).__name__)
-        raise DiscordRpcError(*UNAVAILABLE) from None
-    if response.status_code in (401, 403):
-        raise DiscordRpcError(*REJECTED)
+def _unavailable(message: str) -> DiscordRpcError:
+    return DiscordRpcError(UNAVAILABLE[0], UNAVAILABLE[1], message)
+
+
+def _retry_after(response: httpx.Response) -> float | None:
     try:
         body = response.json()
     except ValueError:
         body = None
-    if response.status_code != 200 or not isinstance(body, list):
-        raise DiscordRpcError(*UNAVAILABLE)
+    raw = body.get("retry_after") if isinstance(body, dict) else response.headers.get("retry-after")
+    try:
+        seconds = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return seconds if math.isfinite(seconds) and seconds >= 0 else None
+
+
+def _discord_error_code(response: httpx.Response) -> int | None:
+    try:
+        code = response.json().get("code")
+    except (ValueError, AttributeError):
+        return None
+    return code if isinstance(code, int) and not isinstance(code, bool) else None
+
+
+def _guilds_refusal(response: httpx.Response) -> DiscordRpcError:
+    status = response.status_code
+    if status == 401:
+        return DiscordRpcError(*REJECTED)
+    if status == 403:
+        code = _discord_error_code(response)
+        if code is None:
+            return _unavailable("Discord blocked the Pal gateway's request before it reached your bot. Try again later.")
+        return DiscordRpcError(REJECTED[0], REJECTED[1],
+                               f"Discord refused the saved bot token (error {code}). Open the Discord developer portal, "
+                               "reset the token and paste it again.")
+    if status == 429:
+        wait = _retry_after(response)
+        if wait is None:
+            return _unavailable("Discord is limiting the Pal gateway right now. Try again in a minute.")
+        return _unavailable(f"Discord asked Pal to wait {max(1, math.ceil(wait))} seconds. Try again then.")
+    if status >= 500:
+        return _unavailable(f"Discord is having trouble (status {status}). Try again in a moment.")
+    if status != 200:
+        return _unavailable(f"Discord answered with an unexpected status ({status}). Try again.")
+    return _unavailable("Discord sent an answer Pal couldn't read. Try again.")
+
+
+def _get_guilds(token: str) -> httpx.Response:
+    try:
+        with _client() as client:
+            return client.get(f"{checks.DISCORD_API}/users/@me/guilds", params={"limit": 200},
+                              headers=checks.discord_headers(token))
+    except httpx.TimeoutException as exc:
+        logger.warning("discord guild list unavailable error=%s", type(exc).__name__)
+        raise _unavailable("The Pal gateway timed out waiting for Discord. Try again.") from None
+    except httpx.HTTPError as exc:
+        logger.warning("discord guild list unavailable error=%s", type(exc).__name__)
+        raise _unavailable("The Pal gateway could not reach Discord. Check its internet connection and try again.") from None
+
+
+def _live_guilds(token: str) -> list[DiscordGuildRow]:
+    response = _get_guilds(token)
+    if response.status_code == 429:
+        wait = _retry_after(response)
+        if wait is not None and wait <= RETRY_AFTER_CAP_SECONDS:
+            time.sleep(wait)
+            response = _get_guilds(token)
+    if response.status_code != 200:
+        logger.warning("discord guild list refused status=%s", response.status_code)
+        raise _guilds_refusal(response)
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    if not isinstance(body, list):
+        logger.warning("discord guild list unreadable status=%s", response.status_code)
+        raise _guilds_refusal(response)
     return [DiscordGuildRow(id=g["id"], name=str(g.get("name") or g["id"])) for g in body
             if isinstance(g, dict) and str(g.get("id", "")).isdigit()]
 
