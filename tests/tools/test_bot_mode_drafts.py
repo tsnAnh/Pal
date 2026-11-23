@@ -124,12 +124,12 @@ class TestAttendedDrafts:
                                  "subject": "Lunch", "text": "Lunch at noon?", "editable": True, "held": False}
         assert card["choices"] == ["once", "deny"]
 
-    def test_discard_is_final_and_tells_the_agent_not_to_retry(self, bot_home, owner_app):
+    def test_discard_tells_the_agent_not_to_retry_and_a_new_draft_is_a_new_card(self, bot_home, owner_app):
         owner = _owner("deny", "once")
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
         assert args is None and "NOT sent" in block and "Do NOT retry" in block
         block, _ = review_outbound(EMAIL, {**EMAIL_ARGS, "body": "Lunch at one?"})
-        assert block is not None and len(owner.cards) == 1
+        assert block is None and len(owner.cards) == 2
         assert bot_mode_draft_store.list_pending() == []
 
     def test_edit_then_send_sends_the_edited_text(self, bot_home, owner_app):

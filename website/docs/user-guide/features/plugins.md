@@ -124,7 +124,6 @@ Every `ctx.*` API below is available inside a plugin's `register(ctx)` function.
 | Register a context-compression engine | `ctx.register_context_engine(engine)` — see [Context Engine Plugins](../../developer-guide/context-engine-plugin.md) |
 | Register a terminal execution backend (cloud sandbox) | `ctx.register_terminal_environment_provider(provider)` — see [Terminal Environment Plugins](../../developer-guide/terminal-environment-plugin.md) |
 | Register a computer-use driver | `ctx.register_computer_use_provider(provider)` — selected by `computer_use.backend`; see [Computer-use backend plugins](../../developer-guide/plugins/index.md#computer-use-backend-plugins) |
-| Route human approval prompts | `ctx.register_approval_transport(name, present_fn)` — see [Approval transports](#approval-transports) |
 | Register a memory backend | Subclass `MemoryProvider` in `plugins/memory/<name>/__init__.py` — see [Memory Provider Plugins](../../developer-guide/memory-provider-plugin.md) (uses a separate discovery system) |
 | Run a host-owned LLM call | `ctx.llm.complete(...)` / `ctx.llm.complete_structured(...)` — borrow the user's active model + auth for a one-shot completion with optional JSON schema validation. See [Plugin LLM Access](../../developer-guide/plugin-llm-access.md) |
 | Call an MCP tool (capability-gated) | `ctx.call_mcp(server, tool, arguments, timeout=30)` — see [Calling MCP servers from plugins](#calling-mcp-servers-from-plugins) |
@@ -288,61 +287,6 @@ Several categories of plugin bypass `plugins.enabled` — they're part of Hermes
 | **User-installed platforms** (under `~/.hermes/plugins/platforms/`) | Opt-in via `plugins.enabled` — third-party gateway adapters need explicit consent. |
 
 In short: **bundled "always-works" infrastructure loads automatically; third-party general plugins are opt-in.** The `plugins.enabled` allow-list is the gate specifically for arbitrary code a user drops into `~/.hermes/plugins/`.
-
-### Approval transports
-
-An approval transport changes **where a human sees and answers** an existing
-Hermes tool-approval request. It does not decide whether a command needs
-approval and it is not an authorization-policy API.
-
-```python
-def present(request):
-    # Deliver request.command and request.description to your UI, wait for
-    # its authenticated human response, then return a request-bound decision.
-    choice = send_to_my_ui_and_wait(request)  # once/session/always/deny
-    return request.respond(choice)
-
-
-def register(ctx):
-    ctx.register_approval_transport("my-ui", present)
-```
-
-`present` may be synchronous or async. Hermes runs it on a bounded worker and
-enforces the canonical `approvals.timeout` even if the plugin does not. The
-request is immutable and contains redacted display text, its host presentation
-class (`cli` or `gateway`), the host timeout, allowed choices, and an opaque
-request ID/digest.
-Return the result of
-`request.respond(choice)`; unbound dictionaries and stale or changed request
-IDs/digests are rejected. A plugin cannot return a scope that the host did not
-offer (for example, `always` on a once-only request).
-
-Registration alone does nothing. Enabling the plugin and explicitly selecting
-its transport are separate consent steps:
-
-```yaml
-plugins:
-  enabled: [my-approval-plugin]
-
-security:
-  approval:
-    transport: my-ui
-    transport_fallback: deny     # default
-```
-
-Transport exceptions, timeouts, unavailable registrations, invalid choices,
-and stale responses deny by default. To deliberately show the prompt on the
-ordinary CLI/TUI/gateway/ACP surface when the selected transport fails, set
-`transport_fallback: builtin`. Without that exact opt-in, Hermes never
-materializes the prompt on another surface.
-
-Hermes still owns hardline blocks, sudo-stdin protection, user deny rules,
-request binding, allowed scopes, persistence, hooks, and final authorization.
-Hardline commands are blocked before any transport callback. There is
-intentionally **no plugin approval policy, auto-allow callback, or required
-`pre_tool_call` policy** in this interface. A future approval-policy capability
-may use the plugin capability-consent model, but transport selection does not
-grant it.
 
 ### Migration for existing users
 
@@ -936,7 +880,7 @@ What changes in `host` mode:
 - **Crashes stay contained.** A plugin that crashes or exits kills its host, not Hermes; the call in
   flight returns a tool error and Hermes restarts the host and reloads its plugins (bounded retries).
 - **A few surfaces need in-process code** and fail that plugin with a clear reason instead of loading:
-  gateway platform adapters (`register_platform`), approval transports, Telegram/platform handlers,
+  gateway platform adapters (`register_platform`), Telegram/platform handlers,
   model-provider profiles that build their own SDK client (`create_client`), terminal backends (the
   backend's commands fail with this reason; the `singularity` plugin is one), streaming and websocket
   dashboard endpoints, and plugins that monkeypatch Hermes modules. Run those with `isolation: in_process`.

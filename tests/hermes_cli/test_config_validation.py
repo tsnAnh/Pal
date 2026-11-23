@@ -193,3 +193,23 @@ class TestQuotedContainerValues:
             "plugins": {"enabled": ["a"]},
         })
         assert not [i for i in issues if "quoted string" in i.message]
+
+
+class TestRetiredApprovalSettings:
+    """``approvals.mode`` and the grant lists no longer have a reader: a profile that still carries them
+    loads and validates as before, and nothing is migrated or rewritten."""
+
+    @pytest.mark.parametrize("mode", ["manual", "smart", "off"])
+    def test_a_stored_mode_loads_and_validates_without_issues(self, tmp_path, monkeypatch, mode):
+        import hermes_yaml as yaml
+
+        from hermes_cli.config import load_config
+
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        stored = {"approvals": {"mode": mode, "timeout": 60, "smart_policy": "x"}, "command_allowlist": ["recursive delete"]}
+        (tmp_path / "config.yaml").write_text(yaml.safe_dump(stored), encoding="utf-8")
+        config = load_config()
+        assert config["approvals"]["cron_mode"] == "deny"
+        assert [i for i in validate_config_structure(config) if i.severity == "error"] == []
+        assert yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8")) == stored
+

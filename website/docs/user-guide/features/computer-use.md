@@ -608,8 +608,8 @@ HERMES_CUA_DRIVER_CMD=/path/to/cua/libs/cua-driver/rust/target/debug/cua-driver
 ### Notes & gotchas
 
 - **Hermes spawns a `cua-driver mcp` stdio proxy.** In a normal session the
-  proxy connects to (and may start) the standard machine daemon. In explicit
-  Hermes YOLO, Hermes instead owns a private `cua-driver serve --embedded`
+  proxy connects to (and may start) the standard machine daemon. In bounded
+  mode, Hermes instead owns a private `cua-driver serve --embedded`
   child and points the proxy at its private socket or named pipe. The Windows
   autostart/UIAccess pattern still matters for interactive Session 1+ input
   from SSH — see the Limitations section.
