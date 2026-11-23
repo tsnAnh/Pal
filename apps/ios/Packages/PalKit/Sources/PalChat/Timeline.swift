@@ -36,6 +36,7 @@ public struct TimelineSnapshot: Sendable, Equatable {
     public var executionGeneration: Int
     public var runningToolName: String?
     public var streamingText: String
+    public var forwardedKeys: [RowKey: RowKey] = [:]
 }
 
 enum OlderEdge: Sendable, Equatable {
@@ -94,6 +95,7 @@ struct Timeline: Sendable {
     private var liveKeys: [String: RowKey] = [:]
     private var anchors: [RowKey: RowKey] = [:]
     private var forwarded: [RowKey: RowKey] = [:]
+    var forwardedKeys: [RowKey: RowKey] { forwarded }
     private var nextKey: UInt64 = 1
     private var failedAttempts = 0
     private var generation = 0
