@@ -285,10 +285,10 @@ def _read_bot_sessions(holder, subject, operator, rule):
             target = conn.execute('SELECT * FROM sessions WHERE id=?', (tip,)).fetchone() or root
             from gateway.display_markers import PREVIEW_HIDDEN_SCAN, owner_display_text
             recent = conn.execute(
-                "SELECT role, content, display_kind FROM messages WHERE session_id=? AND active=1 "
+                "SELECT role, content, display_kind, display_metadata FROM messages WHERE session_id=? AND active=1 "
                 "AND role IN ('user','assistant') AND TRIM(COALESCE(content,''))!='' "
                 f"ORDER BY id DESC LIMIT {PREVIEW_HIDDEN_SCAN}", (tip,)).fetchall()
-            shown = next((t for m in recent if (t := owner_display_text(m[0], m[1], m[2])) is not None), '')
+            shown = next((t for m in recent if (t := owner_display_text(m[0], m[1], m[2], m[3])) is not None), '')
             text = ' '.join(shown.split())
             return {'id': root['id'], 'resolved_id': tip, 'title': target['title'] or '',
                     'root_title': root['title'] or '',

@@ -616,15 +616,15 @@ class SQLiteMessageRepository:
         with _refusals(holder, session_id):
             with holder._read_ctx_with_timeout(1.0) as conn:
                 rows = conn.execute(
-                    "SELECT role, content, display_kind FROM messages"
+                    "SELECT role, content, display_kind, display_metadata FROM messages"
                     " WHERE session_id = ? AND role IN ('user', 'assistant')"
                     " AND active = 1 AND content IS NOT NULL AND TRIM(content) != ''"
                     " ORDER BY id DESC LIMIT ?",
                     (session_id, PREVIEW_HIDDEN_SCAN if owner_visible else 1)).fetchall()
         if not owner_visible:
             return rows[0][1] if rows else None
-        return next((text for role, content, kind in rows
-                     if (text := owner_display_text(role, content, kind)) is not None), None)
+        return next((text for role, content, kind, metadata in rows
+                     if (text := owner_display_text(role, content, kind, metadata)) is not None), None)
 
     def message_storage_state(self, message_id: MessageId) -> Optional[MessageStorageState]:
         if not message_id:

@@ -27,6 +27,10 @@ LAYER_BILLING = "billing"
 LAYER_GATEWAY = "gateway"
 LAYER_DISK = "disk"
 
+NO_PROVIDER_CONFIGURED = "no_provider_configured"
+
+PREVIEW_COPY_BY_CODE = {NO_PROVIDER_CONFIGURED: "Needs an AI model to reply"}
+
 # failure_reason → UI layer. Unlisted reasons fall back to LAYER_PROVIDER:
 # every FailoverReason comes from classifying a provider call. Loop-site codes
 # (agent/turn_failure_copy.py::SITE_FAILURE_CODES) are listed explicitly: the
@@ -104,6 +108,10 @@ def _surface(layer: str, code: str, retryable: bool, provider: str = "", model: 
         if surface["auth_kind"] == "api_key" and (env_var := _api_key_env(provider)):
             surface["api_key_env"] = env_var
     return surface
+
+
+def no_provider_configured_surface() -> dict:
+    return _surface(LAYER_AUTH, NO_PROVIDER_CONFIGURED, False)
 
 
 def _api_key_env(provider: str) -> str:
