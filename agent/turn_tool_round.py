@@ -239,6 +239,25 @@ def run_tool_round(
     return _verdict("continue")
 
 
+def _split_clarify_details(assistant_message: Any, assistant_msg: dict[str, Any]) -> None:
+    """Two bubbles for every ask: a clarify question that carries content is cut into its short line
+    (the card) and the details, which join the row's own text so they persist and reach every client as
+    the bot's normal message ahead of the card (``tools/clarify_split.py``)."""
+    from tools.clarify_split import split_clarify_arguments, with_details_first
+
+    details: list[str] = []
+    for call, stored in zip(assistant_message.tool_calls or (), assistant_msg.get("tool_calls") or ()):
+        if call.function.name != "clarify":
+            continue
+        arguments, detail = split_clarify_arguments(call.function.arguments)
+        if detail:
+            call.function.arguments = arguments
+            stored["function"]["arguments"] = arguments
+            details.append(detail)
+    if details:
+        assistant_msg["content"] = with_details_first(assistant_msg.get("content"), "\n\n".join(details))
+
+
 def stage_tool_call_message(
     agent: Any, *, assistant_message: Any, finish_reason: Any, messages: Any
 ) -> tuple[dict[str, Any], bool]:
@@ -253,6 +272,7 @@ def stage_tool_call_message(
     from agent.conversation_loop import _STALE_MARKER_RE
 
     assistant_msg = agent._build_assistant_message(assistant_message, finish_reason)
+    _split_clarify_details(assistant_message, assistant_msg)
 
     turn_content = assistant_message.content or ""
 

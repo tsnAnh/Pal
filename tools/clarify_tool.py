@@ -5,11 +5,10 @@ callback (cli.py, gateway/run.py, tui_gateway)."""
 import json
 from typing import Callable, Dict, List, Optional
 
+from tools.clarify_split import OPTION_MAX_CHARS
+
 MAX_CHOICES = 4  # the UI always appends an "Other (type your answer)" row
 MAX_QUESTIONS = 5  # independent questions per call
-# Per-choice cap. Surfaces wrap long choice text (newlines kept), so anything longer is rejected here, at the
-# source, instead of a surface silently dropping a choice that ``choices_offered`` still reports as shown.
-MAX_CHOICE_CHARS = 8000
 # Applied to the first choice here (not per-surface) so every adapter renders it identically.
 RECOMMENDED_LABEL = "(Recommended)"
 _UNAVAILABLE = "Clarify tool is not available in this execution context."
@@ -74,9 +73,10 @@ def _normalize_questions(questions) -> tuple:
             if not isinstance(choices, list) or not all(isinstance(c, str) for c in choices):
                 return None, f"questions[{index}].choices must be a list of strings."
             for pos, choice in enumerate(choices):
-                if len(choice.strip()) > MAX_CHOICE_CHARS:
+                if len(choice.strip()) > OPTION_MAX_CHARS:
                     return None, (f"questions[{index}].choices[{pos}] is {len(choice.strip())} characters; the limit is "
-                                  f"{MAX_CHOICE_CHARS}. Move detail into the question text and resend.")
+                                  f"{OPTION_MAX_CHARS}. Shorten the label to a few words, send the detail as a normal "
+                                  "message first, then call clarify with one short question and the options only.")
             cleaned = [c.strip() for c in choices if c.strip()][:MAX_CHOICES]
             if choices and not cleaned:
                 # A card with no options strands the turn: say so instead of silently asking open-ended.
@@ -168,6 +168,11 @@ CLARIFY_SCHEMA = {
     "name": "clarify",
     "description": (
         "Ask the user one or more questions when you need a decision or feedback. "
+        "To ask the owner to approve or choose, first send the details as a normal message "
+        "(summary, then the exact content), then call this with ONE short question line and the "
+        f"options only (labels up to {OPTION_MAX_CHARS} characters). Never paste the content, a list "
+        "of fields or a cover letter into the question or into an option; text over the limit "
+        "is split off into that message for you. "
         "Pass every question "
         f"in `questions` (1-{MAX_QUESTIONS} entries) — a single question is a "
         "one-entry array, and several INDEPENDENT questions belong in ONE "
@@ -195,7 +200,8 @@ CLARIFY_SCHEMA = {
                 "minItems": 1,
                 "maxItems": MAX_QUESTIONS,
                 "description": (
-                    "The question(s). Each: question text (options excluded), "
+                    "The question(s). Each: ONE short question line (details go in a message "
+                    "before the call; options excluded), "
                     "optional choices (recommended first; omit for free-text), "
                     "optional multi_select. Responses come back in question "
                     "order with the question text echoed."

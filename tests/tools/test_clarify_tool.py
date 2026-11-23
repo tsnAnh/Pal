@@ -261,14 +261,15 @@ class TestClarifyBatchValidation:
 
     def test_over_limit_choice_is_rejected_at_the_source(self):
         """#124127: a choice longer than a surface renders is refused, not silently dropped downstream."""
-        from tools.clarify_tool import MAX_CHOICE_CHARS
-        long_choice = "x" * (MAX_CHOICE_CHARS + 1)
+        from tools.clarify_split import OPTION_MAX_CHARS
+        long_choice = "x" * (OPTION_MAX_CHARS + 1)
         result = _ask(lambda questions: _reply({}), [{"question": "Pick?", "choices": ["short", long_choice]}])
-        assert "error" in result and str(MAX_CHOICE_CHARS) in result["error"]
+        assert "error" in result and str(OPTION_MAX_CHARS) in result["error"]
+        assert "Shorten the label" in result["error"] and "Move detail into the question" not in result["error"]
 
     def test_long_multi_line_choice_within_limit_is_kept(self):
         seen = {}
-        choice = "Option A\n" + "detail " * 60
+        choice = "Option A\nsecond line"
         _ask(lambda questions: seen.setdefault("q", questions) and _reply({"q0": "Option A"}),
              [{"question": "Pick?", "choices": [choice, "B"]}])
         assert seen["q"][0]["choices_offered"][0] == choice.strip()

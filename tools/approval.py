@@ -1528,7 +1528,10 @@ def request_tool_approval(tool_name: str, reason: str, *, rule_key: str = "", ap
 
 def request_draft_approval(*, text: str, description: str, pattern_key: str, draft: dict,
                            details: list[dict] | None = None, approval_callback=None) -> dict:
+    from tools.details_bubble import post_details
     approval_callback, is_cli, is_gateway, is_ask = _presence(approval_callback)
+    if is_gateway or is_ask:
+        post_details("\n\n".join(part for part in (description, text) if part.strip()))
     return _human_decision(
         _DRAFT_GATE, command=text, description=description, pattern_key=pattern_key, pattern_keys=[pattern_key],
         session_key=get_current_session_key(), approval_callback=approval_callback,
