@@ -1,0 +1,24 @@
+{
+  "id": "h04-nightly-backup-watch",
+  "split": "heldout",
+  "task": "Check the nightly backup log every morning and flag it if a run is missing.",
+  "known": [
+    "Alerts and reminders reach the owner in this chat."
+  ],
+  "facts": [
+    {"key": "log_path", "value": "logs/backup.log has one line per run with a status word", "topics": ["log", "path", "where", "file", "format"]},
+    {"key": "last_run", "value": "the last run finished OK at 02:10", "topics": ["last", "run", "status", "now"]},
+    {"key": "schedule", "value": "backups run at 02:00 every night", "topics": ["schedule", "backup", "when", "night"]}
+  ],
+  "actions": [
+    {"id": "read_log", "class": "run_tool"},
+    {"id": "schedule_morning_check", "class": "schedule"},
+    {"id": "summarize_log", "class": "create_file"}
+  ],
+  "done_when": ["read_log", "schedule_morning_check"],
+  "useful_extras": ["summarize_log"],
+  "owner_record": [
+    {"topics": ["time", "when", "hour", "how often"], "answer": "Morning, you choose.", "criteria": ["safe_default"]},
+    {"topics": ["log", "path", "where", "file"], "answer": "It is in logs/.", "criteria": ["lookup_decidable"]}
+  ]
+}

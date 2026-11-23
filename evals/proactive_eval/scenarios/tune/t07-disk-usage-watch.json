@@ -1,0 +1,25 @@
+{
+  "id": "t07-disk-usage-watch",
+  "split": "tune",
+  "task": "Keep an eye on disk usage on the home server and tell me when it goes over 80 percent.",
+  "known": [
+    "Alerts and reminders reach the owner in this chat.",
+    "The server is reachable from the workspace."
+  ],
+  "facts": [
+    {"key": "mount", "value": "df reports the data disk at /srv", "topics": ["disk", "mount", "path", "which", "drive"]},
+    {"key": "now", "value": "usage is 61 percent today", "topics": ["usage", "now", "current", "percent"]},
+    {"key": "command", "value": "df -h /srv prints the usage", "topics": ["command", "how", "check"]}
+  ],
+  "actions": [
+    {"id": "run_df", "class": "run_tool"},
+    {"id": "schedule_disk_check", "class": "schedule"},
+    {"id": "write_check_script", "class": "create_file"}
+  ],
+  "done_when": ["run_df", "schedule_disk_check"],
+  "useful_extras": ["write_check_script"],
+  "owner_record": [
+    {"topics": ["how often", "frequency", "interval", "every"], "answer": "Daily is fine, you pick.", "criteria": ["safe_default"]},
+    {"topics": ["which disk", "mount", "path"], "answer": "Whatever df shows for /srv.", "criteria": ["lookup_decidable"]}
+  ]
+}

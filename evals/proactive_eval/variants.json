@@ -1,0 +1,58 @@
+{
+  "refs": {
+    "@current_block": "agent.prompt_builder:OWNER_PROACTIVE_GUIDANCE",
+    "@current_clarify": "tools.clarify_tool:CLARIFY_SCHEMA.description"
+  },
+  "variants": [
+    {
+      "name": "baseline",
+      "axis": "control",
+      "blocks": ["@current_block"],
+      "clarify": "@current_clarify",
+      "stub_policy": "ask_when_unsure"
+    },
+    {
+      "name": "block_short",
+      "axis": "wording length",
+      "blocks": ["# Working for your owner\n- Decide and act on anything reversible; state the assumption in one line.\n- Ask only what only your owner knows, what is irreversible, or what costs money. One question, one recommended answer.\n- Never ask what files, history, the web, tools or memory already hold.\n- Outbound sends keep their content approval. Never invent facts, spend money or use credentials unasked."],
+      "clarify": "@current_clarify",
+      "stub_policy": "proactive"
+    },
+    {
+      "name": "block_long",
+      "axis": "wording length",
+      "blocks": ["@current_block", "Before you ask, run this check: (1) can a file, the history, the web, a tool or memory answer it, (2) is there a default most owners would accept, (3) can I undo a wrong guess? If any answer is yes, decide, state the assumption in one line and continue. After the work: verify it, say only what changed, and name the one next step you prepared."],
+      "clarify": "@current_clarify",
+      "stub_policy": "proactive"
+    },
+    {
+      "name": "plus_clarify",
+      "axis": "where the principle lives",
+      "blocks": ["@current_block"],
+      "clarify": "Ask the owner ONE short question only when the answer is owner-only, irreversible or costs money. Before calling, check that no file, history, web result, tool or memory holds it and that no safe default exists. Send details as a normal message first, then call this with the question line and the options only. Put your recommended option first.",
+      "stub_policy": "proactive"
+    },
+    {
+      "name": "plus_profile",
+      "axis": "where the principle lives",
+      "blocks": ["@current_block"],
+      "clarify": "Ask the owner ONE short question only when the answer is owner-only, irreversible or costs money. Before calling, check that no file, history, web result, tool or memory holds it and that no safe default exists. Send details as a normal message first, then call this with the question line and the options only. Put your recommended option first.",
+      "profile": "Your job is to run this area for your owner without being asked. Prepare the next step before they ask for it, follow up on what you started, and report only what changed.",
+      "stub_policy": "proactive"
+    },
+    {
+      "name": "propose_then_act",
+      "axis": "flow",
+      "blocks": ["@current_block", "On a loose request, post a one-line plan with your default, then act on that default in the same turn unless the step is gated."],
+      "clarify": "@current_clarify",
+      "stub_policy": "proactive"
+    },
+    {
+      "name": "act_then_tell",
+      "axis": "flow",
+      "blocks": ["@current_block", "On a reversible request, act first. Then tell your owner what you did, what you assumed and how to undo it. Gated steps still wait for approval."],
+      "clarify": "@current_clarify",
+      "stub_policy": "proactive"
+    }
+  ]
+}
