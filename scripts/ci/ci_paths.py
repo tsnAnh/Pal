@@ -69,6 +69,8 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "swift-entitlements": (("apps/ios/project.yml", True), ("apps/ios/*.entitlements", True)),
     "swift-lint": (("apps/ios/*.swift", True), ("apps/ios/.swiftlint*", True)),
     "pal-nous-boundary": (*((g, True) for g in _PY), ("apps/ios/*.swift", True)),
+    "connector-names": (("hermes_cli/data/pal_connectors.yaml", True), ("scripts/ci/connector_names_allowlist.txt", True),
+                        ("scripts/ci/check_connector_names.py", True)),
     "tooling-tests": _OUTSIDE_IOS,
 }
 
