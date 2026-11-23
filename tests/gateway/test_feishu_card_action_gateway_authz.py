@@ -1,4 +1,4 @@
-"""Feishu approval / update-prompt card clicks with no Feishu allowlist or admins.
+"""Feishu update-prompt card clicks with no Feishu allowlist or admins.
 
 Setup's default leaves FEISHU_ALLOWED_USERS and the admin list empty (pairing mode). A click
 must then pass the gateway authorization inbound messages get, and is refused when that check
@@ -60,8 +60,6 @@ def _make_adapter(*, allowed=(), admins=()) -> FeishuAdapter:
     adapter._loop.is_closed = MagicMock(return_value=False)
     adapter._allowed_group_users = set(allowed)
     adapter._admins = set(admins)
-    adapter._approval_state[1] = {"session_key": "sess-1", "message_id": "msg-1", "chat_id": "oc_group",
-                                  "request_id": "req-1"}
     adapter._update_prompt_state[2] = {"session_key": "sess-2", "message_id": "msg-2", "chat_id": "oc_group"}
     return adapter
 
@@ -81,14 +79,6 @@ class _GatewayCheck:
 _gateway_check = _GatewayCheck
 
 
-def _approval_click(open_id, *, user_id=None, union_id=None, chat_id="oc_group"):
-    return SimpleNamespace(event=SimpleNamespace(
-        token="tok", context=SimpleNamespace(open_chat_id=chat_id),
-        operator=SimpleNamespace(open_id=open_id, user_id=user_id, union_id=union_id),
-        action=SimpleNamespace(tag="button", value={"hermes_action": "approve_once", "approval_id": 1}),
-    ))
-
-
 def _update_prompt_click(open_id):
     return SimpleNamespace(event=SimpleNamespace(
         token="tok", context=SimpleNamespace(open_chat_id="oc_group"),
@@ -98,26 +88,7 @@ def _update_prompt_click(open_id):
 
 
 class TestNoFeishuAllowlist:
-    def test_click_refused_when_gateway_denies(self):
-        adapter = _make_adapter()
-        adapter.set_authorization_check(_gateway_check({"ou_requester"}))
 
-        with patch("asyncio.run_coroutine_threadsafe") as submit:
-            response = adapter._on_card_action_trigger(_approval_click("ou_bystander"))
-
-        assert response.card is None
-        submit.assert_not_called()
-        assert 1 in adapter._approval_state
-
-    def test_click_refused_without_gateway_check(self):
-        adapter = _make_adapter()
-        assert adapter._authorization_check is None
-
-        with patch("asyncio.run_coroutine_threadsafe") as submit:
-            response = adapter._on_card_action_trigger(_approval_click("ou_anyone"))
-
-        assert response.card is None
-        submit.assert_not_called()
 
     def test_update_prompt_refused_when_gateway_denies(self):
         adapter = _make_adapter()
@@ -130,52 +101,6 @@ class TestNoFeishuAllowlist:
         submit.assert_not_called()
         assert 2 in adapter._update_prompt_state
 
-    def test_gateway_authorized_user_can_approve(self):
-        adapter = _make_adapter()
-        check = _gateway_check({"ou_requester"})
-        adapter.set_authorization_check(check)
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro) as submit:
-            response = adapter._on_card_action_trigger(_approval_click("ou_requester"))
-
-        assert response.card is not None
-        submit.assert_called_once()
-        assert check.seen == [("ou_requester", "group", "oc_group")]
-
-    def test_gateway_check_uses_tenant_user_id_when_present(self):
-        """The principal matches SessionSource.user_id: tenant user_id, else open_id."""
-        adapter = _make_adapter()
-        check = _gateway_check({"u_tenant"})
-        adapter.set_authorization_check(check)
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro):
-            response = adapter._on_card_action_trigger(_approval_click("ou_x", user_id="u_tenant"))
-
-        assert response.card is not None
-        assert check.seen == [("u_tenant", "group", "oc_group")]
-
-    @pytest.mark.asyncio
-    async def test_loop_side_recheck_refuses_unauthorized(self):
-        adapter = _make_adapter()
-        adapter.set_authorization_check(_gateway_check({"ou_requester"}))
-
-        with patch("tools.approval.resolve_gateway_approval") as resolve:
-            await adapter._resolve_approval(1, "once", "Mallory", open_id="ou_bystander", chat_id="oc_group")
-
-        resolve.assert_not_called()
-        assert 1 in adapter._approval_state
-
-    @pytest.mark.asyncio
-    async def test_loop_side_recheck_resolves_authorized(self):
-        adapter = _make_adapter()
-        adapter.set_authorization_check(_gateway_check({"u_tenant"}))
-
-        with patch("tools.approval.resolve_gateway_approval", return_value=1) as resolve:
-            await adapter._resolve_approval(
-                1, "once", "Alice", open_id="ou_x", chat_id="oc_group", user_id="u_tenant",
-            )
-
-        resolve.assert_called_once_with("sess-1", "once", request_id="req-1")
 
     @pytest.mark.asyncio
     async def test_non_approval_card_action_still_routes(self):
@@ -197,72 +122,10 @@ class TestNoFeishuAllowlist:
         handle.assert_called_once()
 
 
-class TestFeishuAllowlistUnchanged:
-    def test_allowlisted_user_approves_without_gateway_check(self):
-        adapter = _make_adapter(allowed={"ou_bob"})
-        check = _gateway_check(set())
-        adapter.set_authorization_check(check)
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro):
-            response = adapter._on_card_action_trigger(_approval_click("ou_bob"))
-
-        assert response.card is not None
-        assert check.seen == []
-
-    def test_non_allowlisted_user_refused_even_if_gateway_allows(self):
-        adapter = _make_adapter(admins={"ou_admin"})
-        adapter.set_authorization_check(_gateway_check({"ou_other"}))
-
-        with patch("asyncio.run_coroutine_threadsafe") as submit:
-            response = adapter._on_card_action_trigger(_approval_click("ou_other"))
-
-        assert response.card is None
-        submit.assert_not_called()
-
 
 class TestFeishuAllowlistMatchesEveryOperatorId:
     """A Feishu list may name a user by any id intake accepts (open_id / user_id / union_id)."""
 
-    @pytest.mark.parametrize("click_ids", [{"user_id": "u_tenant"}, {"union_id": "on_union"}])
-    def test_allowed_users_listed_by_other_id_can_approve(self, click_ids):
-        adapter = _make_adapter(allowed={"u_tenant", "on_union"})
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro) as submit:
-            response = adapter._on_card_action_trigger(_approval_click("ou_x", **click_ids))
-
-        assert response.card is not None
-        submit.assert_called_once()
-
-    def test_admin_listed_by_tenant_user_id_can_approve(self):
-        adapter = _make_adapter(admins={"u_admin"})
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro) as submit:
-            response = adapter._on_card_action_trigger(_approval_click("ou_y", user_id="u_admin"))
-
-        assert response.card is not None
-        submit.assert_called_once()
-
-    def test_unlisted_ids_still_refused(self):
-        adapter = _make_adapter(allowed={"u_tenant"}, admins={"u_admin"})
-
-        with patch("asyncio.run_coroutine_threadsafe") as submit:
-            response = adapter._on_card_action_trigger(
-                _approval_click("ou_z", user_id="u_other", union_id="on_other"),
-            )
-
-        assert response.card is None
-        submit.assert_not_called()
-        assert 1 in adapter._approval_state
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("click_ids", [{"user_id": "u_tenant"}, {"union_id": "on_union"}])
-    async def test_loop_side_recheck_matches_other_ids(self, click_ids):
-        adapter = _make_adapter(allowed={"u_tenant", "on_union"})
-
-        with patch("tools.approval.resolve_gateway_approval", return_value=1) as resolve:
-            await adapter._resolve_approval(1, "once", "Alice", open_id="ou_x", chat_id="oc_group", **click_ids)
-
-        resolve.assert_called_once_with("sess-1", "once", request_id="req-1")
 
     @pytest.mark.asyncio
     async def test_update_prompt_recheck_matches_tenant_user_id(self, tmp_path, monkeypatch):

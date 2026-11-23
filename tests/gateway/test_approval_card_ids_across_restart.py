@@ -36,25 +36,6 @@ def _tap(data: str) -> MagicMock:
     return MagicMock(callback_query=query)
 
 
-@pytest.mark.asyncio
-async def test_old_card_tapped_after_restart_does_not_resolve_the_new_card():
-    before = _adapter()
-    await before.send_exec_approval(chat_id="12345", command="ls", session_key=_SESSION)
-    old_card = _once_data(before)
-
-    after = _adapter()  # the gateway restarted: a new adapter, the old card still in the chat
-    await after.send_exec_approval(chat_id="12345", command="rm -rf /srv", session_key=_SESSION)
-    new_card = _once_data(after)
-    assert old_card != new_card, "a restarted adapter reissued the old card's id"
-
-    resolve = MagicMock(return_value=1)
-    with patch.dict(os.environ, {"TELEGRAM_ALLOWED_USERS": "*"}, clear=False), \
-            patch("tools.approval.resolve_gateway_approval_card", resolve):
-        await after._handle_callback_query(_tap(old_card), MagicMock())
-        resolve.assert_not_called()
-        await after._handle_callback_query(_tap(new_card), MagicMock())  # control: the new card answers
-    assert resolve.call_count == 1 and resolve.call_args.args[:2] == (_SESSION, "once")
-
 
 def _update_card_data(adapter: TelegramAdapter, answer: str) -> str:
     # The id the card's buttons carry (python-telegram-bot's keyboard is stubbed in this suite).

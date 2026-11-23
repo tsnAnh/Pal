@@ -28,29 +28,6 @@ class _FakeClient:
         return self.channel
 
 
-@pytest.mark.asyncio
-async def test_exec_approval_mentions_allowed_users_when_enabled(monkeypatch):
-    monkeypatch.setenv("DISCORD_APPROVAL_MENTIONS", "true")
-    channel = _FakeChannel()
-    adapter = object.__new__(DiscordAdapter)
-    adapter._client = _FakeClient(channel)
-    adapter._allowed_user_ids = {"222", "111", "alice"}
-    adapter._allowed_role_ids = set()
-    adapter.config = SimpleNamespace(extra=None)
-
-    result = await adapter.send_exec_approval(
-        chat_id="99",
-        command="make check",
-        session_key="session-1",
-        description="dangerous command",
-    )
-
-    assert result.success is True
-    # Mentions are prepended to the (always present) content mirror.
-    assert channel.sent_kwargs["content"].startswith("<@111> <@222>\n")
-    assert "make check" in channel.sent_kwargs["content"]
-    assert "allowed_mentions" in channel.sent_kwargs
-
 
 def test_yaml_config_seeds_websocket_health_with_primary_precedence(monkeypatch):
     for key in (

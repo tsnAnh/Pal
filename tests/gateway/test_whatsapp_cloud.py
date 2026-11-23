@@ -1063,42 +1063,6 @@ class TestSendClarifyButtons:
         assert adapter._clarify_state["abc123"] == "sess-1"
 
 
-class TestSendExecApprovalButtons:
-    """``send_exec_approval`` outbound — 2-button Approve/Deny gate."""
-
-    @pytest.mark.asyncio
-    async def test_approval_renders_two_buttons(self):
-        adapter = _make_adapter()
-        adapter._http_client = MagicMock()
-        adapter._http_client.post = AsyncMock(
-            return_value=_mock_httpx_response(200, {"messages": [{"id": "wamid.a1"}]})
-        )
-
-        result = await adapter.send_exec_approval(
-            chat_id="15551234567",
-            command="rm -rf /tmp/foo",
-            session_key="sess-app-1",
-            description="cleanup script",
-        )
-
-        assert result.success
-        payload = adapter._http_client.post.call_args.kwargs["json"]
-        assert payload["interactive"]["type"] == "button"
-        buttons = payload["interactive"]["action"]["buttons"]
-        assert len(buttons) == 2
-        assert "Approve" in buttons[0]["reply"]["title"]
-        assert "Deny" in buttons[1]["reply"]["title"]
-        approve_id = buttons[0]["reply"]["id"]
-        deny_id = buttons[1]["reply"]["id"]
-        assert approve_id.startswith("appr:") and approve_id.endswith(":approve")
-        assert deny_id.startswith("appr:") and deny_id.endswith(":deny")
-        approval_id = approve_id.split(":")[1]
-        assert deny_id.split(":")[1] == approval_id
-        body = payload["interactive"]["body"]["text"]
-        assert "rm -rf /tmp/foo" in body
-        assert "cleanup script" in body
-        assert adapter._exec_approval_state[approval_id] == "sess-app-1"
-
 
 class TestSendSlashConfirmButtons:
     """``send_slash_confirm`` outbound — 3-button Once/Always/Cancel."""
@@ -1191,43 +1155,6 @@ class TestDispatchInteractiveReplyClarify:
         assert handled is False
 
 
-@pytest.mark.usefixtures("authorized_interactive_env")
-class TestDispatchInteractiveReplyApproval:
-    """Inbound side: approval-tap → resolve_gateway_approval."""
-
-    @pytest.mark.asyncio
-    async def test_approve_tap_calls_resolver_and_confirms(self, monkeypatch):
-        adapter = _make_adapter()
-        adapter._exec_approval_state["app1"] = "sess-app-1"
-        adapter._approval_request_ids()["app1"] = "req-1"
-        adapter._http_client = MagicMock()
-        adapter._http_client.post = AsyncMock(
-            return_value=_mock_httpx_response(200, {"messages": [{"id": "x"}]})
-        )
-
-        calls = []
-        monkeypatch.setattr(
-            "tools.approval.resolve_gateway_approval",
-            lambda session_key, choice, request_id=None: calls.append((session_key, choice)) or 1,
-        )
-
-        raw = {
-            "from": "15551234567",
-            "type": "interactive",
-            "interactive": {
-                "type": "button_reply",
-                "button_reply": {"id": "appr:app1:approve", "title": "Approve"},
-            },
-        }
-        handled = await adapter._dispatch_interactive_reply(raw, {})
-
-        assert handled is True
-        assert calls == [("sess-app-1", "approve")]
-        assert "app1" not in adapter._exec_approval_state
-        confirm_payload = adapter._http_client.post.call_args.kwargs["json"]
-        assert confirm_payload["type"] == "text"
-        assert "Approved" in confirm_payload["text"]["body"]
-
 
 @pytest.mark.usefixtures("authorized_interactive_env")
 class TestDispatchInteractiveReplySlashConfirm:
@@ -1276,37 +1203,6 @@ class TestDispatchInteractiveReplySlashConfirm:
 class TestDispatchInteractiveReplyAuthorization:
     """Interactive taps must honor the same DM allowlist as text intake."""
 
-
-    @pytest.mark.asyncio
-    async def test_approval_tap_allowed_when_sender_allowlisted(self, monkeypatch):
-        adapter = _make_adapter(
-            _dm_policy="allowlist",
-            _allow_from={"15551234567"},
-        )
-        adapter._exec_approval_state["app1"] = "sess-app-1"
-        adapter._approval_request_ids()["app1"] = "req-1"
-        adapter._http_client = MagicMock()
-        adapter._http_client.post = AsyncMock(
-            return_value=_mock_httpx_response(200, {"messages": [{"id": "x"}]})
-        )
-        calls = []
-        monkeypatch.setattr(
-            "tools.approval.resolve_gateway_approval",
-            lambda session_key, choice, request_id=None: calls.append((session_key, choice)) or 1,
-        )
-
-        raw = {
-            "from": "15551234567",
-            "type": "interactive",
-            "interactive": {
-                "type": "button_reply",
-                "button_reply": {"id": "appr:app1:approve", "title": "Approve"},
-            },
-        }
-        handled = await adapter._dispatch_interactive_reply(raw, {})
-
-        assert handled is True
-        assert calls == [("sess-app-1", "approve")]
 
 
 @pytest.mark.usefixtures("authorized_interactive_env")

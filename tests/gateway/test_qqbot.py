@@ -624,20 +624,8 @@ class TestChunkedUploaderFlow:
 
 
 # ---------------------------------------------------------------------------
-# Inline keyboards — approval + update-prompt flows
+# Inline keyboards — update-prompt flow
 # ---------------------------------------------------------------------------
-
-class TestApprovalButtonData:
-    def test_parse_allow_once(self):
-        from plugins.platforms.qqbot.keyboards import parse_approval_button_data
-        result = parse_approval_button_data("approve:agent:main:qqbot:c2c:UID:allow-once")
-        assert result == ("agent:main:qqbot:c2c:UID", "allow-once")
-
-
-    def test_parse_empty_returns_none(self):
-        from plugins.platforms.qqbot.keyboards import parse_approval_button_data
-        assert parse_approval_button_data("") is None
-        assert parse_approval_button_data(None) is None  # type: ignore[arg-type]
 
 
 class TestUpdatePromptButtonData:
@@ -645,37 +633,6 @@ class TestUpdatePromptButtonData:
         from plugins.platforms.qqbot.keyboards import parse_update_prompt_button_data
         assert parse_update_prompt_button_data("update_prompt:y") == "y"
 
-
-class TestBuildApprovalKeyboard:
-
-    def test_button_data_embeds_session_key(self):
-        from plugins.platforms.qqbot.keyboards import build_approval_keyboard
-        kb = build_approval_keyboard("agent:main:qqbot:c2c:UID")
-        datas = [b.action.data for b in kb.content.rows[0].buttons]
-        assert datas[0] == "approve:agent:main:qqbot:c2c:UID:allow-once"
-        assert datas[1] == "approve:agent:main:qqbot:c2c:UID:allow-always"
-        assert datas[2] == "approve:agent:main:qqbot:c2c:UID:deny"
-
-
-
-
-class TestBuildApprovalText:
-
-
-    def test_truncates_long_commands(self):
-        from plugins.platforms.qqbot.keyboards import (
-            ApprovalRequest, build_approval_text,
-        )
-        long = "x" * 1000
-        req = ApprovalRequest(
-            session_key="s", title="t", command_preview=long, cwd="/x",
-        )
-        text = build_approval_text(req)
-        # Preview is truncated to 300 chars; 1000 "x"s would still push the
-        # body past 300, but the inline preview specifically must be capped.
-        # 2 backtick fences; the content line in between is separate.
-        xs_in_preview = sum(line.count("x") for line in text.split("\n") if line and "```" not in line)
-        assert xs_in_preview <= 301  # 300 xs + one-off tolerance
 
 
 class TestInteractionEventParsing:
@@ -847,62 +804,6 @@ class TestDefaultInteractionDispatch:
         assert adapter._interaction_callback == adapter._default_interaction_dispatch
 
 
-    @pytest.mark.asyncio
-    async def test_approval_click_once_maps_to_once(self):
-        """'allow-once' button → resolve_gateway_approval(session, 'once')."""
-        adapter = self._make_adapter()
-
-        resolve_calls = []
-
-        def fake_resolve(session_key, choice, resolve_all=False, request_id=None):
-            resolve_calls.append((session_key, choice, resolve_all))
-            return 1
-
-        # Patch the *module-level* function that _default_interaction_dispatch
-        # imports lazily.
-        import tools.approval
-        orig = tools.approval.resolve_gateway_approval
-        tools.approval.resolve_gateway_approval = fake_resolve
-        try:
-            from plugins.platforms.qqbot.keyboards import parse_interaction_event
-            event = parse_interaction_event({
-                "id": "i",
-                "chat_type": 2,
-                "user_openid": "u-42",
-                "data": {"resolved": {"button_data": "approve:agent:main:qqbot:dm:u-42:allow-once:req-1"}},
-            })
-            await adapter._default_interaction_dispatch(event)
-        finally:
-            tools.approval.resolve_gateway_approval = orig
-
-        assert resolve_calls == [("agent:main:qqbot:dm:u-42", "once", False)]
-
-
-    @pytest.mark.asyncio
-    async def test_approval_click_rejects_unauthorized_operator(self):
-        adapter = self._make_adapter()
-        resolve_calls = []
-
-        def fake_resolve(session_key, choice, resolve_all=False, request_id=None):
-            resolve_calls.append((session_key, choice, resolve_all))
-            return 1
-
-        import tools.approval
-        orig = tools.approval.resolve_gateway_approval
-        tools.approval.resolve_gateway_approval = fake_resolve
-        try:
-            from plugins.platforms.qqbot.keyboards import parse_interaction_event
-            event = parse_interaction_event({
-                "id": "i", "chat_type": 1,
-                "group_openid": "g-1",
-                "group_member_openid": "attacker",
-                "data": {"resolved": {"button_data": "approve:agent:main:qqbot:group:g-1:owner:allow-once"}},
-            })
-            await adapter._default_interaction_dispatch(event)
-        finally:
-            tools.approval.resolve_gateway_approval = orig
-
-        assert resolve_calls == []
 
     @pytest.mark.asyncio
     async def test_update_prompt_click_writes_response_file(self, tmp_path, monkeypatch):
@@ -967,92 +868,6 @@ class TestProfileNamespaceApprovalAuthz:
         assert self._parse("agent::qqbot:c2c:u-1") is None
         assert self._parse("agent:main") is None
         assert self._parse("") is None
-
-    @pytest.mark.asyncio
-    async def test_c2c_click_on_named_profile_key_resolves(self):
-        """Approval click carrying a named-profile c2c key resolves (was rejected)."""
-        adapter = self._make_adapter()
-
-        resolve_calls = []
-
-        def fake_resolve(session_key, choice, resolve_all=False, request_id=None):
-            resolve_calls.append((session_key, choice, resolve_all))
-            return 1
-
-        import tools.approval
-        orig = tools.approval.resolve_gateway_approval
-        tools.approval.resolve_gateway_approval = fake_resolve
-        try:
-            from plugins.platforms.qqbot.keyboards import parse_interaction_event
-            event = parse_interaction_event({
-                "id": "i",
-                "chat_type": 2,
-                "user_openid": "u-42",
-                "data": {"resolved": {"button_data": "approve:agent:coder:qqbot:c2c:u-42:allow-once:req-1"}},
-            })
-            await adapter._default_interaction_dispatch(event)
-        finally:
-            tools.approval.resolve_gateway_approval = orig
-
-        assert resolve_calls == [("agent:coder:qqbot:c2c:u-42", "once", False)]
-
-    @pytest.mark.asyncio
-    async def test_group_click_on_named_profile_key_authorizes_session_owner(self):
-        """Group approval click under a named profile authorizes the session owner."""
-        adapter = self._make_adapter()
-
-        resolve_calls = []
-
-        def fake_resolve(session_key, choice, resolve_all=False, request_id=None):
-            resolve_calls.append((session_key, choice, resolve_all))
-            return 1
-
-        import tools.approval
-        orig = tools.approval.resolve_gateway_approval
-        tools.approval.resolve_gateway_approval = fake_resolve
-        try:
-            from plugins.platforms.qqbot.keyboards import parse_interaction_event
-            event = parse_interaction_event({
-                "id": "i", "chat_type": 1,
-                "group_openid": "g-1",
-                "group_member_openid": "owner",
-                "data": {"resolved": {"button_data": "approve:agent:coder:qqbot:group:g-1:owner:allow-once:req-1"}},
-            })
-            await adapter._default_interaction_dispatch(event)
-        finally:
-            tools.approval.resolve_gateway_approval = orig
-
-        assert resolve_calls == [("agent:coder:qqbot:group:g-1:owner", "once", False)]
-
-    @pytest.mark.asyncio
-    async def test_named_profile_key_still_rejects_wrong_operator(self):
-        """The namespace relaxation must not weaken the operator check."""
-        adapter = self._make_adapter()
-
-        resolve_calls = []
-
-        def fake_resolve(session_key, choice, resolve_all=False, request_id=None):
-            resolve_calls.append((session_key, choice, resolve_all))
-            return 1
-
-        import tools.approval
-        orig = tools.approval.resolve_gateway_approval
-        tools.approval.resolve_gateway_approval = fake_resolve
-        try:
-            from plugins.platforms.qqbot.keyboards import parse_interaction_event
-            event = parse_interaction_event({
-                "id": "i", "chat_type": 1,
-                "group_openid": "g-1",
-                "group_member_openid": "attacker",
-                "data": {"resolved": {"button_data": "approve:agent:coder:qqbot:group:g-1:owner:allow-once:req-1"}},
-            })
-            await adapter._default_interaction_dispatch(event)
-        finally:
-            tools.approval.resolve_gateway_approval = orig
-
-        assert resolve_calls == []
-
-
 
 
 class TestSendUpdatePrompt:

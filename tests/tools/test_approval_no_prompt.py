@@ -4,6 +4,7 @@ Driven through the real guards against a temp HERMES_HOME config. What still ref
 bot/profile create refusal, the unattended deny modes) is pinned beside it, because those are the
 rules the removed prompt used to sit in front of.
 """
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -146,3 +147,78 @@ def test_unattended_platform_with_a_notifier_applies_unattended_mode(config_home
     assert result["approved"] is approved
     assert approved or "approvals.unattended_mode" in result["message"]
     notify.assert_not_called()
+
+
+def test_plugin_approve_directive_proceeds_without_a_card(interactive_gateway, monkeypatch):
+    from hermes_cli import plugins
+
+    monkeypatch.setattr(plugins, "invoke_hook", lambda hook_name, **kwargs: [{"action": "approve", "message": "needs ok"}])
+    assert plugins.get_pre_tool_call_block_message("terminal", {"command": "rm -rf ./build"}) is None
+    _assert_no_card(interactive_gateway)
+
+
+def test_plugin_block_directive_still_blocks(interactive_gateway, monkeypatch):
+    from hermes_cli import plugins
+
+    monkeypatch.setattr(plugins, "invoke_hook", lambda hook_name, **kwargs: [{"action": "block", "message": "no"}])
+    assert plugins.get_pre_tool_call_block_message("terminal", {"command": "ls"}) == "no"
+
+
+def test_instruction_file_write_goes_through_while_credential_writes_stay_denied(interactive_gateway, tmp_path, monkeypatch):
+    from tools.file_tools import write_file_tool
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    written = json.loads(write_file_tool(str(tmp_path / "AGENTS.md"), "rules\n"))
+    assert "error" not in written and (tmp_path / "AGENTS.md").read_text() == "rules\n"
+    (tmp_path / ".ssh").mkdir()
+    denied = json.loads(write_file_tool(str(tmp_path / ".ssh" / "id_rsa"), "key\n"))
+    assert "protected system/credential file" in denied["error"]
+    assert not (tmp_path / ".ssh" / "id_rsa").exists()
+    _assert_no_card(interactive_gateway)
+
+
+class Owner:
+    def __init__(self, choice: str = "once") -> None:
+        self.choice, self.cards, self.bubbles = choice, [], []
+
+    def notify(self, data) -> None:
+        self.cards.append(dict(data))
+        approval.resolve_gateway_approval(SESSION, self.choice, request_id=data["request_id"])
+
+
+@pytest.fixture
+def owner(interactive_gateway):
+    from tools.details_bubble import bound_details_sink
+
+    approval.unregister_gateway_notify(SESSION)
+    asked = Owner()
+    approval.register_gateway_notify(SESSION, asked.notify)
+    with bound_details_sink(lambda text: asked.bubbles.append(text) or True):
+        yield asked
+    approval.unregister_gateway_notify(SESSION)
+
+
+def test_a_held_draft_card_carries_the_short_question_the_draft_and_once_or_deny(owner):
+    result = approval.request_draft_approval(
+        text="Lunch at noon?", description="Send to ada@example.com", pattern_key="outbound_draft:email:x",
+        draft={"kind": "outbound_message"}, details=[{"label": "To", "value": "ada@example.com"}])
+    assert result["approved"] is True
+    [card] = owner.cards
+    assert card["question"] == "Send this message?"
+    assert card["draft"] == {"kind": "outbound_message"}
+    assert card["details"] == [{"label": "To", "value": "ada@example.com"}]
+    assert card["choices"] == ["once", "deny"]
+    assert owner.bubbles == ["Send to ada@example.com\n\nLunch at noon?"]
+
+
+def test_an_elicitation_consent_card_carries_its_own_question_after_a_details_bubble(owner):
+    from tools.approval_prompt import request_elicitation_consent
+
+    verdict = request_elicitation_consent(
+        "Fill the saved card on shop.example", "Payment card autofill", question="Fill in your card?")
+    assert verdict == "accept"
+    [card] = owner.cards
+    assert card["question"] == "Fill in your card?"
+    assert card["choices"] == ["once", "deny"]
+    assert owner.bubbles == ["Payment card autofill\n\nFill the saved card on shop.example"]

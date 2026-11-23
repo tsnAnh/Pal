@@ -106,15 +106,13 @@ async def test_apple_actions_work_on_a_named_mac_too(authorities, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_connector_still_asking_keeps_both_approval_gates(authorities, monkeypatch):
+async def test_a_write_on_a_connector_still_asking_raises_no_approval_prompt_and_leaves_consent_to_the_phone(authorities, monkeypatch):
     authority = await authorities()
     pocket = await connect_phone(authority, 'Sam iPhone', responder=reminder_answer)
     approvals = Approvals(monkeypatch, 'deny')
     result = await call_device(authority, 'Sam iPhone', 'reminders.add', {'title': 'Call mum'})
-    assert result['code'] == 'approval_denied' and len(approvals.prompts) == 1 and pocket.requests() == []
-    approvals.choice = 'once'
-    result = await call_device(authority, 'Sam iPhone', 'reminders.add', {'title': 'Call mum'})
-    assert result['success'] is True and pocket.requests()[0]['needs_consent'] is True
+    assert result['success'] is True and approvals.prompts == []
+    assert pocket.requests()[0]['needs_consent'] is True
     await pocket.connection.close()
 
 

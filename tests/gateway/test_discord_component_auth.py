@@ -1,10 +1,10 @@
 """Security regression tests: Discord component views honor allowlists.
 
-The interactive component views (ExecApprovalView, SlashConfirmView,
+The interactive component views (SlashConfirmView,
 UpdatePromptView, ModelPickerView, ClarifyChoiceView) historically accepted only
 ``allowed_user_ids``. Deployments that configure DISCORD_ALLOWED_ROLES
 without DISCORD_ALLOWED_USERS therefore had a wide-open component
-surface: any guild member who could see the prompt could approve exec
+surface: any guild member who could see the prompt could answer
 commands, cancel slash confirmations, or switch the model -- even when
 the same user would be rejected at the slash and on_message gates.
 
@@ -24,11 +24,9 @@ from gateway.config import PlatformConfig
 from plugins.platforms.discord.adapter import (
     ClarifyChoiceView,
     DiscordAdapter,
-    ExecApprovalView,
     ModelPickerView,
     SlashConfirmView,
     UpdatePromptView,
-    _resolve_exec_approval_admin_gate,
 )
 from plugins.platforms.discord.adapter_component_auth import _component_check_auth
 
@@ -108,9 +106,9 @@ def test_snapshot_user_is_confirmed_with_the_live_check(snapshot, verdict, expec
 
 
 @pytest.mark.asyncio
-async def test_approval_buttons_follow_a_revoke_made_after_connect():
+async def test_prompt_buttons_follow_a_revoke_made_after_connect():
     # `hermes pairing revoke` in another process rewrites .env and the pairing store, never the
-    # adapter's snapshot; the card's buttons must follow the gateway's per-call check instead.
+    # adapter's snapshot; a prompt's buttons must follow the gateway's per-call check instead.
     adapter = DiscordAdapter(PlatformConfig(enabled=True, token="***"))
     adapter._allowed_user_ids = {"11111"}
     live = {"11111": True}
@@ -118,7 +116,8 @@ async def test_approval_buttons_follow_a_revoke_made_after_connect():
     channel = SimpleNamespace(send=AsyncMock(return_value=SimpleNamespace(id=1)))
     adapter._client = SimpleNamespace(get_channel=lambda _chat_id: channel, fetch_channel=AsyncMock())
 
-    result = await adapter.send_exec_approval(chat_id="555", command="make deploy", session_key="discord:555")
+    result = await adapter.send_slash_confirm(
+        chat_id="555", title="Reload", message="Reload MCP servers?", session_key="discord:555", confirm_id="c1")
     assert result.success is True
     view = channel.send.call_args.kwargs["view"]
     assert view._check_auth(_interaction(11111)) is True
@@ -136,18 +135,6 @@ async def test_approval_buttons_follow_a_revoke_made_after_connect():
 # View construction: every view must accept allowed_role_ids and route
 # through the shared helper. Default value preserves prior call-sites.
 # ---------------------------------------------------------------------------
-
-
-def test_exec_approval_view_accepts_role_allowlist():
-    view = ExecApprovalView(
-        session_key="sess-1",
-        allowed_user_ids={"11111"},
-        allowed_role_ids={42},
-    )
-    # Role-only user passes
-    assert view._check_auth(_interaction(99999, role_ids=[42])) is True
-    # Neither user nor role match: reject
-    assert view._check_auth(_interaction(99999, role_ids=[7])) is False
 
 
 def test_slash_confirm_view_accepts_role_allowlist():
@@ -190,7 +177,6 @@ def test_clarify_choice_view_accepts_role_allowlist():
 @pytest.mark.parametrize(
     "view_factory",
     [
-        lambda: ExecApprovalView(session_key="s", allowed_user_ids=set()),
         lambda: SlashConfirmView(session_key="s", confirm_id="c", allowed_user_ids=set()),
         lambda: UpdatePromptView(session_key="s", allowed_user_ids=set()),
         lambda: ClarifyChoiceView(
@@ -241,7 +227,7 @@ def test_model_picker_view_empty_allowlists_reject_by_default(monkeypatch):
 
 def test_view_empty_allowlists_allow_with_explicit_allow_all(monkeypatch):
     monkeypatch.setenv("DISCORD_ALLOW_ALL_USERS", "true")
-    view = ExecApprovalView(session_key="s", allowed_user_ids=set())
+    view = SlashConfirmView(session_key="s", confirm_id="c", allowed_user_ids=set())
     assert view._check_auth(_interaction(99999)) is True
 
 
@@ -264,63 +250,7 @@ def test_component_check_pairing_approved_user_passes(monkeypatch):
     mock_store.is_approved.assert_called_once_with("discord", "11111")
 
 
-# ---------------------------------------------------------------------------
-# Opt-in admin gate for exec-approval buttons (feat/discord-admin-exec-approval).
-# Default OFF: any admitted user can approve (the v0.16-restored behavior).
-# When `require_admin_for_exec_approval` is true, the clicker must ALSO be in
-# `allow_admin_from`. Fails closed (logged) when the toggle is on but no
-# admins are configured. Only ExecApprovalView is gated — other views stay
-# user-scope.
-# ---------------------------------------------------------------------------
-
-
-def test_admin_gate_resolver_on_parses_admins():
-    """Toggle true -> gate enabled, admins coerced from allow_admin_from."""
-    require_admin, admins = _resolve_exec_approval_admin_gate(
-        {"require_admin_for_exec_approval": True, "allow_admin_from": "111, 222"}
-    )
-    assert require_admin is True
-    assert admins == {"111", "222"}
-    # list form normalizes identically
-    _, admins_list = _resolve_exec_approval_admin_gate(
-        {"require_admin_for_exec_approval": "true", "allow_admin_from": [111, 222]}
-    )
-    assert admins_list == {"111", "222"}
-
-
-def test_exec_view_gate_on_non_admin_rejected():
-    """Gate on: admitted user who is NOT an admin is rejected at the button."""
-    view = ExecApprovalView(
-        session_key="s",
-        allowed_user_ids={"11111", "22222"},
-        require_admin=True,
-        admin_user_ids={"11111"},
-    )
-    # 22222 is admitted (in allowlist) but not an admin -> rejected.
-    assert view._check_auth(_interaction(22222)) is False
-
-
-def test_exec_view_gate_on_no_admins_fails_closed(caplog):
-    """Gate on but no admins configured -> nobody approves, logged once."""
-    import logging
-
-    view = ExecApprovalView(
-        session_key="s",
-        allowed_user_ids={"11111"},
-        require_admin=True,
-        admin_user_ids=set(),
-    )
-    with caplog.at_level(logging.WARNING):
-        assert view._check_auth(_interaction(11111)) is False
-    assert any(
-        "require_admin_for_exec_approval" in r.message for r in caplog.records
-    )
-
-
-def test_other_views_not_admin_gated():
-    """Lower-stakes views never take the admin gate — they stay user-scope."""
-    # SlashConfirmView/ModelPickerView/etc. construct without require_admin and
-    # delegate straight to _component_check_auth.
+def test_views_stay_user_scope():
     sc = SlashConfirmView(
         session_key="s", confirm_id="c", allowed_user_ids={"11111"}
     )

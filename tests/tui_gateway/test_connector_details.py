@@ -305,7 +305,6 @@ def policy_server(monkeypatch):
     write_config({"upwork": upwork_template()})
     registered = mcp_catalog._build_server_config(mcp_catalog.get_entry("upwork"), None)
     monkeypatch.setitem(mcp_tool._server_action_policies, "upwork@default", mcp_action_gate.policy_from_config(registered))
-    monkeypatch.setitem(mcp_tool._server_trust_levels, "upwork@default", "full")
 
 
 def test_a_read_set_to_ask_waits_for_the_owner_with_the_exact_arguments_and_runs_once(monkeypatch, policy_server):
@@ -365,16 +364,6 @@ def test_the_chat_auto_approve_switch_still_skips_only_the_card(monkeypatch, pol
     finally:
         reset_current_session_key(token)
 
-
-def test_the_live_call_path_applies_a_read_set_to_ask(monkeypatch, policy_server):
-    upwork_tools(monkeypatch)
-    approvals = Approvals(monkeypatch)
-    assert handlers._trust_gate_check("upwork@default", "search_jobs", None, {"q": "x"}) is None
-    assert approvals.cards == []
-
-    ok(set_mode("read", "ask"))
-    assert handlers._trust_gate_check("upwork@default", "search_jobs", None, {"q": "x"}) is None
-    assert approvals.cards == [("upwork@default", "search_jobs", {"q": "x"})]
 
 
 def test_installed_skills_that_name_the_connector_are_listed_with_humanized_titles():

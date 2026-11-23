@@ -81,129 +81,10 @@ def _attach_auth_runner(adapter, auth_fn=None):
 # send_exec_approval — Block Kit buttons
 # ===========================================================================
 
-class TestSlackExecApproval:
-    """Test the send_exec_approval method sends Block Kit buttons."""
-
-    @pytest.mark.asyncio
-    async def test_sends_blocks_with_buttons(self):
-        adapter = _make_adapter()
-        mock_client = adapter._team_clients["T1"]
-        mock_client.chat_postMessage = AsyncMock(return_value={"ts": "1234.5678"})
-
-        result = await adapter.send_exec_approval(
-            chat_id="C1",
-            command="rm -rf /important",
-            session_key="agent:main:slack:group:C1:1111",
-            description="dangerous deletion",
-        )
-
-        assert result.success is True
-        assert result.message_id == "1234.5678"
-
-        # Verify chat_postMessage was called with blocks
-        mock_client.chat_postMessage.assert_called_once()
-        kwargs = mock_client.chat_postMessage.call_args[1]
-        assert "blocks" in kwargs
-        blocks = kwargs["blocks"]
-        assert len(blocks) == 2
-        assert blocks[0]["type"] == "section"
-        assert "rm -rf /important" in blocks[0]["text"]["text"]
-        assert "dangerous deletion" in blocks[0]["text"]["text"]
-        assert blocks[1]["type"] == "actions"
-        elements = blocks[1]["elements"]
-        assert len(elements) == 4
-        action_ids = [e["action_id"] for e in elements]
-        assert "hermes_approve_once" in action_ids
-        assert "hermes_approve_session" in action_ids
-        assert "hermes_approve_always" in action_ids
-        assert "hermes_deny" in action_ids
-        # Each button carries the session key as value
-        for e in elements:
-            assert e["value"] == "agent:main:slack:group:C1:1111"
-
-    @pytest.mark.asyncio
-    async def test_smart_deny_owner_override_hides_persistent_buttons(self):
-        adapter = _make_adapter()
-        mock_client = adapter._team_clients["T1"]
-        mock_client.chat_postMessage = AsyncMock(return_value={"ts": "1234.5678"})
-
-        await adapter.send_exec_approval(
-            chat_id="C1", command="rm -rf /", session_key="s",
-            allow_permanent=False, smart_denied=True,
-        )
-
-        kwargs = mock_client.chat_postMessage.call_args.kwargs
-        elements = kwargs["blocks"][1]["elements"]
-        assert [element["action_id"] for element in elements] == [
-            "hermes_approve_once", "hermes_deny",
-        ]
-        assert "one operation" in kwargs["blocks"][0]["text"]["text"].lower()
-
 
 # ===========================================================================
 # _handle_approval_action — button click handler
 # ===========================================================================
-
-class TestSlackApprovalAction:
-    """Test the approval button click handler."""
-
-
-    @pytest.mark.asyncio
-    async def test_truncates_inflated_original_text(self):
-        """Interaction payload re-escapes HTML entities; text must be capped."""
-        adapter = _make_adapter()
-        _attach_auth_runner(adapter)
-        adapter._approval_resolved["1.2"] = False
-
-        # Simulate Slack re-escaping: original was ~2990 chars, but & → &amp;
-        # etc. inflates it past 3000.
-        inflated_text = "a" * 2990 + "&amp;" * 10  # 2990 + 50 = 3040 chars
-
-        ack = AsyncMock()
-        body = {
-            "message": {"ts": "1.2", "blocks": [
-                {"type": "section", "text": {"type": "mrkdwn", "text": inflated_text}},
-            ]},
-            "channel": {"id": "C1"},
-            "user": {"name": "alice", "id": "U_ALICE"},
-        }
-        action = {"action_id": "hermes_approve_once", "value": "session-key"}
-
-        mock_client = adapter._team_clients["T1"]
-        mock_client.chat_update = AsyncMock()
-
-        with patch("tools.approval.resolve_gateway_approval", return_value=1):
-            await adapter._handle_approval_action(ack, body, action)
-
-        update_kwargs = mock_client.chat_update.call_args[1]
-        section_text = update_kwargs["blocks"][0]["text"]["text"]
-        assert len(section_text) <= 3000
-
-    @pytest.mark.asyncio
-    async def test_global_allowlist_blocks_unauthorized_click(self, monkeypatch):
-        adapter = _make_adapter()
-        adapter._approval_resolved["1234.5678"] = False
-        monkeypatch.delenv("SLACK_ALLOWED_USERS", raising=False)
-        monkeypatch.delenv("SLACK_ALLOW_ALL_USERS", raising=False)
-        monkeypatch.delenv("GATEWAY_ALLOW_ALL_USERS", raising=False)
-        monkeypatch.setenv("GATEWAY_ALLOWED_USERS", "U_OWNER")
-
-        ack = AsyncMock()
-        body = {
-            "message": {"ts": "1234.5678", "blocks": []},
-            "channel": {"id": "C1"},
-            "user": {"name": "mallory", "id": "U_ATTACKER"},
-        }
-        action = {
-            "action_id": "hermes_approve_once",
-            "value": "agent:main:slack:group:C1:1111",
-        }
-
-        with patch("tools.approval.resolve_gateway_approval") as mock_resolve:
-            await adapter._handle_approval_action(ack, body, action)
-
-        ack.assert_called_once()
-        mock_resolve.assert_not_called()
 
 
 class TestSlackInteractiveAuth:
@@ -236,7 +117,6 @@ class TestSlackSlashConfirmAction:
         """Interaction payload re-escapes HTML entities; text must be capped."""
         adapter = _make_adapter()
         _attach_auth_runner(adapter)
-        adapter._approval_resolved["2222.3333"] = False
 
         # Simulate Slack re-escaping inflating text past 3000 chars.
         inflated_text = "b" * 2990 + "&lt;" * 10  # 2990 + 40 = 3030 chars

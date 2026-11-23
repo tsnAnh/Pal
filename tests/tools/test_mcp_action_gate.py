@@ -251,7 +251,7 @@ def test_auto_approve_never_applies_to_money_steps_other_servers_or_other_tools(
     with Owner() as chat:
         assert _call("fund_escrow", {"contract_id": "1"})["code"] == mcp_action_gate.ACTION_REFUSED
         assert _call("write_something", server_name="other") == {"result": "ok"}
-    assert len(chat.cards) == 1 and "draft" not in chat.cards[0], "the other server's own trust gate still asks"
+    assert chat.cards == [], "money steps are refused and a server without an action policy is not gated"
     mcp_action_gate.set_auto_approve("chat-a", "upwork", False)
     with Owner() as chat:
         _call("submit_proposal", {"job_id": "1"})

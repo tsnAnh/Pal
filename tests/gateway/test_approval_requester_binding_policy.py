@@ -36,43 +36,6 @@ def _group_pending(user_id, user_name, session_key):
     return entry
 
 
-def test_a_dm_admin_is_not_a_group_admin_on_buttons_either():
-    """``allow_admin_from`` is the DM scope (slash_access.policy_from_extra): a native button in a group
-    refused it exactly as ``/approve`` does, instead of unioning both scopes."""
-    from gateway.approval_actor import approval_refusal
-    from gateway.slash_access import policy_for_runner_source
-    from types import SimpleNamespace
-
-    write_approvers([])
-    extra = {"allow_admin_from": ["bob"]}
-    _group_pending("alice", "Alice", "g")
-    runner = SimpleNamespace(config=GatewayConfig(platforms={Platform.TELEGRAM: PlatformConfig(extra=extra)}))
-    source = SessionSource(platform=Platform.TELEGRAM, chat_id="g", chat_type="group", user_id="bob")
-    native = approval_refusal("g", "bob", extra=extra)
-    text = approval_refusal("g", "bob", admin_ids=policy_for_runner_source(runner, source).admin_user_ids)
-    assert native == text == "Alice"
-    assert approval_refusal("g", "carol", extra={"group_allow_admin_from": ["carol"]}) is None
-
-
-def test_an_id_less_tap_settles_nothing_even_for_the_requester():
-    """A card tap without a request id cannot say which request it answers, so it resolves nothing,
-    whoever taps (#62359); the requester then answers their own card by id. Bob's request expiring
-    never lets his id-less tap reach Alice's, and Bob may not answer Alice's by id either."""
-    from gateway.approval_actor import approval_refusal
-    from tools import approval
-
-    write_approvers([])
-    bob = pending_from("bob", "Bob", "s")
-    alice = pending_from("alice", "Alice", "s")
-    assert approval_refusal("s", "bob") is None
-    approval.withdraw_gateway_approval("s", bob.data["request_id"], "timeout")
-    assert approval.resolve_gateway_approval_card("s", "once", None, actor_id="bob") == 0
-    assert approval.resolve_gateway_approval_card("s", "once", None, actor_id="alice") == 0
-    assert approval.resolve_gateway_approval_card("s", "once", alice.data["request_id"], actor_id="bob") == 0
-    assert alice.result is None and not alice.event.is_set()
-    assert approval.resolve_gateway_approval_card("s", "once", alice.data["request_id"], actor_id="alice") == 1
-    assert alice.result == "once"
-
 
 @pytest.mark.asyncio
 async def test_a_telegram_tap_settles_only_what_the_tapper_may_answer(monkeypatch):
