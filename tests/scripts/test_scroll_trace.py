@@ -16,7 +16,8 @@ def _load(name):
 
 
 scroll_trace = _load("scroll_trace")
-HEADER = ",".join(scroll_trace.COLUMNS)
+HEADER = ",".join(scroll_trace.COLUMNS_V1)
+FIXTURES = Path(__file__).parent / "fixtures" / "scroll_trace"
 
 
 def row(at, kind="geo", reason="", mode="reading", phase="idle", distance=300.0, pin="7", pin_min_y=500.0, content_h=4000.0):
@@ -95,3 +96,62 @@ def test_following_list_pushed_off_the_newest_edge_is_a_viewport_jump():
     found = scroll_trace.jumps(lines)
     assert [(j.kind, round(j.moved)) for j in found] == [("viewport", 88)]
     assert [c.kind for c in found[0].causes] == ["chrome"]
+
+
+def _run(name, capsys, *extra):
+    code = scroll_trace.main([str(FIXTURES / f"{name}.csv"), *extra])
+    return code, capsys.readouterr().out
+
+
+def _kinds(name):
+    return [j.kind for j in scroll_trace.jumps(scroll_trace.parse((FIXTURES / f"{name}.csv").read_text()))]
+
+
+@pytest.mark.parametrize(
+    ("name", "kinds"),
+    [
+        ("v1_a_open_bounce", ["viewport", "viewport"]),
+        ("v1_b_composer_hold", ["viewport", "viewport", "viewport"]),
+        ("v1_e_layout_oscillation", ["viewport"] * 4),
+        ("v1_f_reading_drift", ["anchor", "anchor"]),
+        ("v2_pinned_displaced", ["viewport", "viewport"]),
+        ("v2_reading_anchor_slip", ["anchor"]),
+    ],
+)
+def test_each_measured_signature_is_flagged_and_fails_the_gate(name, kinds, capsys):
+    assert _kinds(name) == kinds
+    code, out = _run(name, capsys, "--max-jumps", "0")
+    assert code == 1
+    assert f"jumps={len(kinds)} " in out and out.count("JUMP ") == len(kinds)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "v1_d_artefact_pin_push",
+        "v2_clean_pinned_streaming",
+        "v2_clean_reading_growth_below",
+        "v2_clean_prepend_restore",
+        "v2_clean_jump_animation",
+    ],
+)
+def test_clean_runs_pass_the_gate(name, capsys):
+    code, out = _run(name, capsys, "--max-jumps", "0")
+    assert code == 0
+    assert "jumps=0 viewport=0 anchor=0" in out
+
+
+def test_v2_jump_causes_name_the_machine_event_and_command(capsys):
+    _, out = _run("v2_pinned_displaced", capsys)
+    assert "machine:rowsChanged->none" in out
+
+
+def test_v2_jump_without_the_machine_line_is_flagged():
+    text = (FIXTURES / "v2_clean_jump_animation.csv").read_text()
+    kept = [ln for ln in text.splitlines() if ",machine," not in ln and ",programmatic," not in ln]
+    assert [j.kind for j in scroll_trace.jumps(scroll_trace.parse("\n".join(kept) + "\n"))] == ["viewport"]
+
+
+def test_a_threshold_above_the_move_hides_it(capsys):
+    code, _ = _run("v1_f_reading_drift", capsys, "--threshold", "10", "--max-jumps", "0")
+    assert code == 0
