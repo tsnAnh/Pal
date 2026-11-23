@@ -21,6 +21,7 @@ _HERMES_CORE_TOOLS = [
     "todo_list", "memory",
     "session_search",
     "clarify",
+    "commitment",
     "execute_code", "delegate_task",
     "cronjob_manage",
     "kanban_show", "kanban_list",
@@ -164,6 +165,7 @@ TOOLSETS = {
         platforms=frozenset({"ios"}),
     ),
     "clarify": _ts("Ask the user clarifying questions (multiple-choice or open-ended)", ["clarify"]),
+    "commitment": _ts("Record and track promises to the owner that outlive a turn", ["commitment"]),
     "code_execution": _ts("Run Python scripts that call tools programmatically (reduces LLM round trips)", ["execute_code"]),
     "delegation": _ts("Spawn subagents with isolated context for complex subtasks", ["delegate_task"]),
     "kanban": _ts(

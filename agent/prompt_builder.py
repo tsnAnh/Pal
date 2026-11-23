@@ -30,6 +30,7 @@ from agent.skill_utils import (
 )
 from agent.skill_connector_gate import (
     connected_among, connector_state_key, refs_from_labels, unmet_connectors, warm_hosted_connectors)
+from gateway.commitments import PROMPT_RULE
 from tools.threat_patterns import scan_for_threats as _scan_for_threats
 from utils import atomic_json_write, file_cache_version
 
@@ -410,6 +411,7 @@ OWNER_PROACTIVE_GUIDANCE = (
     "terminal command; if only they can act, name that one step and do the rest. Run secret-free host fixes "
     "yourself.\n"
     "- Once your owner decides, finish the job (draft, do, verify); keep replies short.\n"
+    "- " + PROMPT_RULE + "\n"
     "Proactive means preparing and deciding, never acting past an approval gate: a role or instruction to ask "
     "first or never send without your owner wins; irreversible or paid actions wait for one yes/no, everything "
     "prepared.\n"

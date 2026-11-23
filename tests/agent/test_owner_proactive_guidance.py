@@ -128,7 +128,7 @@ def test_rule_text_names_no_secret_path(path_hint):
 
 
 def test_rule_text_stays_short():
-    assert len(OWNER_PROACTIVE_GUIDANCE.split()) < 275
+    assert len(OWNER_PROACTIVE_GUIDANCE.split()) < 345
 
 
 @pytest.fixture

@@ -37,6 +37,7 @@ _GUARD_SCRIPTS = (
     "scripts/ci/check_swift_nav_chrome.py", "scripts/ci/check_swift_bot_tint.py", "scripts/ci/check_swift_chat_drop.py", "scripts/ci/check_swift_chat_scroll.py", "scripts/ci/check_swift_chat_scroll_writer.py", "scripts/ci/check_swift_scroll_gesture.py", "scripts/ci/check_swift_chat_row_alignment.py", "scripts/ci/check_swift_mac_layout.py", "scripts/ci/check_swift_modal_size.py", "scripts/ci/check_swift_esc_dismiss.py", "scripts/ci/check_swift_glass.py", "scripts/ci/check_swift_glass_input.py", "scripts/ci/check_swift_icon_tint.py", "scripts/ci/check_swift_connect_palette.py", "scripts/ci/check_swift_image_viewer.py", "scripts/ci/check_swift_media_preview.py", "scripts/ci/check_swift_bot_settings.py", "scripts/ci/check_swift_perf.py", "scripts/ci/check_swift_fault_details.py", "scripts/ci/check_swift_entitlements.py",
     "scripts/ci/swift_lint.py",
     "scripts/ci/check_connector_names.py",
+    "scripts/ci/check_commitment_writers.py",
 )
 _SUPPORT = ("scripts/ci/profile_scope_patterns.json", "scripts/ci/chat_scroll_single_writer_allowlist.txt", "scripts/ci/swift_fault_details_allowlist.txt", "scripts/ci/glass_input_allowlist.txt", "scripts/ci/connector_names_allowlist.txt", "hermes_cli/data/pal_connectors.yaml", "scripts/install_root_lint_baseline.json", "agent/subdirectory_hints.py",
             "tools/__init__.py", "tools/registry.py", "hermes_constants.py", *_GUARD_SCRIPTS)
