@@ -130,46 +130,6 @@ def _entry_for_request(session_key: str, request_id: Optional[str]):
     return next((e for e in _gateway_queues.get(session_key) or [] if e.data.get("request_id") == request_id), None)
 
 
-def restrict_gateway_approval_card_to_deny(session_key: str, request_id: Optional[str], restricted: bool = True) -> None:
-    """Mark a pending request whose card could not show the whole command: a card tap may only deny it.
-    Every request starts marked; ``restricted=False`` lifts the mark once its card shows the whole command."""
-    with _lock:
-        entry = _entry_for_request(session_key, request_id)
-        if entry is not None:
-            entry.card_deny_only = restricted
-
-
-def resolve_gateway_approval_card(session_key: str, choice: str, request_id: Optional[str], *,
-                                  actor_id: Any = None, admin_ids: Any = (), extra: Any = None,
-                                  admitted: bool = True) -> int:
-    """Resolve the approval a native button card was rendered for.
-
-    Only the card's own request can resolve: a card whose request already settled (timed out, answered
-    from another client) resolves nothing instead of the next queued approval in the same session. A tap
-    without a request id (a card from an older build) cannot say which request it was rendered for, so
-    it resolves nothing. A request stays Deny-only from
-    its creation until its card shows the whole command, so a forged or early approve tap resolves
-    nothing.
-
-    With *actor_id* the clicker's authority (``gateway.approval_actor.may_answer``, with the platform
-    *extra* / *admin_ids*, and the chat's slash policy for the answer's own command)
-    is checked against that same entry (*admitted* as there). The Deny-only check, the authority
-    check and the settle are one critical section."""
-    if not request_id:
-        return 0
-    with _lock:  # re-entrant: the settle below takes it again
-        target = _entry_for_request(session_key, request_id)
-        if target is not None and choice != "deny" and target.card_deny_only:
-            return 0
-        if target is not None and actor_id is not None:
-            from gateway.approval_actor import may_answer
-            from gateway.approval_actor import approval_commands
-            if not may_answer(target.authority, actor_id, admin_ids, extra, approval_commands(choice),
-                              admitted=admitted):
-                return 0
-        return resolve_gateway_approval(session_key, choice, request_id=request_id)
-
-
 def withdraw_gateway_approval(session_key: str, request_id: str, cause: str) -> bool:
     """Withdraw one pending approval nobody can answer (the only attached client cannot render it).
     The waiter wakes at once with ``cancelled=cause`` — a withdrawal, never a user deny — instead of
@@ -193,12 +153,6 @@ def list_gateway_approvals(session_key: str) -> list[dict]:
         return [dict(entry.data) for entry in _gateway_queues.get(session_key, [])]
 
 
-def list_gateway_approval_authority(session_key: str) -> list[dict]:
-    """Per unresolved approval: its ``request_id`` and who may answer it (requester, approvers)."""
-    with _lock:
-        return [{"request_id": e.data.get("request_id"), **e.authority} for e in _gateway_queues.get(session_key, [])]
-
-
 def register_gateway_settle(session_key: str, request_id: str, settle) -> bool:
     """Attach ``settle(reason)`` to one pending approval; it runs once when that wait ends by any path.
     False when the request is no longer pending (the surface should withdraw its prompt itself)."""
@@ -207,16 +161,6 @@ def register_gateway_settle(session_key: str, request_id: str, settle) -> bool:
         if entry is None:
             return False
         entry.settle = settle
-        return True
-
-
-def observe_gateway_settle(session_key: str, request_id: str, observer) -> bool:
-    """Observe a pending approval without replacing its existing settle hook."""
-    with _lock:
-        entry = _entry_for_request(session_key, request_id)
-        if entry is None:
-            return False
-        entry.observers.append(observer)
         return True
 
 
@@ -257,6 +201,8 @@ def clear_session(session_key: str) -> None:
     with _lock:
         from tools.approval_notify_lease import revoke_session_locked
         revoke_session_locked(session_key)
+        from tools.approval_gateway_wait import clear_held_denials
+        clear_held_denials(session_key)
         for entry in _gateway_queues.pop(session_key, []):
             # Cancel blocked waits now so the old run unwinds instead of idling until timeout;
             # the prompt was withdrawn, nobody denied it.
@@ -445,6 +391,20 @@ def _unattended_command_verdict(command: str) -> dict | None:
     return None
 
 
+def unattended_write_refusal(subject: str) -> str | None:
+    """The refusal an unattended context applies to a file write steering future agent behavior (``subject``
+    names the targets), else None. Same ``cron_mode`` / ``single_query_mode`` / ``unattended_mode`` as a
+    dangerous command: deny refuses, approve writes."""
+    if _auto_approving_turn():
+        return None
+    for ctx in _unattended_contexts():
+        if ctx.mode() == "deny":
+            return ctx.block_message(
+                f"Write to {subject}", noun="writes to files that steer agent behavior",
+                advice="Do NOT retry it via another path (terminal, execute_code).")
+    return None
+
+
 # --- Owner decisions (held drafts) ----------------------------------------------------------------------------------
 # A draft that would send content out reaches its owner one way: gateway round-trip -> pending fallback -> CLI
 # prompt. Silence is not consent, deny is a hard halt, and the answer covers that one operation.
@@ -558,12 +518,14 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str, pattern_
                 "pattern_keys": [pattern_key], "description": redact_approval_display(description),
                 "choices": GATEWAY_CHOICES, **(extra_data or {}),
             }
-            decision = _await_gateway_decision(session_key, notify_cb, data, surface="gateway", identity=command)
+            decision = _await_gateway_decision(session_key, notify_cb, data, surface="gateway",
+                                              identity=f"{pattern_key}\n{description}\n{command}")
             if decision.get("notify_failed"):
                 return _denied(spec.notify_failed, pattern_key=pattern_key,
                                description=description, outcome="notify_failed", noun=spec.noun)
             # Consent contract: silence is NOT consent, and an explicit deny is a hard halt, both BLOCKED.
             choice, deny_reason = decision["choice"], decision.get("reason")
+            held = decision.get("held")
             if decision.get("cancelled"):
                 # The prompt was withdrawn (turn interrupted or ended) before anyone answered:
                 # still fail closed, but do not attribute a refusal to the user.
@@ -574,6 +536,10 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str, pattern_
                 return deny(spec.gateway_refused, "timeout", reason="timed out without user response",
                             reason_addendum="", timeout_addendum=" Silence is not consent.",
                             deny_reason=deny_reason)
+            if held:
+                return deny(spec.gateway_refused, "denied", reason="denied by user earlier in this turn",
+                            reason_addendum=" Wait for the user's next message before asking again.",
+                            timeout_addendum="", deny_reason=None)
             if choice is None or choice == "deny":
                 return deny(spec.gateway_refused, "denied", reason="denied by user",
                             reason_addendum=(f' Reason given by the user: "{deny_reason}".' if deny_reason else ""),

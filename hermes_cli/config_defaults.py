@@ -1711,6 +1711,11 @@ DEFAULT_CONFIG = {
         "redact_phone_numbers": True,  # false: E.164 numbers shown in replies/chat only, never other secrets
         # Ack for unattended model overrides on a vendor-trains-on-prompts tier (startup still warns).
         "allow_data_training_tiers_noninteractive": False,
+        # Writes to agent-instruction files (AGENTS.md/CLAUDE.md/SOUL.md/.cursorrules, project-local .hermes
+        # config), ~/.ssh/config and shell rc files are refused in cron / -q / unattended-platform sessions
+        # whose approvals mode is deny. Extra patterns are fnmatch globs on the basename (e.g. "*.mdc").
+        "protected_instruction_files": True,
+        "protected_instruction_extra_patterns": [],
         "website_blocklist": {"enabled": False, "domains": [], "shared_files": []},
         # IDs of supply-chain advisories the user has read and acted on; acked ones stop the startup
         # banner. Add via `hermes doctor --ack <id>`; remove by editing the list. Catalog:

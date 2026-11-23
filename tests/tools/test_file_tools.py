@@ -888,7 +888,8 @@ class TestNotFoundCache:
 
 
 class TestSSHConfigWrite:
-    """``~/.ssh/config`` is an ordinary write: nobody is asked, in any session kind."""
+    """``~/.ssh/config`` is an ordinary write for a session with a person in it; a ``-q`` session applies
+    ``approvals.single_query_mode`` to it, as it does to a dangerous command."""
 
     @pytest.fixture
     def ssh_config(self, tmp_path, monkeypatch):
@@ -896,16 +897,21 @@ class TestSSHConfigWrite:
         (tmp_path / ".ssh").mkdir()
         return tmp_path / ".ssh" / "config"
 
-    @pytest.mark.parametrize("single_query", [False, True])
-    def test_write_goes_through_without_asking(self, ssh_config, monkeypatch, single_query):
-        if single_query:
-            monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
-            monkeypatch.setenv("HERMES_INTERACTIVE", "1")
+    def test_write_goes_through_without_asking(self, ssh_config):
         from tools.file_tools import write_file_tool
 
         result = json.loads(write_file_tool(str(ssh_config), "Host x\n"))
         assert not result.get("error"), result
         assert ssh_config.read_text(encoding="utf-8") == "Host x\n"
+
+    def test_single_query_session_refuses_it_by_default(self, ssh_config, monkeypatch):
+        monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
+        monkeypatch.setenv("HERMES_INTERACTIVE", "1")
+        from tools.file_tools import write_file_tool
+
+        result = json.loads(write_file_tool(str(ssh_config), "Host x\n"))
+        assert "BLOCKED" in result.get("error", "") and "approvals.single_query_mode" in result["error"], result
+        assert not ssh_config.exists()
 
 
 class TestSecretFileReadRedaction:

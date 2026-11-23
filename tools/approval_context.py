@@ -195,7 +195,7 @@ def _session_env(name: str) -> str:
 
 def prompt_authority(requester_id: str | None = None, requester_name: str | None = None,
                      chat_type: str | None = None) -> dict:
-    """Who may answer a chat prompt raised now (``gateway.approval_actor.may_answer``): its requester,
+    """Who may answer a chat prompt raised now (``gateway.approval_actor._refusal``): its requester,
     ``approvals.approvers`` read here in the caller's profile scope (click callbacks run off-turn), and
     the chat type picking the admin scope. Omitted fields are the current turn's ACTOR (who asked):
     empty once another sender's input joined the turn, which leaves only approvers and admins."""

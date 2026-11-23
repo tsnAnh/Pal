@@ -4,7 +4,7 @@ The connector delivers a Discord message (the inbound lane) only to the instance
 check admits its author, but forwards every Discord interaction (button press, application command,
 modal) to all gateways of the tenant unchecked. A relayed Discord sender therefore answers a prompt as
 admitted only once one of their messages reached this gateway; anyone else is unadmitted
-(``approval_actor.may_answer``), and their interaction reaches the runner only as a prompt answer or
+(``approval_actor._refusal``), and their interaction reaches the runner only as a prompt answer or
 from a configured admin (:func:`interaction_admitted`).
 
 The relay adapter is process-level, so is this record: under multiplexing one connector socket serves
@@ -16,7 +16,7 @@ from typing import Any
 
 _MAX = 4096
 # What an unadmitted sender's interaction may still run: the prompt answers, which the runner limits to
-# the requester, a listed approver or an admin (``approval_actor.may_answer``).
+# the requester, a listed approver or an admin (``approval_actor._refusal``).
 _UNADMITTED_COMMANDS = frozenset({"approve", "deny"})
 _admitted: "OrderedDict[str, None]" = OrderedDict()
 
@@ -38,7 +38,7 @@ def note_delivered(source: Any) -> None:
 
 
 def answer_admitted(event: Any) -> bool:
-    """Whether *event*'s sender passed an allowlist (``may_answer``'s ``admitted``): every sender but a
+    """Whether *event*'s sender passed an allowlist (``_refusal``'s ``admitted``): every sender but a
     relayed Discord one whose messages never reached this gateway (a merged turn's ``""`` included)."""
     source = getattr(event, "source", None)
     if not _relayed_discord(source):

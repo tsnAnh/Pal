@@ -25,8 +25,8 @@ logger = logging.getLogger("tools.approval")
 
 class _ApprovalEntry:
     """One pending owner decision inside a gateway session."""
-    __slots__ = ("authority", "cancelled", "card_deny_only", "data", "edited_text", "event", "expired", "identity",
-                 "observers", "owner", "reason", "result", "settle")
+    __slots__ = ("authority", "cancelled", "data", "edited_text", "event", "expired", "identity",
+                 "owner", "reason", "result", "settle")
 
     def __init__(self, data: dict):
         self.owner = None
@@ -36,16 +36,12 @@ class _ApprovalEntry:
         self.event = threading.Event()
         self.data = dict(data)
         self.data.setdefault("request_id", uuid.uuid4().hex)
-        # Born Deny-only: a card tap may only deny until a renderer proves its card shows the whole
-        # command (#62359), so no tap can approve an entry in the window before its card is drawn.
-        self.card_deny_only = True
         # Who may answer (gateway.approval_actor): the turn's actor, approvers and admins. Kept off
         # ``data`` so the prompt and replay payloads sent to clients stay exactly what was raised.
         self.authority = _ctx.prompt_authority()
         # Surface hook run once when the wait ends by ANY path (answer, timeout, interrupt, answer from
         # another client): the tui_gateway withdraws its open server→client request through it.
         self.settle = None
-        self.observers = []
         self.result: str | None = None  # "once"|"deny"
         # Free-text reason with a deny so the agent can adapt, not just hear "denied".
         self.reason: str | None = None
@@ -60,6 +56,32 @@ class _ApprovalEntry:
 
 def _identity_digest(text) -> str:
     return hashlib.sha256(str(text).encode("utf-8", "surrogatepass")).hexdigest()
+
+
+_MAX_HELD_SESSIONS = 256
+_held_lock = threading.Lock()
+_held_denials: dict[str, tuple[str, frozenset[str]]] = {}  # session_key -> (turn_id, identity digests the owner denied)
+
+
+def _hold_denial(session_key: str, turn_id: str, digest: str) -> None:
+    if not session_key or not turn_id:
+        return
+    with _held_lock:
+        held_turn, held = _held_denials.pop(session_key, ("", frozenset()))
+        _held_denials[session_key] = (turn_id, (held if held_turn == turn_id else frozenset()) | {digest})
+        while len(_held_denials) > _MAX_HELD_SESSIONS:
+            _held_denials.pop(next(iter(_held_denials)))
+
+
+def _denial_held(session_key: str, turn_id: str, digest: str) -> bool:
+    with _held_lock:
+        held_turn, held = _held_denials.get(session_key, ("", frozenset()))
+    return bool(turn_id) and held_turn == turn_id and digest in held
+
+
+def clear_held_denials(session_key: str) -> None:
+    with _held_lock:
+        _held_denials.pop(session_key, None)
 
 
 def _same_answerers(leader: dict, follower: dict) -> bool:
@@ -176,6 +198,10 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     through to ONE fresh prompt they coalesce on."""
     from tools import approval as _approval
 
+    turn_id = _ctx.get_current_turn_id()
+    digest = _identity_digest(identity if identity is not None else approval_data.get("command", ""))
+    if _denial_held(session_key, turn_id, digest):
+        return {"resolved": True, "choice": "deny", "reason": None, "held": True}
     primary_key = approval_data.get("pattern_key", "")
     if surface == "gateway":
         surface = _ctx.gateway_approval_surface()
@@ -232,7 +258,6 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
             if not queue:
                 _approval._gateway_queues.pop(session_key, None)
             settle, entry.settle = entry.settle, None
-            observers, entry.observers = entry.observers, []
             if choice is None and state in ("timeout", "notify_failed"):
                 # Coalesced followers block on this event: wake them with the leader's outcome rather than
                 # leaving them waiting their own full timeout on a prompt that no longer exists.
@@ -240,7 +265,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
                 if state == "notify_failed":
                     entry.cancelled = "the approval prompt could not be delivered"
                 entry.event.set()
-        if settle is not None or observers:
+        if settle is not None:
             # ``request.cancel`` carries a RequestCancelReason: a choice committed from another surface is
             # ``resolved``; a withdrawn entry (woken with no choice — session torn down, turn ended, client
             # cannot answer) is ``session_closed``; never the raw poll-state token "set".
@@ -250,11 +275,10 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
                 reason = "resolved" if choice is not None else "session_closed"
             else:
                 reason = state
-            for callback in ([settle] if settle is not None else []) + observers:
-                try:
-                    callback(reason)
-                except Exception:
-                    logger.debug("approval settle hook failed", exc_info=True)
+            try:
+                settle(reason)
+            except Exception:
+                logger.debug("approval settle hook failed", exc_info=True)
         return choice
 
     from tools.human_input_hooks import human_input_request
@@ -288,6 +312,8 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         if state == "interrupted":
             # Our own decision stays a fail-closed deny.
             choice = "deny"
+        elif choice == "deny":
+            _hold_denial(session_key, turn_id, digest)
         # A choice that landed in the gap between the deadline check and leaving the queue is an answer,
         # not a timeout (#112548) — the same first-settlement rule as server_requests.send().
         resolved = state != "timeout" or choice is not None

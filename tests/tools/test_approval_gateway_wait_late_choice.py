@@ -54,7 +54,7 @@ def test_plain_timeout_still_reports_unresolved(monkeypatch):
     assert mod.resolve_gateway_approval(SESSION_KEY, "once") == 0
 
 
-def test_multiple_observers_and_settle_hook_run_on_expiry(monkeypatch):
+def test_settle_hook_runs_on_expiry(monkeypatch):
     _clear()
     monkeypatch.setattr(wait_mod._ctx, "_fire_approval_hook", lambda name, **kw: None)
     monkeypatch.setattr(wait_mod, "_poll_event", lambda event, session_key, *, interrupt_log, timeout_s=None: "timeout")
@@ -63,10 +63,9 @@ def test_multiple_observers_and_settle_hook_run_on_expiry(monkeypatch):
     def notify(data):
         rid = data["request_id"]
         assert mod.register_gateway_settle(SESSION_KEY, rid, lambda reason: outcomes.append(("notice", reason)))
-        assert mod.observe_gateway_settle(SESSION_KEY, rid, lambda reason: outcomes.append(("card", reason)))
 
     wait_mod._await_gateway_decision(SESSION_KEY, notify, APPROVAL)
-    assert outcomes == [("notice", "timeout"), ("card", "timeout")]
+    assert outcomes == [("notice", "timeout")]
 
 
 def test_prompt_and_wait_use_same_profile_timeout_when_config_changes(monkeypatch):

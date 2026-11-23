@@ -133,7 +133,7 @@ def test_rpc_carries_authority_to_real_dispatch(child_env, monkeypatch, transpor
 
 
 @pytest.mark.platforms("posix")
-def test_terminal_inside_a_script_still_meets_the_command_floors(child_env, monkeypatch):
+def test_terminal_inside_a_script_still_meets_the_command_floors(child_env, monkeypatch):  # health: allow F811 -- pytest injects the imported child_env fixture by parameter name
     from tests.tools._child_env_fixtures import run_code
 
     victim = child_env / "victim"

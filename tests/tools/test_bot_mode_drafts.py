@@ -124,13 +124,26 @@ class TestAttendedDrafts:
                                  "subject": "Lunch", "text": "Lunch at noon?", "editable": True, "held": False}
         assert card["choices"] == ["once", "deny"]
 
-    def test_discard_tells_the_agent_not_to_retry_and_a_new_draft_is_a_new_card(self, bot_home, owner_app):
+    def test_discard_is_final_within_the_turn_and_a_new_owner_message_clears_it(self, bot_home, owner_app):
         owner = _owner("deny", "once")
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
         assert args is None and "NOT sent" in block and "Do NOT retry" in block
-        block, _ = review_outbound(EMAIL, {**EMAIL_ARGS, "body": "Lunch at one?"})
-        assert block is None and len(owner.cards) == 2
+        block, args = review_outbound(EMAIL, EMAIL_ARGS)
+        assert args is None and "NOT sent" in block and "next message" in block
+        assert len(owner.cards) == 1
         assert bot_mode_draft_store.list_pending() == []
+        tokens = approval_context.set_current_observability_context(turn_id="turn-2")
+        try:
+            assert review_outbound(EMAIL, EMAIL_ARGS) == (None, None)
+        finally:
+            approval_context.reset_current_observability_context(tokens)
+        assert len(owner.cards) == 2
+
+    def test_a_discarded_draft_does_not_hold_a_different_recipient(self, bot_home, owner_app):
+        owner = _owner("deny", "once")
+        assert review_outbound(EMAIL, EMAIL_ARGS)[0] is not None
+        assert review_outbound(EMAIL, {**EMAIL_ARGS, "to": "bob@example.com"}) == (None, None)
+        assert len(owner.cards) == 2
 
     def test_edit_then_send_sends_the_edited_text(self, bot_home, owner_app):
         _owner(("once", "Lunch at one instead?"))

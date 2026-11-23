@@ -338,6 +338,20 @@ def get_safe_write_roots() -> set[str]:
 SHELL_RC_FILES: tuple[str, ...] = (".bashrc", ".zshrc", ".profile", ".bash_profile", ".zprofile")
 
 
+UNATTENDED_WRITE_CLASSES = {
+    "ssh_config_write": "SSH client config file(s)",
+    "shell_rc_write": "shell startup file(s)",
+}
+
+
+def _unattended_write_paths_by_class(home: str) -> dict[str, str]:
+    """``~/.ssh/config`` can carry ``ProxyCommand`` / ``Match exec`` and shell rc files run at login: not
+    credentials, so never hard-denied, but an unattended context applies its approvals mode to them."""
+    paths = {os.path.realpath(os.path.join(home, ".ssh", "config")): "ssh_config_write"}
+    paths.update({os.path.realpath(os.path.join(home, name)): "shell_rc_write" for name in SHELL_RC_FILES})
+    return paths
+
+
 def _classify_write_denial(path: str, *, entry: bool = False) -> Optional[str]:
     """Return ``'credential'``, ``'safe_root'``, ``'nt_namespace'``, or ``None`` if writes are allowed.
 
@@ -413,6 +427,14 @@ def get_write_denied_error(path: str, *, verb: str = "Write", entry: bool = Fals
     if denial == "nt_namespace":
         return get_nt_namespace_error(path, verb=verb)
     return f"{verb} denied: '{path}' is a protected system/credential file." if denial else None
+
+
+def unattended_write_class(path: str) -> Optional[str]:
+    """``ssh_config_write`` / ``shell_rc_write`` when ``path`` is one of those files, else None."""
+    homes, resolved = _homes_and_resolved(local_drive_spelling(path))
+    key = deny_key(resolved)
+    return next((k for home in homes for p, k in _unattended_write_paths_by_class(home).items()
+                 if deny_key(p) == key), None)
 
 
 # Secret-bearing project-local env file basenames, blocked anywhere on disk.

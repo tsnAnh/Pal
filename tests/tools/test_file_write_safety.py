@@ -624,6 +624,45 @@ class TestInstructionFileWrites:
         assert not result.get("error"), result
         assert target.read_text(encoding="utf-8") == "gate: off\n"
 
+    @pytest.mark.parametrize("name", ["AGENTS.md", "agents.MD", "CLAUDE.md", "SOUL.md", ".cursorrules",
+                                      "AGENT\u017f.md", "\u017foul.md", ".cur\u017forrule\u017f"])
+    def test_instruction_file_names_are_recognised_in_any_directory_and_case(self, tmp_path, name):
+        import tools.file_tools_write_guards as ft
+        deep = tmp_path / "a" / "b"
+        assert ft._protected_instruction_reason(str(deep / name), enabled=True, extra_patterns=[]) == name
+
+    def test_extra_patterns_and_the_off_switch(self, tmp_path):
+        import tools.file_tools_write_guards as ft
+        assert ft._protected_instruction_reason(str(tmp_path / "rules.mdc"), enabled=True, extra_patterns=["*.mdc"])
+        assert ft._protected_instruction_reason(str(tmp_path / "notes.md"), enabled=True, extra_patterns=["*.mdc"]) is None
+        assert ft._protected_instruction_reason(str(tmp_path / "AGENTS.md"), enabled=False, extra_patterns=[]) is None
+
+    @pytest.mark.require_symlinks
+    def test_symlink_onto_an_instruction_file_is_recognised(self, tmp_path):
+        import tools.file_tools_write_guards as ft
+        real = tmp_path / "AGENTS.md"
+        real.write_text("original", encoding="utf-8")
+        link = tmp_path / "innocent.txt"
+        link.symlink_to(real)
+        assert ft._protected_instruction_reason(str(link), enabled=True, extra_patterns=[]) == "AGENTS.md"
+
+    def test_project_hermes_dir_counts_but_a_checkout_nested_under_it_does_not(self, tmp_path):
+        import tools.file_tools_write_guards as ft
+        reason = ft._protected_instruction_reason
+        assert reason(str(tmp_path / "proj" / ".hermes" / "config.yaml"), enabled=True, extra_patterns=[])
+        nested = tmp_path / ".hermes" / "some-repo" / "src" / "module.py"
+        assert reason(str(nested), enabled=True, extra_patterns=[]) is None
+
+    def test_hermes_home_state_is_exempt_but_its_instruction_files_are_not(self, tmp_path, monkeypatch):
+        import tools.file_tools_write_guards as ft
+        fake_home = tmp_path / ".hermes"
+        (fake_home / "notes").mkdir(parents=True)
+        monkeypatch.setattr(ft, "_get_real_hermes_home", lambda: str(fake_home.resolve()))
+        reason = ft._protected_instruction_reason
+        assert reason(str(fake_home / "notes" / "scratch.txt"), enabled=True, extra_patterns=[]) is None
+        assert reason(str(fake_home / "config.yaml"), enabled=True, extra_patterns=[]) is None
+        assert reason(str(fake_home / "SOUL.md"), enabled=True, extra_patterns=[]) == "SOUL.md"
+
     def test_hard_denied_credential_path_still_errors(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
         target = tmp_path / ".ssh" / "authorized_keys"

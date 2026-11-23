@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import hermes_cli.config as hc
-from tools import approval
+from tools import approval, approval_context
 from tools.approval import check_all_command_guards, check_execute_code_guard
 
 SESSION = "no-prompt-session"
@@ -231,3 +231,26 @@ def test_an_elicitation_consent_card_carries_its_own_question_after_a_details_bu
     assert card["question"] == "Fill in your card?"
     assert card["choices"] == ["once", "deny"]
     assert owner.bubbles == ["Payment card autofill\n\nFill the saved card on shop.example"]
+
+
+def test_an_owner_deny_of_a_consent_is_final_until_the_next_owner_message(owner):
+    from tools.approval_prompt import request_elicitation_consent
+
+    owner.choice = "deny"
+    ask = lambda: request_elicitation_consent("Fill the saved card on shop.example", "Payment card autofill")
+    tokens = approval_context.set_current_observability_context(turn_id="turn-1")
+    try:
+        assert ask() == "decline"
+        assert ask() == "decline"
+        assert len(owner.cards) == 1
+        assert request_elicitation_consent("Fill the saved card on other.example", "Payment card autofill") == "decline"
+        assert len(owner.cards) == 2
+    finally:
+        approval_context.reset_current_observability_context(tokens)
+    owner.choice = "once"
+    tokens = approval_context.set_current_observability_context(turn_id="turn-2")
+    try:
+        assert ask() == "accept"
+    finally:
+        approval_context.reset_current_observability_context(tokens)
+    assert len(owner.cards) == 3

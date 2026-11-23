@@ -241,6 +241,7 @@ class CodexAppServerSession:
         self._interrupt_event = threading.Event()
         self._active_turn_id: Optional[str] = None
         self._active_turn_lock = threading.Lock()
+        self._pending_file_change_paths: dict[str, list[str]] = {}
         self._closed = False
 
     def ensure_started(self) -> str:
@@ -419,6 +420,7 @@ class CodexAppServerSession:
             except Exception:  # pragma: no cover - display callback
                 logger.debug("on_event callback raised", exc_info=True)
         _apply_accounting_notification(result, note)
+        self._track_pending_file_change(note)
         projection = projector.project(note)
         if projection.messages:
             result.projected_messages.extend(projection.messages)
@@ -501,7 +503,8 @@ class CodexAppServerSession:
 
         def on_server_request(sreq: dict) -> bool:
             nonlocal last_tool_completion_at
-            # Drain pending notifications first (bounded) so display events still reach on_event.
+            # Drain pending notifications first (bounded) so the pending file changes are current for the
+            # decision and display events still reach on_event.
             turn_complete = False
             for _ in range(8):
                 pending = client.take_notification(timeout=0)
@@ -704,11 +707,49 @@ class CodexAppServerSession:
         return {"action": action, "content": None, "_meta": None}
 
     _SERVER_REQUEST_HANDLERS: dict[str, Callable[..., dict]] = {
-        "item/commandExecution/requestApproval": lambda self, p: {"decision": "accept"},
-        "item/fileChange/requestApproval": lambda self, p: {"decision": "accept"},
+        "item/commandExecution/requestApproval": lambda self, p: {"decision": self._decide_exec(p)},
+        "item/fileChange/requestApproval": lambda self, p: {"decision": self._decide_file_change(p)},
         "item/permissions/requestApproval": lambda self, p: {"decision": "decline"},
         "mcpServer/elicitation/request": _respond_elicitation,
     }
+
+    def _decide_exec(self, params: dict) -> str:
+        """Nobody is asked: codex's exec request goes through the same command guard as the terminal tool,
+        so hardline, runtime self-delete, ``sudo -S``, ``approvals.deny`` and the unattended modes refuse it."""
+        from tools.approval import check_all_command_guards
+        verdict = check_all_command_guards(params.get("command") or "", "local")
+        if verdict["approved"]:
+            return "accept"
+        logger.warning("codex exec request declined: %s", verdict.get("description") or verdict.get("message"))
+        return "decline"
+
+    def _decide_file_change(self, params: dict) -> str:
+        """Nobody is asked: a change touching a write-denied path, or one an unattended context refuses for a
+        file that steers the agent, is declined. Params carry only ``grantRoot``; the changeset paths come
+        from the tracked ``item/started`` notification."""
+        from agent.file_safety import get_write_denied_error
+        from tools.file_tools_write_guards import check_unattended_write
+        paths = list(self._pending_file_change_paths.get(params.get("itemId") or "", ()))
+        if params.get("grantRoot"):
+            paths.append(params["grantRoot"])
+        refusal = next((e for e in map(get_write_denied_error, paths) if e), None) or check_unattended_write(paths)
+        if refusal is None:
+            return "accept"
+        logger.warning("codex file change request declined: %s", refusal)
+        return "decline"
+
+    def _track_pending_file_change(self, note: dict) -> None:
+        """Track fileChange items (item/started -> item/completed) so the approval request can name the paths."""
+        item = (note.get("params") or {}).get("item") or {}
+        item_id = item.get("id") or ""
+        if item.get("type") != "fileChange" or not item_id:
+            return
+        method = note.get("method", "")
+        if method == "item/completed":
+            self._pending_file_change_paths.pop(item_id, None)
+        elif method == "item/started":
+            self._pending_file_change_paths[item_id] = [
+                ch["path"] for ch in item.get("changes") or [] if isinstance(ch, dict) and ch.get("path")]
 
 
 def _apply_accounting_notification(result: TurnResult, note: dict) -> None:

@@ -3,17 +3,20 @@
 Every guard returns ``None`` when the write may proceed, else an error string
 the tool returns verbatim.
 Guards, in the order the tools apply them: ``_check_sensitive_path`` (hard
-deny), ``_check_binary_document_write``,
-``_check_cross_profile_path`` (sandbox-mirror lost-work), ``_is_internal_file_tool_content``.
+deny), ``_check_binary_document_write``, ``check_unattended_write`` (cron, ``-q`` and unattended
+platforms only), ``_check_cross_profile_path`` (sandbox-mirror lost-work), ``_is_internal_file_tool_content``.
 ``_stale_overwrite_blocker`` (write_file only, under the per-path lock) refuses a
 whole-file overwrite of content this task never saw or that changed since.
 """
 
+import fnmatch
 import os
+import unicodedata
 from pathlib import Path
 
-from agent.file_safety import deny_key, get_nt_namespace_error
-from hermes_constants import get_hermes_home
+from agent.file_safety import (
+    UNATTENDED_WRITE_CLASSES, deny_key, get_nt_namespace_error, unattended_write_class)
+from hermes_constants import get_hermes_home, named_profile_home
 from tools import file_state
 from tools.binary_extensions import (
     has_binary_extension,
@@ -46,6 +49,35 @@ def _get_hermes_config_resolved() -> str | None:
         return str((get_hermes_home() / "config.yaml").resolve())
     except Exception:
         return None
+
+
+def _get_real_hermes_home() -> str | None:
+    """Realpath of the Hermes home for the ACTIVE profile, resolved per call so it tracks the per-turn
+    ``HERMES_HOME`` scope (#107327). ``None`` when it cannot be resolved: the ``~/.hermes`` exemption is
+    skipped and the rule runs."""
+    try:
+        return os.path.realpath(str(get_hermes_home()))
+    except Exception:
+        return None
+
+
+def _hermes_exempt_homes() -> tuple[str, ...]:
+    """Realpaths of the Hermes home tree(s) the project-local ``.hermes`` rule stays out of: the ACTIVE
+    profile's home, plus the Hermes ROOT when that home is a named profile (``<root>/profiles/<name>``), so
+    the agent's own store (LEDGER.md / MEMORY.md / USER.md ...) is never mistaken for a project's
+    ``.hermes/config.yaml`` (#110630). Instruction files and ``extra_patterns`` still match inside these
+    homes (#92146)."""
+    home = _get_real_hermes_home()
+    if not home:
+        return ()
+    try:
+        profile_home = named_profile_home(home)
+    except Exception:
+        profile_home = None
+    if profile_home is None:
+        return (home,)
+    root = os.path.realpath(str(Path(str(profile_home)).parent.parent))
+    return (home, root) if root and root != home else (home,)
 
 
 def _resolved_or_raw(filepath: str, task_id: str) -> str:
@@ -114,6 +146,116 @@ def _check_sensitive_path(filepath: str, task_id: str = "default") -> str | None
     if reason := path_refusal(candidates):
         return f"Refusing to write to {filepath}: {reason}"
     return None
+
+
+# Files that steer FUTURE agent behavior are a prompt-injection persistence vector (AGENTS.md / CLAUDE.md /
+# SOUL.md / .cursorrules / project .hermes tree). Basenames match in ANY directory, case-insensitively, because
+# project-context instruction files are loaded from cwd trees. Ported from RooCodeInc/Roo-Code
+# RooProtectedController (Apache-2.0); symlink lesson from #41351: always realpath before matching.
+_PROTECTED_INSTRUCTION_BASENAMES = frozenset({
+    "agents.md", "claude.md", "soul.md", ".cursorrules"})
+
+
+def _name_key(name: str) -> str:
+    """``name`` as APFS compares it: NFC, then full Unicode case folding. ``.lower()`` keeps ``ſ`` and
+    ``ß``, which APFS folds to ``s``/``ss``, so ``AGENTſ.md`` opens ``AGENTS.md`` (CERT/CC VU#604762)."""
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFC", name).casefold())
+
+
+def _protected_instruction_config() -> tuple[bool, list[str]]:
+    """Return ``(enabled, extra_patterns)`` from ``security.protected_instruction_files`` /
+    ``security.protected_instruction_extra_patterns`` (fnmatch on basename). Config read
+    failures keep the rule ON: fail-safe for a security boundary."""
+    try:
+        from hermes_cli.config import load_config, cfg_get
+        cfg = load_config()
+        enabled = cfg_get(cfg, "security", "protected_instruction_files", default=True)
+        extra = cfg_get(cfg, "security", "protected_instruction_extra_patterns", default=[])
+    except Exception:
+        return True, []
+    if not isinstance(enabled, bool):
+        enabled = True
+    if not isinstance(extra, list):
+        extra = []
+    return enabled, [str(p) for p in extra if p]
+
+
+def _protected_instruction_reason(filepath: str, task_id: str = "default",
+                                  *, enabled: bool | None = None,
+                                  extra_patterns: list[str] | None = None) -> str | None:
+    """Return a short label when ``filepath`` targets a protected instruction file, else ``None``.
+
+    Matching runs on BOTH the normalized input path and its realpath so neither a symlink pointing AT a
+    protected file (#41351) nor a protected name that is itself a symlink escapes the rule. ``..`` traversal
+    is neutralized by normpath/realpath before the basename compare.
+    """
+    if enabled is None or extra_patterns is None:
+        enabled, extra_patterns = _protected_instruction_config()
+    if not enabled:
+        return None
+
+    from tools.environments.sandbox_scope import hosted_scope, sandbox_lexical_path
+    hosted = hosted_scope() is not None
+    try:
+        normalized = os.path.normpath(_expand_tilde(filepath, task_id))
+    except ValueError:
+        if not hosted:
+            raise
+        normalized = os.path.normpath(filepath)  # a hosted ``~`` with no sandbox meaning: judged as written
+    try:
+        anchored = str(_resolve_path_for_task(filepath, task_id))
+        lexical = sandbox_lexical_path(anchored)  # a hosted agent's sandbox path: never resolved here
+        resolved = lexical if lexical is not None else os.path.realpath(anchored)
+    except (OSError, ValueError, RuntimeError):
+        resolved = normalized if hosted else os.path.realpath(normalized)
+
+    for candidate in (normalized, resolved):
+        base = os.path.basename(candidate)
+        # Folded keys only ADD matches: the lowercase pair stays, since a glob's ``?`` or ``[ß]`` matches the
+        # one-char ``ß`` but not its folded ``ss``.
+        keys = (base.lower(), _name_key(base))
+        if keys[1] in _PROTECTED_INSTRUCTION_BASENAMES or any(
+                fnmatch.fnmatch(key, norm(pattern)) for pattern in extra_patterns
+                for key, norm in zip(keys, (str.lower, _name_key))):
+            return base
+
+    for real_home in _hermes_exempt_homes():
+        if resolved == real_home or resolved.startswith(real_home + os.sep):
+            return None
+
+    for candidate in (normalized, resolved):
+        # Only the IMMEDIATE parent counts: matching any ancestor would flag every write inside a
+        # checkout living under ~/.hermes.
+        parts = candidate.replace("\\", "/").rstrip("/").split("/")
+        if len(parts) >= 2 and deny_key(parts[-2]) == ".hermes":
+            return candidate
+    return None
+
+
+def _unattended_write_targets(paths: list[str], task_id: str) -> list[str]:
+    """``label: path`` for every path that steers future behavior: agent-instruction files, ``~/.ssh/config``
+    and shell startup files."""
+    enabled, extra = _protected_instruction_config()
+    targets: list[str] = []
+    for p in paths:
+        if reason := _protected_instruction_reason(p, task_id, enabled=enabled, extra_patterns=extra):
+            targets.append(f"agent-instruction file(s) ({reason})")
+        elif write_class := unattended_write_class(_resolved_or_raw(p, task_id)):
+            targets.append(f"{UNATTENDED_WRITE_CLASSES[write_class]} ({p})")
+    return targets
+
+
+def check_unattended_write(paths: list[str], task_id: str = "default") -> str | None:
+    """Refuse a write/patch to a file that steers future behavior when nobody is present to review it
+    (cron, ``-q``, unattended platform), per ``approvals.cron_mode`` / ``single_query_mode`` /
+    ``unattended_mode``. Interactive and gateway turns write without asking. ONE such file refuses the
+    ENTIRE multi-file patch."""
+    from tools.approval_context import _no_user_can_answer
+    if not _no_user_can_answer():
+        return None
+    from tools.approval import unattended_write_refusal
+    targets = _unattended_write_targets(paths, task_id)
+    return unattended_write_refusal(", ".join(dict.fromkeys(targets))) if targets else None
 
 
 def _get_container_mirror_prefix_for_task(task_id: str = "default") -> str | None:

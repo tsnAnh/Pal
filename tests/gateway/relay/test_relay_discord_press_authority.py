@@ -152,29 +152,6 @@ async def test_inbound_lane_press_from_another_member_still_answers(relay, kind,
     assert answered() is True
 
 
-def test_unadmitted_card_answer_settles_nothing_for_another_member(relay):
-    from gateway.session_context import clear_session_vars, set_session_vars
-    from tools import approval
-    from tools.approval_gateway_wait import _ApprovalEntry
-
-    tokens = set_session_vars(platform="discord", user_id="alice", user_name="Alice", chat_type="group",
-                              session_key=SESSION)
-    try:
-        entry = _ApprovalEntry({"command": "rm -rf build"})
-    finally:
-        clear_session_vars(tokens)
-    approval._gateway_queues[SESSION] = [entry]
-    request_id = entry.data["request_id"]
-    approval.restrict_gateway_approval_card_to_deny(SESSION, request_id, restricted=False)
-
-    assert approval.resolve_gateway_approval_card(SESSION, "once", request_id, actor_id="mallory",
-                                                  admitted=False) == 0
-    assert entry.result is None
-    assert approval.resolve_gateway_approval_card(SESSION, "once", request_id, actor_id="alice",
-                                                  admitted=False) == 1
-    assert entry.result == "once"
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
 async def test_discord_press_from_a_member_whose_messages_arrive_here_still_answers(relay, kind, monkeypatch):

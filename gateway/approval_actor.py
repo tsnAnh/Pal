@@ -2,7 +2,7 @@
 
 A prompt belongs to the user whose message started the turn that raised it. Each pending prompt
 records the requester and the profile's ``approvals.approvers`` as its authority, and every surface that
-resolves one from a chat event asks :func:`may_answer` through its own refusal helper first.
+resolves one from a chat event asks :func:`_refusal` through its own refusal helper first.
 
 ``approvals.approvers`` defaults to ``["*"]``: any admitted member answers. Narrowing it (``[]``, or a list
 of chat user ids) is the opt-in: then only the requester, the listed ids and the platform's admins of the
@@ -27,9 +27,10 @@ _NO_REQUESTER = "\0no-requester"
 _ADMIN_ONLY = "\0admin-only:"
 
 
-def may_answer(authority: dict, actor_id: Any, admin_ids: Any = (), extra: Any = None,
-               commands: tuple[str, ...] = (), *, admitted: bool = True) -> bool:
-    """Whether *actor_id* may answer the prompt whose recorded ``authority`` this is.
+def _refusal(authority: dict, actor_id: Any, admin_ids: Any, extra: Any, commands: tuple[str, ...],
+             admitted: bool) -> Optional[str]:
+    """``None`` when *actor_id* may answer the prompt whose recorded ``authority`` this is, else what the refusal
+    names (the answer's admin-only command when the slash policy refused it, else the requester).
 
     ``approvers`` narrowed (``[]`` or ids): the requester, a listed approver or an admin; that explicit
     approval setting decides. ``approvers: ["*"]`` (the default): anyone the chat's slash policy lets
@@ -47,14 +48,6 @@ def may_answer(authority: dict, actor_id: Any, admin_ids: Any = (), extra: Any =
     ``admitted=False`` marks an answer whose sender no allowlist admitted (a relayed Discord sender the
     connector never delivered a message from, ``gateway.relay.admitted_authors``): under ``"*"`` the
     sender must then pass the slash floor AND be the requester or an admin, as with ``approvers`` narrowed."""
-    return _refusal(authority, actor_id, admin_ids, extra, commands, admitted) is None
-
-
-def _refusal(authority: dict, actor_id: Any, admin_ids: Any, extra: Any, commands: tuple[str, ...],
-             admitted: bool) -> Optional[str]:
-    """:func:`may_answer`'s decision: ``None`` when allowed, else what the refusal names, taken from
-    the check that failed: the answer's admin-only command when the slash policy refused it, else the
-    requester."""
     from gateway.slash_access import SlashAccessPolicy, _coerce_id_list, policy_for_chat_type
 
     actor = str(actor_id or "").strip()
@@ -76,15 +69,6 @@ def _refusal(authority: dict, actor_id: Any, admin_ids: Any, extra: Any, command
     return str(authority.get("requester_name") or requester or _NO_REQUESTER)
 
 
-def approval_commands(choice: Optional[str] = None) -> tuple[str, ...]:
-    """The slash command an exec-approval answer is: ``deny`` for a deny, else ``approve``; either
-    when the choice is not known yet (a pre-check before the settle rechecks the exact one).
-    ``SlashAccessPolicy.can_run`` lets an ``approve`` holder run ``deny`` too."""
-    if choice is None:
-        return ("approve", "deny")
-    return ("deny",) if choice == "deny" else ("approve",)
-
-
 def runner_answer_policy(source: Any):
     """Slash policy of the profile whose bot received *source*: the one the text ``/approve`` uses."""
     from gateway.run import _gateway_runner_ref
@@ -96,7 +80,7 @@ def runner_answer_policy(source: Any):
 def _authority_refusal(authority: Any, actor_id: Any, admin_ids: Any, extra: Any,
                        commands: tuple[str, ...] = (), admitted: bool = True) -> Optional[str]:
     # An empty authority ({}) records no restriction: anyone admitted answers, as on main. An
-    # unadmitted sender (``may_answer``'s ``admitted``) needs a recorded requester to match.
+    # unadmitted sender (``_refusal``'s ``admitted``) needs a recorded requester to match.
     if not authority or not isinstance(authority, dict):
         return None if admitted else _NO_REQUESTER
     return _refusal(authority, actor_id, admin_ids, extra, commands, admitted)
@@ -104,7 +88,7 @@ def _authority_refusal(authority: Any, actor_id: Any, admin_ids: Any, extra: Any
 
 def slash_confirm_refusal(session_key: str, confirm_id: str, actor_id: Any, *, admin_ids: Any = (),
                           extra: Any = None, admitted: bool = True) -> Optional[str]:
-    """:func:`may_answer` as a refusal for the slash-command confirmation (``/reload-mcp``) a click or typed
+    """:func:`_refusal` as a refusal for the slash-command confirmation (``/reload-mcp``) a click or typed
     reply would resolve: the same rule, read from the pending confirm, with the confirmed command as
     the slash floor (answering runs it). Nothing pending (or another confirm id) is never refused: the
     resolver reports it as before."""
@@ -122,7 +106,7 @@ def slash_confirm_refusal(session_key: str, confirm_id: str, actor_id: Any, *, a
 
 def clarify_refusal(clarify_id: str, actor_id: Any, *, admin_ids: Any = (),
                     extra: Any = None, admitted: bool = True) -> Optional[str]:
-    """:func:`may_answer` as a refusal for the agent's clarify question a tap (choice or "Other") answers."""
+    """:func:`_refusal` as a refusal for the agent's clarify question a tap (choice or "Other") answers."""
     from tools.clarify_gateway import get_pending
 
     pending = get_pending(clarify_id)
