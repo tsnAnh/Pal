@@ -482,10 +482,29 @@ def test_status_renews_an_allow_link_whose_nonce_expired_and_the_new_link_comple
 def test_status_renews_an_allow_link_whose_nonce_was_already_used(rig):
     r = rig()
     stale = r.to_allow()
-    assert ChatInstallStore(r.home).consume_nonce(nonce_of(stale.next_action.link)) is not None
+    used = r.client.get(REDIRECT_PATH, params={"state": nonce_of(stale.next_action.link)})
+    assert used.status_code == 400 and r.status().step is wire.SetupStep.needs_allow
+    assert r.client.get(REDIRECT_PATH, params={"code": "code-from-slack", "state": nonce_of(stale.next_action.link)}).status_code == 400
     renewed = r.status()
     assert nonce_of(renewed.next_action.link) != nonce_of(stale.next_action.link)
     assert r.allow(renewed).status_code == 200
+    assert r.status().step is wire.SetupStep.ready
+
+
+def test_status_polled_while_the_redirect_exchanges_the_code_keeps_the_link_and_the_install_completes(rig):
+    r = rig()
+    allowed = r.to_allow()
+    exchange = r.slack.m_oauth_v2_access
+    polled = []
+
+    def poll_then_exchange(form):
+        polled.append(r.status())
+        return exchange(form)
+
+    r.slack.m_oauth_v2_access = poll_then_exchange
+    page = r.allow(allowed)
+    assert polled == [allowed]
+    assert page.status_code == 200 and "Done" in page.text
     assert r.status().step is wire.SetupStep.ready
 
 

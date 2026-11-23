@@ -407,8 +407,11 @@ class ChatInstallService:
         try:
             with self.bot_scope(key[0]):
                 return self._finish_redirect(key, code, error), app_scheme
-        except (StaleRevision, ChatServiceError):
+        except (StaleRevision, ChatServiceError) as exc:
+            logger.warning("chat install redirect rejected provider=%s error=%s", key[1], type(exc).__name__)
             return RedirectOutcome.rejected, app_scheme
+        finally:
+            self.store.release_nonce(raw_state)
 
     def _finish_redirect(self, key: SetupKey, code: str | None, error: str | None) -> RedirectOutcome:
         provider = self._provider(key[1])
