@@ -11,6 +11,7 @@ struct SlackSettingsView: View {
     @State private var confirmsDisconnect = false
     @State private var confirmsReinstall = false
     @State private var showsChannels = false
+    @Environment(\.hermesTheme) private var theme
 
     private var chat: ChatInstallModel { model.chat }
     private var members: ChatMembersModel { model.members }
@@ -96,9 +97,9 @@ struct SlackSettingsView: View {
         ) {
             switch chat.snapshot?.installation?.status {
             case .needsReauth:
-                Text("Needs reinstall").hermesText(.rowSubtitle).foregroundStyle(Color.red)
+                Text("Needs reinstall").hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.destructive))
             case .active:
-                Text("● Live").hermesText(.rowSubtitle).foregroundStyle(Color.green)
+                Text("● Live").hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.workingDot))
             default:
                 EmptyView()
             }
@@ -215,7 +216,7 @@ struct SlackSettingsView: View {
         Button { confirmsDisconnect = true } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Disconnect").hermesText(.rowTitle).fontWeight(.semibold).foregroundStyle(Color.red)
+                    Text("Disconnect").hermesText(.rowTitle).fontWeight(.semibold).foregroundStyle(Color(theme.palette.destructive))
                     Text("Removes \(name) from this workspace").hermesText(.rowSubtitle).foregroundStyle(PalTokens.textTertiary)
                 }
                 Spacer(minLength: 0)

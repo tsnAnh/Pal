@@ -9,6 +9,7 @@ struct SlackChannelsScreen: View {
 
     @State private var search = ""
     @State private var leaving: ChatSpaceRow?
+    @Environment(\.hermesTheme) private var theme
 
     private var chat: ChatInstallModel { model.chat }
     private var name: String { model.displayName }
@@ -227,7 +228,7 @@ struct SlackChannelsScreen: View {
     private func status(_ row: ChatSpaceRow) -> some View {
         switch row.status {
         case .live:
-            Text("● Live").hermesText(.rowSubtitle).foregroundStyle(Color.green)
+            Text("● Live").hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.workingDot))
         case .joining:
             HStack(spacing: 5) {
                 ProgressView().controlSize(.mini)

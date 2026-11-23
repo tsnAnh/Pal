@@ -154,7 +154,7 @@ public struct StepFlowEngine: Sendable, Equatable {
     public private(set) var confirmed: Set<String> = []
     public private(set) var switches: [String: Bool] = [:]
 
-    public init?(flowID: String, steps: [FlowStep], resume: StepFlowProgress? = nil) {
+    public init?(flowID: String, steps: [FlowStep], resume: StepFlowProgress? = nil, finished: Bool = false) {
         guard !steps.isEmpty, Set(steps.map(\.id)).count == steps.count, steps.last?.isSuccess == true,
               steps.dropLast().allSatisfy({ !$0.isSuccess }), steps.dropFirst().allSatisfy({ !$0.isIntro })
         else { return nil }
@@ -163,7 +163,7 @@ public struct StepFlowEngine: Sendable, Equatable {
         let known = Set(steps.flatMap(\.fields).map(\.id))
         saved = Set(resume?.saved ?? []).intersection(known)
         let restored = resume.flatMap { progress in steps.firstIndex { $0.id == progress.stepID } } ?? 0
-        index = min(restored, max(steps.count - 2, 0))
+        index = finished ? steps.count - 1 : min(restored, max(steps.count - 2, 0))
         for step in steps { seedSwitches(step.kind) }
     }
 

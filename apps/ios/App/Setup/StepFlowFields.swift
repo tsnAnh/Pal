@@ -45,6 +45,7 @@ struct StepPasteFields: View {
     var refusal: SetupStatus?
 
     @State private var clipboardMark: Int?
+    @Environment(\.hermesTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
@@ -52,7 +53,7 @@ struct StepPasteFields: View {
             if let refusal {
                 Text(verbatim: "\(refusal.title). \(refusal.reason)")
                     .hermesText(.rowSubtitle)
-                    .foregroundStyle(Color.red)
+                    .foregroundStyle(Color(theme.palette.destructive))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("stepFlowRefusal")
             }
@@ -87,12 +88,12 @@ struct StepPasteFields: View {
                 .background(PalTokens.control, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
-                        .strokeBorder(refusal == nil ? border(shape) : Color.red, lineWidth: 1.5)
+                        .strokeBorder(refusal == nil ? border(shape) : Color(theme.palette.destructive), lineWidth: 1.5)
                 }
             if refusal == nil, let message = shape.message(label: field.label) {
                 Text(message)
                     .hermesText(.rowSubtitle)
-                    .foregroundStyle(shape.isValid ? Color.green : Color.red)
+                    .foregroundStyle(shape.isValid ? PalTokens.textSecondary : Color(theme.palette.destructive))
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("stepFlowHint-\(field.id)")
             }
@@ -102,8 +103,8 @@ struct StepPasteFields: View {
     private func border(_ shape: SetupFieldShape) -> Color {
         switch shape {
         case .empty: Color.clear
-        case .valid: Color.green.opacity(0.5)
-        default: Color.red
+        case .valid: PalTokens.borderStrong
+        default: Color(theme.palette.destructive)
         }
     }
 

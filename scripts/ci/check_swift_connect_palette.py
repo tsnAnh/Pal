@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Fail when the Connect Apps sheet leaves the one palette: Liquid Glass clear controls, ink only.
+"""Fail when the Connect Apps sheet or the Slack setup leaves the one palette: Liquid Glass clear controls, ink only.
 
-Scans ``App/ConnectApps/*.swift`` and ``App/Setup/SetupButtons.swift``. The sheet draws with
+Scans ``App/ConnectApps/*.swift`` and ``App/Setup/SetupButtons.swift``, plus ``App/Profile/Slack*.swift`` and
+``App/Setup/StepFlow*.swift`` (the Slack setup and the shared step list) with the same rules and two more
+(connect-green, connect-toggle-blue). The sheet draws with
 ``PalTokens`` / ``theme.palette`` ink and the clear glass components (``.palClearGlass``,
 ``.buttonStyle(.palClearCapsule)``, ``ClearGlassSearchField`` in ``PalDesign/Components/ClearGlass.swift``);
 a raw blue, accent, hex, tint, bordered text field or regular glass there is a regression.
 
-Rules: connect-blue, connect-accent, connect-red, connect-hex, connect-tint, connect-bordered-field,
-connect-glass-regular. An exception is one entry of ALLOWLIST, keyed by (file relative to apps/ios,
+Rules: connect-blue, connect-accent, connect-red, connect-green, connect-toggle-blue, connect-hex, connect-tint,
+connect-bordered-field, connect-glass-regular. An exception is one entry of ALLOWLIST, keyed by (file relative to apps/ios,
 rule) with a reason; an entry that matches nothing is itself a finding.
 
 Run: python scripts/ci/check_swift_connect_palette.py [apps_ios_root]
@@ -22,6 +24,7 @@ from pathlib import Path
 
 SETUP_BUTTONS = Path("App/Setup/SetupButtons.swift")
 CONNECT_DIR = Path("App/ConnectApps")
+SLACK_GLOBS = (("App/Profile", "Slack*.swift"), ("App/Setup", "StepFlow*.swift"))
 STRING = re.compile(r'"(?:\\.|[^"\\])*"')
 RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
     (
@@ -52,6 +55,18 @@ RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
         "regular glass; use .palClearGlass, .buttonStyle(.palClearCapsule) or Glass.clear",
     ),
 )
+SLACK_RULES: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    (
+        "connect-green",
+        re.compile(r"\bColor\.green\b"),
+        "raw green; use PalTokens.borderStrong or textSecondary for valid, Color(theme.palette.workingDot) for live",
+    ),
+    (
+        "connect-toggle-blue",
+        re.compile(r"\bPalTokens\.toggleOn\b"),
+        "PalTokens.toggleOn is blue; use PalTokens.inverseFill (ink) with .onInverseFill for the mark on it",
+    ),
+)
 ALLOWLIST: dict[tuple[str, str], str] = {
     ("App/ConnectApps/DeviceTile.swift", "connect-hex"): "brand device tile fill colours",
     ("App/ConnectApps/CustomConnectorForm.swift", "connect-hex"): "teal avatar accent fallback, the catalog's own colour",
@@ -79,11 +94,16 @@ def code_of(line: str) -> str:
     return STRING.sub('""', line.split("//", 1)[0])
 
 
+def is_slack(rel: Path) -> bool:
+    return any(rel.parent == Path(folder) and rel.match(glob) for folder, glob in SLACK_GLOBS)
+
+
 def violations(rel: Path, source: str) -> list[Finding]:
     found = []
+    rules = RULES + SLACK_RULES if is_slack(rel) else RULES
     for number, line in enumerate(source.splitlines(), 1):
         code = code_of(line)
-        for rule, pattern, message in RULES:
+        for rule, pattern, message in rules:
             if pattern.search(code):
                 found.append(Finding(rule, rel.as_posix(), number, line.strip(), message))
     return found
@@ -93,6 +113,8 @@ def scoped_files(root: Path) -> list[Path]:
     files = sorted((root / CONNECT_DIR).glob("*.swift"))
     if (root / SETUP_BUTTONS).is_file():
         files.append(root / SETUP_BUTTONS)
+    for folder, glob in SLACK_GLOBS:
+        files += sorted((root / folder).glob(glob))
     return files
 
 
@@ -122,7 +144,7 @@ def main(argv: list[str]) -> int:
     for finding in found:
         print(finding.render())
     if found:
-        print(f"\n{len(found)} Connect Apps palette finding(s). The sheet is clear glass and ink only: "
+        print(f"\n{len(found)} Connect Apps / Slack setup palette finding(s). They are clear glass and ink only: "
               "PalTokens / theme.palette, .palClearGlass, .palClearCapsule, ClearGlassSearchField. "
               "A justified exception is an entry of ALLOWLIST in scripts/ci/check_swift_connect_palette.py.")
         return 1

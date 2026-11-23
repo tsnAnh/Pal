@@ -14,17 +14,18 @@ public enum SlackConnection: Sendable, Equatable, Codable {
         } else if !wire.configured {
             self = .notConnected
         } else {
-            self = Self.configured(state: wire.state, hasErrorCode: wire.errorCode?.isEmpty == false)
+            self = Self.configured(wire)
         }
     }
 
-    private static func configured(state: String?, hasErrorCode: Bool) -> SlackConnection {
-        switch state {
+    private static func configured(_ wire: SlackStatusWire) -> SlackConnection {
+        switch wire.state {
         case "connected": .connected
         case "not_configured", "disabled": .notConnected
-        case "startup_failed": .failed
-        case "fatal", "retrying": hasErrorCode ? .failed : .starting
-        default: .starting
+        case "startup_failed", "disconnected", "paused": .failed
+        case "fatal", "retrying": wire.errorCode?.isEmpty == false ? .failed : .starting
+        case "connecting", "pending_restart", "gateway_stopped": .starting
+        default: wire.enabled ? (wire.gatewayRunning ? .starting : .failed) : .notConnected
         }
     }
 
@@ -73,7 +74,16 @@ public struct SlackFailureReason: Sendable, Equatable, Codable {
         }
     }
 
+    init(code: String, message: String) {
+        self.code = code
+        self.message = message
+    }
+
     private static let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:_,.-")
+
+    static func plainWord(_ raw: String) -> String? {
+        plainList(raw)?.replacingOccurrences(of: "_", with: " ")
+    }
 
     private static func plainList(_ raw: String?) -> String? {
         guard let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty, text.count <= 200,
@@ -83,20 +93,60 @@ public struct SlackFailureReason: Sendable, Equatable, Codable {
 }
 
 public struct SlackStatus: Sendable, Equatable, Codable {
+    public static let checkFailedDetail = "Couldn't check Slack's status. Try again."
+
     public let connection: SlackConnection
     public let failure: SlackFailureReason?
+    public let state: String?
+    public let detail: String?
 
-    public init(connection: SlackConnection, failure: SlackFailureReason? = nil) {
+    public init(connection: SlackConnection, failure: SlackFailureReason? = nil, state: String? = nil, detail: String? = nil) {
         self.connection = connection
         self.failure = failure
+        self.state = state
+        self.detail = detail
     }
 
     public init(_ wire: SlackStatusWire) {
         let connection = SlackConnection(wire)
-        self.connection = connection
-        failure = connection == .failed
+        let failure = connection == .failed
             ? SlackFailureReason(errorCode: wire.errorCode, neededScope: wire.neededScope, providedScope: wire.providedScope)
             : nil
+        self.connection = connection
+        self.failure = failure
+        state = wire.state
+        detail = connection == .failed ? failure?.message ?? Self.failedDetail(wire) : nil
+    }
+
+    public static func stalled(last: SlackStatus, botName: String) -> SlackStatus {
+        SlackStatus(
+            connection: .failed, state: last.state,
+            detail: "Slack hasn't started for \(botName). Last status: \(stateLabel(last.state))."
+        )
+    }
+
+    public static let unreachable = SlackStatus(connection: .failed, detail: checkFailedDetail)
+
+    private static func failedDetail(_ wire: SlackStatusWire) -> String {
+        if wire.restartError?.isEmpty == false { return "Pal couldn't restart the bot to apply the Slack connection. Try again." }
+        switch wire.state {
+        case "disconnected": return "Slack disconnected. Try again."
+        case "paused": return "Slack was paused after repeated failures. Try again, or update the tokens."
+        case "startup_failed": return "Pal couldn't start Slack for this bot. Try again, or update the tokens."
+        default: return "This bot isn't running, so Slack can't start. Try again."
+        }
+    }
+
+    private static func stateLabel(_ state: String?) -> String {
+        switch state {
+        case nil, "": "no status yet"
+        case "gateway_stopped": "the bot isn't running"
+        case "pending_restart": "waiting for the bot to restart"
+        case "connecting": "connecting"
+        case "retrying": "retrying"
+        case "fatal": "stopped with an error"
+        case let other?: SlackFailureReason.plainWord(other) ?? "unknown"
+        }
     }
 }
 

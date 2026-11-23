@@ -9,6 +9,7 @@ struct StepFlowView<Accessory: View>: View {
     let savedNote: String?
     let close: () -> Void
     let accessory: (FlowStep) -> Accessory
+    private(set) var headerContent: AnyView?
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -27,6 +28,12 @@ struct StepFlowView<Accessory: View>: View {
     }
 
     private var engine: StepFlowEngine { model.engine }
+
+    func header(_ content: some View) -> Self {
+        var copy = self
+        copy.headerContent = AnyView(content)
+        return copy
+    }
 
     private var inlineRefusal: SetupStatus? {
         guard let failure = engine.failure, failure.kind == .vendorRefusedValue, engine.current.inlineRefusal,
@@ -47,6 +54,7 @@ struct StepFlowView<Accessory: View>: View {
         SetupChrome(title: title, app: app, progress: engine, accessibilityIdentifier: "stepFlow", close: close) {
             VStack(spacing: 0) {
                 if layout.showsSegments { StepFlowSegments(engine: engine, layout: layout) }
+                if let headerContent { headerContent }
                 HStack(spacing: 0) {
                     if layout.showsChecklist { StepFlowChecklist(engine: engine, savedNote: savedNote) }
                     screen.frame(maxWidth: .infinity, maxHeight: .infinity)

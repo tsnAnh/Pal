@@ -21,16 +21,12 @@ struct SlackEntryView: View {
             case .none:
                 DelayedReveal { ProgressView() }
             case .some(true):
-                if let closeSheet {
-                    SheetChrome(title: String(localized: "Slack"), accessibilityIdentifier: "slackScreenSheet", onLeading: closeSheet) { legacy }
-                } else {
-                    legacy
-                }
+                tokenLink
             case .some(false):
                 ModelHost {
                     SlackSetupModel(botName: botName, displayName: displayName, spec: spec, client: source.client, members: source.members)
                 } content: {
-                    SlackSetupScreen(model: $0, spec: spec, events: source.events, close: close, advanced: { legacy })
+                    SlackSetupScreen(model: $0, spec: spec, events: source.events, close: close, advanced: { tokenLink })
                 }
             }
         }
@@ -42,11 +38,11 @@ struct SlackEntryView: View {
         }
     }
 
-    private var legacy: some View {
+    private var tokenLink: some View {
         ModelHost {
             SlackModel(botName: botName, displayName: displayName, services: services)
         } content: {
-            SlackTokensView(model: $0)
+            SlackLinkView(model: $0, spec: spec, closeSheet: closeSheet, close: close)
         }
     }
 }
