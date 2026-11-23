@@ -13,11 +13,15 @@ public struct CachedTimeline: Codable, Sendable, Equatable {
     var olderCursor: String?
     var reachesStart: Bool
     var revision: String?
+    var lastSequence: Int?
+    var replayEpoch: String?
 
-    init(sessionID: String, entries: [TimelineEntryWire], older: OlderEdge, revision: String?) {
+    init(sessionID: String, entries: [TimelineEntryWire], older: OlderEdge, revision: String?, cursor: StreamCursor? = nil) {
         self.sessionID = sessionID
         self.entries = entries
         self.revision = revision
+        lastSequence = cursor?.lastSequence
+        replayEpoch = cursor?.replayEpoch
         switch older {
         case .more(let cursor), .loading(let cursor), .failed(let cursor, _, _):
             olderCursor = cursor
@@ -37,6 +41,18 @@ public struct CachedTimeline: Codable, Sendable, Equatable {
     }
 
     public var entryCount: Int { entries.count }
+
+    var cursor: StreamCursor? {
+        guard let lastSequence, let replayEpoch else { return nil }
+        return StreamCursor(replayEpoch: replayEpoch, lastSequence: lastSequence)
+    }
+
+    func withCursor(_ cursor: StreamCursor?) -> CachedTimeline {
+        var copy = self
+        copy.lastSequence = cursor?.lastSequence
+        copy.replayEpoch = cursor?.replayEpoch
+        return copy
+    }
 
     static func byteCost(_ entry: TimelineEntryWire) -> Int {
         (try? JSONEncoder().encode(entry).count) ?? entry.text.utf8.count + 256

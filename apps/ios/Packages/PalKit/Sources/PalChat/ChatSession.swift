@@ -117,6 +117,12 @@ public actor ChatSession: OutboxSubmitter {
     private var olderFetch: Task<OlderFetch, Never>?
     private var newestRefresh: Task<Void, Never>?
     private var newestStale = false
+    private let store: (any TimelineStore)?
+    private var persistTask: Task<Void, Never>?
+    private var lastPersisted: CachedTimeline?
+    private var restored = false
+    private var restoredCursor: StreamCursor?
+    static let persistCoalesce = Duration.milliseconds(500)
 
     private enum OlderFetch: Sendable {
         case loaded
@@ -133,10 +139,12 @@ public actor ChatSession: OutboxSubmitter {
         connector: any ChatConnector,
         reconnectPolicy: ReconnectPolicy = ReconnectPolicy(),
         paging: PagingPolicy = PagingPolicy(),
+        store: (any TimelineStore)? = nil,
         diagnostics: Diagnostics = .silent
     ) {
         self.profile = profile
         self.paging = paging
+        self.store = store
         (timelineSnapshots, timelineContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         self.connector = connector
         self.reconnectPolicy = reconnectPolicy
@@ -154,7 +162,9 @@ public actor ChatSession: OutboxSubmitter {
         setPhase(.attaching)
         let connection: GatewayConnection
         do {
+            ChatOpenTrace.mark(profile, "connect.begin")
             connection = try await timed("chat.open.connect") { try await connector.connect() }
+            ChatOpenTrace.mark(profile, "connect.end")
         } catch {
             setPhase(.detached)
             noteTerminal(error)
@@ -172,7 +182,9 @@ public actor ChatSession: OutboxSubmitter {
             let capable = api.supportsTimeline
             resolution = try await timed("chat.open.resolve") { try await resolver.open(api, timelineLimit: capable ? paging.firstPage : nil) }
             timelineCapable = capable
+            noteGatewayCursor(resolution.snapshot)
             try await timed("chat.open.adopt") { try await adoptTimeline(resolution.snapshot, page: resolution.timeline, api: api, forced: false) }
+            ChatOpenTrace.mark(profile, "page.adopted")
         } catch {
             attaching = nil
             await connection.close()
@@ -192,6 +204,7 @@ public actor ChatSession: OutboxSubmitter {
         _ = transcript.reconcile(with: resolution.snapshot)
         diagnostics.info("chat", "attached; \(transcript.items.count) items")
         goLive(connection)
+        ChatOpenTrace.noteNewest(bot: profile, version: timelineVersion)
         guard let intro, resolution.created || (resolution.timeline?.entries ?? []).isEmpty && resolution.snapshot.messages.isEmpty else {
             return ChatStartOutcome(created: resolution.created, introAdmission: nil)
         }
@@ -394,7 +407,10 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     public func close() {
+        persistNow()
         closing = true
+        persistTask?.cancel()
+        persistTask = nil
         let abandoned = waiters.values
         waiters = [:]
         for waiter in abandoned { waiter.continuation.resume(returning: nil) }
@@ -709,9 +725,60 @@ public actor ChatSession: OutboxSubmitter {
         publishTimeline()
     }
 
+    public func restore() async {
+        guard let store, !restored, !closing else { return }
+        restored = true
+        ChatOpenTrace.mark(profile, "cache.load.begin")
+        let cached = await store.load()
+        ChatOpenTrace.mark(profile, "cache.load.end", cachedSequence: cached?.lastSequence, rows: cached?.entryCount)
+        guard let cached, !closing else { return }
+        restoredCursor = cached.cursor
+        lastPersisted = cached
+        seed(cached)
+    }
+
+    public func refresh() {
+        guard case .live = phase else { return }
+        ChatOpenTrace.mark(profile, "session.warm")
+        refreshNewest()
+    }
+
+    public func flushCache() {
+        persistNow()
+    }
+
     public func cachedTimeline() -> CachedTimeline? {
         guard let sessionID = transcript.sessionID else { return nil }
-        return timeline.cacheable(sessionID: sessionID)
+        return timeline.cacheable(sessionID: sessionID)?.withCursor(transcript.cursor)
+    }
+
+    private func noteGatewayCursor(_ snapshot: SessionSnapshot) {
+        let detail: String?
+        if let restoredCursor {
+            detail = restoredCursor.replayEpoch == snapshot.replayEpoch ? nil : "epoch-changed"
+        } else {
+            detail = "no-cache-cursor"
+        }
+        ChatOpenTrace.mark(
+            profile, "resolve.end", cachedSequence: restoredCursor?.lastSequence, gatewaySequence: snapshot.lastSequence, detail: detail
+        )
+    }
+
+    private func schedulePersist() {
+        guard store != nil, !closing, persistTask == nil, transcript.sessionID != nil else { return }
+        persistTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.persistCoalesce)
+            guard !Task.isCancelled else { return }
+            await self?.persistNow()
+        }
+    }
+
+    private func persistNow() {
+        persistTask?.cancel()
+        persistTask = nil
+        guard let store, let cached = cachedTimeline(), cached != lastPersisted else { return }
+        lastPersisted = cached
+        store.save(cached)
     }
 
     public func wantOlder() {
@@ -813,6 +880,7 @@ public actor ChatSession: OutboxSubmitter {
     private func publishTimeline() {
         timelineVersion += 1
         timelineContinuation.yield(makeTimelineSnapshot())
+        schedulePersist()
     }
 
     private func setPhase(_ next: ChatPhase) {

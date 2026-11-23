@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import perf_backend
+import perf_chat_open
 import perf_common
 import perf_hitch
 import perf_host
@@ -219,6 +220,9 @@ def main():
     signposts = commands.add_parser("signposts", help="list the Connect Apps signposts from xctrace exports (the os-signpost-interval and os-signpost tables): n, p50, p95, max, total, whole run and the Connect Apps step window")
     signposts.add_argument("exports", nargs="+", help="xctrace export XML files (one per table)")
     signposts.add_argument("--offset", type=float, default=0.0, help="seconds between the recording start and step 1 (default %(default)s)")
+    chat_open = commands.add_parser("chatopen", help="summarize pal-chat-open.jsonl traces (PAL_PERF=1 app runs): step timings, time to the cached and newest frame, stale caches, slow opens with no syncing state")
+    chat_open.add_argument("paths", nargs="*", help="pal-chat-open.jsonl files or directories holding one (default $PAL_PERF_DIR)")
+    chat_open.add_argument("--json", action="store_true", help="print the summary as JSON")
     tour = commands.add_parser("tour", help="print the per-surface frame-pacing table of a perf-mac-tour directory (a run-N directory or the directory holding several), or the before/after comparison of two")
     tour.add_argument("dir")
     tour.add_argument("after", nargs="?")
@@ -237,6 +241,13 @@ def main():
         try:
             print(perf_hitch.render(args.report, args.after), end="")
         except perf_hitch.HitchReportError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "chatopen":
+        try:
+            print(perf_chat_open.render(args.paths, args.json), end="")
+        except perf_chat_open.ChatOpenError as error:
             print(f"error: {error}", file=sys.stderr)
             return 2
         return 0
