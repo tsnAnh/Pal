@@ -1,7 +1,7 @@
 import Foundation
 
 public struct ChatOpenGate: Sendable {
-    public static let bound = Duration.seconds(1)
+    public static let bound = Duration.milliseconds(300)
 
     private var cachedVersion: UInt64?
     private var held: TimelineSnapshot?

@@ -45,6 +45,7 @@ from agent.turn_scripted_prelude import Prelude, play_prelude
 from agent.turn_api_call import handle_api_interrupt, nous_rate_limit_guard, perform_api_call
 from agent.turn_api_error import handle_api_error
 from agent.turn_api_request import build_api_request
+from agent.side_question_lease import is_unattended_turn
 from agent.turn_failure_copy import FAILED_TURN_DISPLAY_KIND, OPEN_TURN_TAIL_ROLES, failed_turn_notice, site_copy
 from agent.turn_final_response import finish_text_response
 from agent.turn_finalizer import finalize_turn
@@ -1943,7 +1944,8 @@ def _close_durable_failed_turn(agent, result: Any) -> None:
         start = result.get("current_turn_user_idx")
         turn_messages = messages[start:] if isinstance(start, int) and 0 <= start < len(messages) else messages
         boundary = {
-            "role": "assistant", "content": failed_turn_notice(turn_messages), "display_kind": FAILED_TURN_DISPLAY_KIND,
+            "role": "assistant", "content": failed_turn_notice(turn_messages, unattended=is_unattended_turn(agent)),
+            "display_kind": FAILED_TURN_DISPLAY_KIND,
         }
         if failure := _failed_turn_display_metadata(agent, result):
             boundary["display_metadata"] = failure
