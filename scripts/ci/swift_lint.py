@@ -54,7 +54,7 @@ BASELINE = ".swiftlint-baseline.json"
 GUARDS = ("scripts/ci/check_swift_brand.py", "scripts/ci/check_swift_nav_chrome.py",
           "scripts/ci/check_swift_bot_tint.py", "scripts/ci/check_swift_chat_drop.py", "scripts/ci/check_swift_chat_scroll.py", "scripts/ci/check_swift_chat_row_alignment.py", "scripts/ci/check_swift_mac_layout.py", "scripts/ci/check_swift_glass.py",
           "scripts/ci/check_swift_image_viewer.py", "scripts/ci/check_swift_bot_settings.py", "scripts/ci/check_swift_perf.py", "scripts/ci/check_swift_fault_details.py",
-          "scripts/ci/check_swift_icon_tint.py", "scripts/ci/check_swift_connect_palette.py")
+          "scripts/ci/check_swift_icon_tint.py", "scripts/ci/check_swift_connect_palette.py", "scripts/ci/check_swift_glass_input.py")
 FIX = "python scripts/ci/swift_lint.py --fetch"
 
 
