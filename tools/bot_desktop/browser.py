@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 from typing import Optional, Sequence
 
+from hermes_platform.host.runtime import no_new_privileges
 from tools.bot_desktop import runtime
 
 DISK_CACHE_BYTES = 256 * 1024 * 1024
@@ -45,21 +46,12 @@ def profile_dir() -> Path:
 
 def executable() -> Optional[str]:
     """The Chromium the bot runs: an explicit ``browser.executable_path``, else the packaged Chromium, else a
-    system Chrome/Chromium. ``None`` when there is none.
-
-    Non-root under ``kernel.apparmor_restrict_unprivileged_userns=1`` (Ubuntu 23.10+) flips the order:
-    Playwright's bundle has no setuid ``chrome_sandbox`` and dies 'FATAL: No usable sandbox!' there, while
-    a distro chromium ships the helper. The bundle stays the answer when it is the only browser — a dock
-    icon that fails loudly beats a non-root ``--no-sandbox``.
-    """
+    system Chrome/Chromium. ``None`` when there is none."""
     from tools.browser_session_cloud import executable_path
     explicit = executable_path()
     if explicit and os.access(explicit, os.X_OK) and not _is_headless_shell(explicit):
         return explicit
-    finders = [_managed_executable, _system_executable]
-    if not runtime.is_root() and _userns_restricted():
-        finders.reverse()
-    return next((exe for find in finders if (exe := find())), None)
+    return _managed_executable() or _system_executable()
 
 
 def _managed_executable() -> Optional[str]:
@@ -76,9 +68,12 @@ def _is_headless_shell(exe: str) -> bool:
 
 
 def _system_executable() -> Optional[str]:
-    """A service's PATH rarely carries ``/snap/bin``, where Ubuntu's Chromium snap lives."""
+    """A service's PATH rarely carries ``/snap/bin``, where Ubuntu's Chromium snap lives. Under NoNewPrivileges
+    a snap cannot start (snap-confine is setuid: exit 46 'cannot run snap applications'), so it is skipped."""
     path = os.pathsep.join((os.environ.get("PATH", os.defpath), _SNAP_BIN_DIR))
-    return next((found for name in _SYSTEM_BROWSERS if (found := shutil.which(name, path=path))), None)
+    found = (shutil.which(name, path=path) for name in _SYSTEM_BROWSERS)
+    unstartable_snaps = no_new_privileges()
+    return next((exe for exe in found if exe and not (unstartable_snaps and _is_snap(exe))), None)
 
 
 def _snap_home() -> Path:
@@ -137,11 +132,6 @@ def snap_env(env: dict[str, str]) -> dict[str, str]:
 def _is_snap(exe: str) -> bool:
     """A snap-confined browser cannot write hidden directories under HOME (``~/.hermes``), only ``~/snap/<name>/common``."""
     return os.path.dirname(exe) == _SNAP_BIN_DIR or os.path.basename(os.path.realpath(exe)) == "snap"
-
-
-def _userns_restricted() -> bool:
-    from tools.browser_launcher import apparmor_restricts_unprivileged_userns
-    return apparmor_restricts_unprivileged_userns()
 
 
 def dock_launch() -> Optional[tuple[str, str]]:

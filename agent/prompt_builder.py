@@ -972,6 +972,12 @@ def _local_host_hints() -> list[str]:
     return ["\n".join(host_lines), _WINDOWS_BASH_SHELL_HINT]
 
 
+_BOT_COMPUTER_FIRST = (
+    "It is your own computer: for a website with no connector or API (a dashboard, an admin console, a "
+    "signed-in page), open it in your browser there before saying you cannot or using the owner's devices; "
+    "a sign-in only the owner can do is one bot_handback step.")
+
+
 def bot_screen_note(running: bool, display: str | None, holder: str) -> str:
     """The one-line Bot Screen status the model sees — the prompt's ``_bot_screen_hint`` body,
     parameterised so the display watcher can stage the same sentence as a per-turn note when a
@@ -989,21 +995,26 @@ def bot_screen_note(running: bool, display: str | None, holder: str) -> str:
                 f"({held}). 'screen N' / ':N' / 'the bot screen' / 'your screen' means THIS screen: "
                 f"GUI apps you launch from the terminal already open there (their DISPLAY is routed "
                 f"to it), and display introspection (xrandr/xdotool/wmctrl) targets it. It is NOT "
-                f"the user's own display.")
-    return ("Bot Screen: this profile's own headless desktop is no longer running. Do not refer to "
-            "'the bot screen' or route GUI launches at it; GUI apps from the terminal open on the "
-            "user's own display again.")
+                f"the user's own display. {_BOT_COMPUTER_FIRST}")
+    return ("Bot Screen: this profile's own desktop is stopped, so GUI apps from the terminal no longer "
+            "open on it. Your browser and computer_use still work and start it again when they need it.")
 
 
 def _bot_screen_hint() -> str:
-    """One line naming this profile's running Bot Screen (#125830): the display, and who holds it.
+    """One line naming this profile's running Bot Screen (#125830): the display, and who holds it. A stopped
+    screen that the first browser/computer_use call would start still gets a line: the model has a computer.
 
-    Pure reads (``published_env`` + the lease file); never raises — a missing/unimportable
+    Pure reads (``published_env``, the lease file, host binaries and config); never raises — a missing/unimportable
     bot_desktop module or an unreadable lease must not break prompt construction. ``""`` when
-    no screen is running, so the block simply drops out of the environment hints."""
+    no screen is running or startable, so the block simply drops out of the environment hints."""
     try:
         from tools.bot_desktop import lease as _bd_lease, runtime as _bd_runtime
-        return bot_screen_note(True, _bd_runtime.published_env().get("DISPLAY"), _bd_lease.get().holder)
+        if display := _bd_runtime.published_env().get("DISPLAY"):
+            return bot_screen_note(True, display, _bd_lease.get().holder)
+        if _bd_runtime.auto_starts(os.environ):
+            return ("Bot Screen: this profile has its own computer, a headless Linux desktop with Chromium. It is "
+                    f"stopped now and starts by itself on your first browser or computer_use call. {_BOT_COMPUTER_FIRST}")
+        return ""
     except Exception:
         return ""
 

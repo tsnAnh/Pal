@@ -91,6 +91,8 @@ def _pin_environment() -> None:
     # The toolchain probe line reports the host's python/node/pip; it is environment, not code.
     from tools import env_probe
     env_probe.get_environment_probe_line = lambda **_k: ""  # type: ignore[assignment]
+    from tools.bot_desktop import runtime as bot_desktop_runtime
+    bot_desktop_runtime.auto_starts = lambda _env: False  # type: ignore[assignment]
 
 
 class _ImportFailures(logging.Handler):
