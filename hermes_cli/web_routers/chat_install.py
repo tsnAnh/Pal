@@ -6,6 +6,8 @@ text never come back out.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
@@ -15,6 +17,7 @@ from tools.connectors.app_scheme import AppScheme
 from tui_gateway.chat_install import REDIRECT_PATH
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 _PAGE = ('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -43,7 +46,8 @@ def _complete(code: str, state: str, error: str) -> tuple[RedirectOutcome, AppSc
 async def chat_install_callback(code: str = "", state: str = "", error: str = "") -> HTMLResponse:
     try:
         outcome, scheme = await run_in_threadpool(_complete, code, state, error)
-    except Exception:  # health: allow BLE001 -- the page must not echo anything, any failure reads as an expired link
+    except Exception as exc:  # health: allow BLE001 -- the page must not echo anything, any failure reads as an expired link
+        logger.warning("chat install callback failed error=%s", type(exc).__name__)
         outcome, scheme = RedirectOutcome.rejected, AppScheme.release
     status, message, returns = _PAGES[outcome]
     return HTMLResponse(

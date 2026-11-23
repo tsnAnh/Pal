@@ -19,9 +19,11 @@ from tui_gateway.chat_install import SetupKey, StaleRevision, setup_key
 from tui_gateway.contracts.chat_provider import Binding, Installation, InstallationStatus, SetupState
 
 DB_NAME = "chat_install.db"
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 NONCE_TTL_SECONDS = 600.0
 OUTBOX_RETENTION_SECONDS = 24 * 60 * 60
+
+CLAIMED_COLUMN_DDL = "claimed_at REAL"
 
 SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS setup_states (
@@ -47,7 +49,8 @@ CREATE TABLE IF NOT EXISTS nonces (
     provider_id TEXT NOT NULL,
     workspace TEXT NOT NULL,
     expires_at REAL NOT NULL,
-    {NONCE_COLUMN_DDL}
+    {NONCE_COLUMN_DDL},
+    {CLAIMED_COLUMN_DDL}
 );
 CREATE TABLE IF NOT EXISTS installations (
     id TEXT PRIMARY KEY,
@@ -93,6 +96,7 @@ def _initialize(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
         add_column_if_missing(conn, "nonces", "app_scheme", NONCE_COLUMN_DDL)
+        add_column_if_missing(conn, "nonces", "claimed_at", CLAIMED_COLUMN_DDL)
         conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 
@@ -236,14 +240,19 @@ class ChatInstallStore:
         wanted = digest(raw)
         now = self._clock() if now is None else now
         with self._write() as conn:
-            row = conn.execute("SELECT digest, bot, provider_id, workspace, expires_at, app_scheme FROM nonces"
+            row = conn.execute("SELECT digest, bot, provider_id, workspace, expires_at, app_scheme, claimed_at FROM nonces"
                                " WHERE digest=?", (wanted,)).fetchone()
-            if row is None or not hmac.compare_digest(row["digest"], wanted):
+            if row is None or not hmac.compare_digest(row["digest"], wanted) or row["claimed_at"] is not None:
                 return None
-            conn.execute("DELETE FROM nonces WHERE digest=?", (wanted,))
-        if row["expires_at"] <= now:
-            return None
+            if row["expires_at"] <= now:
+                conn.execute("DELETE FROM nonces WHERE digest=?", (wanted,))
+                return None
+            conn.execute("UPDATE nonces SET claimed_at=? WHERE digest=?", (now, wanted))
         return (row["bot"], row["provider_id"], row["workspace"]), AppScheme.parse(row["app_scheme"])
+
+    def release_nonce(self, raw: str) -> None:
+        with self._write() as conn:
+            conn.execute("DELETE FROM nonces WHERE digest=?", (digest(raw),))
 
     def save_installation(self, installation: Installation, env_keys: list[str], owner_id: str) -> None:
         with self._write() as conn:

@@ -12,7 +12,8 @@ extension ChatWireEnum {
 }
 
 public enum ChatCapabilityMode: String, ChatWireEnum {
-    case automatic, guided, unsupported, unknown
+    // swiftlint:disable:next redundant_string_enum_value
+    case automatic = "automatic", guided = "guided", unsupported = "unsupported", unknown
 }
 
 public enum ChatProviderCapability: String, ChatWireEnum {
