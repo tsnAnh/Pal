@@ -208,3 +208,7 @@ def test_the_cli_exits_1_and_names_the_fix_on_a_failing_tree(tmp_path):
     root = _tree(tmp_path, App__Chat__ChatRows_swift="proxy.scrollTo(id)\n")
     run = subprocess.run([sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True, check=False)
     assert run.returncode == 1 and FIX in run.stdout
+
+
+def test_a_tree_without_the_chat_code_has_nothing_to_judge(tmp_path):
+    assert writer.main(["check", str(tmp_path)]) == 0

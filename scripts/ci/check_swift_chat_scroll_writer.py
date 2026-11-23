@@ -167,6 +167,8 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
 
 def main(argv: list[str]) -> int:
     root = Path(argv[1]) if len(argv) > 1 else Path(__file__).resolve().parents[2] / "apps" / "ios"
+    if not (root / "App" / "Chat").is_dir():
+        return 0
     found = scan(root)
     for entry in found:
         print(entry)
