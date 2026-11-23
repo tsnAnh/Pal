@@ -1,4 +1,3 @@
-"""``/pal``: the owner picks which Pal bot answers a direct message with the Pal app."""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +6,7 @@ from typing import Any
 
 try:
     import discord
-except ImportError:  # the adapter does not start without discord.py
+except ImportError:
     discord = None
 
 logger = logging.getLogger(__name__)
@@ -31,12 +30,12 @@ def _match(raw: str, choices: list[Any]) -> Any | None:
 class DiscordPalCommandMixin:
     def _register_pal_command(self, tree: Any) -> None:
         try:
-            if tree.get_command("pal") is not None or not self._bots().installed_bots():
-                return
-        except Exception as exc:  # health: allow BLE001 -- /pal is optional; unreadable records leave the other commands intact
+            if tree.get_command("pal") is None and self._bots().installed_bots():
+                self._add_pal_command(tree)
+        except Exception as exc:  # health: allow BLE001 -- /pal is optional; a failure here must not stop the other commands or the connect
             logger.warning("[%s] /pal not registered (%s)", self.name, type(exc).__name__)
-            return
 
+    def _add_pal_command(self, tree: Any) -> None:
         async def _autocomplete(interaction: discord.Interaction, current: str) -> list:
             try:
                 allowed, _reason = self._evaluate_slash_authorization(interaction)

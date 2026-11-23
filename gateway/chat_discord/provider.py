@@ -45,15 +45,27 @@ from .rest import GUILD_CATEGORY, GUILD_TEXT, DiscordRest, webhook_avatar_url, w
 
 logger = logging.getLogger(__name__)
 
+PLATFORM_KEY = "discord"
 SNOWFLAKE = re.compile(r"\d{1,20}")
 MENTION = re.compile(r"<@!?(\d{1,20})>")
 _NO_ACTION = NextAction(kind=NextActionKind.none, action_id="none")
 _NEEDS_ACCESS = NextAction(kind=NextActionKind.button, action_id="grant_channel_access")
 
 
+HOME_CHANNEL_ENV = "DISCORD_HOME_CHANNEL"
+
+
 def saved_app_token() -> str | None:
     from tui_gateway.discord_connector import saved_token
     return saved_token()
+
+
+def profile_has_home_channel(bot: str, scope: Callable[[str], Any] | None = None) -> bool:
+    from gateway.chat_install_runtime import bot_profile_scope
+    from hermes_cli.config import get_env_value, read_raw_config
+    with (scope or bot_profile_scope)(bot):
+        configured = ((read_raw_config().get("platforms") or {}).get(PLATFORM_KEY) or {}).get("home_channel")
+        return bool(configured or get_env_value(HOME_CHANNEL_ENV))
 
 
 class DiscordProvider(ChatProvider):
@@ -66,6 +78,7 @@ class DiscordProvider(ChatProvider):
                  allowlist: OwnerAllowlist | None = None,
                  identity: Callable[[str], BotIdentitySource] = profile_identity,
                  token_source: Callable[[], str | None] = saved_app_token,
+                 has_home_channel: Callable[[str], bool] = profile_has_home_channel,
                  clock: Callable[[], float] = time.time):
         self.vault = vault or VaultStore(get_default_hermes_root() / "vault")
         self.api = api or DiscordApi()
@@ -73,6 +86,7 @@ class DiscordProvider(ChatProvider):
         self.routes = routes or ProfileRoutes()
         self.allowlist = allowlist or OwnerAllowlist()
         self._identity, self._token_source, self._clock = identity, token_source, clock
+        self._has_home_channel = has_home_channel
 
     def capabilities(self, workspace: str | None = None) -> Capabilities:
         return DISCORD_CAPABILITIES
@@ -112,6 +126,8 @@ class DiscordProvider(ChatProvider):
 
     def new_install_config(self, installation: Installation, owner: str) -> dict[str, Any]:
         from gateway.config import HomeChannel, Platform
+        if self._has_home_channel(installation.bot):
+            return {}
         record = self._record_for(installation)[1]
         home = HomeChannel(platform=Platform.DISCORD, chat_id=str(record["channel_id"]),
                            name=self.identity_projection(self._identity(installation.bot)).display_name,

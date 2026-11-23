@@ -1,10 +1,3 @@
-"""Replies posted as a Pal bot through its Discord channel webhook.
-
-``PersonaChannel`` wraps the real channel for the send paths so they keep their ``channel.send`` /
-``get_partial_message`` shape. A webhook that is gone, rate limited or unreachable never loses a reply:
-the wrapper hands the same call to the real channel (the Pal app's identity).
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -241,9 +234,12 @@ class PersonaChannel:
             return await self.real.send(content, **kwargs)
         files = list(kwargs.get("files") or ([kwargs["file"]] if kwargs.get("file") is not None else []))
         try:
-            data = await self.client.execute(self.persona, content=content, thread_id=self.thread_id,
-                                             files=[_read_file(file) for file in files])
-            return PersonaMessage(data)
+            payload_files = [_read_file(file) for file in files]
+        except (AttributeError, OSError, ValueError):
+            return await self.real.send(content, **kwargs)
+        try:
+            return PersonaMessage(await self.client.execute(self.persona, content=content, thread_id=self.thread_id,
+                                                            files=payload_files))
         except WebhookError as exc:
             self.degrade(exc)
         _rewind(files)

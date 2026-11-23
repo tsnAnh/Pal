@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import functools
 import json
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from gateway.chat_install_service import ChatInstallService
 from gateway.chat_install_store import ChatInstallStore
 from gateway.chat_discord.api import DiscordApi
 from gateway.chat_discord.default_profile import OwnerAllowlist, ProfileRoutes
-from gateway.chat_discord.provider import DiscordProvider
+from gateway.chat_discord.provider import DiscordProvider, profile_has_home_channel
 from gateway.chat_discord.records import DiscordRecords
 from tests.gateway.chat_install_harness import RecordingControl
 from tests.gateway.chat_discord.fake_discord import GUILD_ID, OWNER_ID, TOKEN, FakeDiscord
@@ -58,7 +59,8 @@ class Kit:
             vault=self.vault, api=DiscordApi(self.fake.transport, sleep=self.sleeps.append),
             records=DiscordRecords(self.records_path), routes=ProfileRoutes(scope=contextlib.nullcontext),
             allowlist=OwnerAllowlist(scope=contextlib.nullcontext), identity=self.identity,
-            token_source=lambda: self.token, clock=lambda: 1_700_000_000.0)
+            token_source=lambda: self.token, clock=lambda: 1_700_000_000.0,
+            has_home_channel=functools.partial(profile_has_home_channel, scope=lambda _bot: contextlib.nullcontext()))
         self.restarts: list[str] = []
         self.control = SeedingControl()
         self._patch_live(monkeypatch)

@@ -1,4 +1,3 @@
-"""Pal bots speaking as themselves: webhook identity for the send paths, and the loop and free-response gates."""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +6,7 @@ from typing import Any
 
 try:
     import discord
-except ImportError:  # the adapter does not start without discord.py
+except ImportError:
     discord = None
 
 from plugins.platforms.discord.webhook_send import PersonaChannel, WebhookClient
