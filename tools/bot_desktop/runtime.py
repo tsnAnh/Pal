@@ -395,7 +395,7 @@ def ensure_started_for_tool() -> Optional[str]:
         except Exception as exc:
             logger.info("Bot Desktop sandbox start deferred to the tool: %s", exc)
         return None
-    if not _should_auto_start(os.environ):
+    if not auto_starts(os.environ):
         return None
     try:
         start()
@@ -421,7 +421,7 @@ def tool_placement() -> str:
     return placement.TERMINAL
 
 
-def _should_auto_start(env: dict[str, str]) -> bool:
+def auto_starts(env: dict[str, str]) -> bool:
     if not is_supported_host() or env.get("DISPLAY") or env.get("WAYLAND_DISPLAY"):
         return False
     if missing_binaries():

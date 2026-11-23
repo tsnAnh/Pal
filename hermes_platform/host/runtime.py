@@ -11,6 +11,16 @@ def is_termux() -> bool:
     return bool(os.getenv("TERMUX_VERSION") or "com.termux/files/usr" in prefix)
 
 
+def no_new_privileges() -> bool:
+    """Return whether this process carries the kernel's NoNewPrivs flag (systemd ``NoNewPrivileges=``).
+
+    Read live, not cached: the flag can be set after start and the read is one small procfs file."""
+    for line in _read_proc("/proc/self/status").splitlines():
+        if line.startswith("NoNewPrivs:"):
+            return line.partition(":")[2].strip() == "1"
+    return False
+
+
 _wsl_detected: bool | None = None
 
 

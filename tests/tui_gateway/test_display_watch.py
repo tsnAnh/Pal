@@ -188,7 +188,7 @@ def test_screen_start_and_stop_reach_the_models_turn_notes(tmp_path, monkeypatch
         (home / "bot-desktop" / "env").unlink()  # stop() from another process
         server._poll_runtime_files()
         note = getattr(agent, "_gateway_turn_context_notes", "")
-        assert "no longer running" in note, note
+        assert "Bot Screen" in note and "stopped" in note and "Do not refer" not in note, note
         assert [e for e in events if e[0] == "display.status"]  # the broadcast still happened
     finally:
         with server._sessions_lock:
