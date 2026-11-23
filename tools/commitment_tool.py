@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from gateway import commitments as ledger
+from gateway import commitments_wake
 from gateway.commitments import Actor, Details, Refused, RefusalCode, Route, State
 from gateway.session_context import get_session_env
 from hermes_cli.profiles import current_profile_name
@@ -116,8 +117,10 @@ def _promise(args: dict, now: float) -> dict:
     made = ledger.promise(get_hermes_home(), event_key=_event_key("promise", ""), profile=_profile(),
                           text=_required(args, "text"), owner_requested=owner_requested, due_at=_due(args),
                           route=_route(), now=now, next_step=_text(args, "next_step"))
+    follow_up_error = commitments_wake.ensure_job()
     return {"id": made.commitment_id, "state": made.to_state.value, "rev": made.rev,
-            **({"replayed": True} if made.replayed else {})}
+            **({"replayed": True} if made.replayed else {}),
+            **({"follow_up_error": follow_up_error} if follow_up_error else {})}
 
 
 def _target(args: dict, action: str) -> State:

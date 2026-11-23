@@ -135,7 +135,8 @@ def test_config_keys_reach_policy_through_the_effective_loader(tmp_path):
     assert loaded.enabled is True and loaded.daily_budget == 7
     assert loaded.min_gap == timedelta(minutes=15)
     assert loaded.quiet == QuietHours(time(23, 30), time(6, 45))
-    assert dict(loaded.domain_tiers) == {"cron": Tier.SUGGEST, "suggestions": Tier.OFF, "watch": Tier.NOTIFY}
+    assert dict(loaded.domain_tiers) == {"cron": Tier.SUGGEST, "suggestions": Tier.OFF, "watch": Tier.NOTIFY,
+                                         "commitments": Tier.NOTIFY}
     assert loaded.muted == frozenset({"suggestions"})
     assert loaded.messaging_window == timedelta(minutes=5)
 

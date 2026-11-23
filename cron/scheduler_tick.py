@@ -88,7 +88,17 @@ def _pre_dispatch_housekeeping(_sched, headless: bool) -> None:
         _sched.logger.warning("Legacy Bot Chat pending drain failed: %s", _legacy_exc, exc_info=True)
     _sched._maybe_reap_dead_owners()
     if not headless:
+        _report_commitments(_sched)
         _drain_deferred_reach_alerts(_sched)
+
+
+def _report_commitments(_sched) -> None:
+    try:
+        from gateway.commitments_wake import report_due
+        from hermes_constants import get_hermes_home
+        report_due(get_hermes_home())
+    except Exception as exc:
+        _sched.logger.warning("Promise follow-through report failed: %s", exc, exc_info=True)
 
 
 def _drain_deferred_reach_alerts(_sched) -> None:

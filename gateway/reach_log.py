@@ -159,6 +159,19 @@ def get(home, offer_id: str) -> dict | None:
         conn.close()
 
 
+def known_producer_keys(home, producer_keys: list[str]) -> frozenset[str]:
+    if not producer_keys:
+        return frozenset()
+    conn = _connect(home)
+    try:
+        marks = ", ".join("?" * len(producer_keys))
+        found = conn.execute(f"SELECT producer_key FROM reach_offers WHERE producer_key IN ({marks})",
+                             producer_keys).fetchall()
+        return frozenset(row[0] for row in found)
+    finally:
+        conn.close()
+
+
 def due_deferred(home, now: float, limit: int = 20) -> list[dict]:
     conn = _connect(home)
     try:

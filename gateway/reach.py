@@ -11,7 +11,7 @@ from pathlib import Path
 
 from gateway import reach_log, reach_routes
 from gateway.reach_policy import (
-    AppSocket, Consent, LogView, OfferKind, Policy, Route, Verdict, judge, load_policy,
+    AppSocket, Consent, LogView, Messaging, OfferKind, Policy, Route, Verdict, judge, load_policy,
 )
 from gateway.reach_presence import Device
 
@@ -58,6 +58,7 @@ class Offer:
     body: str
     lane: DurableLane | None = None
     lane_text: str | None = None
+    chat: Messaging | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,8 +164,8 @@ def _land(authority, home: Path, item: Offer) -> str | None:
     return None
 
 
-def _ranked_routes(authority, home: Path, policy: Policy):
-    return reach_routes.routes(authority, home, policy)
+def _ranked_routes(authority, home: Path, policy: Policy, chat: Messaging | None = None):
+    return reach_routes.routes(authority, home, policy, prefer=chat)
 
 
 def _messaging_text(item: Offer) -> str:
@@ -217,7 +218,7 @@ async def _try_route(authority, home: Path, route: Route, offer_id: str, item: O
 
 
 async def _walk_routes(authority, home: Path, policy: Policy, offer_id: str, item: Offer, ack_timeout: float):
-    candidates = await asyncio.to_thread(_ranked_routes, authority, home, policy)
+    candidates = await asyncio.to_thread(_ranked_routes, authority, home, policy, item.chat)
     tried = []
     for route in candidates:
         result = await _try_route(authority, home, route, offer_id, item, ack_timeout)
