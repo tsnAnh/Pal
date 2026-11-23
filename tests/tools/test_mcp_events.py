@@ -13,6 +13,7 @@ import pytest
 
 from mcp.shared.exceptions import MCPError
 from tools import mcp_tool_events as events
+from tools.mcp_tool_rpc_gate import RpcGate
 from tools.mcp_tool_registration import _select_utility_schemas
 from tests.waiting import async_wait_until
 
@@ -45,13 +46,13 @@ def _grant(seconds=86400):
             "truncated": False}
 
 
-class ObservedLock(asyncio.Lock):
+class ObservedLock(RpcGate):
     """Records that someone queued for the session, so a test can act while they wait."""
     contended = False
 
-    async def acquire(self):
+    async def _acquire(self, exclusive):
         self.contended = self.locked()
-        return await super().acquire()
+        return await super()._acquire(exclusive)
 
 
 class FakeSession:
@@ -67,7 +68,7 @@ class FakeSession:
 
 
 def _server(session):
-    return SimpleNamespace(name="ambush", session=session, _rpc_lock=asyncio.Lock(), _config={"events": True})
+    return SimpleNamespace(name="ambush", session=session, _rpc_lock=RpcGate(), _config={"events": True})
 
 
 def _subscribe(session, **extra):
@@ -324,7 +325,7 @@ class TestRefresh:
 
         async def scenario():
             server._rpc_lock = ObservedLock()
-            async with server._rpc_lock:  # an unsubscribe holds the session...
+            async with server._rpc_lock.exclusive():  # an unsubscribe holds the session...
                 refresh = asyncio.create_task(events.refresh_server_subscriptions(server, force=True))
                 await async_wait_until(lambda: server._rpc_lock.contended, what="refresh queued on the session")
                 (home / "webhook_subscriptions.json").write_text("{}")  # ...and drops the route

@@ -598,8 +598,12 @@ sees only its own tools; profiles whose `mcp_servers` entry is identical (same
 route *and* credentials, including mTLS `client_cert`/`client_key`) share one
 connection, and an owner's `/reload-mcp`
 re-registers the sharing profiles' tools without them reloading. `auth: oauth`
-servers are never shared across profiles: each profile holds its own token under
-its own `mcp-tokens/` and opens its own connection. Startup connects profiles one
+servers share a connection only when the profiles resolve the same token file: a
+root-owned shared connector does (every profile uses the root profile's token), while
+a server each profile authorizes for itself keeps its own token under its own
+`mcp-tokens/` and its own connection. Calls from different profiles run concurrently
+over a shared HTTP or SSE connection; a stdio connection serves one request at a time.
+Startup connects profiles one
 after another and, within a profile, at most `mcp.discovery_concurrency` servers at
 once (default 4, `0` = unlimited), so a fleet of profiles with many stdio servers
 no longer spawns every helper process in the same instant. Trust policy stays per

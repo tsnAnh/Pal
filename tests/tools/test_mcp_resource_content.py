@@ -11,6 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tools.mcp_tool_rpc_gate import InFlightCalls, RpcGate
+
 
 PDF_BYTES = b"%PDF-1.4 fake pdf payload for tests"
 
@@ -161,7 +163,8 @@ class TestErrorPathResourceText:
                 async def _install_lock_and_run():
                     for srv in list(mcp_tool._servers.values()):
                         if getattr(srv, "_rpc_lock", None) is None:
-                            srv._rpc_lock = asyncio.Lock()
+                            srv._rpc_lock = RpcGate()
+                            srv._inflight_calls = InFlightCalls()
                     return await coro
 
                 return loop.run_until_complete(_install_lock_and_run())

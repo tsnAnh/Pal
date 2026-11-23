@@ -141,7 +141,7 @@ def test_same_named_server_with_other_credentials_is_a_separate_connection(two_p
     assert "s" in disc._select_new_servers({"s": dict(cfg_s)})
 
 
-def test_oauth_server_is_not_adopted_across_profiles(two_profiles):
+def test_oauth_server_with_a_token_store_per_profile_is_not_adopted_across_profiles(two_profiles):
     import tools.mcp_tool as core
     from tools import mcp_tool_discovery as disc
     from tools import mcp_tool_registration as reg
@@ -174,6 +174,34 @@ def test_oauth_server_is_not_adopted_across_profiles(two_profiles):
         disc.register_mcp_servers({"x": dict(cfg)})
     assert connected and core._servers[(scope_b, "x")] is connected[0]
     assert core._servers[(scope_a, "x")] is srv_a
+
+
+def test_root_owned_oauth_connector_is_one_connection_shared_by_every_profile(two_profiles, tmp_path, monkeypatch):
+    import tools.mcp_tool as core
+    from tools import mcp_tool_discovery as disc
+    from tools import mcp_tool_registration as reg
+    from tools.registry import registry
+
+    cfg = {"url": "https://mcp.example/x", "auth": "oauth"}
+    monkeypatch.setattr("hermes_cli.shared_catalog.root_home", lambda: tmp_path / "root")
+    monkeypatch.setattr("hermes_cli.shared_catalog.root_entries", lambda: {"x": dict(cfg)})
+
+    scope_a = two_profiles("a")
+    srv_a = _server("x", cfg)
+    disc._adopt_server("x", srv_a)
+    srv_a._registered_tool_names = reg._register_server_tools("x", srv_a, cfg)
+
+    scope_b = two_profiles("b")
+    assert reg.register_connected_into_current_scope({"x": dict(cfg)}) == 1
+    assert registry.get_tool_names_for_toolset("mcp-x") == ["mcp__x__t"]
+
+    connected = []
+    with patch.object(disc, "_run_discovery_pass", lambda new_servers: connected.extend(new_servers)), \
+            patch.object(disc._loop, "_ensure_mcp_loop", lambda: None):
+        disc.register_mcp_servers({"x": dict(cfg)})
+    assert connected == []
+    assert list(core._servers) == [(scope_a, "x")]
+    assert core._server_tool_scopes[(scope_a, "x")] == {scope_a, scope_b}
 
 
 def test_same_named_server_with_other_mtls_identity_is_a_separate_connection(two_profiles):

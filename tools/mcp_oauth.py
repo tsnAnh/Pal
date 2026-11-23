@@ -498,6 +498,10 @@ class HermesTokenStorage:
         return moved
 
     _tokens_path = partialmethod(_path, ".json")
+
+    def tokens_path(self) -> Path:
+        return self._tokens_path()
+
     _client_info_path = partialmethod(_path, ".client.json")
     _meta_path = partialmethod(_path, ".meta.json")
     _cimd_rejected_path = partialmethod(_path, ".cimd-off")

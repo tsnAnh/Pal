@@ -1208,7 +1208,7 @@ class TestMCPServerTask:
             server._idle_timeout_seconds = 0.01
             server._last_tool_call_at = time.monotonic() - 1.0
 
-            async with server._rpc_lock:
+            async with server._rpc_lock.exclusive():
                 assert server._stdio_recycle_reason() is None
                 assert server._next_stdio_recycle_deadline() is None
 

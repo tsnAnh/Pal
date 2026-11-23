@@ -252,7 +252,7 @@ async def refresh_server_subscriptions(server, *, force: bool,
             due = max(due, failures[route_name][1])
         if url_base and (force or due <= time.time()):
             try:
-                async with server._rpc_lock:
+                async with server._rpc_lock.exclusive():
                     # Re-read under the lock: an unsubscribe that ran while we waited must not be undone.
                     route = (await asyncio.to_thread(_load_routes, server.name)).get(route_name)
                     stored = None
@@ -464,7 +464,7 @@ def _make_events_handler(op: str, label: str, rpc, *, needs_name: bool = True, n
                     return error
 
             async def _call():
-                async with server._rpc_lock:
+                async with server._rpc_lock.exclusive():
                     result = await rpc(server.session, args, server_name)
                 return json.dumps(result, ensure_ascii=False)
             return _handlers._dispatch(

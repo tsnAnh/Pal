@@ -52,7 +52,7 @@ class MCPServerRunMixin:
 
     async def _wait_for_rpc_idle(self) -> None:
         """Wake the lifecycle loop when the active RPC releases its lock."""
-        async with self._rpc_lock:
+        async with self._rpc_lock.exclusive():
             pass
 
     async def _wait_for_lifecycle_event(self) -> str:
@@ -132,7 +132,7 @@ class MCPServerRunMixin:
                     if self._rpc_lock.locked() or any(not t.done() for t in self._inflight_tasks):
                         continue
                     try:
-                        async with self._rpc_lock:
+                        async with self._rpc_lock.exclusive():
                             await self._keepalive_probe()
                     except Exception as exc:
                         root = _errors._unwrap_exception_group(exc)
@@ -274,9 +274,7 @@ class MCPServerRunMixin:
         # elicitation/create lets a server ask for structured input mid-call; the handler
         # routes it through Hermes' approval system.
         elicitation_config = config.get("elicitation", {})
-        self._elicitation = (_sampling.ElicitationHandler(self.name, elicitation_config,
-                                                       call_context=lambda: self._pending_call_context,
-                                                       call_callbacks=lambda: self._pending_call_callbacks)
+        self._elicitation = (_sampling.ElicitationHandler(self.name, elicitation_config, self._inflight_calls)
                              if elicitation_config.get("enabled", True) and _core._MCP_ELICITATION_TYPES else None)
         if "url" in config and "command" in config:
             logger.warning("MCP server '%s' has both 'url' and 'command' in config. Using HTTP transport "

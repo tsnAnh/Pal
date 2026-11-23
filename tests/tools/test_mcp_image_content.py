@@ -151,7 +151,6 @@ class TestNativeImageAttach:
 
         def run(factory, timeout=30):
             async def go():
-                server._rpc_lock = asyncio.Lock()
                 return await factory()
             return asyncio.run(go())
 

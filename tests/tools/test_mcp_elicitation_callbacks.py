@@ -1,7 +1,7 @@
 """The elicitation consent hop must carry the turn thread's prompt callbacks too.
 
 ``ElicitationHandler`` already replays the owning tool call's contextvars snapshot
-(``_pending_call_context``) so gateway-platform detection survives the recv-loop task hop.
+(the in-flight call registry) so gateway-platform detection survives the recv-loop task hop.
 But the consent call itself runs via ``asyncio.to_thread`` on an executor thread, and the
 per-thread prompt callbacks (approval, sudo, vault unlock) live in ``threading.local`` —
 they do not follow the contextvars snapshot. Without an explicit bridge the consent flow
@@ -14,6 +14,7 @@ no real MCP server, the approval router mocked.
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -21,7 +22,12 @@ import pytest
 
 pytest.importorskip("mcp.types")
 
+from tools.mcp_tool_rpc_gate import CallScope
 from tools.mcp_tool_sampling import ElicitationHandler
+
+
+def _calls(context=None, callbacks=()):
+    return SimpleNamespace(attribute=lambda: CallScope(context, callbacks))
 
 
 def _form_params(message="please confirm"):
@@ -62,7 +68,7 @@ class TestElicitationCallbackBridge:
             handler = ElicitationHandler(
                 "pay",
                 {"timeout": 5},
-                call_callbacks=lambda: installs,
+                calls=_calls(None, installs),
             )
             seen = {}
 
@@ -99,7 +105,7 @@ class TestElicitationCallbackBridge:
             handler = ElicitationHandler(
                 "pay",
                 {"timeout": 5},
-                call_callbacks=lambda: installs,
+                calls=_calls(None, installs),
             )
 
             async def _elicit_then_probe_the_same_worker():
@@ -126,7 +132,7 @@ class TestElicitationCallbackBridge:
     def test_no_captured_callbacks_still_prompts(self, empty):
         """Between tool calls (resources/read, prompts/get, or surfaces that install
         nothing) the slot holds no capture; the consent router must still be invoked."""
-        handler = ElicitationHandler("pay", {"timeout": 5}, call_callbacks=lambda: empty)
+        handler = ElicitationHandler("pay", {"timeout": 5}, calls=_calls(None, empty))
         params = _form_params()
 
         with patch(
@@ -174,8 +180,7 @@ class TestElicitationCallbackBridge:
         handler = ElicitationHandler(
             "pay",
             {"timeout": 5},
-            call_context=lambda: captured,
-            call_callbacks=lambda: installs,
+            calls=_calls(captured, installs),
         )
         with patch(
             "tools.approval_prompt.request_elicitation_consent",
