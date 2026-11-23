@@ -40,7 +40,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
         "footguns", "detached-spawns", "install-root", "config-writers", "config-readers",
         "os-marker-fakes", "lazy-deps", "ruff", "health",
         # Upstream guards merged by the sync that read Python sources only.
-        "backend-imports", "tool-discovery", "profile-create-entry")},
+        "backend-imports", "tool-discovery", "profile-create-entry", "commitment-writers")},
     "packaged-imports": (*((g, True) for g in _PY), ("pyproject.toml", True)),
     "shims": (*((g, True) for g in _PY), ("pyproject.toml", True), (".gitattributes", True)),
     "line-endings": (("*", True),),
