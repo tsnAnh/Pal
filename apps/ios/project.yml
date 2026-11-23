@@ -261,6 +261,7 @@ targets:
       - target: Pal
       - package: PalKit
         product: PalLocalEngine
+        destinationFilters: [macOS]
       - package: PalKit
         product: PalProtocol
       - package: PalKit
