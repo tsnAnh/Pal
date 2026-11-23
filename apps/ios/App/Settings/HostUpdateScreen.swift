@@ -58,7 +58,7 @@ struct HostUpdateScreen: View {
         }
         .macSheet(isPresented: $model.showingProgress, onDismiss: { model.dismissProgress() }, size: .compact, content: {
             HostUpdateProgressSheet(model: model) { model.showingProgress = false }
-                .macSheetDismissDisabled(model.isUpdating)
+                .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: model.isUpdating))
         })
     }
 

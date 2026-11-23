@@ -144,7 +144,7 @@ struct OwnerPhotoCropSheet: View {
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .macSheetDismissDisabled(model.isBusy)
+        .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: model.isBusy))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ownerPhotoCropSheet")
     }

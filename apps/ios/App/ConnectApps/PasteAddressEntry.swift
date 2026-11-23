@@ -63,7 +63,7 @@ struct PasteAddressEntry: View {
                     .accessibilityIdentifier("paste-address-reopen")
                 Button(String(localized: "Cancel"), action: cancel)
                     .glassButtonStyle()
-                    .keyboardShortcut(.cancelAction)
+                    .palCancelShortcut()
                     .accessibilityIdentifier(identifiers.cancel)
             }
         }

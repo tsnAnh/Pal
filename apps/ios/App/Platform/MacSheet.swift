@@ -55,14 +55,6 @@ struct SheetDismiss: DynamicProperty {
     }
 }
 
-struct MacSheetDismissLockKey: PreferenceKey {
-    static let defaultValue = false
-
-    static func reduce(value: inout Bool, nextValue: () -> Bool) {
-        value = value || nextValue()
-    }
-}
-
 private func macSheetPresence<Item>(of item: Binding<Item?>) -> Binding<Bool> {
     Binding(get: { item.wrappedValue != nil }, set: { if !$0 { item.wrappedValue = nil } })
 }
@@ -82,11 +74,6 @@ extension View {
         modifier(MacSheetPresentation(
             isPresented: macSheetPresence(of: item), size: size, onDismiss: onDismiss, sheet: { item.wrappedValue.map(content) }
         ))
-    }
-
-    func macSheetDismissDisabled(_ disabled: Bool) -> some View {
-        interactiveDismissDisabled(disabled)
-            .preference(key: MacSheetDismissLockKey.self, value: disabled)
     }
 }
 
@@ -138,6 +125,7 @@ private struct MacSheetPresentation<Sheet: View>: ViewModifier {
             built()
                 .environment(\.sheetClose, nil)
                 .environment(\.sheetChromeHostedInNavigation, false)
+                .environment(\.escapeHostLayer, nil)
                 .macSheetFrame(size: size)
         }
     }

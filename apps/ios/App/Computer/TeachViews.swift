@@ -146,7 +146,7 @@ struct TeachReviewSheet: View {
         ) {
             content
         }
-        .macSheetDismissDisabled(model.busy)
+        .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: model.busy))
     }
 
     @ViewBuilder

@@ -99,7 +99,7 @@ private struct TemplateReviewSheet: View {
             }
             .sheetBottomAction(keyboardUp: false) { importButton }
         }
-        .macSheetDismissDisabled(importer.isBusy)
+        .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: importer.isBusy))
     }
 
     @ViewBuilder

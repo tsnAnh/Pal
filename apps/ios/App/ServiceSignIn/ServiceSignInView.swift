@@ -345,7 +345,7 @@ struct ServiceSignInDialogView: View {
             }
             Button("Close") { Task { await center.notNow() } }
                 .glassButtonStyle()
-                .keyboardShortcut(.cancelAction)
+                .palCancelShortcut()
                 .accessibilityIdentifier("service-signin-notnow-button")
         case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .callbackFailed:
             VStack(spacing: 8) {
@@ -358,7 +358,7 @@ struct ServiceSignInDialogView: View {
                 }
                 Button(dialog.canSignIn ? "Not now" : "Close") { Task { await center.notNow() } }
                     .glassButtonStyle()
-                    .keyboardShortcut(.cancelAction)
+                    .palCancelShortcut()
                     .accessibilityIdentifier("service-signin-notnow-button")
             }
         }
@@ -425,9 +425,9 @@ private struct ServiceSignInPresentation: ViewModifier {
         content
             .onAppear { context.hosts.enter(id) }
             .onDisappear { context.hosts.leave(id) }
-            .macSheet(isPresented: Binding(get: { context.center.current != nil && context.hosts.presents(id) }, set: { _ in }), size: .compact) {
+            .macSheet(isPresented: context.presentation(for: id), size: .compact) {
                 ServiceSignInDialogView(center: context.center, botName: context.botName)
-                    .macSheetDismissDisabled(true)
+                    .interactiveDismissDisabled(true)
                     .iOSOnly { $0.presentationDetents([.medium, .large]) }
             }
     }

@@ -153,7 +153,7 @@ struct OwnerIntroSheet: View {
             .padding(.bottom, 16)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .macSheetDismissDisabled(model.isSaving)
+        .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: model.isSaving))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ownerIntro")
     }

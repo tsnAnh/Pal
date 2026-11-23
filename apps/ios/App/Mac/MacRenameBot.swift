@@ -69,7 +69,7 @@ struct MacRenameBot: View {
                 try? await Task.sleep(for: .milliseconds(120))
             }
         }
-        .interactiveDismissDisabled(isSaving)
+        .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: isSaving))
     }
 
     private var errorMessage: LocalizedStringKey? {
@@ -88,7 +88,7 @@ struct MacRenameBot: View {
             Spacer()
             Button("Cancel") { router.renamingBot = nil }
                 .glassButtonStyle()
-                .keyboardShortcut(.cancelAction)
+                .palCancelShortcut()
                 .accessibilityIdentifier("renameBotCancel")
             Button {
                 save()

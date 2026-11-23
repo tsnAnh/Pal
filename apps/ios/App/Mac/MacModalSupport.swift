@@ -63,27 +63,30 @@ struct MacModalPanel<Content: View>: View {
     let size: MacModalSize
     var clearClose = false
     var closePlacement = MacPanelClosePlacement.leading
-    var closeDisabled = false
+    var layer = EscapeLayer.panel
     let identifier: String
     let closeIdentifier: String
     let close: () -> Void
     @ViewBuilder let content: Content
 
     @Environment(\.macWindowSize) private var windowSize
+    @State private var escape = EscapePolicy.dismisses
 
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 12, style: .continuous) }
 
     var body: some View {
         let frame = size.frame(in: windowSize?.size ?? .zero)
         content
+            .environment(\.escapeHostLayer, layer)
+            .onPreferenceChange(EscapePolicyKey.self) { escape = $0 }
             .macModalFrame(frame)
             .paneOverflowProbe(identifier)
             .background(PalTokens.content, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .overlayPreferenceValue(MacPanelCloseKey.self, alignment: closePlacement.alignment) { override in
                 if !override.hidden {
-                    SheetGlassButton(clear: clearClose, accessibilityIdentifier: override.identifier ?? closeIdentifier, action: close)
-                        .disabled(closeDisabled)
+                    SheetGlassButton(clear: clearClose, escapes: false, accessibilityIdentifier: override.identifier ?? closeIdentifier, action: close)
+                        .disabled(!escape.allowsClose)
                         .padding(.top, PalMetrics.macPanelCloseTopInset)
                         .padding(closePlacement == .leading ? .leading : .trailing, PalMetrics.macPanelCloseLeadingInset)
                 }
@@ -92,6 +95,7 @@ struct MacModalPanel<Content: View>: View {
             .shadow(color: .black.opacity(0.35), radius: 40, y: 18)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier(identifier)
+            .palEscape(layer, policy: escape, dismiss: close)
             .padding(.top, frame.topAnchor ?? 0)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frame.topAnchor == nil ? .center : .top)
             .transition(.scale(scale: 0.97).combined(with: .opacity))

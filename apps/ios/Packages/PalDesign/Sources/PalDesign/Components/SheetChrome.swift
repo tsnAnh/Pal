@@ -53,7 +53,7 @@ public struct SheetGlassButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .modifier(EscapeShortcut(enabled: escapes))
+        .modifier(EscapeShortcut(enabled: escapes, leading: leading, action: action))
         .accessibilityLabel(Text(leading.accessibilityLabel))
         .accessibilityIdentifier(accessibilityIdentifier)
     }
@@ -61,12 +61,22 @@ public struct SheetGlassButton: View {
 
 private struct EscapeShortcut: ViewModifier {
     let enabled: Bool
+    let leading: SheetLeadingButton
+    let action: () -> Void
+
+    @Environment(\.escapeHostLayer) private var hostLayer
 
     func body(content: Content) -> some View {
-        if enabled {
-            content.keyboardShortcut(.cancelAction)
-        } else {
+        if !enabled {
             content
+        } else if let hostLayer {
+            if leading == .back {
+                content.palEscape(hostLayer, nested: true, dismiss: action)
+            } else {
+                content
+            }
+        } else {
+            content.keyboardShortcut(.cancelAction)
         }
     }
 }

@@ -13,13 +13,15 @@ struct LocalEngineSetupHost: View {
                 MacModalScrim { engine.dismissSetup() }
                 MacModalPanel(
                     size: .full,
-                    closeDisabled: engine.isInstalling || engine.isSigningIn || engine.providerSignInBusy,
+                    layer: .stepFlow,
                     identifier: "localEngineSetupPanel",
                     closeIdentifier: "localEngineSetupClose",
                     close: { engine.dismissSetup() },
-                    content: { LocalEngineSetupPanel(engine: engine) }
+                    content: {
+                        LocalEngineSetupPanel(engine: engine)
+                            .palEscapePolicy(EscapePolicy(blocking: .inFlight, when: engine.isInstalling || engine.isSigningIn || engine.providerSignInBusy))
+                    }
                 )
-                .background { escapeKey }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -27,17 +29,6 @@ struct LocalEngineSetupHost: View {
         .ignoresSafeArea(.container, edges: .top)
         .environment(\.macWindowSize, windowSize)
         .animation(.snappy(duration: 0.2), value: engine.isPresentingSetup)
-    }
-
-    @ViewBuilder
-    private var escapeKey: some View {
-        if !engine.isInstalling, !engine.isSigningIn, !engine.providerSignInBusy {
-            Button("") { engine.dismissSetup() }
-                .keyboardShortcut(.cancelAction)
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
     }
 }
 #endif
