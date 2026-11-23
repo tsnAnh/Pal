@@ -64,14 +64,13 @@ struct ChatTranscriptList: View {
         .task(id: model.connection) {
             connectionIsSlow = false
             guard model.connection != .live else { return }
-            try? await Task.sleep(for: model.connection == .reconnecting ? Self.reconnectingNoticeDelay : Self.catchUpNoticeDelay)
-            guard !Task.isCancelled else { return }
+            guard await LoadingPolicy.waited(model.connection == .reconnecting ? Self.reconnectingNoticeDelay : Self.catchUpNoticeDelay) else { return }
             connectionIsSlow = model.connection != .live
         }
     }
 
     private static let reconnectingNoticeDelay = Duration.seconds(1)
-    private static let catchUpNoticeDelay = LoadingPolicy.silentWindow
+    private static let catchUpNoticeDelay = LoadingPolicy.catchUpNoticeWindow
 
     private var jumpButtonTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
