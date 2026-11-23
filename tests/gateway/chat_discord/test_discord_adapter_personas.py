@@ -486,3 +486,38 @@ async def test_pal_only_switches_in_a_direct_message(world, tree):
 
     assert said(interaction) == "Use /pal in a direct message with me."
     assert not [route for route in world.kit.routes() if route["name"].startswith("pal-discord-dm-")]
+
+
+@pytest.mark.asyncio
+async def test_pal_refuses_an_allowed_user_who_is_not_the_owner(world, tree):
+    world.monkeypatch.setenv("DISCORD_ALLOWED_USERS", f"{OWNER_ID},{STRANGER_ID}")
+    world.reload_gates()
+    world.adapter._register_pal_command(tree)
+    guest = dm_interaction(user_id=STRANGER_ID)
+
+    await pal_command(tree).callback(guest, bot=BOT)
+
+    assert said(guest) == "Only the owner can use /pal." and "Pal Helper" not in said(guest)
+    assert await pal_command(tree).callback.autocompletes["bot"](dm_interaction(user_id=STRANGER_ID), "") == []
+    assert not [route for route in world.kit.routes() if route["name"].startswith("pal-discord-dm-")]
+
+
+@pytest.mark.asyncio
+async def test_revoking_a_bot_drops_the_dm_routes_that_point_at_it(world, tree):
+    world.adapter._register_pal_command(tree)
+    await pal_command(tree).callback(dm_interaction(), bot=BOT)
+
+    world.kit.provider.revoke(world.installation)
+
+    assert not [route for route in world.kit.routes() if route["profile"] == BOT]
+
+
+@pytest.mark.asyncio
+async def test_a_failing_repair_request_never_costs_the_reply(world):
+    world.adapter._discord_bots.flag_repair = lambda bot: 1 / 0
+    world.api.script = [error(404, 10015)]
+
+    result = await world.adapter.send(world.channel_id, "still delivered")
+
+    assert result.success
+    assert world.channels[world.channel_id].sent[0][0] == "still delivered"

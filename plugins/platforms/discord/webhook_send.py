@@ -20,6 +20,7 @@ MAX_RETRY_AFTER_S = 5.0
 UNKNOWN_MESSAGE = 10008
 UNKNOWN_WEBHOOK = 10015
 INVALID_WEBHOOK_TOKEN = 50027
+NOT_MESSAGE_AUTHOR = 50005
 FORWARDED_SEND_KWARGS = frozenset({"file", "files", "reference", "allowed_mentions", "mention_author"})
 
 
@@ -91,9 +92,9 @@ def _body(response: httpx.Response) -> Any:
 def _classify(response: httpx.Response, body: Any) -> WebhookError:
     code = body.get("code") if isinstance(body, dict) and isinstance(body.get("code"), int) else None
     status = response.status_code
-    if code == UNKNOWN_MESSAGE:
+    if code in (UNKNOWN_MESSAGE, NOT_MESSAGE_AUTHOR):
         return WebhookMessageMissing("message_missing", status=status, code=code)
-    if code in (UNKNOWN_WEBHOOK, INVALID_WEBHOOK_TOKEN) or status == 404 or (status == 401 and code is None):
+    if code in (UNKNOWN_WEBHOOK, INVALID_WEBHOOK_TOKEN) or (code is None and status in (401, 404)):
         return WebhookGone("webhook_gone", status=status, code=code)
     return WebhookError("rejected", status=status, code=code)
 
@@ -187,7 +188,7 @@ class PersonaPartial:
                 data = await channel.client.edit(channel.persona, str(self.id), content=content or "",
                                                  thread_id=channel.thread_id)
                 return PersonaMessage({"id": self.id, **data})
-            except WebhookError as exc:
+            except WebhookMessageMissing as exc:
                 channel.degrade(exc)
         return await channel.real.get_partial_message(self.id).edit(content=content, **unsupported)
 
@@ -196,7 +197,7 @@ class PersonaPartial:
         try:
             await channel.client.delete(channel.persona, str(self.id), thread_id=channel.thread_id)
             return
-        except WebhookError as exc:
+        except WebhookMessageMissing as exc:
             channel.degrade(exc)
         await channel.real.get_partial_message(self.id).delete()
 
@@ -224,7 +225,10 @@ class PersonaChannel:
     def degrade(self, exc: WebhookError) -> None:
         logger.warning("discord webhook for bot %s not used (%s); using the Pal app", self.persona.bot, exc.reason)
         if isinstance(exc, WebhookGone):
-            self._on_gone(self.persona)
+            try:
+                self._on_gone(self.persona)
+            except Exception as failure:  # health: allow BLE001 -- a failed repair request must never cost the reply
+                logger.warning("discord webhook repair not requested (%s)", type(failure).__name__)
 
     def get_partial_message(self, message_id: int) -> PersonaPartial:
         return PersonaPartial(self, int(message_id))

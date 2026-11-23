@@ -268,6 +268,27 @@ async def test_an_edit_of_a_pal_app_message_falls_back_to_the_pal_app(wrapped, a
 
 
 @pytest.mark.asyncio
+async def test_a_rate_limited_edit_fails_instead_of_asking_the_pal_app_to_edit_a_webhook_message(wrapped, api):
+    real, channel = wrapped
+    api.script = [error(429, None, retry_after=0.1), error(429, None, retry_after=0.1)]
+
+    with pytest.raises(WebhookRateLimited):
+        await channel.get_partial_message(55).edit(content="streamed")
+
+    assert real.edited == []
+
+
+@pytest.mark.asyncio
+async def test_a_missing_thread_does_not_count_as_a_gone_webhook(client, api):
+    api.script = [error(404, 10003)]
+
+    with pytest.raises(WebhookError) as failure:
+        await client.execute(Endpoint(), content="hi", thread_id=THREAD_ID)
+
+    assert not isinstance(failure.value, WebhookGone)
+
+
+@pytest.mark.asyncio
 async def test_a_delete_goes_through_the_webhook_then_the_pal_app(wrapped, api):
     real, channel = wrapped
 

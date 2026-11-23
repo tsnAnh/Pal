@@ -310,6 +310,7 @@ class DiscordProvider(ChatProvider):
             return
         self._delete_remote_webhook(record["webhook_id"])
         removed = [self.routes.remove(installation.bot, c) for c in [record["channel_id"], *record.get("extra_channel_ids", [])]]
+        removed.append(self.routes.clear_direct_for(installation.bot))
         if any(removed):
             self.routes.apply_live()
         self.vault.remove_item(record["webhook_item_id"])

@@ -80,6 +80,9 @@ class DiscordBots:
             str(channel) for record in self._installed()
             for channel in (record["channel_id"], *record.get("extra_channel_ids", [])))
 
+    def owner_ids(self) -> frozenset[str]:
+        return frozenset(str(record["owner_id"]) for record in self._installed() if record.get("owner_id"))
+
     def webhook_ids(self) -> frozenset[str]:
         return frozenset(str(record["webhook_id"]) for record in self._installed())
 

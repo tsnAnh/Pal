@@ -39,7 +39,7 @@ class DiscordPalCommandMixin:
         async def _autocomplete(interaction: discord.Interaction, current: str) -> list:
             try:
                 allowed, _reason = self._evaluate_slash_authorization(interaction)
-                if not allowed:
+                if not allowed or not self._is_pal_owner(interaction):
                     return []
                 query = (current or "").strip().lower()
                 return [
@@ -64,8 +64,15 @@ class DiscordPalCommandMixin:
         except Exception as exc:  # health: allow BLE001 -- the interaction may already be answered or expired
             logger.debug("/pal reply not delivered: %s", type(exc).__name__)
 
+    def _is_pal_owner(self, interaction: Any) -> bool:
+        user_id = str(getattr(getattr(interaction, "user", None), "id", ""))
+        return user_id in self._bots().owner_ids()
+
     async def _handle_pal(self, interaction: Any, bot: str) -> None:
         if not await self._check_slash_authorization(interaction, "/pal"):
+            return
+        if not self._is_pal_owner(interaction):
+            await self._pal_reply(interaction, "Only the owner can use /pal.")
             return
         if getattr(interaction, "guild_id", None) is not None:
             await self._pal_reply(interaction, "Use /pal in a direct message with me.")

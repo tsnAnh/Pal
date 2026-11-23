@@ -26,8 +26,11 @@ def route_name(bot: str, channel_id: str) -> str:
     return f"pal-discord-{bot}-{channel_id}"
 
 
+DIRECT_PREFIX = "pal-discord-dm-"
+
+
 def direct_route_name(channel_id: str) -> str:
-    return f"pal-discord-dm-{channel_id}"
+    return f"{DIRECT_PREFIX}{channel_id}"
 
 
 class RouteConflict(Exception):
@@ -64,6 +67,18 @@ class ProfileRoutes:
 
     def clear_direct(self, channel_id: str) -> bool:
         return self._drop(direct_route_name(channel_id))
+
+    def clear_direct_for(self, bot: str) -> bool:
+        from hermes_cli.config import load_config, save_config
+        with self._scope():
+            config = load_config()
+            current = self._read(config)
+            kept = [e for e in current if not (str(e.get("name", "")).startswith(DIRECT_PREFIX) and e.get("profile") == bot)]
+            if len(kept) == len(current):
+                return False
+            config[PROFILE_ROUTES_KEY] = kept
+            save_config(config)
+        return True
 
     def _put(self, wanted: dict[str, Any]) -> bool:
         from hermes_cli.config import load_config, save_config
