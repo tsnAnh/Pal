@@ -19,7 +19,6 @@ from hermes_cli.config import (
 from hermes_cli.colors import Colors, color
 from hermes_constants import display_hermes_home
 from hermes_cli.mcp_security import validate_mcp_server_entry
-from hermes_cli.profile_admin_guard import ProfileAdminDenied
 from hermes_cli.shared_catalog_connectors import owner_write, owner_write_scope, requested_profile_home
 from tools.mcp_tool_config import _ENV_VAR_PATTERN
 from tools.mcp_tool_common import _env_ref_name, mcp_server_enabled
@@ -220,11 +219,7 @@ def drop_retired_device_servers(config: dict) -> dict:
     if not retired:
         return config
     # A leftover entry would lend its transport to a fresh add of the same name (mcp.servers.add repairs it in place).
-    try:
-        dropped = sum(_remove_mcp_server(name, everywhere=True) for name in retired)
-    except ProfileAdminDenied:
-        logger.warning("Retired device MCP servers stay in config: this bot cannot change shared servers")
-        return config
+    dropped = sum(_remove_mcp_server(name, everywhere=True) for name in retired)
     logger.info("Removed %d retired device MCP server entries from config", dropped)
     return load_config()
 
@@ -280,9 +275,6 @@ def _save_mcp_server(name: str, server_config: dict, *, force_shared: bool = Fal
         except SharedDefinitionConflict as exc:
             _error(str(exc))
             _info("To change it for every bot that uses it, re-run with --replace-shared.")
-            return False
-        except ProfileAdminDenied as exc:
-            _error(str(exc))
             return False
     else:
         config.setdefault("mcp_servers", {})[name] = server_config
@@ -385,7 +377,7 @@ def _replace_mcp_servers(servers: dict[str, dict], *, force_shared: bool = False
     if servers and catalog_active():
         try:
             config["mcp_servers"] = replace_servers(servers, force_shared=force_shared)
-        except (SharedDefinitionConflict, ProfileAdminDenied) as exc:
+        except SharedDefinitionConflict as exc:
             return False, [str(exc)]
     elif servers:
         config["mcp_servers"] = dict(servers)
@@ -850,11 +842,7 @@ def cmd_mcp_remove(args):
     everywhere = bool(getattr(args, "everywhere", False))
     from hermes_cli.shared_catalog import home_is_root, is_root_owned, shared_mcp_names
     root_owned = not home_is_root(requested_profile_home()) and is_root_owned(name)
-    try:
-        _remove_mcp_server(name, everywhere=everywhere)
-    except ProfileAdminDenied as exc:
-        _error(str(exc))
-        return
+    _remove_mcp_server(name, everywhere=everywhere)
     if root_owned:
         _success(f"Disconnected '{name}' for every bot")
     elif name in shared_mcp_names():
@@ -1333,11 +1321,7 @@ def mcp_command(args):
         else:
             import sys as _sys
             identifier = getattr(args, "identifier", "") or ""
-            try:
-                rc = _install_with_shell_keys(identifier, mcp_picker)
-            except ProfileAdminDenied as exc:
-                _error(str(exc))
-                rc = 1
+            rc = _install_with_shell_keys(identifier, mcp_picker)
             if rc:
                 _sys.exit(rc)
         return
@@ -1348,13 +1332,9 @@ def mcp_command(args):
     }.get(action)
     if handler:
         # A handler's int return is the process exit code (``main()`` exits non-zero on it).
-        try:
-            name = getattr(args, "name", None)
-            with owner_write_scope(name) if action in _OWNER_WRITE_ACTIONS else contextlib.nullcontext():
-                return _with_shell_keys(action, name, lambda: handler(args))
-        except ProfileAdminDenied as exc:
-            _error(str(exc))
-            return 1
+        name = getattr(args, "name", None)
+        with owner_write_scope(name) if action in _OWNER_WRITE_ACTIONS else contextlib.nullcontext():
+            return _with_shell_keys(action, name, lambda: handler(args))
     # No subcommand — drop the user into the catalog picker (same UX as `hermes plugin`).
     from hermes_cli.mcp_picker import run_picker
     run_picker()

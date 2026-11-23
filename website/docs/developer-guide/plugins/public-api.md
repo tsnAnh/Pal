@@ -99,7 +99,6 @@ with a name allows that one name only.
 | `gateway.platforms.access_policy_mixin` | `OwnAccessPolicyMixin` | adding-platform-adapters.md § Public helpers for platform plugins |
 | `tools.approval` | `resolve_gateway_approval` | adding-platform-adapters.md § Public helpers for platform plugins |
 | `tools.approval` | `resolve_gateway_approval_card` | adding-platform-adapters.md § Public helpers for platform plugins |
-| `gateway.approval_actor` | `approval_refusal` | adding-platform-adapters.md § Public helpers for platform plugins |
 | `gateway.approval_actor` | `refusal_text` | adding-platform-adapters.md § Public helpers for platform plugins |
 | `gateway.approval_actor` | `slash_confirm_refusal` | adding-platform-adapters.md § Public helpers for platform plugins |
 | `gateway.approval_actor` | `clarify_refusal` | adding-platform-adapters.md § Public helpers for platform plugins |

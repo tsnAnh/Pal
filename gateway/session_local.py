@@ -94,11 +94,6 @@ class LocalSessionAdapter(BasePlatformAdapter):
     async def get_chat_info(self, chat_id):
         return {'id': chat_id, 'type': 'dm'}
 
-    async def send_exec_approval(self, **kwargs):
-        # The existing callback owns registration in PendingControls. An ACK here
-        # selects that rendering path without a plaintext fallback or a second waiter.
-        return SendResult(success=True, message_id=uuid.uuid4().hex)
-
     async def send_clarify(self, chat_id, question, choices, clarify_id, session_key, metadata=None):
         error = self._unanswerable_clarify(chat_id)
         if error is not None:

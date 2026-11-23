@@ -144,7 +144,7 @@ from gateway.authz_mixin import _coerce_allow_set
 from agent.i18n import get_language, t
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import (
-    BasePlatformAdapter, ExecApprovalPrompt, SendResult, unauthorized_action_notice,
+    BasePlatformAdapter, SendResult, unauthorized_action_notice,
     cache_image_from_bytes_async, cache_audio_from_bytes_async, cache_video_from_bytes_async, resolve_proxy_url, safe_proxy_url_for_log, describe_proxy_error, SUPPORTED_VIDEO_TYPES,
     SUPPORTED_DOCUMENT_TYPES, SUPPORTED_IMAGE_DOCUMENT_TYPES, _TEXT_INJECT_EXTENSIONS, utf16_len, env_proxy_for_redaction,
 )
@@ -158,14 +158,6 @@ def _unauthorized() -> str:  # one sentence for every refused tap, resolved per 
 
 def _toast(key: str, **kwargs: Any) -> str:  # ``t()`` for ``query.answer(text=...)``, cut at the toast cap
     return t(key, **kwargs)[:_TOAST_LIMIT]
-
-
-def _bold_label_html(line: str) -> str:
-    """HTML-bold the ``Label:`` prefix of a translated line (whole line when it has no colon)."""
-    label, sep, rest = line.partition(":")
-    if not sep:
-        return f"<b>{_html.escape(line)}</b>"
-    return f"<b>{_html.escape(label)}:</b>{_html.escape(rest)}"
 
 
 # Inbound-media ``kind`` labels are dual-use: the English word stays in the agent-visible observed note,
@@ -597,8 +589,6 @@ class TelegramAdapter(TelegramContactMixin, TelegramHeldInboundMixin, TelegramRe
         self._max_doc_bytes: int = 2 * 1024 * 1024 * 1024 if extra.get("base_url") else 20 * 1024 * 1024
         self._model_picker_state: dict[str, dict] = {}  # per-chat interactive picker state
         self._choice_picker_state: dict[str, dict] = {}
-        self._approval_state: dict[int, str] = {}  # message_id → session_key
-        self._approval_request_ids: dict[int, str] = {}  # message_id → tools.approval request id
         self._slash_confirm_state: dict[str, str] = {}  # confirm_id → session_key
         self._clarify_state: dict[str, ClarifyPrompt] = {}  # clarify_id → prompt bound to its sent message
         self._clarify_multi: dict[str, set[int]] = {}  # clarify_id → checked indices (multi-select only)
@@ -3810,56 +3800,6 @@ class TelegramAdapter(TelegramContactMixin, TelegramHeldInboundMixin, TelegramRe
         return await self._send_prompt(
             "send_update_prompt", chat_id, metadata, build, thread_id=self._metadata_thread_id(metadata), reply_to_mode=self._reply_to_mode)
 
-    # Template attrs for the shared _format_exec_approval core (HTML mode). Properties, not class
-    # constants: the wording comes from the catalog for the language active at send time, and the
-    # translated text is HTML-escaped BEFORE the <b> wrapper (a stray ``&``/``<`` would break the card).
-    @property
-    def _EA_HEADER(self) -> str:
-        return f"⚠️ <b>{_html.escape(t('gateway.exec_approval.header'))}</b>\n\n"
-
-    _EA_CODE_OPEN = "<pre>"
-    _EA_CODE_CLOSE = "</pre>\n\n"
-
-    @property
-    def _EA_REASON_LABEL(self) -> str:
-        return f"{_html.escape(t('gateway.exec_approval.reason_label'))}: "
-
-    @property
-    def _EA_SMART_DENY_LINE(self) -> str:
-        return "\n\n" + _bold_label_html(t("gateway.exec_approval.smart_deny_line"))
-
-    _EA_REASON_BUDGET = 500  # escaped chars; the reason shares the 4096 cap with the command
-    # Telegram rejects the whole card ("Message is too long") and the gateway then falls back to the text
-    # /approve prompt, so the preview is budgeted in UTF-16 units against what the framing leaves of the cap.
-    _EA_CARD_CAP = MAX_MESSAGE_LENGTH
-
-    def _ea_escape(self, text: str) -> str:
-        return _html.escape(text)
-
-    @property
-    def _EA_ACTION_LABELS(self) -> dict[str, str]:
-        # Shorter than the base wording on purpose: two buttons share a row on mobile.
-        return {choice: t(f"platform.telegram.approval.action_{choice}") for choice in ("once", "session", "always", "deny")}
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Inline-keyboard approval prompt; buttons call ``resolve_gateway_approval()`` like the
-        text ``/approve`` flow."""
-        def build():
-            # Short ids in callback_data map back to session_key; restart-unique (prompt_id_counter).
-            if not hasattr(self, "_approval_counter"):
-                self._approval_counter = prompt_id_counter()
-            approval_id = next(self._approval_counter)
-            buttons = [InlineKeyboardButton(label, callback_data=f"ea:{choice}:{approval_id}")
-                       for label, choice, _ in prompt.actions]
-            def on_sent(_msg):
-                self._approval_state[approval_id] = prompt.session_key
-                if prompt.request_id:
-                    self._approval_request_ids[approval_id] = prompt.request_id
-            return prompt.text, InlineKeyboardMarkup(self._rows_of_two(buttons)), on_sent
-        return await self._send_prompt(
-            "send_exec_approval", prompt.chat_id, prompt.metadata, build, parse_mode=ParseMode.HTML,
-            thread_id=self._metadata_thread_id(prompt.metadata), reply_to_mode=self._reply_to_mode)
-
     async def send_slash_confirm(
         self, chat_id: str, title: str, message: str, session_key: str, confirm_id: str,
         metadata: Optional[dict[str, Any]] = None) -> SendResult:
@@ -3872,7 +3812,7 @@ class TelegramAdapter(TelegramContactMixin, TelegramHeldInboundMixin, TelegramRe
                 [InlineKeyboardButton(t("platform.telegram.slash_confirm.cancel"), callback_data=f"sc:cancel:{confirm_id}")],
            ])
             # Budget the MarkdownV2 rendering (escaping expands text), not the raw message.
-            preview = self.format_message(self._ea_fit(
+            preview = self.format_message(self._fit_preview(
                 message, self.MAX_MESSAGE_LENGTH - utf16_len(self.format_message("...")), escape=self.format_message))
             return preview, keyboard, lambda msg: self._slash_confirm_state.__setitem__(confirm_id, session_key)
         return await self._send_prompt(
@@ -4326,7 +4266,7 @@ class TelegramAdapter(TelegramContactMixin, TelegramHeldInboundMixin, TelegramRe
                         await handler(query, data, chat_id)
                 return
         for prefix, handler in (
-            ("gt:", self._handle_gmail_triage_callback), ("ea:", self._handle_exec_approval_callback),
+            ("gt:", self._handle_gmail_triage_callback),
             ("sc:", self._handle_slash_confirm_callback), ("cl:", self._handle_clarify_callback),
             ("update_prompt:", self._handle_update_prompt_callback)):
             if data.startswith(prefix):
@@ -4343,50 +4283,6 @@ class TelegramAdapter(TelegramContactMixin, TelegramHeldInboundMixin, TelegramRe
         if not session_key:
             await answer_callback(query, resolved)
         return session_key
-
-    async def _handle_exec_approval_callback(self, query, data: str, cb: dict[str, Any]) -> None:
-        """``ea:<choice>:<approval_id>`` — resolve a pending exec approval."""
-        parts = data.split(":", 2)
-        if len(parts) != 3:
-            return
-        choice = parts[1]  # once, session, always, deny
-        try:
-            approval_id = int(parts[2])
-        except (ValueError, IndexError):
-            return await answer_callback(query, _toast("platform.telegram.approval.toast_invalid_data"))
-        resolved = _toast("platform.telegram.approval.toast_already_resolved")
-        if not (session_key := await self._claim_callback_state(
-                query, cb, self._approval_state, approval_id, _unauthorized(), resolved, pop=False)):
-            return
-        from gateway.approval_actor import approval_refusal, refusal_text
-        request_id = self._approval_request_ids.get(approval_id)
-        if requester := approval_refusal(session_key, getattr(query.from_user, "id", ""), extra=self.config.extra, request_id=request_id, choice=choice):
-            return await answer_callback(query, refusal_text(requester)[:_TOAST_LIMIT], show_alert=True)
-        if not self._approval_state.pop(approval_id, None):  # a concurrent tap claimed it first
-            return await answer_callback(query, resolved)
-        self._approval_request_ids.pop(approval_id, None)
-        user_display = getattr(query.from_user, "first_name", None) or t("platform.telegram.user_fallback")
-        try:  # resolve FIRST, render after: a tap after the wait timed out (count == 0) is not "Approved" (#63501)
-            from tools.approval import resolve_gateway_approval_card
-            count = resolve_gateway_approval_card(session_key, choice, request_id,
-                                                  actor_id=getattr(query.from_user, "id", ""), extra=self.config.extra)
-            logger.info("Telegram button resolved %d approval(s) for session %s (choice=%s, user=%s)", count, session_key, choice, getattr(query.from_user, "id", None))
-        except Exception as exc:
-            logger.error("Failed to resolve gateway approval from Telegram button: %s", exc)
-            count = 0
-        if count:
-            label_key = {"once": "resolved_once", "session": "resolved_session", "always": "resolved_always", "deny": "resolved_deny"}.get(
-                choice, "resolved_generic")
-            label = t(f"platform.telegram.approval.{label_key}")
-            edit_text = t("platform.telegram.approval.resolved_by_user", label=label, user=user_display)
-        else:
-            label = t("platform.telegram.approval.expired")
-            edit_text = t("platform.telegram.approval.expired_detail", label=label)
-        await answer_callback(query, label[:_TOAST_LIMIT])
-        await edit_keeping_prompt(self, query, edit_text)
-        # Typing was paused when the approval was sent; the text /approve and /deny paths resume it too.
-        if count and cb["chat_id"] is not None:
-            self.resume_typing_for_chat(str(cb["chat_id"]))
 
     async def _handle_slash_confirm_callback(self, query, data: str, cb: dict[str, Any]) -> None:
         """``sc:<choice>:<confirm_id>`` — resolve a slash-command confirmation."""

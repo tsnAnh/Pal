@@ -2382,9 +2382,6 @@ def _dashboard_prepare_runtime(args, headless_backend) -> bool:
 
 def cmd_dashboard(args):
     """Start the web UI server, or (with --stop/--status) manage running ones."""
-    from hermes_cli.profile_admin_guard import leave_agent_context
-
-    leave_agent_context()
     _token_file = getattr(args, "ssh_session_token_file", None)
     _dashboard_lifecycle_flags(args, _token_file)
 

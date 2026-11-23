@@ -674,8 +674,4 @@ def cmd_profile(args):
     """Profile management — create, delete, list, switch, alias."""
     handler = PROFILE_ACTIONS.get(getattr(args, "profile_action", None))
     if handler is not None:
-        from hermes_cli.profile_admin_guard import ProfileAdminDenied
-        try:
-            return handler(args)
-        except ProfileAdminDenied as exc:
-            _die(f"Error: {exc}", err=True)
+        return handler(args)

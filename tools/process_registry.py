@@ -1097,10 +1097,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
     def _spawn_env(env_vars: dict) -> dict:
         """Sanitized child env from the served profile's base, as foreground commands; PYTHONUNBUFFERED."""
         from agent.session_client_env import toolchain_environ
-        from hermes_cli.profile_admin_guard import agent_tool_env
-        return agent_tool_env(
-            _terminal_env(_sanitize_subprocess_env(toolchain_environ(routed_terminal_base()), env_vars))
-            | {"PYTHONUNBUFFERED": "1"})
+        return (_terminal_env(_sanitize_subprocess_env(toolchain_environ(routed_terminal_base()), env_vars))
+                | {"PYTHONUNBUFFERED": "1"})
 
     def _track_started(self, session: ProcessSession, reader_target, reader_name: str, extra_args=()) -> None:
         """Register before the reader can publish completion, even for an exited child."""

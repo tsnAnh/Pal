@@ -1,7 +1,7 @@
-"""QQ Bot inline keyboards + approval / update-prompt helpers. A button click dispatches an
+"""QQ Bot inline keyboards + update-prompt helpers. A button click dispatches an
 ``INTERACTION_CREATE`` event carrying the button's ``data``; the bot must ACK promptly via
 ``PUT /interactions/{id}`` or the user sees an error indicator. ``button_data`` formats:
-``approve:<session_key>:<decision>[:<request_id>]`` (allow-once|allow-always|deny) and ``update_prompt:<answer>`` (y|n).
+``update_prompt:<answer>`` (y|n).
 Ported from WideLee's qqbot-agent-sdk v1.2.2 (authorship via Co-authored-by)."""
 
 from __future__ import annotations
@@ -10,12 +10,8 @@ import re
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, List, Optional
 
-APPROVAL_BUTTON_PREFIX = "approve:"
 UPDATE_PROMPT_PREFIX = "update_prompt:"
 
-# session_key may itself contain colons (agent:main:qqbot:c2c:OPENID): greedy group, decision trails.
-# The request id trails, so a card from an older build (no id) still parses.
-_APPROVAL_DATA_RE = re.compile(r"^approve:(.+):(allow-once|allow-always|deny)(?::([0-9A-Za-z_-]+))?$")
 _UPDATE_PROMPT_RE = re.compile(r"^update_prompt:(y|n)$")
 
 def _to_dict(value: Any) -> Any:
@@ -78,16 +74,6 @@ class InlineKeyboard(_Serializable):
     content: KeyboardContent = field(default_factory=KeyboardContent)
 
 
-def parse_approval_button_data(button_data: str) -> Optional[tuple[str, str]]:
-    """Parse approval ``button_data`` into ``(session_key, decision)`` or ``None``."""
-    return m.groups()[:2] if (m := _APPROVAL_DATA_RE.match(button_data or "")) else None
-
-
-def approval_button_request_id(button_data: str) -> Optional[str]:
-    """The request id an approval button was built for; ``None`` on a card from an older build."""
-    return m.group(3) if (m := _APPROVAL_DATA_RE.match(button_data or "")) else None
-
-
 def parse_update_prompt_button_data(button_data: str) -> Optional[str]:
     """Parse update-prompt ``button_data`` into ``'y'`` / ``'n'`` or ``None``."""
     return m.group(1) if (m := _UPDATE_PROMPT_RE.match(button_data or "")) else None
@@ -102,65 +88,10 @@ def _single_row_keyboard(group_id: str, *buttons: tuple) -> InlineKeyboard:
     return InlineKeyboard(content=KeyboardContent(rows=[row]))
 
 
-def build_approval_keyboard(session_key: str, *, allow_permanent: bool = True, allow_once: bool = True,
-                            request_id: Optional[str] = None) -> InlineKeyboard:
-    """Build ``[✅ 允许一次] [⭐ 始终允许] [❌ 拒绝]`` (one group, so a click greys the rest). ⭐ is hidden when
-    persistent scope is unavailable; *session_key* and *request_id* ride in ``button_data`` so a click
-    resolves exactly the request its card was sent for."""
-    prefix = f"{APPROVAL_BUTTON_PREFIX}{session_key}"
-    rid = f":{request_id}" if request_id else ""
-    buttons = [("allow", "✅ 允许一次", "已允许", f"{prefix}:allow-once{rid}", 1)] if allow_once else []
-    if allow_once and allow_permanent:
-        buttons.append(("always", "⭐ 始终允许", "已始终允许", f"{prefix}:allow-always{rid}", 1))
-    buttons.append(("deny", "❌ 拒绝", "已拒绝", f"{prefix}:deny{rid}", 0))
-    return _single_row_keyboard("approval", *buttons)
-
-
 def build_update_prompt_keyboard() -> InlineKeyboard:
     """Build a Yes/No keyboard for update confirmation prompts."""
     return _single_row_keyboard("update_prompt", ("yes", "✓ 确认", "已确认", f"{UPDATE_PROMPT_PREFIX}y", 1),
                                 ("no", "✗ 取消", "已取消", f"{UPDATE_PROMPT_PREFIX}n", 0))
-
-
-@dataclass
-class ApprovalRequest:
-    """Approval-request display data. ``command_preview`` / ``cwd`` are set for exec approvals, ``tool_name``
-    for plugin approvals; ``severity`` is ``'critical' | 'info' | ''``."""
-    session_key: str
-    title: str
-    description: str = ""
-    command_preview: str = ""
-    cwd: str = ""
-    tool_name: str = ""
-    severity: str = ""
-    timeout_sec: int = 120
-    allow_permanent: bool = True
-    request_id: str = ""  # the tools.approval request this card answers (and only that one)
-
-
-_SEVERITY_ICONS = {"critical": "🔴", "info": "🔵"}
-
-
-def build_approval_text(req: ApprovalRequest) -> str:
-    """Render an :class:`ApprovalRequest` into the message body (markdown)."""
-    if req.command_preview or req.cwd:
-        lines = ["🔐 **命令执行审批**", ""]
-        if req.command_preview:
-            lines.append(f"```\n{req.command_preview[:300]}\n```")
-        if req.cwd:
-            lines.append(f"📁 目录: {req.cwd}")
-        if req.title and req.title != req.command_preview:
-            lines.append(f"📋 {req.title}")
-        if req.description:
-            lines.append(f"📝 {req.description}")
-    else:
-        lines = [f"{_SEVERITY_ICONS.get(req.severity, '🟡')} **审批请求**", "", f"📋 {req.title}"]
-        if req.description:
-            lines.append(f"📝 {req.description}")
-        if req.tool_name:
-            lines.append(f"🔧 工具: {req.tool_name}")
-    lines += ["", f"⏱️ 超时: {req.timeout_sec} 秒"]
-    return "\n".join(lines)
 
 
 @dataclass

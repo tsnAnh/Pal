@@ -42,7 +42,7 @@ from agent.i18n import t
 from agent.retry_utils import parse_retry_after_seconds
 from agent.secret_scope import get_secret
 from gateway.config import Platform, PlatformConfig
-from gateway.approval_actor import approval_refusal, clarify_refusal, refusal_text, slash_confirm_refusal
+from gateway.approval_actor import clarify_refusal, refusal_text, slash_confirm_refusal
 from gateway.platforms._shared import (
     apply_yaml_bridge as _apply_yaml_bridge, env_is_connected as _env_is_connected,
     extra_or_secret as _extra_or_secret, get_scoped_secret as _get_scoped_secret,
@@ -56,7 +56,7 @@ from plugins.platforms.slack.owner_cards import SlackOwnerDeskMixin
 from plugins.platforms.slack.adapter_config_readers import (
     _extra_or_env_channel_set_getter, _extra_or_env_flag_getter)
 from gateway.platforms.base import (
-    gateway_trust_env, BasePlatformAdapter, ExecApprovalPrompt,
+    gateway_trust_env, BasePlatformAdapter,
     SendResult, SUPPORTED_DOCUMENT_TYPES, SUPPORTED_VIDEO_TYPES, _TEXT_INJECT_EXTENSIONS,
     is_host_excluded_by_no_proxy, resolve_proxy_url, safe_proxy_url_for_log, ssrf_redirect_guard, describe_proxy_error,
     cache_document_from_bytes_async, cache_video_from_bytes_async,
@@ -1023,7 +1023,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
     _ASSISTANT_THREADS_MAX = _AGENT_VIEW_CONTEXTS_MAX = _THREAD_REHYDRATION_CHECKED_MAX = 5000
     _REACTING_MESSAGE_IDS_MAX = _TITLED_ASSISTANT_THREADS_MAX = 5000
     _CHANNEL_TEAM_MAX = 10000
-    _APPROVAL_RESOLVED_MAX = _CLARIFY_RESOLVED_MAX = _ACTIVE_STATUS_THREADS_MAX = 1000
+    _CLARIFY_RESOLVED_MAX = _ACTIVE_STATUS_THREADS_MAX = 1000
     _CLARIFY_MESSAGE_MAX = 1000
     # Tighter cap than the approval/clarify dicts: each entry holds the
     # full provider list, and a picker is only live for minutes.
@@ -1069,17 +1069,15 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
         self._dedup = MessageDeduplicator(ttl_seconds=_slack_dedup_ttl_seconds())
         # ts of messages already routed to the agent, so later edits don't re-trigger a reply.
         self._processed_message_ts: dict[str, float] = {}
-        # approval / clarify message_ts (or (team_id, ts)) → resolved; blocks double-clicks.
+        # clarify message_ts (or (team_id, ts)) → resolved; blocks double-clicks.
         # Bounded: never-clicked prompts would otherwise leak forever.
-        self._approval_resolved: dict[Any, bool] = {}
-        self._approval_request_ids: dict[Any, str] = {}  # same key → tools.approval request id
         self._clarify_resolved: dict[Any, bool] = {}
         # clarify_id → (channel_id, message_ts, rendered_question) so the gateway can retire a
         # card whose clarify ended without a click (timeout, reset, superseding prose).
         self._clarify_messages: dict[str, tuple[str, str, str]] = {}
         # Model picker state keyed by workspace message marker (team_id, ts) →
         # picker context (providers, session_key, on_model_selected, stage).
-        # Mirrors _approval_resolved / _clarify_resolved: bounded, and the
+        # Mirrors _clarify_resolved: bounded, and the
         # marker scopes entries per workspace so multi-workspace installs
         # never resolve a picker against another tenant's session.
         self._model_picker_state: dict[Any, dict] = {}
@@ -1665,9 +1663,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
 
         self._app.command(_slash_pattern)(self._handle_hermes_command)
 
-        # Approval buttons, slash-confirm buttons (tools/slash_confirm.py), feedback.
-        for _action_id in self._APPROVAL_CHOICES:
-            self._app.action(_action_id)(self._handle_approval_action)
+        # Slash-confirm buttons (tools/slash_confirm.py), feedback.
         for _action_id in self._CONFIRM_CHOICES:
             self._app.action(_action_id)(self._handle_slash_confirm_action)
         self._app.action("hermes_feedback")(self._handle_feedback_action)
@@ -5030,54 +5026,13 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
             logger.error("[Slack] %s failed: %s", label, e, exc_info=True)
             return SendResult(success=False, error=str(e))
 
-    # The fence uses the base's own-line opener/closer: a fence touching the command's own backticks
-    # would merge into one longer run.
-    # Resolved per call (not at class-body time) so the active language applies; the budget
-    # below measures ``len()`` of these resolved strings against the 3000-char section cap.
-    @property
-    def _EA_HEADER(self) -> str:
-        return f":warning: *{t('gateway.exec_approval.header')}*\n"
-
-    @property
-    def _EA_SMART_DENY_LINE(self) -> str:
-        line = t("gateway.exec_approval.smart_deny_line")
-        label, sep, rest = line.partition(":")
-        return "\n" + (f"*{label}{sep}*{rest}" if sep else line)
-
-    _EA_REASON_BUDGET = 500
-    _EA_CARD_CAP = 3000  # section text cap: a longer one → invalid_blocks → no buttons at all
-    _EA_ACTION_IDS = {"once": "hermes_approve_once", "session": "hermes_approve_session",
-                      "always": "hermes_approve_always", "deny": "hermes_deny"}
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Block Kit approval prompt; the buttons call ``resolve_gateway_approval()`` to unblock the
-        waiting agent thread — same mechanism as the text ``/approve`` flow."""
-
-        def _build() -> tuple[str, list]:
-            actions = [
-                self._button(label, self._EA_ACTION_IDS[choice], prompt.session_key, style=style)
-                for label, choice, style in prompt.actions]
-            blocks = [
-                {"type": "section", "text": {"type": "mrkdwn", "text": prompt.text}},
-                {"type": "actions", "elements": actions}]
-            return t("platform.slack.approval.fallback_text", command=prompt.command[:100]), blocks
-
-        result = await self._send_interactive_prompt(
-            prompt.chat_id, prompt.metadata, _build, "send_exec_approval",
-            resolved=self._approval_resolved, resolved_max=self._APPROVAL_RESOLVED_MAX)
-        if result.success and prompt.request_id:  # keyed like the double-click guard
-            key = self._workspace_message_marker(self._metadata_team_id(prompt.metadata), result.message_id)
-            self._approval_request_ids[key] = prompt.request_id
-            self._trim_oldest_dict_entries(self._approval_request_ids, self._APPROVAL_RESOLVED_MAX)
-        return result
-
     async def send_slash_confirm(
         self, chat_id: str, title: str, message: str, session_key: str, confirm_id: str,
         metadata: Optional[dict[str, Any]] = None) -> SendResult:
         """Send a Block Kit three-option slash-command confirmation prompt."""
 
         def _build() -> tuple[str, list]:
-            # Same 3000-char section cap as send_exec_approval: budget the body
+            # 3000-char section cap: budget the body
             # against the rendered title.
             _title = (title or t("platform.slack.confirm.default_title"))[:150]
             budget = 3000 - len(f"*{_title}*\n\n") - len("...")
@@ -5529,7 +5484,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
             return body, blocks
 
         # Bare-ts key (not workspace-scoped) so the action handler's atomic-pop guard
-        # can reject double-clicks (mirrors _approval_resolved).
+        # can reject double-clicks (mirrors _clarify_resolved).
         result = await self._send_interactive_prompt(
             chat_id, metadata, _build, "send_clarify",
             resolved=self._clarify_resolved, resolved_max=self._CLARIFY_RESOLVED_MAX,
@@ -5644,13 +5599,6 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
             logger.warning("[Slack] Failed to update %s message: %s", label, e)
 
     # Button action_id → choice, and choice → outcome text (``{user}`` = clicker's name).
-    _APPROVAL_CHOICES: ClassVar[dict[str, str]] = {
-        "hermes_approve_once": "once", "hermes_approve_session": "session",
-        "hermes_approve_always": "always", "hermes_deny": "deny"}
-    # choice → catalog key; resolved through ``t()`` at click time so the active language applies.
-    _APPROVAL_DECISION_KEYS: ClassVar[dict[str, str]] = {
-        "once": "platform.slack.approval.resolved_once", "session": "platform.slack.approval.resolved_session",
-        "always": "platform.slack.approval.resolved_always", "deny": "platform.slack.approval.resolved_deny"}
     _CONFIRM_CHOICES: ClassVar[dict[str, str]] = {
         "hermes_confirm_once": "once", "hermes_confirm_always": "always",
         "hermes_confirm_cancel": "cancel"}
@@ -5710,40 +5658,6 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
             await self._get_client(channel_id, team_id=self._event_team_id({}, body) or None).chat_postEphemeral(
                 channel=channel_id, user=user_id, text=refusal_text(requester), thread_ts=(body.get("message") or {}).get("thread_ts"))
         return bool(requester)
-
-    async def _handle_approval_action(self, ack, body, action) -> None:
-        """Handle an approval button click from Block Kit."""
-        if (started := await self._begin_interaction(ack, body, action, "approval")) is None:
-            return
-        team_id, action_id, session_key, message, msg_ts, channel_id, user_name, user_id = started
-        choice = self._APPROVAL_CHOICES.get(action_id, "deny")
-        # The bare ts too: stored without a team id, clicked with one.
-        approval_key = msg_ts if msg_ts in self._approval_resolved else self._workspace_message_marker(team_id, msg_ts)
-        if await self._refuse_other_requester(approval_refusal(
-                session_key, user_id, extra=self.config.extra, request_id=self._approval_request_ids.get(approval_key),
-                choice=choice), body):
-            return
-        if self._approval_resolved.pop(approval_key, True):  # double-click guard (atomic pop)
-            return
-        request_id = self._approval_request_ids.pop(approval_key, None)
-        # Resolve FIRST (unblocks the agent); render after so a click past the
-        # timeout (count == 0) shows "expired", not "approved".
-        try:
-            from tools.approval import resolve_gateway_approval_card
-            count = resolve_gateway_approval_card(session_key, choice, request_id, actor_id=user_id,
-                                                  extra=self.config.extra)
-            logger.info(
-                "Slack button resolved %d approval(s) for session %s (choice=%s, user=%s)", count,
-                session_key, choice, user_id)
-        except Exception as exc:
-            logger.error("Failed to resolve gateway approval from Slack button: %s", exc)
-            count = 0
-        decision_text = t(self._APPROVAL_DECISION_KEYS[choice], user=user_name)
-        if not count:
-            decision_text = t("platform.shared.approval_expired")
-        await self._finalize_interactive_message(
-            channel_id, msg_ts, self._section_text(message).replace(self._ea_deadline_line(), ""), decision_text,
-            "Command approval request", "approval", team_id or None)
 
     async def _update_clarify_message(
         self, channel_id: str, msg_ts: str, question_text: str, decision_text: str) -> None:

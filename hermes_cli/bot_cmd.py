@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import NoReturn
 
 from hermes_cli._startup_fast import project_root_str
-from hermes_cli.profile_admin_guard import ProfileAdminDenied
 from tools.environments.local import build_subprocess_env
 
 logger = logging.getLogger(__name__)
@@ -189,7 +188,7 @@ def _bot_create(args) -> None:
             args.bot_name, display_name=getattr(args, "display_name", None),
             description=getattr(args, "description", None), soul=soul,
         )
-    except (BotCreateError, ValueError, ProfileAdminDenied) as exc:
+    except (BotCreateError, ValueError) as exc:
         _die(str(exc))
     if getattr(args, "json", False):
         print(json.dumps({"name": canon, "home": str(profile_dir)}))
