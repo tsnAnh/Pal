@@ -17,6 +17,10 @@ enum StepFlowLayout {
     var fillsWidth: Bool { self == .stacked }
     var keepsLinksInContent: Bool { self == .stepper }
 
+    func footerLayout(at size: DynamicTypeSize) -> StepFlowLayout {
+        size.isAccessibilitySize ? .stacked : self
+    }
+
     var contentInsets: EdgeInsets {
         switch self {
         case .stepper:
