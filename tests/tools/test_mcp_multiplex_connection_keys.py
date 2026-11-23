@@ -454,3 +454,22 @@ def test_adopter_scope_setup_failure_leaks_no_override_and_continues(two_profile
     assert get_hermes_home_override() is None
     assert ss.current_secret_scope() is None
     assert registered == [{"x": {"url": "https://mcp.example/x"}}]
+
+
+def test_startup_summary_counts_an_adopted_connection_as_connected(two_profiles, caplog):
+    import logging
+
+    import tools.mcp_tool as core
+    from tools.mcp_tool_discovery import _log_summary
+
+    scope_a = two_profiles("a")
+    core._servers[(scope_a, "s")] = SimpleNamespace(_registered_tool_names=["mcp__s__t"])
+    core._server_tool_scopes[(scope_a, "s")] = {scope_a}
+    scope_b = two_profiles("b")
+    core._server_tool_scopes[(scope_a, "s")].add(scope_b)
+
+    with caplog.at_level(logging.INFO, logger="tools.mcp_tool"):
+        _log_summary("  MCP:", ["s"])
+
+    summaries = [r.getMessage() for r in caplog.records if "tool(s) from" in r.getMessage()]
+    assert summaries == ["  MCP: 1 tool(s) from 1 server(s)"], summaries
