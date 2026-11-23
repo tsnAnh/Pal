@@ -21,7 +21,7 @@ connectors:
 - id: aws-knowledge
   name: AWS Knowledge
   description: "Look up AWS documentation, API references and best practices."
-  icon: plugin_glyph
+  icon: aws-knowledge
   category: Hosting and infrastructure
   method: none
   mcp_url: https://knowledge-mcp.global.api.aws
@@ -151,7 +151,7 @@ connectors:
 - id: context7
   name: Context7
   description: "Look up current, version-specific documentation and code examples for software libraries."
-  icon: plugin_glyph
+  icon: context7
   category: Developer tools
   method: none
   mcp_url: https://mcp.context7.com/mcp
@@ -160,7 +160,7 @@ connectors:
 - id: craft
   name: Craft
   description: "Read and write documents, tasks and notes in your Craft space."
-  icon: plugin_glyph
+  icon: craft
   category: Docs and files
   method: mcp_oauth
   mcp_url: https://mcp.craft.do/my/mcp
@@ -178,7 +178,7 @@ connectors:
 - id: deepwiki
   name: DeepWiki
   description: "Ask questions about any public GitHub repository and read its generated documentation."
-  icon: plugin_glyph
+  icon: deepwiki
   category: Developer tools
   method: none
   mcp_url: https://mcp.deepwiki.com/mcp
@@ -187,7 +187,7 @@ connectors:
 - id: discord
   name: Discord
   description: "Read and send messages in the Discord servers you choose."
-  icon: plugin_glyph
+  icon: discord
   category: Communication
   method: bot_token_stdio
   verified: true
@@ -238,7 +238,7 @@ connectors:
 - id: discord_mcp
   name: Discord (your account)
   description: "Search and read the Discord servers and mentions your own account can see."
-  icon: plugin_glyph
+  icon: discord
   category: Communication
   method: oauth_client
   mcp_url: https://mcp.discord.com/mcp
@@ -369,7 +369,7 @@ connectors:
 - id: gamma
   name: Gamma
   description: "Generate and edit presentations, documents and sites in Gamma."
-  icon: plugin_glyph
+  icon: gamma
   category: Docs and files
   method: mcp_oauth
   sign_in: device
@@ -415,7 +415,7 @@ connectors:
 - id: google-ads
   name: Google Ads
   description: "Read campaign, ad group and keyword performance from your Google Ads account."
-  icon: plugin_glyph
+  icon: google-ads
   category: Monitoring and analytics
   method: oauth_client
   oauth:
@@ -434,7 +434,7 @@ connectors:
 - id: google-workspace
   name: Google Workspace
   description: "Work with your Gmail, Calendar, Drive, Docs and Sheets."
-  icon: plugin_glyph
+  icon: google-workspace
   category: Docs and files
   method: oauth_client
   oauth:
@@ -510,7 +510,7 @@ connectors:
 - id: higgsfield
   name: Higgsfield
   description: "Generate images and videos with Higgsfield and check on your creations."
-  icon: plugin_glyph
+  icon: higgsfield
   category: Design and web
   method: mcp_oauth
   mcp_url: https://mcp.higgsfield.ai/mcp
@@ -548,7 +548,7 @@ connectors:
 - id: microsoft-learn
   name: Microsoft Learn
   description: "Search official Microsoft, Azure and .NET documentation and code samples."
-  icon: plugin_glyph
+  icon: microsoft-learn
   category: Developer tools
   method: none
   mcp_url: https://learn.microsoft.com/api/mcp
@@ -575,7 +575,7 @@ connectors:
 - id: monday
   name: monday.com
   description: "Search and update boards, items and docs in your monday.com account."
-  icon: plugin_glyph
+  icon: monday
   category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.monday.com/mcp
@@ -584,7 +584,7 @@ connectors:
 - id: motherduck
   name: MotherDuck
   description: "Run SQL queries against your MotherDuck databases."
-  icon: plugin_glyph
+  icon: motherduck
   category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://api.motherduck.com/mcp
@@ -620,7 +620,7 @@ connectors:
 - id: paypal
   name: PayPal
   description: "Look up PayPal invoices, orders, products, subscriptions, disputes and transactions."
-  icon: plugin_glyph
+  icon: paypal
   category: Finance
   method: mcp_oauth
   mcp_url: https://mcp.paypal.com/mcp
@@ -669,7 +669,7 @@ connectors:
 - id: posthog
   name: PostHog
   description: "Query your PostHog analytics, feature flags, experiments and errors."
-  icon: plugin_glyph
+  icon: posthog
   category: Monitoring and analytics
   method: mcp_oauth
   mcp_url: https://mcp.posthog.com/mcp
@@ -706,7 +706,7 @@ connectors:
 - id: resend
   name: Resend
   description: "Send and manage emails, domains and contacts in your Resend account."
-  icon: plugin_glyph
+  icon: resend
   category: Communication
   method: mcp_oauth
   mcp_url: https://mcp.resend.com/mcp
@@ -716,7 +716,7 @@ connectors:
 - id: semgrep
   name: Semgrep
   description: "Scan code for security vulnerabilities with Semgrep."
-  icon: plugin_glyph
+  icon: semgrep
   category: Developer tools
   method: mcp_oauth
   mcp_url: https://mcp.semgrep.ai/mcp
@@ -734,7 +734,7 @@ connectors:
 - id: shopify
   name: Shopify
   description: "Search a Shopify store's products and policies and manage a cart for your customers."
-  icon: plugin_glyph
+  icon: shopify
   category: Sales and support
   method: none
   verified: true
@@ -743,7 +743,7 @@ connectors:
 - id: slack
   name: Slack
   description: "Read channels and send messages in your Slack workspace."
-  icon: plugin_glyph
+  icon: slack
   category: Communication
   method: bot_app
   verified: true
@@ -751,7 +751,7 @@ connectors:
 - id: slack_mcp
   name: Slack (your account)
   description: "Search and read Slack conversations and send messages as yourself."
-  icon: plugin_glyph
+  icon: slack
   category: Communication
   method: oauth_client
   mcp_url: https://mcp.slack.com/mcp
@@ -822,7 +822,7 @@ connectors:
 - id: t3code
   name: T3 Code
   description: "Start and manage coding threads in your T3 Code app."
-  icon: plugin_glyph
+  icon: t3code
   category: Developer tools
   method: mcp_oauth
   verified: false
@@ -849,7 +849,7 @@ connectors:
 - id: twilio-docs
   name: Twilio Docs
   description: "Search the Twilio developer documentation."
-  icon: plugin_glyph
+  icon: twilio-docs
   category: Developer tools
   method: none
   mcp_url: https://mcp.twilio.com/docs

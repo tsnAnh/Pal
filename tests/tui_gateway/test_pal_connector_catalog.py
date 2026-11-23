@@ -115,7 +115,7 @@ T3_URL = "http://100.101.102.103:3773/mcp"
 def test_t3code_is_not_connected_until_a_t3code_server_is_configured(work_home):
     row = _rows()["t3code"]
 
-    assert (row["method"], row["mcp_url"], row["status"], row["icon"]) == ("mcp_oauth", None, "not_connected", "plugin_glyph")
+    assert (row["method"], row["mcp_url"], row["status"], row["icon"]) == ("mcp_oauth", None, "not_connected", "t3code")
 
 
 def test_t3code_is_connected_once_signed_in_and_needs_reconnect_when_sign_in_expired(work_home, monkeypatch):

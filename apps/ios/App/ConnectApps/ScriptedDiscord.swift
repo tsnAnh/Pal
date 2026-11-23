@@ -42,7 +42,7 @@ struct ScriptedDiscord {
     func row() -> JSONValue {
         let step = connected ? "access" : tokenSaved ? "invite" : "bot"
         return [
-            "slug": "discord", "name": "Discord", "category": "Communication", "icon": "plugin_glyph", "method": "bot_token_stdio",
+            "slug": "discord", "name": "Discord", "category": "Communication", "icon": "discord", "method": "bot_token_stdio",
             "verified": true, "status": .string(connected ? "connected" : "not_connected"),
             "setup_guide": guide(), "setup_progress": ScriptedSetupGuides.progress(step, saved: tokenSaved ? ["token"] : []),
         ]

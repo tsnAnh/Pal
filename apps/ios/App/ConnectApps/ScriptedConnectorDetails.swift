@@ -78,7 +78,7 @@ actor ScriptedConnectorDetailsRPC: ConnectRPC {
     private func row(_ connector: Connector) -> JSONValue {
         let aggregate = connector.accounts.contains { $0.status == "connected" } ? "connected" : (connector.connected ? "needs_reconnect" : "not_connected")
         return [
-            "slug": .string(connector.slug), "name": .string(connector.name), "category": .string(connector.category), "icon": "plugin_glyph",
+            "slug": .string(connector.slug), "name": .string(connector.name), "category": .string(connector.category), "icon": .string(connector.slug),
             "method": .string(connector.method), "verified": true, "status": .string(aggregate), "multi_account": true,
             "mcp_url": .string("https://\(connector.host)/mcp"), "description": .string(connector.description),
             "source": .string("https://\(connector.host.replacingOccurrences(of: "mcp.", with: ""))/docs"),
