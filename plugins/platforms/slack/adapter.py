@@ -6114,7 +6114,7 @@ class SlackAdapter(SlackSocketLifecycleMixin, SlackVaultCodeMixin, SlackOwnerDes
         from hermes_cli.commands import resolve_command
         cmd = resolve_command(event.get_command() or "")
         controls_running_turn = cmd is not None and (
-            cmd.busy_policy == "interrupt_then_dispatch" or cmd.name in ("approve", "deny", "pause"))
+            cmd.busy_policy == "interrupt_then_dispatch" or cmd.name == "pause")
         lane = ahead = handed_off = None
         if not rejected and not controls_running_turn:
             lane = self._event_session_key(event)  # slot taken before any lookup is awaited

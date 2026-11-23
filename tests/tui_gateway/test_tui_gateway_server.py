@@ -3934,7 +3934,6 @@ def test_session_resume_profile_uses_profile_db_cwd(monkeypatch, tmp_path):
     from tools import approval
 
     monkeypatch.setattr(approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(approval, "load_permanent_allowlist", lambda: None)
 
     try:
         # eager_build: asserts the synchronous build receives the profile's db
@@ -6113,7 +6112,6 @@ def test_init_session_fires_reset_hook(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     sid = "sid"
     try:
@@ -15076,7 +15074,6 @@ def test_session_create_close_race_does_not_orphan_resources(monkeypatch):
         "unregister_gateway_notify",
         lambda key: unregistered_keys.append(key),
     )
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     # Start: session.create spawns _build thread, returns synchronously
     resp = server.handle_request(
@@ -15190,7 +15187,6 @@ def test_session_create_no_race_keeps_worker_alive(monkeypatch):
         "unregister_gateway_notify",
         lambda key: unregistered_keys.append(key),
     )
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     # Isolate from sibling-test leakage: daemon build threads from prior
     # session.create tests in the same shard process mutate the shared
@@ -15333,7 +15329,6 @@ def test_session_create_continues_when_state_db_is_unavailable(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {"id": "1", "method": "session.create", "params": {"cols": 80}}
@@ -16064,7 +16059,6 @@ def test_session_create_persists_seeded_branch_child(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     seeded = [
         {"role": "user", "content": "hello from parent"},
@@ -16191,7 +16185,6 @@ def test_session_create_branch_seed_failure_does_not_break_create(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {
@@ -16263,7 +16256,6 @@ def test_session_create_seed_failure_after_row_compensates(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {
@@ -16323,7 +16315,6 @@ def test_session_create_seed_disk_full_keeps_row_for_retry(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     records: list = []
 
@@ -16382,7 +16373,6 @@ def test_session_create_without_parent_still_defers_row(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {"id": "1", "method": "session.create", "params": {"cols": 80}}

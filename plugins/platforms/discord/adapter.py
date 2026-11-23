@@ -151,12 +151,6 @@ _NATIVE_SLASH_COMMAND_SPECS: tuple = (
      "/voice {mode}", None),
     ("update", "slash.update.description", (), "/update", "platform.discord.command.update.followup"),
     ("restart", "platform.discord.command.restart.description", (), "/restart", "platform.discord.command.restart.followup"),
-    ("approve", "slash.approve.description",
-     (("scope", str, "", "platform.discord.command.approve.arg_scope", None),),
-     "/approve {scope}", None),
-    ("deny", "platform.discord.command.deny.description",
-     (("scope", str, "", "platform.discord.command.deny.arg_scope", None),),
-     "/deny {scope}", None),
     # /thread: template None -> registered by _register_thread_slash (auth-gated defer).
     ("thread", "platform.discord.command.thread.description", (), None, None),
     ("queue", "platform.discord.command.queue.description",
