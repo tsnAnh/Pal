@@ -18,16 +18,18 @@ DEFAULT_TTL_SECONDS = 1800
 MAX_PENDING_DRAFTS = 200
 _GC_AFTER_EXPIRY_SECONDS = 7 * 24 * 3600
 _GC_STAGED_SECONDS = 3600
-_PENDING, _CLAIMED, _SENDING, _DISCARDED = "pending", "claimed", "sending", "discarded"
+_PENDING, _CLAIMED, _SENDING, _DISCARDED, _SENT = "pending", "claimed", "sending", "discarded", "sent"
+STATES = ("pending", "approved", "sent", "failed", "cancelled", "expired")
 _ID_RE = re.compile(r"^[0-9a-f]{32}$")
 REQUEST_ID_PREFIX = "draft:"
 
 
 class DraftError(Exception):
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, state: str | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
+        self.state = state
 
 
 def _home(home: str | Path | None) -> Path:
@@ -97,6 +99,11 @@ def list_pending(home: str | Path | None = None) -> list[dict]:
         with contextlib.suppress(OSError):
             if now - stale.stat().st_mtime > _GC_STAGED_SECONDS:
                 stale.unlink()
+    for state in (_SENT, _DISCARDED):
+        for tombstone in _dir(home, state).glob("*.json"):
+            with contextlib.suppress(OSError):
+                if now - tombstone.stat().st_mtime > _GC_AFTER_EXPIRY_SECONDS:
+                    tombstone.unlink()
     records = []
     for path in pending.glob("*.json"):
         record = _read(path)
@@ -118,6 +125,12 @@ def _classify(record: dict) -> Outbound | None:
         return None
 
 
+def _held_state(record: dict, expired: bool) -> str:
+    if expired:
+        return "expired"
+    return "failed" if record.get("failed_at") else "pending"
+
+
 def card_payload(record: dict) -> dict:
     expired = _expired(record, time.time())
     outbound = _classify(record)
@@ -125,7 +138,7 @@ def card_payload(record: dict) -> dict:
     description = card_description(outbound) if outbound is not None else (
         f"Send to {record['recipient'] or record['channel']} via {record['channel']}")
     if outbound is not None and not outbound.viewable:
-        description += "\nThis message cannot be shown in full, so it can only be discarded."
+        description += "\nThis message cannot be shown in full, so it can only be cancelled."
     return {
         "request_id": REQUEST_ID_PREFIX + record["id"],
         "command": record["text"],
@@ -137,7 +150,8 @@ def card_payload(record: dict) -> dict:
             "kind": "outbound_message", "channel": record["channel"], "recipient": record["recipient"],
             "subject": record["subject"], "text": record["text"], "held": True,
             "editable": record.get("text_field") is not None and sendable,
-            "state": "expired" if expired else "pending",
+            "state": _held_state(record, expired),
+            "error": record.get("last_error") if record.get("failed_at") else None,
             "expires_at": record.get("expires_at"), "origin": record.get("origin", ""),
         },
     }
@@ -147,7 +161,31 @@ def pending_cards(home: str | Path | None = None) -> list[dict]:
     return [card_payload(record) for record in list_pending(home)]
 
 
-def discard(draft_id: str, home: str | Path | None = None) -> None:
+def state_of(draft_id: str, home: str | Path | None = None) -> str | None:
+    draft_id = _valid_id(draft_id)
+    record = _read(_dir(home, _PENDING) / f"{draft_id}.json")
+    if record is not None:
+        return _held_state(record, _expired(record, time.time()))
+    for state, name in ((_CLAIMED, "approved"), (_SENDING, "approved"), (_SENT, "sent"), (_DISCARDED, "cancelled")):
+        if (_dir(home, state) / f"{draft_id}.json").exists():
+            return name
+    return None
+
+
+def _settled_error(draft_id: str, home: str | Path | None, action: str) -> DraftError:
+    state = state_of(draft_id, home)
+    if state == "sent":
+        return DraftError("already_sent", "This draft was already sent.", state)
+    if state == "cancelled":
+        return DraftError("already_cancelled", "This draft was cancelled and was not sent.", state)
+    if state == "approved":
+        return DraftError("in_progress", f"This draft is being sent right now, so it cannot be {action}.", state)
+    if state is not None:
+        return DraftError("busy", "This draft is being answered somewhere else. Reload to see its state.", state)
+    return DraftError("not_found", "This draft no longer exists.")
+
+
+def discard(draft_id: str, home: str | Path | None = None) -> dict:
     draft_id = _valid_id(draft_id)
     tombstone = _dir(home, _DISCARDED, create=True) / f"{draft_id}.json"
     for state in (_PENDING, _CLAIMED):
@@ -156,10 +194,10 @@ def discard(draft_id: str, home: str | Path | None = None) -> None:
         except FileNotFoundError:
             continue
         atomic_json_write(tombstone, {"id": draft_id, "discarded_at": time.time()}, mode=0o600)
-        return
-    if (_dir(home, _SENDING) / f"{draft_id}.json").exists():
-        raise DraftError("sending", "This draft is already being sent and can no longer be discarded.")
-    raise DraftError("not_found", "This draft no longer exists.")
+        return {"state": "cancelled"}
+    if state_of(draft_id, home) == "cancelled":
+        return {"state": "cancelled"}
+    raise _settled_error(draft_id, home, "cancelled")
 
 
 def _claim(draft_id: str, home: str | Path | None) -> tuple[dict, Path]:
@@ -168,7 +206,7 @@ def _claim(draft_id: str, home: str | Path | None) -> tuple[dict, Path]:
     try:
         os.rename(source, target)
     except FileNotFoundError:
-        raise DraftError("not_found", "This draft was already sent or discarded.") from None
+        raise _settled_error(draft_id, home, "approved again") from None
     record = _read(target)
     if record is None:
         target.unlink(missing_ok=True)
@@ -181,14 +219,15 @@ def _begin_delivery(claimed_path: Path, home: str | Path | None) -> Path:
     try:
         os.rename(claimed_path, sending)
     except FileNotFoundError:
-        raise DraftError("discarded", "This draft was discarded and was not sent.") from None
+        raise DraftError("discarded", "This draft was cancelled and was not sent.", "cancelled") from None
     return sending
 
 
-def _release(record: dict, held_path: Path, home: str | Path | None, error: str) -> bool:
+def _release(record: dict, held_path: Path, home: str | Path | None, error: str, *, failed: bool = False) -> bool:
     pending = _dir(home, _PENDING, create=True)
     staged = pending / f".{held_path.stem}.{uuid.uuid4().hex}.tmp"
-    atomic_json_write(staged, {**record, "last_error": error[:300]}, mode=0o600)
+    stamp = {"failed_at": time.time()} if failed else {}
+    atomic_json_write(staged, {**record, **stamp, "last_error": error[:300]}, mode=0o600)
     try:
         held_path.unlink()
     except FileNotFoundError:
@@ -225,36 +264,61 @@ def _execute(record: dict, args: dict) -> str:
             skip_tool_request_middleware=True)
 
 
+def _failure_reason(exc: Exception) -> str:
+    from agent.redact import redact_sensitive_text
+    detail = redact_sensitive_text(str(exc), force=True).strip()
+    return f"{type(exc).__name__}: {detail}"[:300] if detail else type(exc).__name__
+
+
+def _send_failed(error: str) -> DraftError:
+    return DraftError(
+        "send_failed", f"The message was NOT sent: {error}. It is still waiting for approval; approve it again "
+        "to retry.", "failed")
+
+
 def send(draft_id: str, edited_text=None, home: str | Path | None = None) -> dict:
     draft_id = _valid_id(draft_id)
     record, claimed_path = _claim(draft_id, home)
     if _expired(record, time.time()):
         _release(record, claimed_path, home, "expired")
-        raise DraftError("expired", "This draft expired and can no longer be sent.")
+        raise DraftError("expired", "This draft expired and can no longer be sent.", "expired")
     outbound = _classify(record)
     if outbound is None:
         _release(record, claimed_path, home, "not an outbound send")
-        raise DraftError("invalid", "This draft can no longer be sent.")
+        raise DraftError("invalid", "This draft can no longer be sent.", "pending")
     if not outbound.viewable:
         _release(record, claimed_path, home, "cannot be shown in full")
-        raise DraftError("unviewable", "This message cannot be shown in full, so it can only be discarded.")
+        raise DraftError("unviewable", "This message cannot be shown in full, so it can only be cancelled.", "pending")
     args = record["args"]
     if edited_text is not None and edited_text != record["text"]:
         args, reason = validate_edit(outbound, record["args"], edited_text)
         if args is None:
             _release(record, claimed_path, home, reason)
-            raise DraftError("invalid_edit", reason[:1].upper() + reason[1:] + ".")
+            raise DraftError("invalid_edit", reason[:1].upper() + reason[1:] + ".", "pending")
     sending_path = _begin_delivery(claimed_path, home)
     try:
         raw = _execute(record, args)
     except Exception as exc:
+        reason = _failure_reason(exc)
         logger.warning("held draft %s send raised %s", draft_id, type(exc).__name__)
-        _release(record, sending_path, home, type(exc).__name__)
-        raise DraftError("send_failed", "The message could not be sent. It is still waiting here.") from exc
+        _release(record, sending_path, home, reason, failed=True)
+        raise _send_failed(reason) from exc
     error = _result_error(raw)
     if error:
+        from agent.redact import redact_sensitive_text
+        error = redact_sensitive_text(error, force=True)
         logger.warning("held draft %s send failed", draft_id)
-        _release(record, sending_path, home, error)
-        raise DraftError("send_failed", "The message could not be sent. It is still waiting here.")
+        _release(record, sending_path, home, error, failed=True)
+        raise _send_failed(error[:300])
+    atomic_json_write(_dir(home, _SENT, create=True) / f"{draft_id}.json", {"id": draft_id, "sent_at": time.time()},
+                      mode=0o600)
     sending_path.unlink(missing_ok=True)
-    return {"status": "sent"}
+    return {"status": "sent", "state": "sent"}
+
+
+def answer(draft_id: str, choice: str, edited_text=None, home: str | Path | None = None) -> dict:
+    if choice == "once":
+        return {"resolved": 1, **send(draft_id, edited_text, home)}
+    if choice == "deny":
+        return {"resolved": 1, **discard(draft_id, home)}
+    raise DraftError("invalid_choice", "A draft is either sent or cancelled.")

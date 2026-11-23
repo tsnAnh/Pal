@@ -56,6 +56,13 @@ def bot_chat():
     approval_context.reset_current_bot_chat(token)
 
 
+@pytest.fixture
+def owner_app():
+    token = approval_context.set_approval_client_probe(lambda: True)
+    yield
+    approval_context.reset_approval_client_probe(token)
+
+
 class Owner:
 
     def __init__(self, *answers):
@@ -166,7 +173,7 @@ class TestClassification:
 
 
 class TestAttendedDrafts:
-    def test_send_runs_the_call_as_drafted(self, bot_home, bot_chat):
+    def test_send_runs_the_call_as_drafted(self, bot_home, owner_app):
         owner = _owner("once")
         assert review_outbound(EMAIL, EMAIL_ARGS) == (None, None)
         card = owner.cards[0]
@@ -176,7 +183,7 @@ class TestAttendedDrafts:
                                  "subject": "Lunch", "text": "Lunch at noon?", "editable": True, "held": False}
         assert card["allow_session"] is False and card["allow_permanent"] is False
 
-    def test_discard_is_final_and_tells_the_agent_not_to_retry(self, bot_home, bot_chat):
+    def test_discard_is_final_and_tells_the_agent_not_to_retry(self, bot_home, bot_chat, owner_app):
         owner = _owner("deny", "once")
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
         assert args is None and "NOT sent" in block and "Do NOT retry" in block
@@ -184,14 +191,14 @@ class TestAttendedDrafts:
         assert block is not None and len(owner.cards) == 1
         assert bot_mode_draft_store.list_pending() == []
 
-    def test_edit_then_send_sends_the_edited_text(self, bot_home, bot_chat):
+    def test_edit_then_send_sends_the_edited_text(self, bot_home, owner_app):
         _owner(("once", "Lunch at one instead?"))
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
         assert block is None
         assert args == {**EMAIL_ARGS, "body": "Lunch at one instead?"}
 
     @pytest.mark.parametrize("edit", ["   ", "x" * 100_001, "token ghp_" + "a" * 36])
-    def test_an_invalid_edit_is_revalidated_and_nothing_is_sent(self, bot_home, bot_chat, edit):
+    def test_an_invalid_edit_is_revalidated_and_nothing_is_sent(self, bot_home, owner_app, edit):
         _owner(("once", edit))
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
         assert block is not None and args is None and "NOT sent" in block
@@ -203,13 +210,13 @@ class TestAttendedDrafts:
         assert validate_edit(classify_outbound("connectors__gmail__SEND_DRAFT", {"draft_id": "d"}),
                              {"draft_id": "d"}, "x")[0] is None
 
-    def test_a_secret_in_the_body_is_refused_without_a_draft(self, bot_home, bot_chat):
+    def test_a_secret_in_the_body_is_refused_without_a_draft(self, bot_home, owner_app):
         owner = _owner("once")
         block, _ = review_outbound(EMAIL, {**EMAIL_ARGS, "body": "key ghp_" + "a" * 36})
         assert "credential" in block and owner.cards == []
         assert bot_mode_draft_store.list_pending() == []
 
-    def test_no_answer_never_sends_and_keeps_the_draft(self, bot_home, bot_chat):
+    def test_no_answer_never_sends_and_keeps_the_draft(self, bot_home, owner_app):
         owner = _owner(None)
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
         assert args is None and "NOT sent" in block and len(owner.cards) == 1
@@ -218,19 +225,19 @@ class TestAttendedDrafts:
 
 
 class TestToolCallPipeline:
-    def test_the_real_pre_tool_call_dispatch_applies_an_edited_send(self, bot_home, bot_chat):
+    def test_the_real_pre_tool_call_dispatch_applies_an_edited_send(self, bot_home, owner_app):
         from hermes_cli.plugins import _dispatch_pre_tool_call_hooks
         _owner(("once", "Lunch at one?"))
         block, args = _dispatch_pre_tool_call_hooks(EMAIL, dict(EMAIL_ARGS))
         assert block is None and args == {**EMAIL_ARGS, "body": "Lunch at one?"}
 
-    def test_the_real_pre_tool_call_dispatch_blocks_a_discarded_send(self, bot_home, bot_chat):
+    def test_the_real_pre_tool_call_dispatch_blocks_a_discarded_send(self, bot_home, owner_app):
         from hermes_cli.plugins import _dispatch_pre_tool_call_hooks
         _owner("deny")
         block, args = _dispatch_pre_tool_call_hooks(EMAIL, dict(EMAIL_ARGS))
         assert "NOT sent" in block and args is None
 
-    def test_a_connector_batch_entry_is_drafted_and_never_reaches_the_wire(self, bot_home, bot_chat, monkeypatch):
+    def test_a_connector_batch_entry_is_drafted_and_never_reaches_the_wire(self, bot_home, owner_app, monkeypatch):
         import model_tools
         from tools.connectors.gateway import bridge, config
         monkeypatch.setattr(config, "connectors_available", lambda: True)
@@ -251,20 +258,20 @@ class TestToolCallPipeline:
 
 
 class TestDraftPolicy:
-    def test_send_without_asking_sends_attended_turns_directly(self, bot_home, bot_chat):
+    def test_send_without_asking_sends_attended_turns_directly(self, bot_home, owner_app):
         _write_config(bot_home, drafts="false")
         owner = _owner("once")
         assert review_outbound(EMAIL, EMAIL_ARGS) == (None, None)
         assert owner.cards == []
 
-    def test_a_profile_that_is_not_bot_mode_managed_is_untouched(self, bot_home, bot_chat):
+    def test_a_profile_that_is_not_bot_mode_managed_is_untouched(self, bot_home, owner_app):
         (bot_home / "profile.yaml").unlink()
         owner = _owner("deny")
         assert review_outbound(EMAIL, EMAIL_ARGS) == (None, None)
         assert owner.cards == []
         assert bot_mode_draft_store.list_pending() == []
 
-    def test_drafts_true_turns_them_on_for_an_unmanaged_profile(self, bot_home, bot_chat):
+    def test_drafts_true_turns_them_on_for_an_unmanaged_profile(self, bot_home, owner_app):
         (bot_home / "profile.yaml").unlink()
         _write_config(bot_home, drafts="true")
         owner = _owner("once")
@@ -281,13 +288,13 @@ class TestDraftPolicy:
         held = bot_mode_draft_store.list_pending()
         assert len(held) == 1 and held[0]["origin"] == "unattended" and held[0]["text"] == EMAIL_ARGS["body"]
 
-    def test_a_turn_outside_the_bot_chat_holds_instead_of_rendering_a_card(self, bot_home):
+    def test_a_turn_outside_the_owner_app_holds_instead_of_rendering_a_card(self, bot_home):
         owner = _owner("once")
         block, _ = review_outbound(EMAIL, EMAIL_ARGS)
         assert "NOT sent" in block and owner.cards == []
         assert [d["origin"] for d in bot_mode_draft_store.list_pending()] == ["elsewhere"]
 
-    def test_tools_that_send_nothing_never_touch_the_gate(self, bot_home, bot_chat):
+    def test_tools_that_send_nothing_never_touch_the_gate(self, bot_home, owner_app):
         owner = _owner("deny")
         assert review_outbound("connectors__gmail__LIST_THREADS", {}) == (None, None)
         assert review_outbound("terminal", {"command": "ls"}) == (None, None)
@@ -322,12 +329,12 @@ class TestHeldDrafts:
 
     def test_send_delivers_the_stored_call_exactly_once(self, bot_home, sent):
         record = _hold()
-        assert bot_mode_draft_store.send(record["id"]) == {"status": "sent"}
+        assert bot_mode_draft_store.send(record["id"]) == {"status": "sent", "state": "sent"}
         assert [(t, a) for t, a, _ in sent] == [(EMAIL, EMAIL_ARGS)]
         assert sent[0][2]["skip_pre_tool_call_hook"] is True
         with pytest.raises(bot_mode_draft_store.DraftError) as again:
             bot_mode_draft_store.send(record["id"])
-        assert again.value.code == "not_found" and len(sent) == 1
+        assert again.value.code == "already_sent" and again.value.state == "sent" and len(sent) == 1
         assert bot_mode_draft_store.list_pending() == []
 
     def test_edit_then_send_delivers_the_edited_text(self, bot_home, sent):
@@ -344,11 +351,11 @@ class TestHeldDrafts:
 
     def test_discard_is_final(self, bot_home, sent):
         record = _hold()
-        bot_mode_draft_store.discard(record["id"])
-        with pytest.raises(bot_mode_draft_store.DraftError):
+        assert bot_mode_draft_store.discard(record["id"]) == {"state": "cancelled"}
+        with pytest.raises(bot_mode_draft_store.DraftError) as err:
             bot_mode_draft_store.send(record["id"])
-        with pytest.raises(bot_mode_draft_store.DraftError):
-            bot_mode_draft_store.discard(record["id"])
+        assert err.value.code == "already_cancelled" and err.value.state == "cancelled"
+        assert bot_mode_draft_store.discard(record["id"]) == {"state": "cancelled"}
         assert sent == []
 
     def test_an_expired_draft_is_never_sent_by_anyone_but_can_be_discarded(self, bot_home, sent):
@@ -427,7 +434,7 @@ class TestSendMessageActionsMirrorTheTool:
             tool.send_message_tool(args)
             assert (classify_outbound("send_message", args) is not None) == (reached == ["send"]), action
 
-    def test_a_non_send_action_variant_is_drafted_not_sent(self, bot_home, bot_chat):
+    def test_a_non_send_action_variant_is_drafted_not_sent(self, bot_home, owner_app):
         owner = _owner("deny")
         block, _ = review_outbound("send_message", {"action": "post", "target": "telegram:1", "message": "hi"})
         assert "NOT sent" in block and len(owner.cards) == 1
@@ -446,7 +453,7 @@ class TestTheOwnerSeesEverythingThatIsSent:
                 "html_body": "<b>Lunch</b> at noon", "thread_id": "t-9",
                 "attachments": [str(attachment), {"filename": "notes.txt", "content": "aGVsbG8="}]}
 
-    def test_the_card_lists_every_other_argument_in_full(self, bot_home, bot_chat, attachment):
+    def test_the_card_lists_every_other_argument_in_full(self, bot_home, owner_app, attachment):
         owner = _owner("once")
         assert review_outbound(EMAIL, self._args(attachment)) == (None, None)
         shown = {item["name"]: item["value"] for item in owner.cards[0]["details"]}
@@ -457,12 +464,12 @@ class TestTheOwnerSeesEverythingThatIsSent:
         assert "menu.pdf" in shown["attachments"] and "2.0 KB" in shown["attachments"]
         assert "notes.txt" in shown["attachments"]
 
-    def test_the_description_the_cli_prompt_reads_carries_them_too(self, bot_home, bot_chat, attachment):
+    def test_the_description_the_cli_prompt_reads_carries_them_too(self, bot_home, owner_app, attachment):
         owner = _owner("once")
         review_outbound(EMAIL, self._args(attachment))
         assert "bcc: spy@example.com" in owner.cards[0]["description"]
 
-    def test_a_plain_send_has_no_extra_details(self, bot_home, bot_chat):
+    def test_a_plain_send_has_no_extra_details(self, bot_home, owner_app):
         owner = _owner("once")
         review_outbound(EMAIL, EMAIL_ARGS)
         assert owner.cards[0]["details"] == []
@@ -480,13 +487,13 @@ class TestTheOwnerSeesEverythingThatIsSent:
         {"attachments": [{"filename": "a.txt", "note": "ghp_" + "c" * 36}]},
         {"metadata": {"deep": {"er": ["ghp_" + "d" * 36]}}},
     ])
-    def test_a_secret_anywhere_in_the_arguments_is_refused_without_a_draft(self, bot_home, bot_chat, where):
+    def test_a_secret_anywhere_in_the_arguments_is_refused_without_a_draft(self, bot_home, owner_app, where):
         owner = _owner("once")
         block, _ = review_outbound(EMAIL, {**EMAIL_ARGS, **where})
         assert "credential" in block and owner.cards == []
         assert bot_mode_draft_store.list_pending() == []
 
-    def test_an_argument_that_cannot_be_shown_is_held_and_can_only_be_discarded(self, bot_home, bot_chat, sent):
+    def test_an_argument_that_cannot_be_shown_is_held_and_can_only_be_discarded(self, bot_home, owner_app, sent):
         owner = _owner("once")
         args = {**EMAIL_ARGS, "score": float("nan")}
         block, edited = review_outbound(EMAIL, args)
@@ -500,13 +507,13 @@ class TestTheOwnerSeesEverythingThatIsSent:
         bot_mode_draft_store.discard(record["id"])
         assert bot_mode_draft_store.list_pending() == []
 
-    def test_oversized_arguments_are_refused_outright(self, bot_home, bot_chat):
+    def test_oversized_arguments_are_refused_outright(self, bot_home, owner_app):
         owner = _owner("once")
         block, _ = review_outbound(EMAIL, {**EMAIL_ARGS, "html_body": "x" * 400_000})
         assert "too long" in block and owner.cards == []
         assert bot_mode_draft_store.list_pending() == []
 
-    def test_an_edit_keeps_every_other_argument_as_the_owner_saw_it(self, bot_home, bot_chat, attachment):
+    def test_an_edit_keeps_every_other_argument_as_the_owner_saw_it(self, bot_home, owner_app, attachment):
         args = self._args(attachment)
         _owner(("once", "Lunch at one?"))
         block, edited = review_outbound(EMAIL, args)
@@ -551,8 +558,8 @@ class TestDiscardRaces:
             return json.dumps({"response": "ok"})
 
         monkeypatch.setattr("model_tools.handle_function_call", deliver)
-        assert bot_mode_draft_store.send(record["id"]) == {"status": "sent"}
-        assert seen["code"] == "sending" and bot_mode_draft_store.list_pending() == []
+        assert bot_mode_draft_store.send(record["id"]) == {"status": "sent", "state": "sent"}
+        assert seen["code"] == "in_progress" and bot_mode_draft_store.list_pending() == []
 
     def test_a_failed_send_that_could_not_be_discarded_stays_pending_for_the_owner(self, bot_home, monkeypatch):
         record = _hold()
@@ -602,11 +609,11 @@ class TestDiscardRaces:
         gate.set()
         for thread in threads:
             thread.join(5)
-        assert len(delivered) == 1 and sorted(map(str, outcomes)) == sorted(["not_found", str({"status": "sent"})])
+        assert len(delivered) == 1 and sorted(map(str, outcomes)) == sorted(["in_progress", str({"status": "sent", "state": "sent"})])
 
 
 class TestFailClosed:
-    def test_a_classification_crash_blocks_a_send_shaped_tool(self, bot_home, bot_chat, monkeypatch):
+    def test_a_classification_crash_blocks_a_send_shaped_tool(self, bot_home, owner_app, monkeypatch):
         monkeypatch.setattr("tools.bot_mode_drafts.classify_outbound",
                             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
         block, args = review_outbound(EMAIL, EMAIL_ARGS)
@@ -614,18 +621,18 @@ class TestFailClosed:
         assert review_outbound("terminal", {"command": "ls"}) == (None, None)
         assert review_outbound("connectors__gmail__LIST_THREADS", {}) == (None, None)
 
-    def test_a_crash_does_not_touch_a_profile_that_is_not_bot_managed(self, bot_home, bot_chat, monkeypatch):
+    def test_a_crash_does_not_touch_a_profile_that_is_not_bot_managed(self, bot_home, owner_app, monkeypatch):
         (bot_home / "profile.yaml").unlink()
         monkeypatch.setattr("tools.bot_mode_drafts.classify_outbound",
                             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
         assert review_outbound(EMAIL, EMAIL_ARGS) == (None, None)
 
-    def test_arguments_that_are_not_a_mapping_never_slip_past(self, bot_home, bot_chat):
+    def test_arguments_that_are_not_a_mapping_never_slip_past(self, bot_home, owner_app):
         block, _ = review_outbound(EMAIL, "not a dict")
         assert "NOT sent" in block
         assert review_outbound("terminal", "not a dict") == (None, None)
 
-    def test_a_crash_while_loading_or_resolving_hooks_blocks_a_send(self, bot_home, bot_chat):
+    def test_a_crash_while_loading_or_resolving_hooks_blocks_a_send(self, bot_home, owner_app):
         from types import SimpleNamespace
 
         from tools.bot_mode_drafts import review_after_hooks
@@ -640,7 +647,7 @@ class TestFailClosed:
             with pytest.raises(RuntimeError):
                 review_after_hooks("terminal", {"command": "ls"}, load, resolve)
 
-    def test_a_crash_inside_the_hook_dispatch_blocks_a_send(self, bot_home, bot_chat, monkeypatch):
+    def test_a_crash_inside_the_hook_dispatch_blocks_a_send(self, bot_home, owner_app, monkeypatch):
         from hermes_cli import plugins
         monkeypatch.setattr(plugins, "_get_pre_tool_call_directive_details",
                             lambda *a, **k: (_ for _ in ()).throw(RuntimeError("plugin crash")))
@@ -649,7 +656,7 @@ class TestFailClosed:
         with pytest.raises(RuntimeError):
             plugins._dispatch_pre_tool_call_hooks("terminal", {"command": "ls"})
 
-    def test_the_agent_loop_does_not_run_a_send_when_the_hook_dispatch_crashes(self, bot_home, bot_chat, monkeypatch):
+    def test_the_agent_loop_does_not_run_a_send_when_the_hook_dispatch_crashes(self, bot_home, owner_app, monkeypatch):
         from types import SimpleNamespace
 
         from hermes_cli import plugins
@@ -668,7 +675,7 @@ class TestFailClosed:
 
 
 class TestSingleEditOnly:
-    def test_resolve_all_never_hands_one_edit_to_every_draft(self, bot_home, bot_chat):
+    def test_resolve_all_never_hands_one_edit_to_every_draft(self, bot_home, owner_app):
         import contextvars
         import threading
         cards, both_waiting, results = [], threading.Event(), []
@@ -695,7 +702,7 @@ class TestSingleEditOnly:
         assert len(results) == 2 and all(result["approved"] for result in results)
         assert all("edited_text" not in result for result in results)
 
-    def test_an_edit_for_one_request_id_still_lands_on_that_draft_alone(self, bot_home, bot_chat):
+    def test_an_edit_for_one_request_id_still_lands_on_that_draft_alone(self, bot_home, owner_app):
         owner = _owner(("once", "edited"))
         outbound = classify_outbound(EMAIL, EMAIL_ARGS)
         from tools.bot_mode_drafts import _ask_owner
@@ -724,3 +731,241 @@ class TestPendingDraftCap:
         bot_mode_draft_store.hold(classify_outbound(EMAIL, EMAIL_ARGS), EMAIL_ARGS, origin="x", home=other)
         bot_mode_draft_store.discard(first["id"])
         assert _hold()["id"]
+
+
+CONSUMERS = [
+    ("mcp__upwork__upwork__send_message", {"action": "send", "recipient": "client-1", "message": "Hello"}),
+    ("mcp__fakeconn__fakeconn__send_message", {"to": "ada", "message": "Hello"}),
+    ("connectors__slack__SEND_MESSAGE", {"channel": "C1", "text": "Hello"}),
+    ("connectors__gmail__SEND_EMAIL", EMAIL_ARGS),
+    ("mcp__discord__post_message", {"channel_id": "9", "content": "Hello"}),
+    ("send_message", {"action": "send", "target": "telegram:123", "message": "Hello"}),
+]
+
+
+@pytest.fixture
+def fake_outbound(monkeypatch):
+    receipts = []
+
+    def deliver(tool, args, **kwargs):
+        receipts.append((tool, args))
+        return json.dumps({"response": {"ok": True}})
+
+    monkeypatch.setattr("model_tools.handle_function_call", deliver)
+    monkeypatch.setattr("gateway.outbound.send.send_message_tool", lambda args, **kw: deliver("send_message", args))
+    return receipts
+
+
+class TestAnyChatOfTheBot:
+    @pytest.mark.parametrize(("tool", "args"), CONSUMERS)
+    def test_a_client_that_can_answer_gets_the_card_whatever_the_chat_is_called(self, bot_home, owner_app, tool, args):
+        owner = _owner("once")
+        assert approval_context.is_bot_chat_turn() is False
+        assert review_outbound(tool, args) == (None, None)
+        card = owner.cards[0]
+        assert card["choices"] == ["once", "deny"] and "draft" in card
+        assert card["command"] == args.get("message") or card["command"] == args.get("text") \
+            or card["command"] == args.get("body") or card["command"] == args.get("content")
+        assert bot_mode_draft_store.list_pending() == []
+
+    @pytest.mark.parametrize(("tool", "args"), CONSUMERS)
+    def test_with_nobody_to_answer_every_consumer_holds_and_names_a_real_place(self, bot_home, tool, args):
+        owner = _owner("once")
+        block, new_args = review_outbound(tool, args)
+        assert new_args is None and owner.cards == []
+        (held,) = bot_mode_draft_store.list_pending()
+        assert held["origin"] == "elsewhere"
+        assert f"draft {held['id']}" in block and "state: pending" in block
+        assert "NOT sent" in block and "Do NOT retry" in block and "do NOT rephrase" in block
+        assert "another tool or route" in block
+        assert "Pal app" in block and "Approvals" in block and "Bot Chat" not in block
+
+    @pytest.mark.parametrize(("setup", "reason"), [
+        ("cron", "Nobody is present"),
+        ("timeout", "did not answer in time"),
+        ("unviewable", "cannot be shown in full"),
+        ("no_client", "No Pal app is connected"),
+    ])
+    def test_every_hold_reason_keeps_the_draft_pending_and_names_the_place(self, bot_home, monkeypatch, setup, reason):
+        args = EMAIL_ARGS
+        if setup == "cron":
+            monkeypatch.setenv("HERMES_CRON_SESSION", "1")
+        if setup == "timeout":
+            _write_config(bot_home)
+            token = approval_context.set_approval_client_probe(lambda: True)
+            _owner(None)
+        if setup == "unviewable":
+            args = {**EMAIL_ARGS, "score": float("nan")}
+            token = approval_context.set_approval_client_probe(lambda: True)
+        try:
+            block, _ = review_outbound(EMAIL, args)
+        finally:
+            if setup in ("timeout", "unviewable"):
+                approval_context.reset_approval_client_probe(token)
+        assert reason in block and "Approvals" in block and "Bot Chat" not in block
+        assert len(bot_mode_draft_store.list_pending()) == 1
+
+    def test_the_client_probe_is_read_when_the_question_is_asked_not_when_the_turn_began(self, bot_home):
+        attached = {"now": False}
+        token = approval_context.set_approval_client_probe(lambda: attached["now"])
+        try:
+            _owner("once")
+            assert review_outbound(EMAIL, EMAIL_ARGS)[0] is not None
+            attached["now"] = True
+            assert review_outbound(EMAIL, EMAIL_ARGS) == (None, None)
+        finally:
+            approval_context.reset_approval_client_probe(token)
+
+    @pytest.mark.parametrize("answer", ["always", "session"])
+    def test_no_answer_becomes_a_standing_grant_every_send_is_its_own_card(self, bot_home, owner_app, answer):
+        owner = _owner(answer, answer)
+        for _ in range(2):
+            review_outbound(EMAIL, EMAIL_ARGS)
+        assert len(owner.cards) == 2
+        assert all(card["allow_session"] is False and card["allow_permanent"] is False for card in owner.cards)
+        assert "plugin_rule" not in str(hc.load_config().get("command_allowlist", []))
+
+    def test_the_secret_and_too_long_blocks_come_before_any_card_or_draft(self, bot_home, owner_app):
+        owner = _owner("once")
+        assert "credential" in review_outbound(EMAIL, {**EMAIL_ARGS, "body": "k ghp_" + "a" * 36})[0]
+        assert "too long" in review_outbound(EMAIL, {**EMAIL_ARGS, "body": "x" * 100_001})[0]
+        assert owner.cards == [] and bot_mode_draft_store.list_pending() == []
+
+
+class TestDraftStates:
+    def test_a_draft_walks_pending_approved_sent_and_a_second_approve_never_resends(self, bot_home, monkeypatch):
+        record = _hold()
+        seen = []
+
+        def deliver(tool, args, **kwargs):
+            seen.append(bot_mode_draft_store.state_of(record["id"]))
+            return json.dumps({"response": "ok"})
+
+        monkeypatch.setattr("model_tools.handle_function_call", deliver)
+        assert bot_mode_draft_store.state_of(record["id"]) == "pending"
+        assert bot_mode_draft_store.answer(record["id"], "once") == {"resolved": 1, "status": "sent", "state": "sent"}
+        assert seen == ["approved"] and bot_mode_draft_store.state_of(record["id"]) == "sent"
+        for choice in ("once", "once", "deny"):
+            with pytest.raises(bot_mode_draft_store.DraftError) as err:
+                bot_mode_draft_store.answer(record["id"], choice)
+            assert err.value.code == "already_sent" and err.value.state == "sent"
+        assert len(seen) == 1
+
+    def test_cancel_never_sends_and_is_idempotent(self, bot_home, sent):
+        record = _hold()
+        assert bot_mode_draft_store.answer(record["id"], "deny") == {"resolved": 1, "state": "cancelled"}
+        assert bot_mode_draft_store.answer(record["id"], "deny") == {"resolved": 1, "state": "cancelled"}
+        with pytest.raises(bot_mode_draft_store.DraftError) as err:
+            bot_mode_draft_store.answer(record["id"], "once")
+        assert err.value.code == "already_cancelled" and sent == []
+
+    def test_an_unknown_choice_is_refused(self, bot_home, sent):
+        record = _hold()
+        with pytest.raises(bot_mode_draft_store.DraftError) as err:
+            bot_mode_draft_store.answer(record["id"], "always")
+        assert err.value.code == "invalid_choice" and sent == [] and len(bot_mode_draft_store.list_pending()) == 1
+
+    def test_a_failed_send_reports_the_real_reason_state_failed_and_waits_for_a_new_approval(self, bot_home, monkeypatch):
+        record = _hold()
+        results = [json.dumps({"error": {"code": "AUTH", "message": "provider down"}}),
+                   json.dumps({"response": "ok"})]
+        calls = []
+        monkeypatch.setattr("model_tools.handle_function_call", lambda *a, **k: calls.append(1) or results.pop(0))
+        with pytest.raises(bot_mode_draft_store.DraftError) as err:
+            bot_mode_draft_store.answer(record["id"], "once")
+        assert err.value.code == "send_failed" and err.value.state == "failed"
+        assert "provider down" in err.value.message and "NOT sent" in err.value.message
+        (card,) = bot_mode_draft_store.pending_cards()
+        assert card["draft"]["state"] == "failed" and card["draft"]["error"] == "provider down"
+        assert card["choices"] == ["once", "deny"] and len(calls) == 1
+        assert bot_mode_draft_store.list_pending()[0]["id"] == record["id"]
+        assert bot_mode_draft_store.answer(record["id"], "once")["state"] == "sent" and len(calls) == 2
+
+    def test_a_connector_that_raises_is_a_failed_state_with_its_reason(self, bot_home, monkeypatch):
+        def boom(*a, **k):
+            raise ConnectionError("upstream refused")
+
+        monkeypatch.setattr("model_tools.handle_function_call", boom)
+        record = _hold()
+        with pytest.raises(bot_mode_draft_store.DraftError) as err:
+            bot_mode_draft_store.answer(record["id"], "once")
+        assert err.value.state == "failed" and "ConnectionError: upstream refused" in err.value.message
+
+    def test_the_failure_reason_never_carries_a_credential(self, bot_home, monkeypatch):
+        secret = "ghp_" + "a" * 36
+        monkeypatch.setattr("model_tools.handle_function_call",
+                            lambda *a, **k: json.dumps({"error": {"message": f"bad token {secret}"}}))
+        record = _hold()
+        with pytest.raises(bot_mode_draft_store.DraftError) as err:
+            bot_mode_draft_store.answer(record["id"], "once")
+        assert secret not in err.value.message
+        assert secret not in json.dumps(bot_mode_draft_store.pending_cards())
+
+    def test_a_bad_edit_is_not_a_failed_send(self, bot_home, sent):
+        record = _hold()
+        with pytest.raises(bot_mode_draft_store.DraftError):
+            bot_mode_draft_store.answer(record["id"], "once", "   ")
+        assert bot_mode_draft_store.pending_cards()[0]["draft"]["state"] == "pending"
+
+    def test_eight_clients_approving_at_once_send_exactly_once(self, bot_home, monkeypatch):
+        import threading
+        record = _hold()
+        delivered, gate, started = [], threading.Event(), threading.Event()
+
+        def slow(tool, args, **kwargs):
+            delivered.append(args)
+            started.set()
+            gate.wait(3)
+            return json.dumps({"response": "ok"})
+
+        monkeypatch.setattr("model_tools.handle_function_call", slow)
+        outcomes, lock = [], threading.Lock()
+
+        def attempt():
+            try:
+                result = bot_mode_draft_store.answer(record["id"], "once")
+            except bot_mode_draft_store.DraftError as exc:
+                result = exc.code
+            with lock:
+                outcomes.append(result)
+
+        threads = [threading.Thread(target=attempt) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        started.wait(5)
+        gate.set()
+        for thread in threads:
+            thread.join(5)
+        assert len(delivered) == 1
+        assert sum(1 for o in outcomes if isinstance(o, dict)) == 1
+        assert {o for o in outcomes if not isinstance(o, dict)} <= {"in_progress", "already_sent"}
+
+    def test_an_approve_and_a_cancel_at_once_end_in_one_true_state(self, bot_home, fake_outbound):
+        import threading
+        record = _hold()
+        results = []
+
+        def run(choice):
+            try:
+                results.append(bot_mode_draft_store.answer(record["id"], choice)["state"])
+            except bot_mode_draft_store.DraftError as exc:
+                results.append(exc.state)
+
+        threads = [threading.Thread(target=run, args=(c,)) for c in ("once", "deny")]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(5)
+        final = bot_mode_draft_store.state_of(record["id"])
+        assert final in ("sent", "cancelled") and (len(fake_outbound) == 1) == (final == "sent")
+
+    def test_finished_drafts_leave_a_tombstone_the_store_eventually_collects(self, bot_home, sent):
+        import os
+        record = _hold()
+        bot_mode_draft_store.answer(record["id"], "once")
+        tomb = bot_home / "bot_mode" / "drafts" / "sent" / f"{record['id']}.json"
+        assert tomb.exists() and tomb.stat().st_mode & 0o077 == 0
+        old = tomb.stat().st_mtime - 8 * 24 * 3600
+        os.utime(tomb, (old, old))
+        bot_mode_draft_store.list_pending()
+        assert not tomb.exists()

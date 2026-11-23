@@ -213,7 +213,8 @@ class ApprovalDraft(Params):
     text: str = ""
     editable: bool = False
     held: bool = False
-    state: Literal["pending", "expired"] = "pending"
+    state: Literal["pending", "failed", "expired"] = "pending"
+    error: str | None = None
     expires_at: float | None = None
     origin: str | None = None
 

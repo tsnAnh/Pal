@@ -4549,7 +4549,8 @@ export interface ApprovalDraft {
   text?: string
   editable?: boolean
   held?: boolean
-  state?: 'pending' | 'expired'
+  state?: 'pending' | 'failed' | 'expired'
+  error?: string | null
   expires_at?: number | null
   origin?: string | null
 }
@@ -4572,6 +4573,8 @@ export interface ApprovalRespondParams {
 }
 export interface ApprovalRespondResult {
   resolved: number
+  status?: 'sent' | null
+  state?: 'sent' | 'cancelled' | null
 }
 export interface VoiceToggleParams {
   action?: VoiceToggleAction
@@ -6750,6 +6753,7 @@ export interface ClarifyRespondParams {
 export interface PromptResponseResult {
   status: 'resolved' | 'already_resolved'
   prompt_id: string
+  state?: 'sent' | 'cancelled' | null
 }
 export interface CronRunParams {
   job_id: string
@@ -7192,9 +7196,10 @@ export interface CanonicalSubmitReceipt {
 export interface CanonicalApprovalParams {
   profile?: string | null
   session_id: string
-  execution_generation: number
+  execution_generation?: number | null
   prompt_id: string
   choice: string
+  edited_text?: string | null
 }
 export interface CanonicalSteerQueuedParams {
   profile?: string | null

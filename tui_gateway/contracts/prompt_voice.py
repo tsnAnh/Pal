@@ -7,6 +7,8 @@ and voice / wake-word control (``methods_voice.py``).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
@@ -342,6 +344,8 @@ class ApprovalRespondParams(SessionParams):
 
 class ApprovalRespondResult(Result):
     resolved: int  # how many pending approvals this decision unblocked
+    status: Literal["sent"] | None = None
+    state: Literal["sent", "cancelled"] | None = None
 
 
 method("approval.respond", params=ApprovalRespondParams, result=ApprovalRespondResult,

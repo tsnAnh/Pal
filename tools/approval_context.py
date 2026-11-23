@@ -29,6 +29,7 @@ _approval_tool_call_id: contextvars.ContextVar[str] = _ctx("approval_tool_call_i
 # session whose scope never closes, so close-time exporters never ship them.
 _approval_session_id: contextvars.ContextVar[str] = _ctx("approval_session_id")
 _approval_bot_chat: contextvars.ContextVar[bool] = contextvars.ContextVar("approval_bot_chat", default=False)
+_approval_client_probe: contextvars.ContextVar = contextvars.ContextVar("approval_client_probe", default=None)
 # Interactive-CLI flag. Concurrent ACP sessions share a ThreadPoolExecutor, so mutating
 # os.environ["HERMES_INTERACTIVE"] races: one session's `finally` restore can clobber another's set mid-run, dropping
 # it onto the non-interactive auto-approve path so a dangerous command runs without the approval callback firing
@@ -152,6 +153,27 @@ def reset_current_bot_chat(token: contextvars.Token[bool]) -> None:
 
 def is_bot_chat_turn() -> bool:
     return _approval_bot_chat.get()
+
+
+def set_approval_client_probe(probe) -> contextvars.Token:
+    """Bind a zero-argument callable that says whether a client able to show and answer an approval card is attached
+    to the current turn's session right now; evaluated when the question is asked, not when the turn starts."""
+    return _approval_client_probe.set(probe)
+
+
+def reset_approval_client_probe(token: contextvars.Token) -> None:
+    _approval_client_probe.reset(token)
+
+
+def approval_client_attached() -> bool:
+    probe = _approval_client_probe.get()
+    if probe is not None:
+        try:
+            if probe():
+                return True
+        except Exception:
+            logger.debug("approval client probe failed", exc_info=True)
+    return is_viewer_turn_with_approver()
 
 
 def get_current_turn_id() -> str:

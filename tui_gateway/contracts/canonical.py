@@ -439,6 +439,7 @@ class ClarifyRespondParams(Params):
 class PromptResponseResult(Result):
     status: Literal["resolved", "already_resolved"]
     prompt_id: str
+    state: Literal["sent", "cancelled"] | None = None
 
 
 canonical_method("clarify.respond", params=ClarifyRespondParams, result=PromptResponseResult,

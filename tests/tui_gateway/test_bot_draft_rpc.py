@@ -55,13 +55,65 @@ def test_held_drafts_come_back_with_the_bot_chats_pending_approvals(home):
     assert card["draft"]["text"] == "Lunch at noon?" and card["draft"]["held"] is True
 
 
-def test_no_other_chat_lists_or_answers_a_drafts(home):
+def test_any_chat_of_the_bot_lists_and_answers_its_held_drafts(home, monkeypatch):
+    sent = []
+    monkeypatch.setattr("model_tools.handle_function_call",
+                        lambda tool, args, **kw: sent.append((tool, args)) or json.dumps({"response": "ok"}))
+    _session("Some other chat")
+    record, other = _hold(), _hold()
+    cards = _rpc("approval.pending")["result"]["approvals"]
+    assert {card["request_id"] for card in cards} == {f"draft:{record['id']}", f"draft:{other['id']}"}
+    assert {card["draft"]["state"] for card in cards} == {"pending"}
+    assert _rpc("approval.respond", request_id=f"draft:{record['id']}", choice="once")["result"] == {
+        "resolved": 1, "status": "sent", "state": "sent"}
+    assert _rpc("approval.respond", request_id=f"draft:{other['id']}", choice="deny")["result"] == {
+        "resolved": 1, "state": "cancelled"}
+    assert len(sent) == 1 and bot_mode_draft_store.list_pending() == []
+
+
+def test_a_second_answer_names_the_true_state_and_never_resends(home, monkeypatch):
+    sent = []
+    monkeypatch.setattr("model_tools.handle_function_call",
+                        lambda tool, args, **kw: sent.append((tool, args)) or json.dumps({"response": "ok"}))
     _session("Some other chat")
     record = _hold()
-    assert _rpc("approval.pending")["result"]["approvals"] == []
+    assert _rpc("approval.respond", request_id=f"draft:{record['id']}", choice="once")["result"]["state"] == "sent"
+    again = _rpc("approval.respond", request_id=f"draft:{record['id']}", choice="once")
+    assert again["error"]["code"] == 4134 and again["error"]["data"] == {"reason": "already_sent", "state": "sent"}
+    assert len(sent) == 1
+
+
+def test_a_failed_send_comes_back_with_its_reason_and_state(home, monkeypatch):
+    monkeypatch.setattr("model_tools.handle_function_call",
+                        lambda *a, **k: json.dumps({"error": {"message": "provider down"}}))
+    _session("Some other chat")
+    record = _hold()
     reply = _rpc("approval.respond", request_id=f"draft:{record['id']}", choice="once")
-    assert reply["error"]["code"] == 4132
-    assert len(bot_mode_draft_store.list_pending()) == 1
+    assert reply["error"]["code"] == 4134 and reply["error"]["data"] == {"reason": "send_failed", "state": "failed"}
+    assert "provider down" in reply["error"]["message"]
+    (card,) = _rpc("approval.pending")["result"]["approvals"]
+    assert card["draft"]["state"] == "failed" and card["draft"]["error"] == "provider down"
+
+
+def test_a_draft_of_another_profile_is_not_reachable_from_this_one(home, tmp_path):
+    secondary = tmp_path / "secondary"
+    secondary.mkdir()
+    (secondary / "profile.yaml").write_text("ui_meta:\n  hermes-bots:\n    shape: cloud\n", encoding="utf-8")
+    (secondary / "config.yaml").write_text("approvals:\n  mode: manual\n", encoding="utf-8")
+    foreign = bot_mode_draft_store.hold(classify_outbound(EMAIL, ARGS), ARGS, origin="elsewhere", home=secondary)
+    _session("Some other chat")
+    assert _rpc("approval.pending")["result"]["approvals"] == []
+    reply = _rpc("approval.respond", request_id=f"draft:{foreign['id']}", choice="once")
+    assert reply["error"]["code"] == 4134 and reply["error"]["data"]["reason"] == "not_found"
+    assert len(bot_mode_draft_store.list_pending(secondary)) == 1
+
+
+def test_a_profile_that_is_not_bot_managed_lists_and_answers_nothing(home):
+    _session("Some other chat")
+    record = _hold()
+    (home / "profile.yaml").unlink()
+    assert _rpc("approval.pending")["result"]["approvals"] == []
+    assert _rpc("approval.respond", request_id=f"draft:{record['id']}", choice="deny")["error"]["code"] == 4132
 
 
 def test_send_delivers_once_and_discard_is_final(home, monkeypatch):
@@ -71,11 +123,12 @@ def test_send_delivers_once_and_discard_is_final(home, monkeypatch):
     _session("Bot Chat")
     first, second = _hold(), _hold()
     ok = _rpc("approval.respond", request_id=f"draft:{first['id']}", choice="once", edited_text="Lunch at one?")
-    assert ok["result"] == {"resolved": 1}
+    assert ok["result"] == {"resolved": 1, "status": "sent", "state": "sent"}
     assert sent == [(EMAIL, {**ARGS, "body": "Lunch at one?"})]
     again = _rpc("approval.respond", request_id=f"draft:{first['id']}", choice="once")
-    assert again["error"]["code"] == 4134 and again["error"]["data"]["reason"] == "not_found"
-    assert _rpc("approval.respond", request_id=f"draft:{second['id']}", choice="deny")["result"] == {"resolved": 1}
+    assert again["error"]["code"] == 4134 and again["error"]["data"]["reason"] == "already_sent"
+    assert _rpc("approval.respond", request_id=f"draft:{second['id']}", choice="deny")["result"] == {
+        "resolved": 1, "state": "cancelled"}
     assert len(sent) == 1 and bot_mode_draft_store.list_pending() == []
 
 
@@ -134,7 +187,7 @@ def test_a_send_runs_off_the_rpc_reader_and_answers_through_the_transport(home, 
     wire = _Wire()
     assert _dispatch(wire, request_id=f"draft:{record['id']}", choice="once") is None
     assert wire.arrived.wait(10)
-    assert wire.frames[0]["result"] == {"resolved": 1}
+    assert wire.frames[0]["result"] == {"resolved": 1, "status": "sent", "state": "sent"}
     assert ran_on and ran_on[0] is not threading.current_thread()
 
 
@@ -169,7 +222,7 @@ def test_the_send_uses_the_sessions_profile_not_the_launch_profile(home, tmp_pat
     wire = _Wire()
     assert _dispatch(wire, request_id=f"draft:{record['id']}", choice="once") is None
     assert wire.arrived.wait(10)
-    assert wire.frames[0]["result"] == {"resolved": 1}
+    assert wire.frames[0]["result"] == {"resolved": 1, "status": "sent", "state": "sent"}
     assert seen["home"] == secondary
     assert seen["mcp_scope"] is not None and seen["mcp_scope"] == expected_scope
     assert seen["mcp_scope"] != _mcp_registry_scope()
