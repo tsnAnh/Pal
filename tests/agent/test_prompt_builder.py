@@ -788,6 +788,7 @@ class TestEnvironmentHints:
         monkeypatch.setattr("tools.bot_desktop.lease.get", lambda: SimpleNamespace(holder="agent"))
         hints = _pb.build_environment_hints()
         assert "Bot Screen" in hints and "display :20" in hints and "you hold it" in hints
+        assert "before saying you cannot" in hints
 
     def test_human_held_bot_screen_says_so(self, monkeypatch):
         import agent.prompt_builder as _pb
@@ -798,12 +799,26 @@ class TestEnvironmentHints:
         hints = _pb.build_environment_hints()
         assert "a human holds it" in hints and "do not drive the screen" in hints
 
-    def test_stopped_bot_screen_leaves_no_hint(self, monkeypatch):
-        """No screen running → nothing added; the block must drop out entirely, not say 'None'."""
+    def test_stopped_bot_screen_that_auto_starts_is_still_the_bots_computer(self, monkeypatch):
+        """A stopped screen starts by itself on the first browser/computer_use call, so the model must be told
+        it has its own computer before it concludes it has no tool for a website or reaches for the owner's."""
         import agent.prompt_builder as _pb
         monkeypatch.setattr(_pb, "is_wsl", lambda: False)
         monkeypatch.delenv("TERMINAL_ENV", raising=False)
         monkeypatch.setattr("tools.bot_desktop.runtime.published_env", dict)
+        monkeypatch.setattr("tools.bot_desktop.runtime.auto_starts", lambda _env: True)
+        _pb._BACKEND_PROBE_CACHE.clear()
+        hints = _pb.build_environment_hints()
+        assert "Bot Screen" in hints and "own computer" in hints
+        assert "before saying you cannot" in hints
+
+    def test_stopped_bot_screen_that_cannot_auto_start_leaves_no_hint(self, monkeypatch):
+        """No screen running and none able to start → nothing added; the block must drop out entirely."""
+        import agent.prompt_builder as _pb
+        monkeypatch.setattr(_pb, "is_wsl", lambda: False)
+        monkeypatch.delenv("TERMINAL_ENV", raising=False)
+        monkeypatch.setattr("tools.bot_desktop.runtime.published_env", dict)
+        monkeypatch.setattr("tools.bot_desktop.runtime.auto_starts", lambda _env: False)
         _pb._BACKEND_PROBE_CACHE.clear()
         assert "Bot Screen" not in _pb.build_environment_hints()
 

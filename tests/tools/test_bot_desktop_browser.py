@@ -200,27 +200,39 @@ def _install_browsers(tmp_path, monkeypatch, *, playwright: bool, system: bool):
     return str(pw_exe), str(sys_exe)
 
 
-def test_unprivileged_user_under_apparmor_userns_restriction_gets_the_system_browser(tmp_path, monkeypatch):
-    """Playwright's bundled Chromium has no setuid chrome_sandbox; with
-    kernel.apparmor_restrict_unprivileged_userns=1 it dies 'FATAL: No usable sandbox!' for a non-root user,
-    so the dock icon is dead. A distro chromium (which ships the sandbox helper) must win there — and
-    the Playwright build stays the answer when it is the only one, started with exactly the flags
-    the agent's launch starts it with on that host (one sandbox policy for the human's and the bot's browser)."""
+def test_restricted_userns_host_keeps_the_managed_chromium_over_the_system_one(tmp_path, monkeypatch):
+    """Every launch on an AppArmor-restricted host already gets --no-sandbox, so the distro browser's setuid
+    sandbox buys nothing there, while a system snap Chromium cannot start under NoNewPrivileges at all. The
+    managed Chromium wins wherever it exists, started with the flags the agent's launch gives it."""
     pw_exe, sys_exe = _install_browsers(tmp_path, monkeypatch, playwright=True, system=True)
     monkeypatch.setattr(browser.os, "geteuid", lambda: 1000)
-    monkeypatch.setattr(browser, "_userns_restricted", lambda: True)
-    assert browser.executable() == sys_exe
+    monkeypatch.setattr("tools.browser_launcher.apparmor_restricts_unprivileged_userns", lambda: True)
+    monkeypatch.setattr("tools.browser_launcher.needs_chromium_sandbox_bypass", lambda: True)
+    monkeypatch.setattr(browser, "no_new_privileges", lambda: False)
+    assert browser.executable() == pw_exe != sys_exe
 
-    monkeypatch.setattr(browser, "_userns_restricted", lambda: False)
-    assert browser.executable() == pw_exe  # unrestricted host: Playwright's build as before
-
-    _install_browsers(tmp_path / "only-pw", monkeypatch, playwright=True, system=False)
-    monkeypatch.setattr(browser, "_userns_restricted", lambda: True)
     exe = browser.executable()
-    assert exe and exe.endswith("chrome-linux/chrome")
     agent_flags = _agent_sandbox_flags(exe)
+    assert "--no-sandbox" in agent_flags
     assert agent_flags <= set(browser.dock_argv(exe, "/p/dir"))
-    assert ("--no-sandbox" in browser.dock_argv(exe, "/p/dir")) == ("--no-sandbox" in agent_flags)
+
+
+def test_snap_chromium_is_not_offered_when_the_service_cannot_gain_privileges(tmp_path, monkeypatch):
+    """snap-confine is setuid: under NoNewPrivileges (a hardened systemd unit) a snap browser exits 46 'cannot
+    run snap applications on this system', so naming it would hand the agent and the dock a dead browser."""
+    exe = _snap_host(tmp_path, monkeypatch)
+    monkeypatch.setattr(browser, "no_new_privileges", lambda: True)
+    assert browser.executable() is None
+    assert browser.dock_launch() is None
+
+    monkeypatch.setattr(browser, "no_new_privileges", lambda: False)
+    assert browser.executable() == str(exe)
+
+
+def test_non_snap_system_browser_survives_no_new_privileges(tmp_path, monkeypatch):
+    _, sys_exe = _install_browsers(tmp_path, monkeypatch, playwright=False, system=True)
+    monkeypatch.setattr(browser, "no_new_privileges", lambda: True)
+    assert browser.executable() == sys_exe
 
 
 def _agent_sandbox_flags(exe: str) -> set:
@@ -313,7 +325,6 @@ def test_headless_override_does_not_hide_pm_headed_browser(tmp_path, monkeypatch
     _browser_config(monkeypatch, tmp_path / "home", executable_path=str(headless))
     monkeypatch.setattr(pm, "installed_package", lambda name: SimpleNamespace(binary=headed))
     monkeypatch.setattr(browser, "_system_executable", lambda: None)
-    monkeypatch.setattr(browser, "_userns_restricted", lambda: False)
 
     assert chromium_executable() == str(headless)  # ordinary headless browsing keeps its override
     dock = browser.dock_launch()
@@ -396,9 +407,6 @@ def test_a_headless_shell_pin_is_replaced_while_a_screen_is_up(tmp_path, monkeyp
     monkeypatch.setattr(runtime, "state_dir", lambda: tmp_path / "bot-desktop")
     monkeypatch.setattr(browser, "_managed_executable", lambda: str(headed))
     monkeypatch.setattr("tools.browser_session_cloud.executable_path", lambda: str(shell))
-    # Unpinned, the ubuntu runner (non-root, userns-restricted) flips executable() to
-    # its own /usr/bin/google-chrome; host policy is not the subject here.
-    monkeypatch.setattr(browser, "_userns_restricted", lambda: False)
 
     agent = _agent_launch(monkeypatch)
     dock_exe, _ = browser.dock_launch()
@@ -434,7 +442,7 @@ def _snap_host(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
     monkeypatch.setattr(browser, "_SNAP_BIN_DIR", str(snap_bin))
     monkeypatch.setattr(browser, "_managed_executable", lambda: None)
-    monkeypatch.setattr(browser, "_userns_restricted", lambda: False)
+    monkeypatch.setattr(browser, "no_new_privileges", lambda: False)
     monkeypatch.setattr(runtime, "state_dir", lambda: tmp_path / "home" / "bot-desktop")
     return exe
 
@@ -555,6 +563,6 @@ def test_auto_start_is_on_by_default_and_an_explicit_value_wins(monkeypatch):
     monkeypatch.setattr(runtime, "is_supported_host", lambda: True)
     monkeypatch.setattr(runtime, "missing_binaries", list)
     monkeypatch.setattr("hermes_cli.config.load_config_readonly", dict)
-    assert runtime._should_auto_start({}) is True
+    assert runtime.auto_starts({}) is True
     monkeypatch.setattr("hermes_cli.config.load_config_readonly", lambda: {"bot_desktop": {"auto_start": False}})
-    assert runtime._should_auto_start({}) is False
+    assert runtime.auto_starts({}) is False
