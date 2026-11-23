@@ -138,7 +138,7 @@ struct OutboxAttachmentTests {
         #expect(FileManager.default.fileExists(atPath: attachmentsDirectory(directory).appendingPathComponent(entry.submissionID).path))
     }
 
-    @Test func aFailedEntryCanBeRequeuedWithItsFilesAndPurgingRemovesThem() async throws {
+    @Test func aFailedEntryCanBeRequeuedWithItsFilesAndPurgingSparesIt() async throws {
         let directory = try temporaryDirectory()
         let refusal = RPCError(code: 4001, message: "invalid_params", data: ["reason": "invalid_params"])
         let outbox = try Outbox(directory: directory, submitter: Recorder(failure: { GatewayTransportError.rpc(refusal) }))
@@ -146,10 +146,9 @@ struct OutboxAttachmentTests {
         #expect(await outbox.deliver(entry.submissionID) == .failed(reason: "invalid_params"))
         let failed = try #require(await outbox.snapshot(botID: "bot").first)
         let again = try await outbox.requeue(failed)
-        #expect(again.submissionID != failed.submissionID)
+        #expect(again.submissionID == failed.submissionID)
         #expect(again.files.map(\.name) == ["a.txt", "b.png"])
         try await outbox.purgeFinished()
-        #expect(!FileManager.default.fileExists(atPath: attachmentsDirectory(directory).appendingPathComponent(failed.submissionID).path))
         #expect(FileManager.default.fileExists(atPath: attachmentsDirectory(directory).appendingPathComponent(again.submissionID).path))
     }
 

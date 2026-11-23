@@ -47,6 +47,20 @@ final class BotChatE2ETests: E2ETestCase {
         shot(app, "chat-reply")
     }
 
+    func test2cMessageSentWhileTheBotWorksIsAcceptedAtOnce() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-beta")
+        send(app, "HOLD long task")
+        let working = app.descendants(matching: .any)["assistantBubble-streaming"]
+        waitFor(working, timeout: 30, "the bot is working")
+        send(app, "second message while working")
+        waitFor(bubbles(app, "userBubble", containing: "second message while working").firstMatch, timeout: 10, "second message shown")
+        waitGone(app.descendants(matching: .any)["deliverySending"], timeout: 10, "accepted while the bot still works")
+        XCTAssertTrue(working.exists, "the turn is still running when the second message counts as sent")
+        XCTAssertEqual(bubbles(app, "userBubble", containing: "second message while working").count, 1)
+    }
+
     #if os(iOS)
     func test2bVoiceModeClosesWithTheSystemClose() throws {
         let app = launch()

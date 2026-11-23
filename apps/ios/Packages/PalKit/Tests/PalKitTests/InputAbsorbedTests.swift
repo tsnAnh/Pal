@@ -393,7 +393,7 @@ private struct StatusSubmitter: OutboxSubmitter {
 
 @Suite("Submit status")
 struct SubmitStatusTests {
-    @Test(arguments: ["turn", "steered", "queued"])
+    @Test(arguments: ["turn", "steered", "queued", "started"])
     func everyAcceptedSubmitStatusMarksTheEntryDelivered(status: String) async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("hermes-absorb-\(UUID().uuidString)")
         let outbox = try Outbox(directory: directory, submitter: StatusSubmitter(status: status))
