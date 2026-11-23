@@ -117,9 +117,10 @@ struct SlackLinkStatusView: View {
     }
 
     private var footer: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: SetupFooterMetrics.phone.buttonSpacing) {
             if link.phase == .connected {
                 SetupButton(title: String(localized: "Done"), kind: .primary, fillsWidth: true, identifier: "slackDoneButton") { close() }
+                    .keyboardShortcut(.defaultAction)
                 if model.checkFailed {
                     SetupButton(title: String(localized: "Retry"), fillsWidth: true, identifier: "slackRetryButton") {
                         Task { await model.recheck() }
@@ -144,8 +145,6 @@ struct SlackLinkStatusView: View {
                 }
             }
         }
-        .padding(PalMetrics.screenMargin)
-        .frame(maxWidth: .infinity)
-        .overlay(alignment: .top) { PalHairline() }
+        .setupFooter(fillsWidth: true)
     }
 }

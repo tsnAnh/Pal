@@ -158,6 +158,12 @@ CASES = [
     ("perf-open-ungated", "App/ChatModel.swift",
      "    func consume() async {\n        await TimelinePacer.consume(session.timelineSnapshots, apply: { next in\n            apply(next)\n        })\n    }\n",
      "    func consume() async {\n        await TimelinePacer.consume(session.timelineSnapshots, apply: { next in\n            guard let ready = openGate.admit(next) else { return }\n            apply(ready)\n        })\n    }\n"),
+    ("perf-open-main-work", CHAT_MODEL,
+     "    private func loadCache() async -> CachedTimeline? {\n        let cached = await Task.detached { cache.load(bot: name) }.value\n        return cached\n    }\n",
+     "    private func consume() async {\n        for await next in session.timelineSnapshots { apply(next) }\n    }\n"),
+    ("perf-open-main-work", CHAT_MODEL,
+     "    func saveCache() {\n        guard let cached = await session.cachedTimeline(), cached != lastCached else { return }\n        await session.seed(cached)\n    }\n",
+     "    func open() async {\n        await session.restore()\n    }\n"),
     ("perf-glass-over-fill", DESIGN,
      "configuration.label\n    .background(fill ?? PalTokens.control, in: Capsule())\n    .palGlass(Capsule())\n",
      "configuration.label\n    .palGlass(Capsule())\n"),
@@ -283,6 +289,7 @@ def test_messages_name_the_replacement() -> None:
         "perf-hover-tracker-per-bubble": "RowHoverState",
         "perf-observed-image-dictionary": "Slot",
         "perf-drag-writes-binding": "DragWidth",
+        "perf-open-main-work": "ChatSession",
     }
     messages = {lr.rule: lr.message for lr in csp.LINE_RULES}
     messages["perf-drag-writes-binding"] = " ".join(m for _, m in csp.drag_writes_binding(csp.Source(
@@ -480,6 +487,47 @@ def test_pre_fix_chat_open_fails_and_the_real_chat_model_passes(tmp_path: Path) 
     assert [f.line for f in old] == [2]
     current = (REPO / "apps" / "ios" / "App" / "ChatModel.swift").read_text(encoding="utf-8")
     assert not [f for f in csp.scan(_tree(tmp_path / "new", {"App/ChatModel.swift": current})) if f.rule == "perf-open-ungated"]
+
+
+PRE_FIX_CHAT_OPEN_CACHE = """    private var lastCached: CachedTimeline?
+
+        let current = await session.timelineSnapshot
+        if current.rows.isEmpty, let cached = await loadCache() {
+            await session.seed(cached)
+        }
+
+    private func loadCache() async -> CachedTimeline? {
+        let cache = roster.conversationCache
+        let name = openedBot.name
+        let cached = await Task.detached(priority: .userInitiated) { cache.load(bot: name) }.value
+        if let cached {
+            lastCached = cached
+        }
+        return cached
+    }
+
+    private func saveCache() {
+        let cache = roster.conversationCache
+        Task {
+            guard let cached = await session.cachedTimeline(), cached != lastCached else { return }
+            lastCached = cached
+            cache.save(cached, bot: name)
+        }
+    }
+"""
+
+
+def test_pre_fix_chat_open_cache_work_fails_and_the_real_chat_model_passes(tmp_path: Path) -> None:
+    old = [f for f in csp.scan(_tree(tmp_path / "old", {CHAT_MODEL: PRE_FIX_CHAT_OPEN_CACHE})) if f.rule == "perf-open-main-work"]
+    assert [f.line for f in old] == [1, 5, 8, 11]
+    current = (REPO / "apps" / "ios" / CHAT_MODEL).read_text(encoding="utf-8")
+    assert not [f for f in csp.scan(_tree(tmp_path / "new", {CHAT_MODEL: current})) if f.rule == "perf-open-main-work"]
+
+
+def test_open_main_work_is_allowed_in_the_conversation_cache_and_outside_app(tmp_path: Path) -> None:
+    body = "    func load(bot: String) -> CachedTimeline? { nil }\n"
+    assert "perf-open-main-work" not in _rules(tmp_path / "home", "App/ConversationCache.swift", body)
+    assert "perf-open-main-work" not in _rules(tmp_path / "kit", "Packages/PalKit/Sources/PalChat/ChatSession.swift", body)
 
 
 AVATAR = "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"
