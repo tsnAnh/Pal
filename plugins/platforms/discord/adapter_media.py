@@ -87,6 +87,7 @@ class DiscordMediaMixin:
             channel = await self._resolve_channel(_prompt_target_id(chat_id, None))
             if channel is None:
                 return False
+            channel = await self._persona_channel(channel)
             await channel.get_partial_message(int(message_id)).delete()
             return True
         except Exception as e:  # health: allow BLE001 -- best-effort delete: every failure is a logged False
@@ -166,6 +167,7 @@ class DiscordMediaMixin:
         channel = await self._resolve_channel(_prompt_target_id(chat_id, metadata))
         if not channel:
             return SendResult(success=False, error=f"Channel {chat_id} not found")
+        channel = await self._persona_channel(channel)
         filename = file_name or os.path.basename(file_path)
         rejected = await self._reject_oversized_upload(channel, file_path, filename, caption=caption)
         if rejected is not None:
@@ -222,6 +224,7 @@ class DiscordMediaMixin:
             if not channel:
                 logger.warning("[%s] Channel %s not found for multi-image send", self.name, chat_id)
                 return SendResult(success=False, error=f"Channel {chat_id} not found")
+            channel = await self._persona_channel(channel)
         except Exception as e:
             logger.warning("[%s] Failed to resolve channel for multi-image send: %s", self.name, e)
             return await super().send_multiple_images(chat_id, images, metadata, human_delay)
@@ -492,6 +495,7 @@ class DiscordMediaMixin:
             channel = await self._resolve_channel(_prompt_target_id(chat_id, metadata))
             if not channel:
                 return SendResult(success=False, error=f"Channel {chat_id} not found")
+            channel = await self._persona_channel(channel)
             from gateway.platforms.base import resolve_proxy_url, proxy_kwargs_for_aiohttp
             _sess_kw, _req_kw = proxy_kwargs_for_aiohttp(resolve_proxy_url(platform_env_var="DISCORD_PROXY"))
             async with aiohttp.ClientSession(**_sess_kw) as session:

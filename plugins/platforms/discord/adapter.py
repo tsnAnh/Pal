@@ -1174,6 +1174,8 @@ from plugins.platforms.discord.standalone_rest import api_url as _rest_url, post
 from plugins.platforms.discord.adapter_opus import load_opus_codec
 from plugins.platforms.discord.adapter_authorization import DiscordAuthorizationMixin, is_automated_message
 from plugins.platforms.discord.adapter_slash_auth import DiscordSlashAuthMixin
+from plugins.platforms.discord.adapter_pal_command import DiscordPalCommandMixin
+from plugins.platforms.discord.adapter_personas import DiscordPersonaMixin
 from plugins.platforms.discord.adapter_live_gates import DiscordLiveGatesMixin
 from plugins.platforms.discord.adapter_thread_titles import DiscordThreadTitlesMixin, SemanticThreadRenames
 from plugins.platforms.discord.adapter_voice_info import DiscordVoiceInfoMixin
@@ -1182,7 +1184,8 @@ from plugins.platforms.discord.adapter_vault_code import DiscordVaultCodeMixin, 
 
 
 class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMediaMixin, DiscordThreadTitlesMixin, DiscordVoiceInfoMixin,
-                     DiscordSlashAuthMixin, DiscordReactionsMixin, DiscordVaultCodeMixin, BasePlatformAdapter):
+                     DiscordSlashAuthMixin, DiscordReactionsMixin, DiscordVaultCodeMixin, DiscordPersonaMixin,
+                     DiscordPalCommandMixin, BasePlatformAdapter):
     """Discord bot adapter: guild/DM messages, threads, slash commands, button approvals, reactions."""
 
     MAX_MESSAGE_LENGTH = 2000
@@ -1633,7 +1636,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
                 return False, False
         elif self._dedup.contains(message_id):
             return False, False
-        if message.author == self._client.user:
+        if message.author == self._client.user or self._is_own_webhook_message(message):
             return False, False
         if message.type not in {discord.MessageType.default, discord.MessageType.reply}:
             return False, False
@@ -3173,6 +3176,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
             if self._is_forum_parent(channel):
                 result = await self._send_to_forum(channel, content)
                 return await self._record_response_async(reply_to, result, content, final_delivery, metadata)
+            channel = await self._persona_channel(channel)
             formatted = self.format_message(content)
             chunks = self.truncate_message(formatted, self.MAX_MESSAGE_LENGTH)
             message_ids = []
@@ -3327,7 +3331,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
         if not self._client:
             return SendResult(success=False, error="Not connected")
         try:
-            channel = await self._resolve_channel(chat_id)
+            channel = await self._persona_channel(await self._resolve_channel(chat_id))
             msg = channel.get_partial_message(int(message_id))
             formatted = self.format_message(content)
             _preview_key = (str(chat_id), str(message_id))
@@ -4473,6 +4477,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
             tree.command(name=name, description=description)(
                 self._slash_proxy(name, args, template, followup, strip=name != "insights")
             )
+        self._register_pal_command(tree)
         # Auto-register COMMAND_REGISTRY + plugin commands not yet on the tree. Native
         # commands above always survive the 100-command cap; reserve one slot for /skill.
         already_registered: set[str] = set()
@@ -4992,7 +4997,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
         raw = self.config.extra.get("free_response_channels")
         if raw is None:
             raw = self._gate_env("DISCORD_FREE_RESPONSE_CHANNELS")
-        return self._gate_csv_set(raw)
+        return self._gate_csv_set(raw) | self._bot_channel_ids()
 
     def _raw_mentioned_user_ids(self, message: Any) -> set:
         """Extract user-mention IDs (``<@ID>`` and legacy ``<@!ID>``) from raw content,
@@ -5170,7 +5175,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
                 ):
                     continue
                 # Partition point: our own conversational message (needed for cold start).
-                if msg.author == self._client.user:
+                if msg.author == self._client.user or self._is_own_webhook_message(msg):
                     break
                 line = _keep(msg)
                 if line is None:

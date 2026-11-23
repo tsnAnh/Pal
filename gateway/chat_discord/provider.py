@@ -41,19 +41,31 @@ from .api import (
 from .default_profile import OwnerAllowlist, ProfileRoutes, RouteConflict
 from .naming import CATEGORY_NAME, avatar_data_uri, unique_channel_name, webhook_name
 from .records import DiscordRecords
-from .rest import GUILD_CATEGORY, GUILD_TEXT, DiscordRest, webhook_url
+from .rest import GUILD_CATEGORY, GUILD_TEXT, DiscordRest, webhook_avatar_url, webhook_url
 
 logger = logging.getLogger(__name__)
 
+PLATFORM_KEY = "discord"
 SNOWFLAKE = re.compile(r"\d{1,20}")
 MENTION = re.compile(r"<@!?(\d{1,20})>")
 _NO_ACTION = NextAction(kind=NextActionKind.none, action_id="none")
 _NEEDS_ACCESS = NextAction(kind=NextActionKind.button, action_id="grant_channel_access")
 
 
+HOME_CHANNEL_ENV = "DISCORD_HOME_CHANNEL"
+
+
 def saved_app_token() -> str | None:
     from tui_gateway.discord_connector import saved_token
     return saved_token()
+
+
+def profile_has_home_channel(bot: str, scope: Callable[[str], Any] | None = None) -> bool:
+    from gateway.chat_install_runtime import bot_profile_scope
+    from hermes_cli.config import get_env_value, read_raw_config
+    with (scope or bot_profile_scope)(bot):
+        configured = ((read_raw_config().get("platforms") or {}).get(PLATFORM_KEY) or {}).get("home_channel")
+        return bool(configured or get_env_value(HOME_CHANNEL_ENV))
 
 
 class DiscordProvider(ChatProvider):
@@ -66,6 +78,7 @@ class DiscordProvider(ChatProvider):
                  allowlist: OwnerAllowlist | None = None,
                  identity: Callable[[str], BotIdentitySource] = profile_identity,
                  token_source: Callable[[], str | None] = saved_app_token,
+                 has_home_channel: Callable[[str], bool] = profile_has_home_channel,
                  clock: Callable[[], float] = time.time):
         self.vault = vault or VaultStore(get_default_hermes_root() / "vault")
         self.api = api or DiscordApi()
@@ -73,6 +86,7 @@ class DiscordProvider(ChatProvider):
         self.routes = routes or ProfileRoutes()
         self.allowlist = allowlist or OwnerAllowlist()
         self._identity, self._token_source, self._clock = identity, token_source, clock
+        self._has_home_channel = has_home_channel
 
     def capabilities(self, workspace: str | None = None) -> Capabilities:
         return DISCORD_CAPABILITIES
@@ -109,6 +123,16 @@ class DiscordProvider(ChatProvider):
         rest = DiscordRest(self.api, token)
         guild_id = self._guild_for(rest, state.workspace)
         return self._ensure(rest, state.bot, guild_id)
+
+    def new_install_config(self, installation: Installation, owner: str) -> dict[str, Any]:
+        from gateway.config import HomeChannel, Platform
+        if self._has_home_channel(installation.bot):
+            return {}
+        record = self._record_for(installation)[1]
+        home = HomeChannel(platform=Platform.DISCORD, chat_id=str(record["channel_id"]),
+                           name=self.identity_projection(self._identity(installation.bot)).display_name,
+                           user_id=owner, scope_id=installation.workspace_id)
+        return {"platforms": {self.provider_id: {"home_channel": home.to_dict()}}}
 
     def update_identity(self, installation: Installation) -> IdentityUpdate:
         rest = DiscordRest(self.api, self._token())
@@ -152,8 +176,9 @@ class DiscordProvider(ChatProvider):
         channel_id = self._ensure_channel(rest, bot, guild_id, record, projection)
         self.records.update_app(bot, guild_id, guild_id=guild_id, guild_name=str(guild.get("name") or guild_id),
                                 channel_id=channel_id)
-        webhook_id, item_id = self._ensure_webhook(rest, bot, channel_id, record, projection, avatar)
-        self.records.update_app(bot, guild_id, webhook_id=webhook_id, webhook_item_id=item_id)
+        webhook_id, item_id, avatar_url = self._ensure_webhook(rest, bot, channel_id, record, projection, avatar)
+        self.records.update_app(bot, guild_id, webhook_id=webhook_id, webhook_item_id=item_id,
+                                webhook_name=projection.username, webhook_avatar_url=avatar_url)
         extras = [c for c in record.get("extra_channel_ids", []) if c != channel_id]
         self._route(bot, [channel_id, *extras], record.get("channel_id"))
         now = self._clock()
@@ -196,7 +221,7 @@ class DiscordProvider(ChatProvider):
         return str(rest.create_channel(guild_id, {"name": CATEGORY_NAME, "type": GUILD_CATEGORY})["id"])
 
     def _ensure_webhook(self, rest: DiscordRest, bot: str, channel_id: str, record: dict[str, Any],
-                        projection: IdentityProjection, avatar: str | None) -> tuple[str, str]:
+                        projection: IdentityProjection, avatar: str | None) -> tuple[str, str, str | None]:
         webhook_id, item_id = record.get("webhook_id"), record.get("webhook_item_id")
         if webhook_id and item_id and self._secret_on_file(item_id):
             try:
@@ -204,12 +229,12 @@ class DiscordProvider(ChatProvider):
             except DiscordGone:
                 live = None
             if live is not None and str(live.get("channel_id")) == channel_id:
-                rest.edit_webhook(webhook_id, projection.username, avatar)
-                return webhook_id, item_id
+                edited = rest.edit_webhook(webhook_id, projection.username, avatar)
+                return webhook_id, item_id, webhook_avatar_url({**live, **edited, "id": webhook_id})
         self._drop_webhook(rest, webhook_id, item_id)
         created = rest.create_webhook(channel_id, projection.username, avatar)
         item = self.vault.add_item("api_key", f"Discord webhook for {bot}", {"api_key": webhook_url(created)})
-        return str(created["id"]), item.id
+        return str(created["id"]), item.id, webhook_avatar_url(created)
 
     def _drop_webhook(self, rest: DiscordRest, webhook_id: str | None, item_id: str | None) -> None:
         if webhook_id:
@@ -285,6 +310,7 @@ class DiscordProvider(ChatProvider):
             return
         self._delete_remote_webhook(record["webhook_id"])
         removed = [self.routes.remove(installation.bot, c) for c in [record["channel_id"], *record.get("extra_channel_ids", [])]]
+        removed.append(self.routes.clear_direct_for(installation.bot))
         if any(removed):
             self.routes.apply_live()
         self.vault.remove_item(record["webhook_item_id"])
