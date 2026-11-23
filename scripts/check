@@ -113,6 +113,7 @@ _GUARDS = {
     "packaged-imports": ["scripts/check_packaged_imports.py"],
     "os-marker-fakes": ["scripts/ci/check_os_marker_fakes.py"],
     "agents-md": ["scripts/ci/check_agents_md_size.py"],
+    "commitment-writers": ["scripts/ci/check_commitment_writers.py"],
     "shims": ["scripts/move/generate_shims.py", "--check"],
     "case-collisions": ["scripts/check-case-collisions.py"],
     "line-endings": ["scripts/ci/check_line_endings.py"],
