@@ -204,9 +204,10 @@ is still better than A, because H1 and H2 stay gone. C is the escape hatch only 
    - PalKit `ChatScrollMachineTests` (Swift Testing), one per transition: open, stream while pinned, stream while
      reading, older page while reading, new message while reading, jump, reveal, visibility, user scroll
      enter and leave.
-   - Bench `MacChatScrollStressTests` (draft in commit 2, `apps/ios/Tests/`): row-level jump probe over streaming
-     while reading, composer growth while reading and at the newest edge, window resize while reading, older page
-     while streaming. Pass means zero rows moved by more than 1 pt with no user scroll.
+   - Bench `MacChatScrollStressTests` (draft in commit 2, `apps/ios/Tests/`): the row-level jump probe of
+     `MacChatOpenJumpTests` over two scenarios, a reply streaming 120 frames and then finishing while you read,
+     and the composer growing to eight lines and shrinking while you read. Pass means no visible row moved by more
+     than 1 pt with no user scroll. The remaining scenarios are in the harness spec below.
    - Trace replay: `apps/ios/Tools/perf/scroll_trace.py <csv> --max-jumps 0` fails a recorded scenario.
    - Lint `chat-scroll-single-writer`, a new rule in `scripts/ci/check_swift_chat_scroll.py` (already wired as
      `swift-chat-scroll` in `python scripts/check`). Under `App/Chat/**` and `App/ChatView.swift`, it forbids
@@ -216,6 +217,38 @@ is still better than A, because H1 and H2 stay gone. C is the escape hatch only 
      (`ChatTranscriptList.swift`, exactly one `.scrollPosition(` and the anchor modifiers). Opt-out on the
      line is `chat-scroll: ok`, as the rule already does. Its test in `tests/ci/test_check_swift_chat_scroll.py`
      fails on `0228552c` (the flip, the margins, the reveal writes) and passes after migration.
+
+## Harness spec
+
+Two harnesses already exist. The next units extend them instead of adding a third.
+
+- **Mac bench, offscreen** (`apps/ios/Tests/MacChatBench*.swift`, `MacChatOpenJumpTests.swift`). It hosts the real
+  `ChatTranscriptList` and composer in a hidden window, drives the backing `NSScrollView`, and samples every row's
+  frame each 1/120 s through `OpenJumpProbe`. It runs in `PalTests` on a Mac with no gateway. Scenarios, with
+  the state on `0228552c`:
+
+  | Scenario | Probe check | State |
+  |---|---|---|
+  | open, live tail, older page at the newest edge | rows still | exists (`MacChatOpenJumpTests`) |
+  | reading: older page, new tail rows, working row, catch-up line | rows still | exists (`MacChatOpenJumpTests`) |
+  | reading: reply streams 120 frames, then finishes | rows still | commit 2 |
+  | reading: composer grows to 8 lines, shrinks | rows still | commit 2 |
+  | newest edge: composer grows | newest row's bottom stays above the composer's top | spec: needs the composer frame from the view tree |
+  | newest edge: reply streams with a growing table and code block | newest row's bottom stays fixed | spec: fixture text with a table |
+  | reading: generated-image placeholder becomes the image | rows still | spec: needs a `GeneratedImageRow` fixture |
+  | reading: window resize | anchor row keeps its distance to the viewport bottom (text reflows, so not "rows still") | spec |
+  | reading: older page lands while a reply streams | rows still | spec |
+
+- **UI tests against the stub LLM** (`Tools/stub-llm/stub_llm.py`, `Scripts/e2e-gateway`, `UITests/`). The stub
+  already streams `STREAM-LONG-MARKDOWN` (14 markdown sections at 12 ms per word piece, `stub_llm.py:56-59`,
+  `:255-256`, `:303-347`) and `SLOW` (40 chunks every 0.25 s). The spec for a `SCROLLSTRESS` trigger: a constant near
+  `stub_llm.py:56` and a branch near `:255` that streams paragraphs, a five-column table that grows row by row and a
+  long code block, then calls a tool, so the working row comes and goes. A UI test modelled on
+  `UITests/ChatListNoShiftE2ETests.swift` launches with `PAL_SCROLL_TRACE=1` and `PAL_PERF_DIR` (as
+  `UITests/MacPerfTourTests.swift:17` does for `PAL_PERF`), sends the trigger, scrolls up one screen, waits for the
+  stream to end, and fails when `scroll_trace.py --max-jumps 0` exits 1. iPhone adds the keyboard: focus the
+  composer at the newest edge, then drag the list to dismiss it. The stub has no image trigger, so the image
+  scenario stays on the bench.
 
 ## Unit split (after the owner picks)
 
