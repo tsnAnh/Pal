@@ -30,7 +30,15 @@ public struct LocalEngineConfiguration: Sendable, Equatable {
         self.branch = branch
     }
 
-    public static func standard(userHome: URL = FileManager.default.homeDirectoryForCurrentUser) -> LocalEngineConfiguration {
+    public static var currentUserHome: URL {
+        #if os(macOS)
+        FileManager.default.homeDirectoryForCurrentUser
+        #else
+        URL.homeDirectory
+        #endif
+    }
+
+    public static func standard(userHome: URL = currentUserHome) -> LocalEngineConfiguration {
         LocalEngineConfiguration(hermesHome: userHome.appending(path: ".hermes", directoryHint: .isDirectory), userHome: userHome)
     }
 

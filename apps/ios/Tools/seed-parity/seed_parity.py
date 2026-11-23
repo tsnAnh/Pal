@@ -78,152 +78,6 @@ class Bot:
     shared: tuple[Shared, ...] = ()
 
 
-BOTS = (
-    Bot(
-        slug="default",
-        title="chó pal bot",
-        look=Look(shape="blobatar:pal:round", color="#ffffff"),
-        pinned=True,
-        last_message=Recency(minutes_ago=45),
-        conversation=(
-            ("user", "Chào em, hôm nay anh cần em gom lại việc của cả đội bot giúp anh."),
-            ("assistant", "Dạ anh. Em đang điều phối 7 bot:\n\n- **chó UA** lo creative quảng cáo\n- **chó ai image gen** gen ảnh\n- **Upwork Hunter** săn job\n- **chó research app** nghiên cứu thị trường app\n- **chó hóng hớt** bản tin AI mỗi sáng\n- **Market Researcher** định vị sản phẩm\n- **chó Định** báo cáo số liệu\n\nAnh muốn em hỏi bot nào trước?"),
-            ("user", "Hỏi chó UA xem tiến độ bộ ảnh tháng 12 tới đâu rồi."),
-            ("assistant", "Em đã nhắn chó UA. Bot trả lời là đã giao làm 12 ảnh, ước tính xong trong 20 phút. Anh xem chi tiết ở [bảng creative](https://www.notion.so/creative-ua-t12) nhé."),
-            ("user", "Tốt. Chiều nay nhắc anh duyệt ảnh."),
-            ("assistant", "Dạ anh, em đã đặt nhắc lúc 15:00. Có gì thay đổi em báo anh ngay."),
-            Turn("user", "Fren fix rồi", gap_before=timedelta(hours=14)),
-            Turn("assistant", "Ok anh. Fren đã fix rồi thì còn lại Kirumi với thẻ Google Cloud của ScribeFoundry thôi nha.", gap_before=timedelta(minutes=1)),
-            Turn("assistant", "Anh ơi, sáng nay (khoảng 8:03, giờ VN) Google Payments gửi mail \"Add Brazil tax info\", yêu cầu anh bổ sung thông tin thuế Brazil vì app trên Play đã có thu nhập ở đó. Anh khai ở [Google Payments](https://pay.google.com/) nha. Thẻ GCP với vụ thanh toán bị giữ thì vẫn như em báo hôm trước.", gap_before=timedelta(hours=15)),
-            Turn("assistant", "Anh ơi, LastPass Premium của anh không bật tự gia hạn nên sẽ hết hạn ngày 6/12/2026. Nếu còn dùng thì anh vào [LastPass](https://www.lastpass.com/) gia hạn hoặc bật auto-renew nha.", gap_before=timedelta(minutes=23)),
-            Turn("user", "éo, tau dùng 1password", gap_before=timedelta(minutes=8)),
-            Turn("assistant", "Ok anh, vậy cứ để LastPass hết hạn. Em ghi nhớ anh dùng 1Password rồi, lần sau không nhắc LastPass nữa.", gap_before=timedelta(minutes=1)),
-            Turn("user", "ý là đợi hết lastpass t sẽ qua 1password", gap_before=timedelta(hours=9)),
-            Turn("assistant", "À hiểu rồi anh, dùng LastPass tới khi hết hạn ngày 6/12 rồi mới chuyển qua 1Password. Em sửa lại ghi nhớ rồi, lần sau cũng không nhắc gia hạn LastPass nữa.", gap_before=timedelta(minutes=1)),
-        ),
-        routines=(
-            Routine("Nhắc thanh toán và gia hạn", "Kiểm tra email thanh toán và gia hạn, tóm tắt cái nào sắp hết hạn.", "weekdays at 8:30am"),
-            Routine("Xử lý store review", "Đọc review mới trên App Store và Google Play rồi gợi ý trả lời.", "weekdays at 3pm"),
-        ),
-        shared=(
-            Shared("assistant", "Anh xem trang giá ở https://www.apple.com/app-store/ và tài liệu ở https://developer.apple.com/documentation/swiftui nhé.", 2),
-            Shared("assistant", "Em lưu lại ảnh mô phỏng giao diện ở đây. MEDIA:{media}", 3, "16:40", "library-sample.png"),
-            Shared("assistant", "Bản tin hôm nay: https://news.ycombinator.com/ và https://github.com/trending.", 9),
-            Shared("assistant", "Tài liệu cũ: https://www.python.org/ và https://www.wikipedia.org/ để tham khảo thêm.", 26),
-        ),
-    ),
-    Bot(
-        slug="cho-ua",
-        title="chó UA",
-        look=Look(shape="blobatar:ua:organic", color="#ed0a37"),
-        last_message=Recency(minutes_ago=12),
-        conversation=(
-            Turn("user", "Em ơi, anh cần 4 ảnh App Store cho app Fren, bán ý tưởng chính là wallpaper và chibi trên home screen. Lên brief giúp anh."),
-            Turn("assistant", "Dạ anh. Nội dung 4 ảnh:\n\n1. **\u201cYour wallpaper has a roommate\u201d** \u2014 Giới thiệu ngay wallpaper có người sống bên trong. Một màn home nổi bật, thấy rõ căn phòng và nhân vật. Đây là ảnh bán ý tưởng chính.\n2. **\u201cHer little moments, on your screen\u201d** \u2014 Đưa người xem gần hơn với Fren đang trang trí cây. Dùng cảnh và chi tiết chuyển động làm trọng tâm, không lặp layout home của ảnh 1. Không thêm hành động app chưa có.\n3. **\u201cThree rooms. One cozy Christmas.\u201d** \u2014 Cho thấy ba không gian bedroom, workshop, igloo bằng bố cục có chiều sâu, một cảnh chính và hai cảnh phụ. Không biến thành catalog cửa hàng hay bảng nút mua.\n4. **\u201cMeet your tiny home-screen companion\u201d** \u2014 Tập trung vào chibi Fren giữa các icon và tương tác home đã có. Phân biệt rõ với Fren trong wallpaper ở ảnh 1; không dùng cô gái minh họa lớn để thay cho tính năng.\n\n**Không làm:** khoanh đỏ, dây nối, kính lúp, collage screenshot có chữ li ti, clipart dán bốn góc, UI giả có tính năng không tồn tại, claim miễn phí hoặc trial.\n\n**Bàn giao:** 4 ảnh 1080\u00d71920 và một bảng xem cả bộ. Trước khi gửi, so trực tiếp với reference về độ rõ, bố cục và tính nhất quán; ghi rõ phần nào là mockup để kiểm tính chính xác."),
-            Turn("user", "cái 3, ko cần list 3 rooms làm gì cho mệt", gap_before=timedelta(minutes=25)),
-            Turn("assistant", "Ừ anh, #3 chỉ cần một cảnh igloo thật đẹp với headline **\u201cFind your cozy corner\u201d**. Bỏ danh sách, thumbnail và tên ba phòng; bán cảm giác có một góc riêng, không liệt kê tính năng.", gap_before=timedelta(minutes=1)),
-            Turn("user", "thees sau tao theem vaof thif sao", gap_before=timedelta(minutes=1)),
-            Turn("assistant", "Đúng anh, ghi \u201c3 rooms\u201d thì thêm phòng lại phải sửa ảnh. Brief #3 đổi thành **\u201cFind your cozy corner\u201d**, minh họa một phòng thôi, không chốt số lượng hay liệt kê tên phòng.", gap_before=timedelta(minutes=1)),
-            Turn("user", "Maf sao cos 4 cai screenshot thoi?", gap_before=timedelta(minutes=1)),
-            Turn("assistant", "Vì em tự rút từ 8 xuống 4 để bỏ nội dung lặp, nhưng lại thu hẹp bộ quá mức. Không phải giới hạn của store. Em sẽ lên lại mạch 8 ảnh với 8 ý riêng, không kéo dài bằng cách liệt kê từng phòng hay lặp màn hình home.", gap_before=timedelta(minutes=1)),
-            Turn("user", "6 casi ddi, lam 2 bo experiment", gap_before=timedelta(minutes=1)),
-            Turn("assistant", "Chốt anh: 2 bộ, mỗi bộ 6 ảnh. Em giữ cùng nội dung và thứ tự, chỉ đổi hướng thiết kế giữa hai bộ để test rõ; không ghi số lượng phòng. Làm xong em gửi cả hai bộ duyệt, chưa chạy experiment.", gap_before=timedelta(minutes=1)),
-            Turn("user", "Message from \U0001f916 chó ai image gen (@cho-ai-image-gen): Brief received: 2 sets, 6 images each. Generating now, first drafts in a few minutes.", gap_before=timedelta(hours=6), display_kind="internal_notification"),
-            Turn("user", "[IMPORTANT: Background process proc_7f3a matched watch pattern \"batch complete\".\nCommand: gen_images.sh --sets 2\nMatched output:\nbatch complete: 12 files]", gap_before=timedelta(minutes=3), display_kind="internal_notification"),
-            Turn("assistant", "Đã giao làm 12 ảnh: bộ A pastel sáng, bộ B Giáng sinh tông đậm. Cùng thông điệp để so thiết kế, không trộn thêm thay đổi nội dung giữa hai bộ. Chi tiết xem [bảng creative](https://www.notion.so/creative-ua-t12).", gap_before=timedelta(minutes=1)),
-        ),
-    ),
-    Bot(
-        slug="cho-ai-image-gen",
-        title="chó ai image gen",
-        look=Look(shape="blobatar:ai-image-gen:round", color="#ed0a37"),
-        last_message=Recency(days_back=1, clock="22:48"),
-        conversation=(
-            ("user", "Gen cho anh logo mascot con chó cầm điện thoại, style flat, nền trong."),
-            ("assistant", "Dạ, em đã tạo 4 biến thể logo flat, nền trong suốt:\n\n1. Corgi cầm điện thoại, viền dày\n2. Shiba tông cam\n3. Chó đen tối giản\n4. Chó hoạt hình kiểu sticker\n\nAnh chọn số nào em tinh chỉnh tiếp?"),
-            ("user", "Số 2, đổi tông sang xanh mint."),
-            ("assistant", "Xong rồi anh, bản mint đây. Em lưu PNG 2048px và SVG trong thư mục chung của đội."),
-            ("user", "Em xem tin nhắn từ chó UA đi, có brief mới."),
-            ("user", "Message from 🤖 chó UA (@cho-ua): Updated brief: 6 images per set, drop minimalist set C, keep sets A and B. Regenerate to this brief, about 20 minutes. Details in the [new brief](https://www.notion.so/creative-ua-t12)."),
-        ),
-    ),
-    Bot(
-        slug="upwork-hunter",
-        title="Upwork Hunter",
-        look=Look(shape="blobatar:upwork:capsule", color="#10dc69"),
-        last_message=Recency(days_back=1, clock="18:20"),
-        conversation=(
-            ("user", "Quét Upwork giúp anh job React Native, budget từ $2000, đăng trong 24 giờ qua."),
-            ("assistant", "Em tìm được 3 job phù hợp trên [Upwork](https://www.upwork.com/nx/search/jobs/?q=react%20native):\n\n- **Mobile app fitness**: fixed $3,500, client đã tiêu $40K\n- **Fintech dashboard RN**: $60 một giờ, client đã xác minh\n- **Marketplace app**: fixed $2,200\n\nEm đã chấm điểm phù hợp, 2 job đầu đáng apply nhất."),
-            ("user", "Soạn cover letter cho job fitness. Giọng thân thiện, ngắn."),
-            ("assistant", "Em soạn xong, 140 từ, mở đầu bằng điểm liên quan tới app fitness anh từng làm. Em lưu bản nháp, chưa gửi. Anh duyệt rồi em mới submit nhé."),
-            ("user", "Gửi đi. Rồi nhắn anh khi client trả lời."),
-            ("assistant", "Đã gửi proposal. Em sẽ theo dõi inbox Upwork mỗi 30 phút và báo anh ngay khi có phản hồi."),
-            ("user", "Có client nào trả lời chưa em?"),
-            ("assistant", "Chưa anh. Tin cuối vẫn là tin anh gửi lúc 17:33 (giờ VN), client chưa mở proposal. Em vẫn đang theo dõi và sẽ báo ngay khi có động tĩnh."),
-        ),
-    ),
-    Bot(
-        slug="cho-research-app",
-        title="chó research app",
-        look=Look(shape="blobatar:research:hexagon", color="#ee0d8f"),
-        last_message=Recency(days_back=2, clock="16:05"),
-        conversation=(
-            ("user", "Nghiên cứu giúp anh các app journaling đang top ở App Store Việt Nam."),
-            ("assistant", "Em đã xem top 20 mục Lifestyle, các app journaling nổi bật:\n\n- [Day One](https://dayoneapp.com/): nhật ký đa phương tiện, đồng bộ tốt\n- [Reflectly](https://reflectly.app/): trò chuyện hỏi đáp hằng ngày\n- Journey: tối giản, hỗ trợ nhiều nền tảng\n\nPhần lớn đều thu phí theo năm, giá khoảng $25 đến $35."),
-            ("user", "Soully nằm ở đâu so với đám này?"),
-            ("assistant", "Soully khác ở chỗ viết chung và phản tỉnh cùng nhau. Chưa app nào trong top làm hướng này. Rủi ro là người dùng chưa quen viết nhật ký chung nên cần onboarding rõ."),
-            ("user", "Tóm 3 điểm khác biệt rồi gửi qua Market Researcher giúp anh."),
-            ("assistant", "Em tóm 3 điểm:\n\n1. Nhật ký chung thay vì riêng tư\n2. Câu hỏi phản tỉnh có hướng dẫn\n3. Giá thấp hơn nhóm top khoảng 30%\n\nĐã chuyển bản đầy đủ sang Market Researcher."),
-            ("user", "Gửi đi nhé, xong thì nhắn anh một tiếng."),
-            ("assistant", "ok"),
-        ),
-    ),
-    Bot(
-        slug="cho-hong-hot",
-        title="chó hóng hớt",
-        look=Look(shape="blobatar:hong-hot:organic", color="#f15105"),
-        last_message=Recency(days_back=2, clock="08:12"),
-        conversation=(
-            ("user", "Mỗi sáng 8 giờ gửi anh bản tin AI, tối đa 5 ý, có link nguồn."),
-            ("assistant", "Dạ anh. Em đặt lịch 8:00 hằng ngày, 5 ý, kèm link nguồn gốc. Anh muốn thêm mục nào không ạ?"),
-            ("user", "Thêm mục cho dev mobile, đừng dài quá."),
-            ("assistant", "OK anh, em thêm mục Mobile dev, 1 ý ở cuối bản tin."),
-            ("user", "Hôm nay có gì hot không em?"),
-            ("assistant", "Anh Anh ơi, đây là bản tin AI hôm nay. Bản tin hôm qua nói về cuộc đua agent, hôm nay có 5 ý:\n\n1. Các hãng lớn tiếp tục mở rộng agent chạy tác vụ dài, xem [Hacker News](https://news.ycombinator.com/)\n2. Chi phí suy luận giảm thêm, nhiều startup hạ giá gói\n3. Mô hình nhỏ chạy trên điện thoại ngày càng tốt\n4. Quy định về dữ liệu huấn luyện được bàn nhiều ở châu Âu\n5. Mobile dev: công cụ code agent tích hợp thẳng vào Xcode"),
-        ),
-    ),
-    Bot(
-        slug="market-researcher",
-        title="Market Researcher",
-        look=Look(shape="blobatar:market:hexagon", color="#833cf8"),
-        last_message=Recency(days_back=3, clock="11:40"),
-        conversation=(
-            ("user", "Chốt cho anh định vị Soully, đừng lan man."),
-            ("assistant", "Em đề xuất 2 hướng:\n\n- **Journal-first**: nhật ký là lõi, bạn bè phản hồi\n- **Companion-first**: trợ lý trò chuyện là lõi, nhật ký là phụ\n\nHướng đầu ít đối thủ trực diện hơn."),
-            ("user", "Đối thủ chính của hướng đầu là ai?"),
-            ("assistant", "Gần nhất là [Day One](https://dayoneapp.com/) và [Reflectly](https://reflectly.app/), nhưng cả hai đều là nhật ký riêng tư. Không bên nào làm nhật ký phản tỉnh chung."),
-            ("user", "Chọn hướng journal-first, viết lại one-liner và 3 ý giá trị."),
-            ("assistant", "Bản Soully cuối (journal-first, nhật ký phản tỉnh chung):\n\n**One-liner:** Viết nhật ký cùng người thân, hiểu mình hơn mỗi ngày.\n\n- Viết riêng, chia sẻ khi bạn muốn\n- Câu hỏi phản tỉnh gợi ý theo tâm trạng\n- Nhìn lại cả tuần cùng nhau, không cần nói nhiều"),
-        ),
-    ),
-    Bot(
-        slug="cho-dinh",
-        title="chó Định",
-        look=Look(shape="blobatar:dinh:triangle", color="#0ec79b"),
-        last_message=Recency(days_back=4, clock="09:25"),
-        conversation=(
-            ("user", "Định ơi, gộp việc check crash Crashlytics vào routine sáng của em."),
-            ("assistant", "Dạ anh Anh. Em đề xuất routine 8:30: kéo tỉ lệ crash-free, liệt kê 3 crash nhiều nhất, gắn link issue tương ứng. Anh đồng ý không ạ?"),
-            ("user", "Thêm báo cáo doanh thu RevenueCat nữa, đổ vào Notion."),
-            ("assistant", "Em cần API key RevenueCat chỉ đọc. Anh cấp qua biến môi trường giúp em, em không lưu vào chat."),
-            ("user", "Cấp rồi. Làm đi."),
-            ("assistant", "Xong rồi anh Anh. Em đã gộp vào routine của em và đổ số liệu vào [Notion dashboard](https://www.notion.so/metrics-daily) mỗi sáng 8:30. Lần chạy thử: crash-free 99.4%, doanh thu hôm qua đã khớp với RevenueCat.\n\n| Nguồn số liệu | Chỉ số theo dõi mỗi sáng | Ngưỡng cảnh báo | Người nhận báo cáo |\n| --- | --- | --- | --- |\n| Crashlytics production | Tỉ lệ crash-free của phiên bản mới nhất | Dưới 99,0% trong 24 giờ | chó Định và anh Anh |\n| RevenueCat subscriptions | Doanh thu thuần theo ngày và số lượt hủy | Giảm hơn 15% so với tuần trước | chó Định |\n\n```bash\nhermes routine run --profile cho-dinh --name morning-metrics --notion-database metrics-daily --revenuecat-project fren-prod --crashlytics-app dev.tsnanh.fren --since yesterday\n```"),
-        ),
-    ),
-)
-
-
 @dataclass(frozen=True)
 class Exchange:
     sender: str
@@ -232,36 +86,162 @@ class Exchange:
     reply: str
 
 
+BOTS = (
+    Bot(
+        slug="default",
+        title="Pal",
+        look=None,
+        pinned=True,
+        last_message=Recency(minutes_ago=45),
+        conversation=(
+            ("user", "Morning! Can you give me a quick rundown of what the team is working on today?"),
+            ("assistant", "Good morning! Here's where everyone is:\n\n- **Ad Creative** is finishing the holiday ad set\n- **Designer** is polishing the new app icon options\n- **Job Scout** found two freelance leads overnight\n- **App Research** is comparing top journaling apps\n- **Daily Brief** sent today's AI news at 8:00\n- **Market Researcher** is drafting positioning for the launch\n- **Metrics** posted yesterday's numbers\n\nWho do you want to check in with first?"),
+            ("user", "Ask Ad Creative how far along the holiday set is."),
+            ("assistant", "Ad Creative says 12 images are in production and the first drafts land in about 20 minutes. Everything is tracked on the [creative board](https://www.notion.so/)."),
+            ("user", "Great. Remind me to review them this afternoon."),
+            ("assistant", "Done. I set a reminder for 3:00 PM and I'll ping you if anything changes before then."),
+            Turn("user", "Anything I need to pay attention to this week?", gap_before=timedelta(hours=14)),
+            Turn("assistant", "Two things:\n\n1. Your domain renews on Friday. Auto-renew is on, so nothing to do.\n2. The App Store asked for updated tax info. It takes about five minutes in [App Store Connect](https://appstoreconnect.apple.com/).\n\nEverything else is on track.", gap_before=timedelta(minutes=1)),
+            Turn("user", "Thanks, I'll do the tax form tonight.", gap_before=timedelta(minutes=8)),
+            Turn("assistant", "Sounds good. I'll check tomorrow morning and let you know if it went through.", gap_before=timedelta(minutes=1)),
+        ),
+        routines=(
+            Routine("Bills and renewals", "Check email for upcoming bills and renewals and summarise what needs attention.", "weekdays at 8:30am"),
+            Routine("Store reviews", "Read new App Store and Google Play reviews and suggest replies.", "weekdays at 3pm"),
+        ),
+        shared=(
+            Shared("assistant", "Pricing is at https://www.apple.com/app-store/ and the docs are at https://developer.apple.com/documentation/swiftui.", 2),
+            Shared("assistant", "Here's the interface mockup I saved. MEDIA:{media}", 3, "16:40", "library-sample.png"),
+            Shared("assistant", "Today's reading: https://news.ycombinator.com/ and https://github.com/trending.", 9),
+            Shared("assistant", "Background reading: https://www.python.org/ and https://www.wikipedia.org/.", 26),
+        ),
+    ),
+    Bot(
+        slug="cho-ua",
+        title="Ad Creative",
+        look=Look(shape="blobatar:ua:organic", color="#ed0a37"),
+        last_message=Recency(minutes_ago=12),
+        conversation=(
+            Turn("user", "I need App Store screenshots for our wallpaper app. The main idea: a cozy room that lives on your home screen. Can you write the brief?"),
+            Turn("assistant", "Here's the brief for six screenshots:\n\n1. **“Your wallpaper, with a roommate”** — the hero shot: a home screen with the room and character clearly visible.\n2. **“Little moments, every day”** — a close-up of the character decorating, focused on motion and detail.\n3. **“Find your cozy corner”** — one beautiful igloo room, no feature list.\n4. **“A tiny friend between your apps”** — the companion sitting among home-screen icons.\n5. **“Made for every season”** — a holiday variant of the room.\n6. **“Set it up in seconds”** — the real setup flow.\n\n**Avoid:** red circles, tiny text collages, fake UI, and free-trial claims.\n\n**Deliverables:** six 1290×2796 images plus one overview board."),
+            Turn("user", "Let's make two sets so we can A/B test them.", gap_before=timedelta(minutes=25)),
+            Turn("assistant", "Got it: two sets with the same copy and order, only the visual direction changes. Set A is bright pastel, set B is a bold holiday palette with the snowy igloo. I'll send both for review before we start the test.", gap_before=timedelta(minutes=1)),
+            Turn("user", "Message from \U0001f916 Designer (@cho-ai-image-gen): Brief received: 2 sets, 6 images each. Generating now, first drafts in a few minutes.", gap_before=timedelta(hours=6), display_kind="internal_notification"),
+            Turn("assistant", "12 images are in production: set A bright pastel, set B bold holiday. Same message in both so the test compares design only. Details are on the [creative board](https://www.notion.so/).", gap_before=timedelta(minutes=1)),
+        ),
+    ),
+    Bot(
+        slug="cho-ai-image-gen",
+        title="Designer",
+        look=Look(shape="blobatar:ai-image-gen:round", color="#ed0a37"),
+        last_message=Recency(days_back=1, clock="22:48"),
+        conversation=(
+            ("user", "Make me a mascot logo: a friendly fox holding a phone, flat style, transparent background."),
+            ("assistant", "Here are four flat variants on a transparent background:\n\n1. Fox with a thick outline\n2. Warm orange fox\n3. Minimal monochrome fox\n4. Sticker-style cartoon fox\n\nWhich one should I refine?"),
+            ("user", "Number 2, but in mint green."),
+            ("assistant", "Done, here's the mint version. I saved a 2048px PNG and an SVG to the shared team folder."),
+            ("user", "Check the new brief from Ad Creative."),
+            ("user", "Message from \U0001f916 Ad Creative (@cho-ua): Updated brief: 6 images per set, keep sets A and B. About 20 minutes. Details in the [brief](https://www.notion.so/)."),
+        ),
+    ),
+    Bot(
+        slug="upwork-hunter",
+        title="Job Scout",
+        look=Look(shape="blobatar:upwork:capsule", color="#10dc69"),
+        last_message=Recency(days_back=1, clock="18:20"),
+        conversation=(
+            ("user", "Find me React Native jobs on Upwork with a budget over $2,000, posted in the last 24 hours."),
+            ("assistant", "I found 3 good matches on [Upwork](https://www.upwork.com/):\n\n- **Fitness tracking app**: fixed $3,500, client has spent $40K\n- **Fintech dashboard**: $60/hour, verified client\n- **Marketplace app**: fixed $2,200\n\nThe first two are the strongest fits."),
+            ("user", "Draft a cover letter for the fitness one. Friendly and short."),
+            ("assistant", "Drafted: 140 words, opening with the fitness app you shipped last year. It's saved as a draft and not sent yet. Approve it and I'll submit."),
+            ("user", "Send it, and tell me when the client replies."),
+            ("assistant", "Proposal sent. I'll check your Upwork inbox every 30 minutes and let you know as soon as there's a reply."),
+            ("user", "Any replies yet?"),
+            ("assistant", "Not yet. The client hasn't opened the proposal. I'm still watching and will tell you the moment they do."),
+        ),
+    ),
+    Bot(
+        slug="cho-research-app",
+        title="App Research",
+        look=Look(shape="blobatar:research:hexagon", color="#ee0d8f"),
+        last_message=Recency(days_back=2, clock="16:05"),
+        conversation=(
+            ("user", "Research the top journaling apps on the App Store for me."),
+            ("assistant", "I looked at the top 20 in Lifestyle. The standouts:\n\n- [Day One](https://dayoneapp.com/): rich media journal with great sync\n- [Reflectly](https://reflectly.app/): daily guided prompts\n- Journey: minimal and cross-platform\n\nMost charge yearly, around $25 to $35."),
+            ("user", "Where would our app fit next to these?"),
+            ("assistant", "Ours is the only one built around journaling together with someone you trust. None of the top apps do that. The risk is that shared journaling is unfamiliar, so onboarding has to explain it clearly."),
+            ("user", "Summarise three differences and send them to Market Researcher."),
+            ("assistant", "Three differences:\n\n1. Shared journaling instead of private\n2. Guided reflection prompts\n3. Priced about 30% below the top apps\n\nI sent the full write-up to Market Researcher."),
+        ),
+    ),
+    Bot(
+        slug="cho-hong-hot",
+        title="Daily Brief",
+        look=Look(shape="blobatar:hong-hot:organic", color="#f15105"),
+        last_message=Recency(days_back=2, clock="08:12"),
+        conversation=(
+            ("user", "Every morning at 8, send me an AI news brief. Five points max, with sources."),
+            ("assistant", "Scheduled for 8:00 every day: five points, each with a source link. Want any extra sections?"),
+            ("user", "Add one point for mobile developers. Keep it short."),
+            ("assistant", "Done. A Mobile dev point now closes each brief."),
+            ("user", "What's new today?"),
+            ("assistant", "Here's today's AI brief:\n\n1. Agents that run long tasks keep getting better, see [Hacker News](https://news.ycombinator.com/)\n2. Inference costs dropped again and several startups cut prices\n3. Small on-device models keep improving\n4. Training-data rules are a hot topic in Europe\n5. Mobile dev: coding agents now plug straight into Xcode"),
+        ),
+    ),
+    Bot(
+        slug="market-researcher",
+        title="Market Researcher",
+        look=Look(shape="blobatar:market:hexagon", color="#833cf8"),
+        last_message=Recency(days_back=3, clock="11:40"),
+        conversation=(
+            ("user", "Help me pick a positioning for the journaling app. Keep it tight."),
+            ("assistant", "Two options:\n\n- **Journal-first**: the journal is the core, friends respond\n- **Companion-first**: an AI companion is the core, the journal is secondary\n\nJournal-first has fewer direct competitors."),
+            ("user", "Who are the main competitors for journal-first?"),
+            ("assistant", "The closest are [Day One](https://dayoneapp.com/) and [Reflectly](https://reflectly.app/), but both are private journals. Nobody does shared reflective journaling."),
+            ("user", "Go with journal-first. Write a one-liner and three value points."),
+            ("assistant", "**One-liner:** Journal with the people you love, and understand yourself a little better every day.\n\n- Write privately, share when you want\n- Reflection prompts that match your mood\n- Look back on the week together"),
+        ),
+    ),
+    Bot(
+        slug="cho-dinh",
+        title="Metrics",
+        look=Look(shape="blobatar:dinh:triangle", color="#0ec79b"),
+        last_message=Recency(days_back=4, clock="09:25"),
+        conversation=(
+            ("user", "Add a Crashlytics crash check to your morning routine."),
+            ("assistant", "Proposed 8:30 routine: pull the crash-free rate, list the top 3 crashes, and link each issue. Sound good?"),
+            ("user", "Add RevenueCat revenue too, and post it to Notion."),
+            ("assistant", "I need a read-only RevenueCat API key. Add it in Pal's vault and I'll pick it up from there."),
+            ("user", "Added. Go ahead."),
+            ("assistant", "All set. The morning routine now posts to your [Notion dashboard](https://www.notion.so/) at 8:30. Test run: 99.4% crash-free, and yesterday's revenue matches RevenueCat.\n\n| Source | Daily metric | Alert when | Sent to |\n| --- | --- | --- | --- |\n| Crashlytics | Crash-free rate of the latest version | Below 99.0% over 24 hours | You |\n| RevenueCat | Net daily revenue and cancellations | Down more than 15% week over week | You |"),
+        ),
+    ),
+)
+
 EXCHANGES = (
     Exchange(
         sender="cho-research-app",
         target="market-researcher",
-        body="Final verification for Soully. Plan: /workspace/radar/soully-43b-plan.md (journal-first, cards as optional prompts, pair + receipts). Please:\n\n1. Verify the cited precedents exist and how they're framed (Specula, Hermit's Way, Shadow Work, Arcana).\n2. Check journal-first still lands in a proven payer lane (Stoic, Day One, Reflectly, Rosebud).\n3. Re-score this final version out of 10 with remaining gaps.\n\nWrite /workspace/radar/mr-soully-final.md and message me.",
-        reply="Soully final (journal-first): **7.1/10** under the paid-ads-OK bar, a little below Pair's independent 7.3. It's safer at App Review but lands in a thinner lane for revenue.\n\n- Precedents verified: Specula, Hermit's Way and Shadow Work all exist and frame cards as optional prompts\n- Payer lane: Stoic, Day One and Reflectly confirm journal-first still monetises\n- Gaps keeping it below 8:\n  1. Pair mechanic is unproven at scale\n  2. Receipts feel secondary in onboarding\n\nFull report: [mr-soully-final.md](https://www.notion.so/soully-final).",
+        body="Final check on the journaling app plan. Please confirm journal-first still sits in a proven paying category (Day One, Reflectly, Stoic) and score it out of 10 with the remaining gaps.",
+        reply="Journal-first scores **7.1/10**. Day One, Reflectly and Stoic confirm people pay for journaling.\n\nGaps keeping it below 8:\n\n1. Shared journaling is unproven at scale\n2. Onboarding needs to explain the pairing clearly",
     ),
     Exchange(
         sender="cho-research-app",
         target="market-researcher",
-        body="Thanks. One more check: does removing the oracle-first framing hurt the spiritual payer segment? Add one line to the report.",
-        reply="Short answer: a little. Oracle-first converts about 18% better with the spiritual segment, but journal-first keeps App Review risk low. Added one line to the report under Gaps.",
+        body="Thanks. One more: does skipping the AI-companion angle lose us any audience? One line is enough.",
+        reply="A little: the companion angle converts about 18% better with wellness-focused users, but journal-first is clearer and easier to explain.",
     ),
     Exchange(
         sender="cho-ua",
         target="cho-ai-image-gen",
-        body="Final brief: 2 sets, 6 images each. Set A bright pastel, set B bold Christmas. Same content, only the design direction differs. Send both back for approval when done.",
+        body="Final brief: 2 sets, 6 images each. Set A bright pastel, set B bold holiday. Same copy, only the visual direction changes. Send both back for review.",
         reply="Brief received. Generating 12 images now, first drafts in a few minutes.",
-    ),
-    Exchange(
-        sender="cho-ua",
-        target="cho-ai-image-gen",
-        body="One more point: image #3 is a single igloo scene, headline “Find your cozy corner”. Do not list rooms.",
-        reply="Updated #3 to the new headline, no room list.",
     ),
     Exchange(
         sender="default",
         target="cho-ua",
-        body="The owner asks how far the December image sets are.",
-        reply="12 images in production: set A bright pastel, set B bold Christmas. Details in the [creative board](https://www.notion.so/creative-ua-t12).",
+        body="The owner asks how far along the holiday image sets are.",
+        reply="12 images in production: set A bright pastel, set B bold holiday. Details on the [creative board](https://www.notion.so/).",
     ),
 )
 
@@ -288,17 +268,17 @@ def extra_bot(index, slug, title, minutes_ago):
     )
 
 
-def roster(total=len(BOTS)):
-    if total < len(BOTS):
-        raise SystemExit(f"--bots must be at least {len(BOTS)}, the size of the parity roster")
-    if total == len(BOTS):
-        return BOTS
+def roster(total=len(BOTS), base=BOTS):
+    if total < len(base):
+        raise SystemExit(f"--bots must be at least {len(base)}, the size of the seeded roster")
+    if total == len(base):
+        return base
     stream = extra_bot(0, STREAM_BOT_SLUG, STREAM_BOT_TITLE, 5)
     fillers = tuple(
         extra_bot(index, f"perf-bot-{index:02d}", f"Perf Bot {index:02d}", EXTRA_BOT_FIRST_MINUTES_AGO + index * EXTRA_BOT_MINUTES_APART)
-        for index in range(1, total - len(BOTS))
+        for index in range(1, total - len(base))
     )
-    return BOTS + (stream,) + fillers
+    return base + (stream,) + fillers
 
 ProviderAccount = namedtuple("ProviderAccount", "provider label auth_type base_path spend")
 
@@ -312,9 +292,10 @@ SPEND_SOURCE = "api_server"
 OtherDevice = namedtuple("OtherDevice", "device_id label days_ago")
 
 OTHER_DEVICES = (
-    OtherDevice("e2e-desktop-0001", "Bens-MacBook-Pro.local", 9),
-    OtherDevice("e2e-desktop-0002", "tsnanh", 56),
+    OtherDevice("e2e-desktop-0001", "Studio Mac", 9),
+    OtherDevice("e2e-desktop-0002", "Home Server", 56),
 )
+
 
 
 def slugs(bots=BOTS):
@@ -415,9 +396,9 @@ def write_transcript(profile_dir, session_id, bot, now):
         database.close()
 
 
-def write_dm_replies(path):
+def write_dm_replies(path, exchanges):
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump({exchange.body.strip(): exchange.reply for exchange in EXCHANGES}, handle, ensure_ascii=False)
+        json.dump({exchange.body.strip(): exchange.reply for exchange in exchanges}, handle, ensure_ascii=False)
 
 
 async def settled_chat(rpc, slug, session_id, since_messages, reply):
@@ -452,7 +433,7 @@ async def create_routines(rpc, bot):
             raise SystemExit(f"cron.manage add refused for {bot.slug}: {json.dumps(result)}")
 
 
-async def seed_through_gateway(home, now, bots):
+async def seed_through_gateway(home, now, bots, exchanges):
     client = load_gateway_client()
     environment = os.environ
     gateway = client.Gateway(environment["HERMES_IOS_TEST_BASE_URL"], environment["HERMES_IOS_TEST_USERNAME"],
@@ -469,7 +450,7 @@ async def seed_through_gateway(home, now, bots):
             session_ids[bot.slug] = await create_bot_chat(rpc, bot)
             write_transcript(profile_directory(home, bot), session_ids[bot.slug], bot, now)
             await create_routines(rpc, bot)
-        for exchange in EXCHANGES:
+        for exchange in exchanges:
             await run_exchange(rpc, session_ids, exchange)
         pump.cancel()
 
@@ -505,11 +486,11 @@ def seed_provider_accounts(home, stub_url):
         database.close()
 
 
-def seed_other_devices(home, now):
+def seed_other_devices(home, now, devices):
     from gateway import device_registry
 
     root = device_registry.install_root(home)
-    for device in OTHER_DEVICES:
+    for device in devices:
         device_registry.record_hello(
             root, device_id=device.device_id, kind="desktop", label=device.label, model="Mac", os_name="macOS",
             app_version="1.0", now=(now - timedelta(days=device.days_ago)).timestamp())
@@ -531,12 +512,12 @@ def require_sandbox_home(home, bots):
 def seed(home, repo, dm_replies, bots):
     home = require_sandbox_home(home, bots)
     os.environ["HERMES_HOME"] = str(home)
-    write_dm_replies(dm_replies)
+    write_dm_replies(dm_replies, EXCHANGES)
     sys.path.insert(0, str(repo))
     now = datetime.now().astimezone()
-    asyncio.run(seed_through_gateway(home, now, bots))
+    asyncio.run(seed_through_gateway(home, now, bots, EXCHANGES))
     seed_provider_accounts(home, os.environ["HERMES_IOS_E2E_STUB_URL"])
-    seed_other_devices(home, now)
+    seed_other_devices(home, now, OTHER_DEVICES)
     print(",".join(slugs(bots)))
 
 

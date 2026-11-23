@@ -25,7 +25,7 @@ DM_STAMP = re.compile(r"\AMessage from \U0001f916 .+? \(@[A-Za-z0-9_-]+\): ?(.*)
 DM_REPLY_FIELD = re.compile(r'"reply":\s*("(?:[^"\\]|\\.)*")')
 DM_OWNER_LINE = "A bot messaged me, replying now."
 DM_DEFAULT_REPLY = "Received, working on it."
-DM_SENT_REPLY = "Đã nhắn."
+DM_SENT_REPLY = "Message sent."
 dm_replies_path = None
 IPHONE_TRIGGER = "IPHONE"
 CALL_TOOL_TRIGGER = re.compile(r"CALL-TOOL (\S+)(?: (\{.*\}))?", re.DOTALL)
@@ -47,7 +47,7 @@ TOOL_COMMANDS = {
     "NARRATE": "sleep 3; echo hermes-stub-narrate",
 }
 TOOL_PREAMBLE_CHUNKS = {"STEER": 60}
-COMMENTARY = ["Pal đã nhận việc ", "145 nhưng cần ", "xem hàng đợi trước.\n\n"]
+COMMENTARY = ["Pal took job ", "145 but needs to ", "check the queue first.\n\n"]
 COMMENTARY_DELAY = 0.1
 TOOL_PREAMBLES = {"NARRATE": COMMENTARY}
 NARRATED_CLARIFY_TRIGGER = "NARRASK"

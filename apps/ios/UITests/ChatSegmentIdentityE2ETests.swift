@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class ChatSegmentIdentityE2ETests: E2ETestCase {
-    private static let commentary = "Pal đã nhận việc 145 nhưng cần xem hàng đợi trước."
+    private static let commentary = "Pal took job 145 but needs to check the queue first."
     private static let narratedFinal = "hermes-stub-narrate"
     private static let clarifyFinal = "Got it, chocolate"
     private static let settleSeconds: TimeInterval = 8
