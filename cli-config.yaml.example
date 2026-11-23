@@ -434,6 +434,18 @@ kanban:
 cron:
   catch_up_missed: true  # False skips past-grace recurring misses after planned downtime.
 
+# How far a bot goes on its own, per action class: act | act_and_tell | ask.
+# spend_money and message_people never go below ask (a lower value is clamped);
+# outbound messages still pass the per-send approval. Shapes one prompt line only.
+# proactive:
+#   autonomy:
+#     reversible_edits: act
+#     run_tools: act
+#     create_files: act
+#     schedule_jobs: act_and_tell
+#     spend_money: ask
+#     message_people: ask
+
 terminal:
   backend: "local"
   cwd: "."  # For local backend: "." = current directory. Ignored for remote backends unless a backend documents otherwise.
