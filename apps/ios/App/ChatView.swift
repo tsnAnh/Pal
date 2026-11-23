@@ -40,6 +40,7 @@ struct ChatView: View {
                 )
                 .chatColumn()
                 .paneOverflowProbe("chat.composer")
+                .iOSOnly { $0.ignoresSafeArea(.container, edges: .bottom) }
             }
             .iOSOnly { chat in
                 chat
