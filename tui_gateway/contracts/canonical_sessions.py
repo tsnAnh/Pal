@@ -367,9 +367,11 @@ class CanonicalCorrectionResult(RootModel):
     root: CanonicalCorrectionAck | CanonicalVoiceStopped
 
 
-class CanonicalApprovalParams(CanonicalControlParams):
+class CanonicalApprovalParams(CanonicalSessionParams):
+    execution_generation: int | None = None
     prompt_id: str
     choice: str
+    edited_text: str | None = None
 
 
 class CanonicalEventsParams(CanonicalSessionParams):

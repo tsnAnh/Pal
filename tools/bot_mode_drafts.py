@@ -301,9 +301,13 @@ def validate_edit(outbound: Outbound, args: dict, edited_text) -> tuple[dict | N
     return new_args, ""
 
 
+HELD_WHERE = ("Open this bot's chat in the Pal app: the draft is waiting under Approvals, where the owner can "
+              "approve, edit or cancel it.")
+
+
 def _held_message(draft_id: str, reason: str) -> str:
-    return (f"BLOCKED: {reason} The message was NOT sent. A draft is waiting in the owner's Bot Chat "
-            f"(draft {draft_id}); the owner decides whether to send it. Do NOT retry it, do NOT rephrase it, "
+    return (f"BLOCKED: {reason} The message was NOT sent. It is saved as a draft (state: pending, draft {draft_id}) "
+            f"and nothing is sent until the owner approves it. {HELD_WHERE} Do NOT retry it, do NOT rephrase it, "
             "and do NOT deliver the same message through another tool or route.")
 
 
@@ -325,7 +329,7 @@ def _hold(outbound: Outbound, args: dict, origin: str, reason: str) -> tuple[str
 
 def _inline_capable(approval) -> bool:
     from tools import approval_context
-    if approval_context.is_bot_chat_turn():
+    if approval_context.approval_client_attached():
         return True
     callback, is_cli, _is_gateway, _is_ask = approval._presence()
     return bool(is_cli and callback is not None)
@@ -381,9 +385,9 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
         return None, None
     if not outbound.viewable:
         return _hold(outbound, args, "unviewable",
-                     "Part of this message cannot be shown in full, so it can only be discarded.")
+                     "Part of this message cannot be shown in full, so it can only be cancelled.")
     if not _inline_capable(approval):
-        return _hold(outbound, args, "elsewhere", "Drafts are reviewed in the bot's own Bot Chat.")
+        return _hold(outbound, args, "elsewhere", "No Pal app is connected to this chat to show the approval right now.")
     return _ask_owner(outbound, args)
 
 

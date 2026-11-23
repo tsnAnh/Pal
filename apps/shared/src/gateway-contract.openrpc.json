@@ -7772,10 +7772,23 @@
             "default": "pending",
             "enum": [
               "pending",
+              "failed",
               "expired"
             ],
             "title": "State",
             "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
           },
           "expires_at": {
             "anyOf": [
@@ -8095,6 +8108,35 @@
           "resolved": {
             "title": "Resolved",
             "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "sent",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sent",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
           }
         },
         "required": [
@@ -12281,8 +12323,16 @@
             "type": "string"
           },
           "execution_generation": {
-            "title": "Execution Generation",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Execution Generation"
           },
           "prompt_id": {
             "title": "Prompt Id",
@@ -12291,11 +12341,22 @@
           "choice": {
             "title": "Choice",
             "type": "string"
+          },
+          "edited_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Edited Text"
           }
         },
         "required": [
           "session_id",
-          "execution_generation",
           "prompt_id",
           "choice"
         ],
@@ -49573,6 +49634,22 @@
           "prompt_id": {
             "title": "Prompt Id",
             "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sent",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
           }
         },
         "required": [

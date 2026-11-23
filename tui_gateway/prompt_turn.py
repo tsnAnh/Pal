@@ -193,6 +193,7 @@ class _TurnScopes:
 
     approval: Any = None
     bot_chat: Any = None
+    approval_client: Any = None
     session_tokens: list = dataclasses.field(default_factory=list)
     # The turn's profile state (home, secrets, terminal policy, runtime scope) as ONE bind; released
     # whole after post-turn housekeeping, which still runs under the session's own profile.
@@ -683,6 +684,8 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
     from tools.bot_mode_drafts import profile_is_bot_managed
     from tools.approval_context import set_current_bot_chat
     scopes.bot_chat = set_current_bot_chat(_is_bot_mode_session(session) and profile_is_bot_managed())
+    from tools.approval_context import set_approval_client_probe
+    scopes.approval_client = set_approval_client_probe(lambda: bool(_session_answering_clients(sid)))
     # The sudo password callback is thread-local: without re-wiring here, sudo prompts
     # fall through to /dev/tty and hang the headless gateway (re-run is a no-op).
     _wire_callbacks(sid)
@@ -1122,6 +1125,10 @@ def _release_turn_scopes(sid: str, session: dict, st: _TurnRun) -> None:
         if scopes.bot_chat is not None:
             from tools.approval_context import reset_current_bot_chat
             reset_current_bot_chat(scopes.bot_chat)
+    with contextlib.suppress(Exception):
+        if scopes.approval_client is not None:
+            from tools.approval_context import reset_approval_client_probe
+            reset_approval_client_probe(scopes.approval_client)
     _clear_session_context(scopes.session_tokens)
 
 

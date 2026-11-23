@@ -1580,8 +1580,6 @@ def _approval_reply(rid, result_key, call):
 
 
 def _held_draft_cards(session: dict) -> list[dict]:
-    if not _is_bot_mode_session(session):
-        return []
     from tools import bot_mode_draft_store
     from tools.bot_mode_drafts import profile_is_bot_managed
     with _session_profile_runtime_scope(session, hydrate_secrets=False):
@@ -1591,8 +1589,6 @@ def _held_draft_cards(session: dict) -> list[dict]:
 def _respond_held_draft(rid, session: dict, params: dict) -> dict:
     from tools import bot_mode_draft_store
     from tools.bot_mode_drafts import profile_is_bot_managed
-    if not _is_bot_mode_session(session):
-        return _err(rid, 4132, "drafts are answered in the bot's own chat")
     choice, draft_id = params.get("choice"), str(params.get("request_id"))[len("draft:"):]
     if choice not in ("once", "deny"):
         return _err(rid, 4133, "a draft is either sent or discarded")
@@ -1601,13 +1597,9 @@ def _respond_held_draft(rid, session: dict, params: dict) -> dict:
         with _session_profile_runtime_scope(session):
             if not profile_is_bot_managed():
                 return _err(rid, 4132, "drafts are answered in the bot's own chat")
-            if choice == "deny":
-                bot_mode_draft_store.discard(draft_id)
-                return _ok(rid, {"resolved": 1})
-            bot_mode_draft_store.send(draft_id, edited if isinstance(edited, str) else None)
-            return _ok(rid, {"resolved": 1})
+            return _ok(rid, bot_mode_draft_store.answer(draft_id, choice, edited if isinstance(edited, str) else None))
     except bot_mode_draft_store.DraftError as e:
-        return _err(rid, 4134, e.message, data={"reason": e.code})
+        return _err(rid, 4134, e.message, data={"reason": e.code, "state": e.state})
 
 
 def _approval_respond_session_fallback(params: dict):
