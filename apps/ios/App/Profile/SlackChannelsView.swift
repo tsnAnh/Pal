@@ -17,8 +17,7 @@ struct SlackChannelsView: View {
         VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
             HStack(spacing: 8) {
                 PalIcon("magnifyingglass", ink: .tertiary).accessibilityHidden(true)
-                TextField(String(localized: "Search channels"), text: $search)
-                    .textFieldStyle(.plain)
+                PalTextField(String(localized: "Search channels"), text: $search)
                     .autocorrectionDisabled()
                     #if os(iOS)
                     .textInputAutocapitalization(.never)

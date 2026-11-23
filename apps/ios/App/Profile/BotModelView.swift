@@ -272,8 +272,7 @@ private struct BotModelPicker: View {
 
     private var list: some View {
         VStack(spacing: 0) {
-            TextField("Search models", text: $query)
-                .textFieldStyle(.plain)
+            PalTextField("Search models", text: $query)
                 .padding(.horizontal, PalMetrics.rowInset)
                 .frame(minHeight: PalMetrics.rowMinimumHeight)
                 .background(Color(theme.palette.groupedCard), in: Capsule())

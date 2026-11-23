@@ -43,18 +43,19 @@ Any unit that adds or changes what a person sees in the Pal app (macOS, iPhone, 
 
 ## Rule 5: Liquid Glass design rules are lint-enforced
 
-Glass is a control and navigation layer floating above content, never the content layer. Run `python scripts/check --only swift-glass,swift-nav-chrome,swift-bot-tint` on every UI change; a finding names file, line, rule id and fix. Findings sit in `apps/ios/.glass-lint-baseline.json`: new code never adds to it; a fix deletes its entry (`check_swift_glass.py --write-baseline`). Exception: `// glass-lint: ok` on the line.
+Glass is a control and navigation layer floating above content, never the content layer. Run `python scripts/check --only swift-glass,swift-nav-chrome,swift-bot-tint` on every UI change. Findings sit in `apps/ios/.glass-lint-baseline.json`: new code never adds to it; a fix deletes its entry (`check_swift_glass.py --write-baseline`). Exception: `// glass-lint: ok` on the line.
 
 | Apple rule | Pal decision | Lint id |
 |---|---|---|
 | Custom glass only sparingly, via `glassEffect(_:in:)` | `glassEffect` and `NSGlassEffectView` live in PalDesign only with the Mac 15 fallbacks; screens call `.palGlass`, `.glassButtonStyle()`, `PalGlassContainer`, not raw macOS 26 APIs | `glass-hand-rolled`, `glass-raw-glass-api` |
-| Tint marks prominence, never darkens | No black or dark tint on glass on iOS, iPadOS or Mac (PAL-3 removes `PalGlass.darkTint`) | `glass-dark-tint` |
-| Buttons are native glass | Text buttons: `.glassButtonStyle()`; primary or selected: `.glassButtonStyle(prominent: true)` (raw `.glassProminent` follows the Mac system accent); default size, no `.controlSize`, no `.tint` (it fills `.glass`), no custom `ButtonStyle` | `glass-pill-button`, `glass-button-size`, `glass-button-tint`, `glass-prominent-direct`, `glass-custom-button-style`; old pill/capsule styles are deleted |
+| Tint marks prominence, never darkens | No black or dark tint on glass on iOS, iPadOS or Mac | `glass-dark-tint` |
+| Buttons are native glass | Text buttons: `.glassButtonStyle()`; primary or selected: `.glassButtonStyle(prominent: true)` (raw `.glassProminent` follows the Mac system accent); default size, no `.controlSize`, no `.tint`, no custom `ButtonStyle` | `glass-pill-button`, `glass-button-size`, `glass-button-tint`, `glass-prominent-direct`, `glass-custom-button-style` |
 | Group nearby custom glass | Two or more `.palGlass` in one view share a `PalGlassContainer` | `glass-container` |
 | Sheets: standard Close on the leading side | `SheetChrome` hosts every sheet; Close is `PalCloseButton` on the leading side, only in SheetChrome/`ToolbarItem`; bottom inset comes from SheetChrome, never `.padding(.bottom, N)` | `glass-sheet-chrome`, `glass-close-chrome`, `swift-nav-chrome` |
 | Search is `.searchable` | `.searchable`, the plain system field or PalDesign `FloatingSearchBar`; no bezel, border, background or custom search view | `glass-search-field` |
-| Bars over scrolling content use system insets (`.palSafeAreaBar`) | A bar over a ScrollView uses `safeAreaInset` or `contentMargins` (measured height) and owns a background; no overlay or ZStack with fixed padding (PAL-4) | `glass-floating-bar` |
+| Bars over scrolling content use system insets (`.palSafeAreaBar`) | A bar over a ScrollView uses `safeAreaInset` or `contentMargins` and owns a background; no overlay or ZStack with fixed padding | `glass-floating-bar` |
 | System colours with light, dark and increased-contrast variants | Colours come from `PalTokens`, `theme.palette` or system colours; no raw hex, `Color(red:`, `Color(white:` in `App/` | `glass-raw-color` |
+| Liquid Glass is the only surface of an input | `PalTextField`, `PalTextEditor`, `PalGlassTextField` (`PalTextInput.swift`): plain, no bezel, ring or second background; focus on the glass; exceptions `glass_input_allowlist.txt` | `glass-input-*` |
 | Bot accents stay on small shapes | Surfaces use the neutral palette | `swift-bot-tint` |
 | Icons are the primary ink | `PalIcon`, `Label(_, palIcon:)`; no raw `Image(systemName:)`, `systemImage:` or blue; exceptions in `swift_icon_tint_allowlist.txt` | `swift-icon-tint` |
 | Connect Apps, Slack setup: clear glass, ink | `PalTokens` ink, `.palClearGlass`, `ClearGlassSearchField`; no blue (`toggleOn`), green, red, hex, `.tint(`, `Glass.regular`; errors `palette.destructive` | `swift-connect-palette` |
@@ -62,7 +63,6 @@ Glass is a control and navigation layer floating above content, never the conten
 | Mac window fits: one `MacLayoutMetrics`, one `MacShellLayout`; sidebar rows use `.boundedToColumn()` | No width literal outside `MacLayoutMetrics`; the shell never lays out with a stack; a `Mac*Row` or row `LazyVStack` is bounded and has no `fixedSize` | `swift-mac-layout`, `MacLayoutMetricsTests` |
 | Chat rows name their side | `chatRowFrame(for: ChatSender)`: bot leading, user trailing, chips `.system`; no max- or fixed-width `.frame` without `alignment:` | `swift-chat-row-alignment` |
 | One design system | Mac and iOS share PalDesign components; no Electron (`apps/desktop` is not Pal) | review |
-| Design first | UI changes start from an owner-approved mockup (Rule 4) | review |
 | Mac popups: size classes (`MacModalSize`) | `MacModalPanel(size:)`/`macSheet(size:)`: compact (440, hugs), form (560, hugs), stepper (540x500), wide (720, hugs, max 600), full (70% of window, 640x440 floor), palette (640, 120pt from top); capped at 90% width, 85% height; no `width:`/`height:` on `MacModalPanel`; `.macAlert`/`.macConfirm`; `.macModalEnvironment()` last | `swift-modal-size`, `MacModalSizingTests` |
 | Notification extension never requests Communication Notifications (app only) | entitlements exist | `swift-entitlements` |
 

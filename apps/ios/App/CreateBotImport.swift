@@ -107,8 +107,7 @@ private struct TemplateReviewSheet: View {
         SectionCaption(String(localized: "Name"), accessibilityIdentifier: "templateNameCaption")
             .padding(.bottom, PalMetrics.captionToCardGap)
         GroupedCard(accessibilityIdentifier: "templateNameCard") {
-            TextField("", text: $importer.name, prompt: Text("Name your Bot"))
-                .textFieldStyle(.plain)
+            PalTextField("", text: $importer.name, prompt: Text("Name your Bot"))
                 .padding(.horizontal, PalMetrics.rowInset)
                 .frame(minHeight: PalMetrics.rowMinimumHeight)
                 .disabled(importer.isBusy)

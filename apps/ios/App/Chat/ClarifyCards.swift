@@ -224,13 +224,11 @@ struct ClarifyInputRow: View {
         let style: ClarifyRowStyle = hasText || focused.wrappedValue ? .chosen : .choice
         let placeholder = String(localized: "Something else")
         ClarifyRowShell(letter: letter, style: style, accent: accent) {
-            TextField(
+            PalTextField(
                 "",
                 text: $text,
-                prompt: Text(placeholder).foregroundStyle(Color(style.placeholder(in: theme.palette)))
+                prompt: Text(placeholder)
             )
-            .textFieldStyle(.plain)
-            .focusEffectDisabled()
             .font(.body)
             .foregroundStyle(Color(style.typedText(in: theme.palette)))
             .focused(focused)

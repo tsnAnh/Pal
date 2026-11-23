@@ -263,7 +263,9 @@ struct ChatComposer: View {
     }
 
     private var field: some View {
-        TextField("", text: $draft, prompt: promptText.foregroundStyle(PalTokens.textTertiary), axis: .vertical)
+        PalTextField(
+            "", text: $draft, prompt: promptText, axis: .vertical
+        )
             .hermesText(.composerField)
             .foregroundStyle(PalTokens.textPrimary)
             .lineLimit(1...5)
@@ -272,8 +274,6 @@ struct ChatComposer: View {
             .onSubmit { if hasContent, canSend { send(draft) } }
             .macOnly { field in
                 field
-                    .textFieldStyle(.plain)
-                    .focusEffectDisabled()
                     .onKeyPress(.escape, phases: .down) { _ in
                         guard !slashMatches.isEmpty || isFileRefOpen, !isComposingText else { return .ignored }
                         dismissedDraft = draft

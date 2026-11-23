@@ -66,8 +66,7 @@ struct GitHubTokenScreen: View {
 
     @ViewBuilder
     private var clientIDRows: some View {
-        TextField("Client ID", text: $clientID, prompt: Text("OAuth app client ID"))
-            .textFieldStyle(.plain)
+        PalTextField("Client ID", text: $clientID, prompt: Text("OAuth app client ID"))
             .autocorrectionDisabled()
             .submitLabel(.done)
             .onSubmit { Task { await model.saveClientID(clientID) } }

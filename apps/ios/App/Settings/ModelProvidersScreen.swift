@@ -54,8 +54,7 @@ struct ModelProvidersScreen: View {
     }
 
     private var searchField: some View {
-        TextField("Search providers", text: $model.query)
-            .textFieldStyle(.plain)
+        PalTextField("Search providers", text: $model.query)
             .padding(.horizontal, PalMetrics.rowInset)
             .frame(minHeight: PalMetrics.rowMinimumHeight)
             .background(Color(theme.palette.groupedCard), in: Capsule())
@@ -127,12 +126,11 @@ struct ModelProvidersScreen: View {
 
     @ViewBuilder
     private func addressRows(_ provider: ModelProvider, key: String) -> some View {
-        TextField(
+        PalTextField(
             "Address",
             text: Binding(get: { model.address(for: provider) }, set: { model.setAddress($0, for: provider) }),
             prompt: Text(provider.defaultBaseURL ?? "Address")
         )
-        .textFieldStyle(.plain)
         .urlEntry()
         .submitLabel(.done)
         .onSubmit { Task { await model.saveAddress(provider) } }
