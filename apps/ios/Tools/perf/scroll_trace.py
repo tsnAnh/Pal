@@ -1,8 +1,12 @@
 """Find chat list jumps in a PAL_SCROLL_TRACE=1 CSV (pal-scroll-trace.csv).
 
-A jump is a change of the pinned row's position relative to the newest-edge inset line
-(pin_min_y - distance) between two consecutive lines, larger than the threshold, while no user
-scroll is moving the list and no intended move (jump to newest, find reveal) is settling.
+Two kinds of jump, counted only while no user scroll is moving the list and no intended move
+(jump to newest, find reveal) is settling:
+
+* viewport: in following mode the list leaves or re-enters the newest edge (distance changes by
+  more than the threshold). Rows growing at the newest edge while distance stays put are intended.
+* anchor: in reading mode the pinned row moves relative to the newest-edge inset line
+  (pin_min_y - distance) between two lines with the same pinned row.
 
 Run: python3 apps/ios/Tools/perf/scroll_trace.py TRACE.csv [--threshold 1.0] [--settle 0.4] [--max-jumps N]
 """
@@ -49,6 +53,7 @@ class Line:
 
 @dataclass(frozen=True)
 class Jump:
+    kind: str
     line: Line
     moved: float
     causes: tuple[Line, ...]
@@ -56,7 +61,7 @@ class Jump:
     def describe(self, start: float) -> str:
         changes = ", ".join(f"{c.kind}:{c.reason or '-'}@{c.at - start:.3f}s" for c in self.causes) or "none"
         return (
-            f"t={self.line.at - start:.3f}s moved {self.moved:+.1f}pt mode={self.line.mode} "
+            f"{self.kind} t={self.line.at - start:.3f}s moved {self.moved:+.1f}pt mode={self.line.mode} "
             f"kind={self.line.kind} content_h={_show(self.line.content_h)} inset_top={_show(self.line.inset_top)} "
             f"safe_bottom={_show(self.line.safe_bottom)} preceding=[{changes}]"
         )
@@ -97,16 +102,28 @@ def jumps(lines: list[Line], threshold: float = 1.0, settle: float = 0.4) -> lis
         if line.kind == "write" and line.reason in INTENDED:
             intended_at = line.at
         quiet = line.phase not in USER_PHASES and line.at - intended_at > settle
-        if previous and quiet and line.pin and line.pin == previous.pin:
-            before, after = previous.anchor, line.anchor
-            if before is not None and after is not None and abs(after - before) > threshold:
+        if previous and quiet:
+            move = _move(previous, line, threshold)
+            if move:
                 causes = tuple(
                     c for c in lines[:index]
                     if line.at - c.at <= LOOKBACK_S and c.kind in {"write", "skip", "chrome", "rows"}
                 )
-                found.append(Jump(line=line, moved=after - before, causes=causes))
+                found.append(Jump(kind=move[0], line=line, moved=move[1], causes=causes))
         previous = line
     return found
+
+
+def _move(before: Line, after: Line, threshold: float) -> tuple[str, float] | None:
+    if after.mode == "following":
+        if before.distance is None or after.distance is None:
+            return None
+        moved = after.distance - before.distance
+        return ("viewport", moved) if abs(moved) > threshold else None
+    if not after.pin or after.pin != before.pin or before.anchor is None or after.anchor is None:
+        return None
+    moved = after.anchor - before.anchor
+    return ("anchor", moved) if abs(moved) > threshold else None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -123,7 +140,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     found = jumps(lines, args.threshold, args.settle)
     start = lines[0].at if lines else 0.0
-    print(f"lines={len(lines)} jumps={len(found)} threshold={args.threshold}pt")
+    viewport = sum(1 for jump in found if jump.kind == "viewport")
+    print(f"lines={len(lines)} jumps={len(found)} viewport={viewport} anchor={len(found) - viewport} threshold={args.threshold}pt")
     for jump in found:
         print("JUMP " + jump.describe(start))
     return 1 if args.max_jumps is not None and len(found) > args.max_jumps else 0

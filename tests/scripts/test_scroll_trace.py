@@ -72,4 +72,26 @@ def test_max_jumps_fails_the_run(tmp_path, capsys):
     path = tmp_path / "trace.csv"
     path.write_text(trace(row(0.0), row(0.016, distance=320.0)))
     assert scroll_trace.main([str(path), "--max-jumps", "0"]) == 1
-    assert "JUMP t=0.016s moved -20.0pt" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "jumps=1 viewport=0 anchor=1" in out
+    assert "JUMP anchor t=0.016s moved -20.0pt" in out
+
+
+def test_a_row_appended_at_the_newest_edge_while_following_is_not_a_jump():
+    lines = scroll_trace.parse(trace(
+        row(0.0, mode="following", distance=0.0, pin_min_y=0.0),
+        row(0.010, kind="rows", mode="following", distance=0.0, pin_min_y=0.0),
+        row(0.016, kind="pin", mode="following", distance=0.0, pin_min_y=44.0),
+    ))
+    assert scroll_trace.jumps(lines) == []
+
+
+def test_following_list_pushed_off_the_newest_edge_is_a_viewport_jump():
+    lines = scroll_trace.parse(trace(
+        row(0.0, mode="following", distance=0.0, pin_min_y=0.0),
+        row(0.010, kind="chrome", mode="following", distance=0.0, pin_min_y=0.0),
+        row(0.016, mode="following", distance=88.0, pin_min_y=0.0),
+    ))
+    found = scroll_trace.jumps(lines)
+    assert [(j.kind, round(j.moved)) for j in found] == [("viewport", 88)]
+    assert [c.kind for c in found[0].causes] == ["chrome"]
