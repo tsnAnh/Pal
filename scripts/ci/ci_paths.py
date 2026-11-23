@@ -18,9 +18,11 @@ Rule = tuple[str, bool]
 
 _RUN_EVERYTHING: tuple[Rule, ...] = ((".github/*", True), ("scripts/check", True))
 _OUTSIDE_IOS: tuple[Rule, ...] = (("*", True), ("apps/ios/*", False))
+_PROVIDER_LOGOS: tuple[Rule, ...] = (("apps/ios/Design/ProviderLogos/*", True),
+                                     ("apps/ios/App/Assets.xcassets/ProviderLogos/*", True))
 
 JOB_RULES: dict[str, tuple[Rule, ...]] = {
-    "python": (*_OUTSIDE_IOS, ("apps/ios/*.py", True), *_RUN_EVERYTHING),
+    "python": (*_OUTSIDE_IOS, ("apps/ios/*.py", True), *_PROVIDER_LOGOS, *_RUN_EVERYTHING),
     "tooling-tests": (*_OUTSIDE_IOS, *_RUN_EVERYTHING),
     "ios-guards": (("apps/ios/*", True), *_RUN_EVERYTHING),
     "swift": (("apps/ios/*", True), (".github/workflows/python.yml", True)),
@@ -47,6 +49,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "case-collisions": (("*", True),),
     "profile-archives": (("*", True),),
     "blob-size": (("*", True),),
+    "provider-logos": (*((g, True) for g in _PY), *_PROVIDER_LOGOS),
     "swift-brand": (("apps/ios/*.swift", True),),
     "swift-nav-chrome": (("apps/ios/*.swift", True),),
     "swift-bot-tint": (("apps/ios/*.swift", True),),

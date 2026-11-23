@@ -24,7 +24,7 @@ final class LocalEngineModel {
     private(set) var tailnetPassword: String?
     private(set) var tailnetFailure: String?
     private(set) var isUpdatingTailnet = false
-    private(set) var providerStep: ModelProvidersModel?
+    private(set) var providerStep: ProviderOnboardingModel?
     @ObservationIgnored private var tailnetGeneration = 0
     var isPresentingSetup = false
 
@@ -33,6 +33,7 @@ final class LocalEngineModel {
     @ObservationIgnored private let diagnostics: Diagnostics
     @ObservationIgnored private var session: EngineSession?
     @ObservationIgnored private var installTask: Task<Void, Never>?
+    @ObservationIgnored private var presentedScriptedProviderStep = false
 
     init(connection: ConnectionModel, diagnostics: Diagnostics, service: LocalEngineService? = nil) {
         self.connection = connection
@@ -61,6 +62,10 @@ final class LocalEngineModel {
     var isRunningForSignIn: Bool { state == .ready && session != nil }
 
     func detect() async {
+        if ProviderOnboardingScript.isActive {
+            await presentScriptedProviderStep()
+            return
+        }
         switch state {
         case .installing, .removing: return
         default: break
@@ -80,8 +85,8 @@ final class LocalEngineModel {
 
     func dismissSetup() {
         guard !isInstalling, !isSigningIn, !providerSignInBusy else { return }
-        if providerStep != nil {
-            finishProviderStep()
+        if let step = providerStep {
+            step.escape()
             return
         }
         isPresentingSetup = false
@@ -280,34 +285,51 @@ final class LocalEngineModel {
 extension LocalEngineModel {
     var isChoosingProvider: Bool { providerStep != nil }
 
-    var providerSignInBusy: Bool { providerStep?.isSigningInAny ?? false }
+    var providerSignInBusy: Bool { providerStep?.isBusy ?? false }
 
-    func finishProviderStep() {
-        guard let step = providerStep, !step.isSigningInAny else { return }
+    func finishProviderStep(greets: Bool) {
+        guard providerStep != nil else { return }
         providerStep = nil
         isPresentingSetup = false
-        connection?.finishLocalSetup(greets: step.hasConnectedProvider)
+        connection?.finishLocalSetup(greets: greets)
     }
 
     private func signInAndBeginFirstRun(_ session: EngineSession) async -> Bool {
         isSigningIn = true
         defer { isSigningIn = false }
         guard let connection, await connection.signInToLocalEngine(session) else { return false }
-        let providers = providerSetupModel(connection)
-        await providers.load()
-        if providers.hasLoaded, providers.hasConnectedProvider {
+        let step = providerOnboarding(connection)
+        await step.providers.load()
+        if step.providers.hasLoaded, step.providers.hasConnectedProvider {
             connection.finishLocalSetup(greets: true)
         } else {
-            providerStep = providers
+            providerStep = step
             isPresentingSetup = true
         }
         return true
     }
 
-    private func providerSetupModel(_ connection: ConnectionModel) -> ModelProvidersModel {
-        let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        return ModelProvidersModel(client: ModelProvidersClient(gateway: gateway), surfaces: connection.surfaces)
+    func presentScriptedProviderStep() async {
+        guard let connection, !presentedScriptedProviderStep else { return }
+        presentedScriptedProviderStep = true
+        let step = providerOnboarding(connection, gateway: ProviderOnboardingScript.gateway())
+        await step.providers.load()
+        providerStep = step
+        isPresentingSetup = true
     }
 
+    private func providerOnboarding(
+        _ connection: ConnectionModel,
+        gateway: BotsGateway? = nil
+    ) -> ProviderOnboardingModel {
+        let gateway = gateway ?? BotsGateway { method, params in try await connection.rpc(method, params) }
+        let client = ModelProvidersClient(gateway: gateway)
+        let models = BotModelClient(gateway: gateway, profile: CreateBotModel.mainBot)
+        let providers = ModelProvidersModel(client: client, surfaces: connection.surfaces)
+        let flow = ProviderTestFlow(backend: ModelProvidersBackend(providers: client, models: models))
+        return ProviderOnboardingModel(providers: providers, flow: flow, client: client, models: models) { [weak self] greets in
+            self?.finishProviderStep(greets: greets)
+        }
+    }
 }
 #endif

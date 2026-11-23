@@ -6,6 +6,7 @@ public enum ModelProviderKind: Sendable, Equatable {
     case apiKey
     case deviceCode
     case oauthPaste
+    case cliPlan
     case unsupported
     case unknown
 
@@ -14,6 +15,7 @@ public enum ModelProviderKind: Sendable, Equatable {
         case "api_key": self = .apiKey
         case "device_code": self = .deviceCode
         case "oauth_paste": self = .oauthPaste
+        case "cli_plan": self = .cliPlan
         case "unsupported": self = .unsupported
         default: self = .unknown
         }
@@ -107,7 +109,7 @@ public struct ModelProvider: Sendable, Equatable, Identifiable, Decodable {
 
     public var canSignIn: Bool {
         switch kind {
-        case .apiKey, .deviceCode, .oauthPaste: state != .unsupported
+        case .apiKey, .deviceCode, .oauthPaste, .cliPlan: state != .unsupported
         case .unsupported, .unknown: false
         }
     }
@@ -124,6 +126,13 @@ public enum ModelProviderCredential {
 
 extension ModelProvider {
     public var acceptsSetupToken: Bool { ModelProviderCredential.setupTokenProviders.contains(id) }
+
+    public var isSubscription: Bool {
+        switch kind {
+        case .deviceCode, .oauthPaste, .cliPlan: true
+        case .apiKey, .unsupported, .unknown: false
+        }
+    }
 }
 
 public enum ModelProviderRemoval: Sendable, Equatable {
@@ -169,8 +178,8 @@ struct ModelProviderActionWire: Decodable {
 public struct ModelProvidersClient: Sendable {
     public static let serviceKey = "provider:"
 
-    private let gateway: BotsGateway
-    private let profile: String?
+    let gateway: BotsGateway
+    let profile: String?
 
     public init(gateway: BotsGateway, profile: String? = nil) {
         self.gateway = gateway
@@ -236,12 +245,12 @@ public struct ModelProvidersClient: Sendable {
         }
     }
 
-    private func perform(_ method: String, _ params: [String: JSONValue]) async throws -> ModelProviderActionWire {
+    func perform(_ method: String, _ params: [String: JSONValue]) async throws -> ModelProviderActionWire {
         let result = try await gateway.call(method, scoped(params))
         return try gateway.decoded(ModelProviderActionWire.self, result)
     }
 
-    private func scoped(_ params: [String: JSONValue]) -> [String: JSONValue] {
+    func scoped(_ params: [String: JSONValue]) -> [String: JSONValue] {
         guard let profile, !profile.isEmpty else { return params }
         var merged = params
         merged["profile"] = .string(profile)

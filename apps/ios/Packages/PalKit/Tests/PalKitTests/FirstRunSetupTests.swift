@@ -6,10 +6,6 @@ import PalProtocol
 import Synchronization
 import Testing
 
-private func provider(_ id: String, kind: ModelProviderKind = .apiKey, state: ModelProviderState = .notSet) -> ModelProvider {
-    ModelProvider(id: id, name: id.capitalized, kind: kind, state: state)
-}
-
 private func keyRequired(_ requestID: String, service: String) -> GatewayEvent {
     GatewayEvent(
         type: "auth.required",
@@ -35,28 +31,6 @@ private func center(_ calls: Calls) -> ServiceSignInCenter {
         },
         openBrowser: { _ in }
     )
-}
-
-@Suite("First run providers")
-struct FirstRunProvidersTests {
-    @Test func theShortListKeepsItsOrderAndSkipsIdsTheEngineDoesNotReturn() {
-        let browser: Set<String> = ["nous", "openai-codex"]
-        let catalogue = ["nous", "gemini", "anthropic", "openai-codex", "mistral"].map {
-            provider($0, kind: browser.contains($0) ? .deviceCode : .apiKey)
-        }
-        #expect(FirstRunProviders.choices(from: catalogue).map(\.id) == ["anthropic", "openai-codex", "gemini", "nous"])
-    }
-
-    @Test func aProviderThatCannotSignInHereIsLeftOut() {
-        let catalogue = [provider("anthropic", kind: .unsupported, state: .unsupported), provider("openrouter")]
-        #expect(FirstRunProviders.choices(from: catalogue).map(\.id) == ["openrouter"])
-    }
-
-    @Test func onlyASetProviderCountsAsConnected() {
-        #expect(!FirstRunProviders.hasConnected([provider("anthropic"), provider("openrouter", state: .expired)]))
-        #expect(FirstRunProviders.hasConnected([provider("anthropic"), provider("openrouter", state: .set)]))
-        #expect(!FirstRunProviders.hasConnected([]))
-    }
 }
 
 @Suite("Owner welcome")

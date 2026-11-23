@@ -139,6 +139,7 @@ _GUARDS = {
     "swift-perf": ["scripts/ci/check_swift_perf.py"],
     "swift-fault-details": ["scripts/ci/check_swift_fault_details.py"],
     "swift-entitlements": ["scripts/ci/check_swift_entitlements.py"],
+    "provider-logos": ["scripts/ci/check_provider_logos.py"],
     "backend-imports": ["scripts/ci/check_backend_imports.py"],
     "connector-names": ["scripts/ci/check_connector_names.py"],
     "pal-nous-boundary": ["scripts/ci/check_pal_nous_boundary.py"],
