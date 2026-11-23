@@ -16,6 +16,7 @@ MANAGE_CHANNELS = 1 << 4
 MANAGE_WEBHOOKS = 1 << 29
 MESSAGE_CONTENT_INTENT = 1 << 18
 API_PREFIX = "/api/v10"
+AVATAR_HASH = "a1b2c3d4e5f6"
 
 ROUTES = (
     ("GET", r"/users/@me", "me"),
@@ -160,7 +161,8 @@ class FakeDiscord:
         self.webhooks[webhook_id] = {"id": webhook_id, "token": f"FAKE-WEBHOOK-SECRET-{self.sequence}",
                                      "channel_id": channel, "name": body["name"], "avatar": body.get("avatar")}
         created = self.webhooks[webhook_id]
-        return httpx.Response(200, json={"id": webhook_id, "token": created["token"], "channel_id": channel})
+        return httpx.Response(200, json={"id": webhook_id, "token": created["token"], "channel_id": channel,
+                                         "avatar": AVATAR_HASH if body.get("avatar") else None})
 
     def route_webhook(self, body, webhook):
         if webhook not in self.webhooks:
@@ -171,7 +173,7 @@ class FakeDiscord:
         if webhook not in self.webhooks:
             return error(404, 10015, "Unknown Webhook")
         self.webhooks[webhook].update(body)
-        return httpx.Response(200, json={"id": webhook})
+        return httpx.Response(200, json={"id": webhook, "avatar": AVATAR_HASH if self.webhooks[webhook].get("avatar") else None})
 
     def route_delete_webhook(self, body, webhook):
         if self.webhooks.pop(webhook, None) is None:

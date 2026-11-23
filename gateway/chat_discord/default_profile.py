@@ -26,6 +26,10 @@ def route_name(bot: str, channel_id: str) -> str:
     return f"pal-discord-{bot}-{channel_id}"
 
 
+def direct_route_name(channel_id: str) -> str:
+    return f"pal-discord-dm-{channel_id}"
+
+
 class RouteConflict(Exception):
     pass
 
@@ -44,24 +48,40 @@ class ProfileRoutes:
             return self._read(read_raw_config_readonly())
 
     def set(self, bot: str, channel_id: str) -> bool:
+        return self._put({"name": route_name(bot, channel_id), "platform": PLATFORM, "chat_id": channel_id,
+                          "profile": bot})
+
+    def remove(self, bot: str, channel_id: str) -> bool:
+        return self._drop(route_name(bot, channel_id))
+
+    def direct_bot(self, channel_id: str) -> str | None:
+        name = direct_route_name(channel_id)
+        return next((str(e["profile"]) for e in self.entries() if e.get("name") == name and e.get("profile")), None)
+
+    def set_direct(self, channel_id: str, bot: str) -> bool:
+        return self._put({"name": direct_route_name(channel_id), "platform": PLATFORM, "chat_id": channel_id,
+                          "profile": bot})
+
+    def clear_direct(self, channel_id: str) -> bool:
+        return self._drop(direct_route_name(channel_id))
+
+    def _put(self, wanted: dict[str, Any]) -> bool:
         from hermes_cli.config import load_config, save_config
-        wanted = {"name": route_name(bot, channel_id), "platform": PLATFORM, "chat_id": channel_id, "profile": bot}
         with self._scope():
             config = load_config()
             current = self._read(config)
-            clash = next((e for e in current if e.get("platform") == PLATFORM and str(e.get("chat_id")) == channel_id
+            clash = next((e for e in current if e.get("platform") == PLATFORM and str(e.get("chat_id")) == wanted["chat_id"]
                           and not e.get("bot_profile") and e.get("name") != wanted["name"]), None)
             if clash is not None:
-                raise RouteConflict(channel_id)
+                raise RouteConflict(wanted["chat_id"])
             if wanted in current:
                 return False
             config[PROFILE_ROUTES_KEY] = [e for e in current if e.get("name") != wanted["name"]] + [wanted]
             save_config(config)
         return True
 
-    def remove(self, bot: str, channel_id: str) -> bool:
+    def _drop(self, name: str) -> bool:
         from hermes_cli.config import load_config, save_config
-        name = route_name(bot, channel_id)
         with self._scope():
             config = load_config()
             current = self._read(config)
@@ -71,6 +91,11 @@ class ProfileRoutes:
             config[PROFILE_ROUTES_KEY] = kept
             save_config(config)
         return True
+
+    def apply_in_process(self, runner: Any) -> None:
+        from gateway.run_platform_reload import reload_routes_verb
+        with self._scope():
+            reload_routes_verb(runner)({})
 
     def apply_live(self) -> bool:
         from gateway.control_socket import reload_gateway_routes

@@ -18,6 +18,11 @@ def webhook_url(webhook: dict[str, Any]) -> str:
     return f"https://discord.com/api/webhooks/{webhook['id']}/{webhook['token']}"
 
 
+def webhook_avatar_url(webhook: dict[str, Any]) -> str | None:
+    avatar = webhook.get("avatar")
+    return f"https://cdn.discordapp.com/avatars/{webhook['id']}/{avatar}.png" if avatar else None
+
+
 class DiscordRest:
     def __init__(self, api: DiscordApi, token: str):
         self._api, self._token = api, token

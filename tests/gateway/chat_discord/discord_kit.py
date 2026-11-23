@@ -27,6 +27,17 @@ def route_for(bot: str, channel_id: str) -> dict[str, str]:
     return {"name": f"pal-discord-{bot}-{channel_id}", "platform": "discord", "chat_id": channel_id, "profile": bot}
 
 
+class SeedingControl(RecordingControl):
+    def __init__(self) -> None:
+        super().__init__()
+        self.seeded: list[tuple[str, dict]] = []
+
+    def seed_config(self, profile, defaults) -> None:
+        from gateway.chat_audience import seed_missing
+        self.seeded.append((profile, defaults))
+        seed_missing(defaults)
+
+
 class Kit:
     def __init__(self, tmp_path: Path, monkeypatch, *, with_avatar: bool = False):
         self.home = tmp_path / ".hermes"
@@ -49,7 +60,7 @@ class Kit:
             allowlist=OwnerAllowlist(scope=contextlib.nullcontext), identity=self.identity,
             token_source=lambda: self.token, clock=lambda: 1_700_000_000.0)
         self.restarts: list[str] = []
-        self.control = RecordingControl()
+        self.control = SeedingControl()
         self._patch_live(monkeypatch)
 
     @staticmethod
