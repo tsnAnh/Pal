@@ -61,6 +61,10 @@ struct EditBotSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(
+            blocking: .unsavedInput,
+            when: model.nameChanged || model.lookChanged || model.photoChanged || !model.changedPersonaFields.isEmpty
+        ))
     }
 
     private var shapeBinding: Binding<BlobKind> {

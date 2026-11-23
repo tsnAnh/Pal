@@ -55,6 +55,7 @@ struct NewRoutineSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(blocking: .unsavedInput, when: !model.title.isEmpty || !model.prompt.isEmpty || !model.schedule.isEmpty))
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String, identifier: String) -> some View {

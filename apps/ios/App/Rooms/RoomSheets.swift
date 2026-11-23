@@ -67,7 +67,7 @@ struct CreateRoomSheet: View {
             },
             content: { form }
         )
-        .macSheetDismissDisabled(model.isCreating)
+        .palEscapePolicy(model.isCreating ? .blocked(.inFlight) : EscapePolicy(blocking: .unsavedInput, when: !model.name.isEmpty || !model.selected.isEmpty))
     }
 
     @ViewBuilder

@@ -40,9 +40,21 @@ class ProviderRow:
         return {f: getattr(self, f) for f in self.__slots__}
 
 
+def _cli_plan_descriptor(provider, order: int):
+    from hermes_cli.provider_catalog import ProviderDescriptor
+    return ProviderDescriptor(
+        slug=provider.id, label=provider.name, description=provider.name, auth_type="external_process",
+        tab="accounts", api_key_env_vars=(), base_url_env_var="", signup_url="", order=order)
+
+
 def _catalog() -> dict:
+    from hermes_cli.model_provider_cli_plan import CLI_PLAN_PROVIDERS
     from hermes_cli.provider_catalog import provider_catalog_by_slug
-    return {slug: d for slug, d in provider_catalog_by_slug().items() if d.auth_type != "virtual"}
+    catalog = {slug: d for slug, d in provider_catalog_by_slug().items() if d.auth_type != "virtual"}
+    for provider in CLI_PLAN_PROVIDERS.values():
+        if provider.id not in catalog:
+            catalog[provider.id] = _cli_plan_descriptor(provider, len(catalog))
+    return catalog
 
 
 def lookup(provider_id: str):
@@ -67,6 +79,9 @@ def pkce_config(provider_id: str):
 
 
 def kind_of(pconfig) -> tuple[str, Optional[str]]:
+    from hermes_cli.model_provider_cli_plan import CLI_PLAN_PROVIDERS
+    if pconfig.slug in CLI_PLAN_PROVIDERS and pconfig.auth_type == "external_process":
+        return "cli_plan", None
     if pconfig.slug in DEVICE_CODE_BUILTIN or has_device_profile(pconfig.slug):
         return "device_code", None
     if pkce_config(pconfig.slug) is not None:
@@ -86,6 +101,15 @@ def _openrouter_status() -> dict:
 
 
 _UNREGISTERED_STATUS: dict[str, Callable[[], dict]] = {"openrouter": _openrouter_status}
+
+
+def _cli_plan_row(pconfig) -> ProviderRow:
+    from hermes_cli.model_provider_cli_plan import CLI_PLAN_PROVIDERS, host_check
+    check = host_check(CLI_PLAN_PROVIDERS[pconfig.slug], detail=False)
+    return ProviderRow(
+        id=pconfig.slug, name=pconfig.label, kind="cli_plan", state="set" if check.ready else "not_set",
+        scope="profile", base_url_editable=False, base_url=None, default_base_url=None,
+        reason=None if check.ready else check.install_hint, can_remove=False)
 
 
 def _state_of(pconfig, kind: str) -> str:
@@ -118,6 +142,8 @@ def _base_url_override(pconfig) -> Optional[str]:
 
 def row_for(pconfig) -> ProviderRow:
     kind, reason = kind_of(pconfig)
+    if kind == "cli_plan":
+        return _cli_plan_row(pconfig)
     state = _state_of(pconfig, kind)
     return ProviderRow(
         id=pconfig.slug, name=pconfig.label, kind=kind, state=state,

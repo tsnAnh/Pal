@@ -24,3 +24,18 @@ def test_an_approval_prompt_offers_once_or_deny_and_carries_the_question():
     assert event_type == "approval.request"
     assert prompt["choices"] == ["once", "deny"]
     assert prompt["question"] == "Send this message?"
+
+
+def test_a_held_draft_prompt_keeps_its_draft_and_details():
+    events = _Events()
+    controls = PendingControls(events)
+    draft = {"id": "d1", "kind": "message"}
+    details = [{"label": "To", "value": "Ada"}]
+
+    controls.register("sid", "route", 1, {
+        "request_id": "draft:d1", "command": "Hi Ada", "description": "Send to Ada",
+        "question": "Send this message?", "draft": draft, "details": details})
+
+    (_, prompt), = events.published
+    assert prompt["draft"] == draft
+    assert prompt["details"] == details

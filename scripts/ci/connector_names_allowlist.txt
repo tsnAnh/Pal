@@ -1,0 +1,47 @@
+# <connector id>  <reason>. Two spaces before the reason; a line whose connector no longer matches its title-cased id fails the check.
+airtable  brand spelling is a single capitalised word
+atlassian  brand spelling is a single capitalised word
+buildkite  brand spelling is a single capitalised word
+calendly  brand spelling is a single capitalised word
+canva  brand spelling is a single capitalised word
+cloudflare  brand spelling is a single capitalised word
+cloudinary  brand spelling is a single capitalised word
+comfy-cloud  brand writes its words capitalised, as the name shows
+context7  brand spelling is a single capitalised word
+craft  brand spelling is a single capitalised word
+datadog  brand spelling is a single capitalised word
+discord  brand spelling is a single capitalised word
+dropbox  brand spelling is a single capitalised word
+figma  brand spelling is a single capitalised word
+gamma  brand spelling is a single capitalised word
+google-ads  brand writes its words capitalised, as the name shows
+google-workspace  brand writes its words capitalised, as the name shows
+grafana  brand spelling is a single capitalised word
+higgsfield  brand spelling is a single capitalised word
+hugging_face  brand writes its words capitalised, as the name shows
+intercom  brand spelling is a single capitalised word
+linear  brand spelling is a single capitalised word
+microsoft-learn  brand writes its words capitalised, as the name shows
+mintlify  brand spelling is a single capitalised word
+miro  brand spelling is a single capitalised word
+neon  brand spelling is a single capitalised word
+netlify  brand spelling is a single capitalised word
+notion  brand spelling is a single capitalised word
+postman  brand spelling is a single capitalised word
+prisma-postgres  brand writes its words capitalised, as the name shows
+railway  brand spelling is a single capitalised word
+resend  brand spelling is a single capitalised word
+semgrep  brand spelling is a single capitalised word
+sentry  brand spelling is a single capitalised word
+shopify  brand spelling is a single capitalised word
+slack  brand spelling is a single capitalised word
+stripe  brand spelling is a single capitalised word
+supabase  brand spelling is a single capitalised word
+todoist  brand spelling is a single capitalised word
+trello  brand spelling is a single capitalised word
+twilio-docs  brand writes its words capitalised, as the name shows
+unreal-engine  brand writes its words capitalised, as the name shows
+upwork  brand spelling is a single capitalised word
+vercel  brand spelling is a single capitalised word
+webflow  brand spelling is a single capitalised word
+wolfram  brand spelling is a single capitalised word

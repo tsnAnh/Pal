@@ -203,6 +203,7 @@ private struct MacProviderAddressEditor: View {
         }
         .padding(14)
         .frame(width: 300)
+        .palEscape(.native, dismiss: dismiss)
     }
 
     private func save() {

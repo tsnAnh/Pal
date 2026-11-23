@@ -128,6 +128,7 @@ _GUARDS = {
     "swift-chat-row-alignment": ["scripts/ci/check_swift_chat_row_alignment.py"],
     "swift-mac-layout": ["scripts/ci/check_swift_mac_layout.py"],
     "swift-modal-size": ["scripts/ci/check_swift_modal_size.py"],
+    "swift-esc-dismiss": ["scripts/ci/check_swift_esc_dismiss.py"],
     "swift-glass": ["scripts/ci/check_swift_glass.py"],
     "swift-icon-tint": ["scripts/ci/check_swift_icon_tint.py"],
     "swift-connect-palette": ["scripts/ci/check_swift_connect_palette.py"],
@@ -139,6 +140,7 @@ _GUARDS = {
     "swift-fault-details": ["scripts/ci/check_swift_fault_details.py"],
     "swift-entitlements": ["scripts/ci/check_swift_entitlements.py"],
     "backend-imports": ["scripts/ci/check_backend_imports.py"],
+    "connector-names": ["scripts/ci/check_connector_names.py"],
     "pal-nous-boundary": ["scripts/ci/check_pal_nous_boundary.py"],
 }
 # Guards that judge a diff, not a tree: they get the same base/head as the ratchet

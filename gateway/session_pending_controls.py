@@ -26,8 +26,9 @@ class PendingControls:
                       'choices': ['once', 'deny']}
             if isinstance(data.get('question'), str):
                 prompt['question'] = _redact_approval_command(data['question'])
-            if 'edit' in data:
-                prompt['edit'] = deepcopy(data['edit'])
+            for key in ('edit', 'draft', 'details'):
+                if key in data:
+                    prompt[key] = deepcopy(data[key])
             if timeout_s is not None:
                 prompt['timeout_s'] = timeout_s
             self.pending[prompt_id] = (route, prompt)

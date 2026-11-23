@@ -14,6 +14,7 @@ struct MacSheetFrame: ViewModifier {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .macModalFrame(frame)
             .environment(\.macDialogCenter, dialogs)
+            .environment(\.macEscapeStack, nil)
             .overlay { MacDialogLayer(center: dialogs, window: frame.size) }
     }
 }

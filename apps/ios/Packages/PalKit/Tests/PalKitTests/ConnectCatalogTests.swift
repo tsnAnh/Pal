@@ -325,7 +325,7 @@ struct ConnectAppsServiceTests {
             "mcp.servers.set_api_key": { _ in throw GatewayTransportError.rpc(RPCError(code: 4001, message: "bad")) },
         ])
         let app = ConnectApp(
-            id: "mcp:github", name: "Github", summary: "", category: "Other",
+            id: "mcp:github", name: "GitHub", summary: "", category: "Other",
             source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
         )
         await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["MCP_GITHUB_API_KEY": "v"]) }
@@ -335,7 +335,7 @@ struct ConnectAppsServiceTests {
     @Test func aRefusedTokenIsReportedAfterTheServerTestsIt() async {
         let rpc = ScriptedRPC(["mcp.servers.test": { _ in ["ok": false, "reason": "auth_refused", "tools": []] }])
         let app = ConnectApp(
-            id: "mcp:github", name: "Github", summary: "", category: "Other",
+            id: "mcp:github", name: "GitHub", summary: "", category: "Other",
             source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
         )
         #expect(await service(rpc).tokenFailure(app) == .authRefused)

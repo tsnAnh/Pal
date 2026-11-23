@@ -285,6 +285,7 @@ struct AddVaultSheet: View {
                 .scrollDismissesKeyboard(.interactively)
             }
         )
+        .palEscapePolicy(EscapePolicy(blocking: .unsavedInput, when: login != VaultLoginDraft() || apiKey != VaultAPIKeyDraft()))
     }
 
     private func save() async -> Bool {
