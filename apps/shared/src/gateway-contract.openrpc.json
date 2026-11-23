@@ -692,7 +692,7 @@
     },
     {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. app_scheme is read as in chat.install.begin.",
       "params": [
         {
           "name": "params",
@@ -710,12 +710,12 @@
     },
     {
       "name": "chat.install.begin",
-      "summary": "Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL.",
+      "summary": "Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/ChatInstallParams"
+            "$ref": "#/components/schemas/ChatInstallBeginParams"
           }
         }
       ],
@@ -1412,7 +1412,7 @@
     },
     {
       "name": "connectors.oauth_client.connect",
-      "summary": "Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog.",
+      "summary": "Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog. app_scheme is the URL scheme of the Pal build that asked, so the page after sign-in returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first.",
       "params": [
         {
           "name": "params",
@@ -17584,6 +17584,18 @@
             "title": "Workspace",
             "type": "string"
           },
+          "app_scheme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "App Scheme"
+          },
           "event": {
             "$ref": "#/components/schemas/SetupEventKind"
           },
@@ -17646,6 +17658,50 @@
           "expected_revision"
         ],
         "title": "ChatInstallAdvanceParams",
+        "type": "object"
+      },
+      "ChatInstallBeginParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "app_scheme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "App Scheme"
+          }
+        },
+        "required": [
+          "provider_id"
+        ],
+        "title": "ChatInstallBeginParams",
         "type": "object"
       },
       "ChatInstallChangedPayload": {
@@ -40340,6 +40396,18 @@
             "default": false,
             "title": "Create",
             "type": "boolean"
+          },
+          "app_scheme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "App Scheme"
           }
         },
         "required": [
@@ -68635,7 +68703,7 @@
     },
     {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. app_scheme is read as in chat.install.begin.",
       "params": [
         {
           "name": "params",
@@ -68653,12 +68721,12 @@
     },
     {
       "name": "chat.install.begin",
-      "summary": "Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL.",
+      "summary": "Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/ChatInstallParams"
+            "$ref": "#/components/schemas/ChatInstallBeginParams"
           }
         }
       ],

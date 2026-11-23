@@ -73,8 +73,10 @@ private let notionApp = ConnectApp(
 )
 private let appCallback = "dev.tsnanh.hermes.bot:/mcp-oauth/callback?code=app-code&state=st-1"
 
-private func service(_ rpc: CustomRPC, _ browser: ScriptedCallbackBrowser) -> ConnectAppsService {
-    ConnectAppsService(rpc: rpc, profile: nil, browser: browser, timing: ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3))
+private func service(_ rpc: CustomRPC, _ browser: ScriptedCallbackBrowser, scheme: PalURLScheme = .release) -> ConnectAppsService {
+    ConnectAppsService(
+        rpc: rpc, profile: nil, browser: browser, timing: ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3),
+        urlScheme: scheme)
 }
 
 @Suite("MCP sign-in returns to the app")
@@ -94,6 +96,18 @@ struct McpAppRedirectTests {
         let relayed = try #require(rpc.params("mcp.servers.oauth.callback").first)
         #expect(relayed["code"]?.stringValue == "app-code" && relayed["state"]?.stringValue == "st-1")
         #expect(rpc.methods().last == "mcp.servers.oauth.poll")
+    }
+
+    @Test func aDevelopmentBuildOffersAndListensOnItsOwnScheme() async throws {
+        let rpc = gateway(redirect: "app")
+        let browser = ScriptedCallbackBrowser(.callback("dev.tsnanh.hermes.bot.dev:/mcp-oauth/callback?code=app-code&state=st-1"))
+        guard case .connected = try await service(rpc, browser, scheme: .development).signInMcp(notionApp, platform: .mac) else {
+            Issue.record("expected connected")
+            return
+        }
+        let start = try #require(rpc.params("mcp.servers.oauth.start").first)
+        #expect(start["client_redirect_uri"]?.stringValue == "dev.tsnanh.hermes.bot.dev:/mcp-oauth/callback")
+        #expect(browser.authenticated.withLock { $0.first?.scheme } == "dev.tsnanh.hermes.bot.dev")
     }
 
     @Test(arguments: [ConnectorPlatform.mac, .iPhone])

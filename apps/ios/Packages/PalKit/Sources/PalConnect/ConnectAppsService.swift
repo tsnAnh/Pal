@@ -57,6 +57,7 @@ public struct ConnectAppsService: Sendable {
     let timing: ConnectAppsTiming
     let diagnostics: Diagnostics
     let nativeSignIn: McpNativeSignIn?
+    let urlScheme: PalURLScheme
 
     public init(
         rpc: any ConnectRPC,
@@ -65,8 +66,10 @@ public struct ConnectAppsService: Sendable {
         systemBrowser: any AuthorizationBrowser = UnavailableAuthorizationBrowser(),
         nativeSignIn: McpNativeSignIn? = nil,
         timing: ConnectAppsTiming = .standard,
-        diagnostics: Diagnostics = .silent
+        diagnostics: Diagnostics = .silent,
+        urlScheme: PalURLScheme = .current
     ) {
+        self.urlScheme = urlScheme
         self.nativeSignIn = nativeSignIn
         self.rpc = rpc
         self.profile = profile

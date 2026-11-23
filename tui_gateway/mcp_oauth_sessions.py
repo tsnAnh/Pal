@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 from tools.connectors import gateway_client_id
+from tools.connectors.app_scheme import AppScheme
 from tools.connectors.mcp_oauth import (
     _pinned_loopback,
     _validate_client_redirect_uri,
@@ -24,7 +25,6 @@ from tools.connectors.mcp_oauth import (
 )
 from tools.connectors.mcp_oauth_redirect import (
     ADMIN_APPROVAL_MESSAGE,
-    APP_REDIRECT_URI,
     KIND_APP,
     KIND_GATEWAY,
     KIND_LOOPBACK,
@@ -65,7 +65,7 @@ def _shutdown_listener(rec: dict[str, Any]) -> None:
     rec["httpd"] = None
 
 
-def register_flow(flow, *, httpd=None) -> dict[str, Any]:
+def register_flow(flow, *, httpd=None, app_scheme: AppScheme = AppScheme.release) -> dict[str, Any]:
     """Register a callback-relay flow so both RPC and card starts share ownership checks."""
     rec = {
         "session_id": flow.flow_id,
@@ -73,6 +73,7 @@ def register_flow(flow, *, httpd=None) -> dict[str, Any]:
         "hermes_home": flow.hermes_home,
         "flow": flow,
         "httpd": httpd,
+        "app_scheme": app_scheme,
         "created_at": time.time(),
     }
     with _sessions_lock:
@@ -110,7 +111,7 @@ def _remember_approval(rec: dict[str, Any]) -> None:
 
 def _launch(
     hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, kind: str,
-    redirect_uri: Optional[str]) -> dict[str, Any]:
+    redirect_uri: Optional[str], app_scheme: AppScheme = AppScheme.release) -> dict[str, Any]:
     """Start one fresh flow on one redirect. ``redirect_uri`` None means the gateway-hosted loopback receiver."""
     from tools.mcp_dashboard_oauth import DashboardOAuthFlow
     session_id = secrets.token_urlsafe(24)
@@ -118,7 +119,7 @@ def _launch(
         flow_id=session_id, server_name=server_name, hermes_home=hermes_home,
         redirect_uri=redirect_uri if kind == KIND_GATEWAY else "", reconnect_live=reconnect_live)
     httpd = None if kind == KIND_GATEWAY else choose_callback_receiver(flow, cfg, redirect_uri)
-    rec = register_flow(flow, httpd=httpd)
+    rec = register_flow(flow, httpd=httpd, app_scheme=app_scheme)
     rec["redirect"] = kind
     threading.Thread(
         target=run_worker, args=(hermes_home, server_name, dict(cfg), reconnect_live),
@@ -185,16 +186,17 @@ def _supersede_active(server_name: str, hermes_home: str) -> None:
 
 def _run_chain(
     hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, url_timeout: float,
-    fallback: Optional[str]) -> dict[str, Any]:
+    app_redirect_uri: str, fallback: Optional[str]) -> dict[str, Any]:
     pref = mcp_oauth_redirects.load_pref(hermes_home, server_name)
     gateway = mcp_oauth_redirects.gateway_redirect_uri(hermes_home)
-    uris = {KIND_APP: APP_REDIRECT_URI, KIND_GATEWAY: gateway, KIND_LOOPBACK: fallback}
+    app_scheme = AppScheme.of_uri(app_redirect_uri) or AppScheme.release
+    uris = {KIND_APP: app_redirect_uri, KIND_GATEWAY: gateway, KIND_LOOPBACK: fallback}
     notice = None
     for kind in mcp_oauth_redirects.steps_from(pref.get("kind")):
         if kind == KIND_GATEWAY and gateway is None:
             notice = mcp_oauth_redirects.NOTICE
             continue
-        rec = _launch(hermes_home, server_name, cfg, reconnect_live, kind, uris[kind])
+        rec = _launch(hermes_home, server_name, cfg, reconnect_live, kind, uris[kind], app_scheme)
         try:
             result = _publish(rec, url_timeout)
         except Exception as exc:
@@ -228,38 +230,43 @@ def start_flow(
         client_redirect_uri = _validate_client_redirect_uri(client_redirect_uri)
     if fallback_redirect_uri is not None:
         fallback_redirect_uri = validate_loopback_redirect_uri(fallback_redirect_uri)
+    app_scheme = AppScheme.of_uri(client_redirect_uri) or AppScheme.release
     if gateway_client_id.entry_for(server_name, cfg) is not None:
-        return _start_gateway_only(hermes_home, server_name, cfg, reconnect_live, url_timeout)
+        return _start_gateway_only(hermes_home, server_name, cfg, reconnect_live, url_timeout, app_scheme)
     _supersede_active(server_name, hermes_home)
     _gc_and_check_capacity(server_name, hermes_home)
     if client_redirect_uri is not None and is_app_redirect(client_redirect_uri) and not _pinned_loopback(cfg):
-        return _run_chain(hermes_home, server_name, cfg, reconnect_live, url_timeout, fallback_redirect_uri)
+        return _run_chain(
+            hermes_home, server_name, cfg, reconnect_live, url_timeout, client_redirect_uri, fallback_redirect_uri)
     rec = _launch(hermes_home, server_name, cfg, reconnect_live, KIND_LOOPBACK, client_redirect_uri)
     return _publish(rec, url_timeout)
 
 
 def _start_gateway_only(
-    hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, url_timeout: float) -> dict[str, Any]:
+    hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, url_timeout: float,
+    app_scheme: AppScheme) -> dict[str, Any]:
     gateway = gateway_client_id.callback_url(hermes_home)
     _supersede_active(server_name, hermes_home)
     _gc_and_check_capacity(server_name, hermes_home)
-    rec = _launch(hermes_home, server_name, cfg, reconnect_live, KIND_GATEWAY, gateway)
+    rec = _launch(hermes_home, server_name, cfg, reconnect_live, KIND_GATEWAY, gateway, app_scheme)
     return _publish(rec, url_timeout)
 
 
-def start_gateway_flow(hermes_home: str, server_name: str, cfg: dict, redirect_uri: str) -> dict[str, Any]:
+def start_gateway_flow(
+    hermes_home: str, server_name: str, cfg: dict, redirect_uri: str,
+    app_scheme: AppScheme = AppScheme.release) -> dict[str, Any]:
     """Begin a flow whose vendor-registered redirect is the gateway's https callback (a preregistered client
     cannot be retried on another redirect); the session returns through ``deliver_gateway_callback``."""
     _gc_and_check_capacity(server_name, hermes_home)
-    rec = _launch(hermes_home, server_name, cfg, False, KIND_GATEWAY, redirect_uri)
+    rec = _launch(hermes_home, server_name, cfg, False, KIND_GATEWAY, redirect_uri, app_scheme)
     return _publish(rec, 30.0)
 
 
 def deliver_gateway_callback(
     state: str, *, code: Optional[str], error: Optional[str] = None, iss: Optional[str] = None,
-    error_description: Optional[str] = None) -> bool:
+    error_description: Optional[str] = None) -> AppScheme | None:
     """Hand the https callback route's redirect to the flow that minted ``state``. A state works once and
-    only while its session lives; True when delivered."""
+    only while its session lives; the Pal build that started the flow when delivered, else None."""
     cutoff = time.time() - _SESSION_TTL_SECONDS
     match = None
     with _sessions_lock:
@@ -268,13 +275,13 @@ def deliver_gateway_callback(
             if expected and hmac.compare_digest(expected.encode(), state.encode()) and rec["created_at"] >= cutoff:
                 match, rec["gateway_state"] = rec, None
     if match is None:
-        return False
+        return None
     try:
         match["flow"].deliver_callback(
             code=code, state=state, error=error, iss=iss, error_description=error_description)
     except ValueError:
-        return False
-    return True
+        return None
+    return match["app_scheme"]
 
 
 def _lookup(

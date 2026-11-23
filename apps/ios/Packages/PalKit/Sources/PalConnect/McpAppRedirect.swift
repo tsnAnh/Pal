@@ -27,8 +27,6 @@ struct McpOAuthStart: Sendable {
 }
 
 extension ConnectAppsService {
-    static let appCallbackScheme = "dev.tsnanh.hermes.bot"
-    static let appRedirectURI = "\(appCallbackScheme):/mcp-oauth/callback"
     private static let unsupportedRedirectCode = 4001
     static let accountExistsCode = 4090
 
@@ -54,7 +52,7 @@ extension ConnectAppsService {
     ) async throws -> McpOAuthStart {
         var params: [String: JSONValue] = ["name": .string(name)]
         if offerApp {
-            params["client_redirect_uri"] = .string(Self.appRedirectURI)
+            params["client_redirect_uri"] = .string(urlScheme.mcpRedirectURI)
             params["fallback_redirect_uri"] = .string(fallbackURI)
         } else {
             params["client_redirect_uri"] = .string(fallbackURI)
@@ -120,7 +118,7 @@ extension ConnectAppsService {
             throw ConnectAppsError.signInFailed(McpSignInFailure.other.reason)
         }
         do {
-            return try await callbackBrowser.authenticate(started.link, callbackScheme: Self.appCallbackScheme)
+            return try await callbackBrowser.authenticate(started.link, callbackScheme: urlScheme.rawValue)
         } catch {
             throw await failedSignIn(name: name, flow: started.flow, error: error, account: started.account)
         }
