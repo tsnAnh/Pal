@@ -308,7 +308,7 @@ struct ConnectionRequestCard: View {
             }
             ForEach(decisions, id: \.self) { decision in
                 Button(Self.label(for: decision)) { decide(target, decision) }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .disabled(busy)
                     .accessibilityIdentifier(Self.identifier(for: decision, target: target.name))
             }

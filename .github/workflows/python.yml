@@ -263,8 +263,6 @@ jobs:
           ARCHS=arm64 ONLY_ACTIVE_ARCH=NO COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf
           COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas
 
-      # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
-      # the tests are built, not run. xcodebuild, not `swift build`, so the compile cache applies.
       - name: Build HermesKit and its tests
         if: matrix.kind == 'package'
         working-directory: apps/ios/Packages/PalKit

@@ -123,7 +123,7 @@ struct ServiceSignInPasteStep: View {
                 } label: {
                     Label("Paste", palIcon: "doc.on.clipboard")
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .accessibilityIdentifier("service-signin-callback-paste-button")
                 Button("Continue") {
                     onSubmit(text)
@@ -154,7 +154,7 @@ struct ServiceSignInCodeCard: View {
             } label: {
                 Label(copied ? String(localized: "Copied") : String(localized: "Copy"), palIcon: copied ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .accessibilityIdentifier("service-signin-copy-button")
         }
         .frame(maxWidth: .infinity)
@@ -181,7 +181,7 @@ struct ServiceSignInSetupTokenHelp: View {
             } label: {
                 Label(copied ? String(localized: "Copied") : String(localized: "Copy Command"), palIcon: copied ? "checkmark" : "doc.on.doc")
             }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .accessibilityIdentifier("service-signin-copy-command-button")
         }
         .frame(maxWidth: .infinity)
@@ -344,7 +344,7 @@ struct ServiceSignInDialogView: View {
                     .accessibilityIdentifier("service-signin-paste-instead-button")
             }
             Button("Close") { Task { await center.notNow() } }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("service-signin-notnow-button")
         case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .callbackFailed:
@@ -357,7 +357,7 @@ struct ServiceSignInDialogView: View {
                         .accessibilityIdentifier("service-signin-signin-button")
                 }
                 Button(dialog.canSignIn ? "Not now" : "Close") { Task { await center.notNow() } }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("service-signin-notnow-button")
             }

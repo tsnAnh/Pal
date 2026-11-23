@@ -20,18 +20,17 @@ struct RoutinesView: View {
             .padding(.top, RoutinesMetrics.topPadding)
             .padding(.bottom, 32)
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .palSoftScrollEdge(for: .top)
         .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
         .accessibilityIdentifier("routinesScreen")
+        .palPrincipalToolbarItem {
+            Text("Routines")
+                .hermesText(.sheetTitle)
+                .foregroundStyle(Color(theme.palette.textPrimary))
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("routinesTitle")
+        }
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Routines")
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("routinesTitle")
-            }
-            .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .trailingBar) {
                 Button { creation = model.creationModel() } label: {
                     PalIcon("plus")
@@ -156,7 +155,7 @@ private struct RoutinesNotice: View {
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .multilineTextAlignment(.center)
             Button(actionTitle, action: action)
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .accessibilityIdentifier("\(accessibilityIdentifier)-action")
                 .padding(.top, 8)
         }

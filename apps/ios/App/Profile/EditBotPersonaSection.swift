@@ -27,12 +27,12 @@ struct EditBotPersonaSection: View {
                         Text("Write one for me")
                     }
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(!model.personaFieldsEnabled || model.isWritingDescription)
                 .accessibilityIdentifier("editBotWriteDescription")
                 if model.offersReplaceDescription {
                     Button("Replace it") { model.confirmsReplaceDescription = true }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .disabled(model.isWritingDescription)
                         .accessibilityIdentifier("editBotReplaceDescription")
                 }
@@ -69,7 +69,7 @@ struct EditBotPersonaSection: View {
                 HStack(spacing: 8) {
                     note(String(localized: "Couldn't load the description and personality."), identifier: "editBotPersonaFailed")
                     Button("Try again") { Task { await model.loadPersona() } }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .accessibilityIdentifier("editBotPersonaRetry")
                 }
             case .ready:

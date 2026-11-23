@@ -85,7 +85,7 @@ struct EditBotSheet: View {
 
     private func avatarAction(_ title: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Text(title) }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .accessibilityIdentifier(id)
     }
 }

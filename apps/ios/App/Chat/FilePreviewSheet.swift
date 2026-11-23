@@ -50,7 +50,7 @@ struct FilePreviewSheet: View {
                 .navigationTitle(file.name)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close) { dismiss() }
+                        PalCloseButton { dismiss() }
                             .accessibilityIdentifier("filePreviewClose")
                     }
                 }
@@ -109,13 +109,13 @@ struct FilePreviewSheet: View {
         } label: {
             Label("Save as…", palIcon: "square.and.arrow.down")
         }
-        .buttonStyle(.glass)
+        .glassButtonStyle()
         .accessibilityIdentifier("filePreviewSave")
         #else
         ShareLink(item: url) {
             Label("Share", palIcon: "square.and.arrow.up")
         }
-        .buttonStyle(.glass)
+        .glassButtonStyle()
         .accessibilityIdentifier("filePreviewShare")
         #endif
     }

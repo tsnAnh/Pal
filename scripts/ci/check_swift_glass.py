@@ -8,8 +8,8 @@ line do not break it); only a NEW finding fails. Fixing one leaves a stale basel
 reported and harmless; ``--write-baseline`` rewrites the file. A justified exception carries
 ``glass-lint: ok`` on the flagged line.
 
-Rules: glass-dark-tint, glass-hand-rolled, glass-pill-button, glass-button-size, glass-button-tint, glass-prominent-direct,
-glass-custom-button-style, glass-container, glass-sheet-chrome, glass-close-chrome,
+Rules: glass-dark-tint, glass-hand-rolled, glass-raw-glass-api, glass-pill-button, glass-button-size, glass-button-tint, glass-prominent-direct,
+glass-custom-button-style, glass-container, glass-toolbar-availability, glass-sheet-chrome, glass-close-chrome,
 glass-search-field, glass-floating-bar, glass-raw-color, glass-system-tint.
 
 Run: python scripts/ci/check_swift_glass.py [apps_ios_root] [--write-baseline] [--no-baseline]
@@ -176,6 +176,10 @@ SCREENS = Scope("screens", lambda parts: parts[0] == "App")
 OUTSIDE_DESIGN = Scope("outside PalDesign", lambda parts: parts[:2] != PAL_DESIGN)
 
 
+GLASS_BUTTON = (r"\.buttonStyle\(\s*\.glass|\.glassButtonStyle\(\s*(?:prominent:\s*false\s*)?\)"
+                r"|\.interactiveGlassButtonStyle\(")
+
+
 @dataclass(frozen=True)
 class LineRule:
     rule: str
@@ -218,13 +222,23 @@ LINE_RULES = (
         "glass-hand-rolled",
         re.compile(r"\.glassEffect(?:ID|Union|Transition)?\(|\bNSGlassEffectView\b|\bUIGlassEffect\b"),
         OUTSIDE_DESIGN,
-        "hand-rolled glass outside PalDesign. Use PalGlass / .palGlass(...) or the system .buttonStyle(.glass)",
+        "hand-rolled glass outside PalDesign. Use PalGlass / .palGlass(...) or the system glass button (.glassButtonStyle())",
+    ),
+    LineRule(
+        "glass-raw-glass-api",
+        re.compile(r"\.buttonStyle\(\s*\.glass(?!Prominent)\b|(?<![A-Za-z0-9_])GlassEffectContainer\b"
+                   r"|(?<![A-Za-z0-9_])safeAreaBar\(|\.scrollEdgeEffect(?:Style|Hidden)\(|\.sharedBackgroundVisibility\("
+                   r"|(?<![A-Za-z0-9_])ToolbarSpacer\("),
+        OUTSIDE_DESIGN,
+        "macOS 26 glass API called directly. PalDesign owns the macOS 15 fallback: .glassButtonStyle() "
+        "(.interactiveGlassButtonStyle() for .glass(.regular.interactive())), PalGlassContainer, .palSafeAreaBar, "
+        ".palSoftScrollEdge, .palHiddenScrollEdge, .palPrincipalToolbarItem { }, PalToolbarSpacer (iOS)",
     ),
     LineRule(
         "glass-pill-button",
         re.compile(r"\bPillButtonStyle\b|\bPalPillButtonStyle\b|\.pill\(|\.palPill\b|(?<![A-Za-z0-9_])PillButton\("),
         EVERYWHERE,
-        "old pill button style. Use the shared glass or capsule button style (.buttonStyle(.glass), no blue)",
+        "old pill button style. Use the shared glass or capsule button style (.glassButtonStyle(), no blue)",
     ),
     LineRule(
         "glass-system-tint",
@@ -237,9 +251,9 @@ LINE_RULES = (
         "glass-button-size",
         re.compile(r"\.controlSize\(\s*\.(?:mini|small|large|extraLarge)\s*\)"),
         EVERYWHERE,
-        "custom size on a glass button. Native .glass / .glassProminent buttons keep the default control size; "
+        "custom size on a glass button. Native glass buttons (.glassButtonStyle) keep the default control size; "
         "drop .controlSize(...)",
-        window_must_match=re.compile(r"\.buttonStyle\(\s*\.glass"),
+        window_must_match=re.compile(GLASS_BUTTON),
         skip=re.compile(r"ProgressView"),
     ),
     LineRule(
@@ -248,7 +262,7 @@ LINE_RULES = (
         OUTSIDE_DESIGN,
         "tint on a native glass button. Any tint fills .glass (the blue Cancel); the app accent is already neutral, "
         "so drop .tint(...)",
-        window_must_match=re.compile(r"\.buttonStyle\(\s*\.glass"),
+        window_must_match=re.compile(GLASS_BUTTON),
         skip=re.compile(r"ProgressView|Toggle|Slider"),
     ),
     LineRule(
@@ -262,7 +276,7 @@ LINE_RULES = (
         "glass-custom-button-style",
         re.compile(r"\b(?:struct|extension)\s+\w+\s*:\s*(?:\w+\s*,\s*)*(?:Primitive)?ButtonStyle\b"),
         EVERYWHERE,
-        "custom ButtonStyle. Text buttons use native .buttonStyle(.glass) / .glassProminent at the default size "
+        "custom ButtonStyle. Text buttons use .glassButtonStyle() at the default size "
         "(.glassButtonStyle(prominent:) for selected chips)",
     ),
     LineRule(
@@ -281,14 +295,17 @@ SEARCH_LABEL = re.compile(r"[Ss]earch|[Ff]ind\b")
 BLUE = re.compile(r"\.blue\b|Color\.blue|\bsystemBlue\b|\baccentBlue(?:Text)?\b|\.accentColor\b")
 SCROLLING = re.compile(r"\b(?:ScrollView|ScrollViewReader|LazyVStack|LazyVGrid|List|Table)\b")
 FLOATING_EDGE = re.compile(r"\.overlay\(\s*alignment:\s*\.(?:top|bottom)\b|\bZStack\(\s*alignment:\s*\.(?:top|bottom)\b")
-OWNS_BACKGROUND = re.compile(r"\.background\(|palGlass|glassEffect|Material\b|FloatingSearchBar|GlassEffectContainer"
-                             r"|\.buttonStyle\(\s*\.glass|\.glassButtonStyle\(|ChatComposer|\.bar\b|\.scrollEdgeEffect")
+OWNS_BACKGROUND = re.compile(r"\.background\(|palGlass|glassEffect|Material\b|FloatingSearchBar|GlassEffectContainer|PalGlassContainer"
+                             r"|\.buttonStyle\(\s*\.glass|\.glassButtonStyle\(|\.interactiveGlassButtonStyle\(|ChatComposer|\.bar\b"
+                             r"|\.scrollEdgeEffect|\.palSoftScrollEdge|\.palHiddenScrollEdge")
 DECL = re.compile(r"^\s*(?:@\w+(?:\([^)]*\))?\s+)*(?:(?:public|private|fileprivate|internal|static|final|nonisolated|"
                   r"override|mutating)\s+)*(?:var|func|init)\b")
-CLOSE_SIDE = re.compile(r'"(?:Close|Cancel|Dismiss)"|xmark|role:\s*\.(?:close|cancel)')
+CLOSE_SIDE = re.compile(r'"(?:Close|Cancel|Dismiss)"|xmark|role:\s*\.(?:close|cancel)|\bPalCloseButton\b')
 TRAILING_PLACEMENT = re.compile(r"placement:\s*\.(?:topBarTrailing|navigationBarTrailing|confirmationAction|primaryAction)\b")
 MAGIC_BOTTOM = re.compile(r"\.padding\(\s*\.bottom\s*,\s*\d")
 CLOSE_ROLE = re.compile(r"\brole:\s*\.close\b")
+PAL_CLOSE_BUTTON = re.compile(r"(?<![A-Za-z0-9_])PalCloseButton\b")
+GLASS_CONTAINER = ("GlassEffectContainer", "PalGlassContainer")
 CLOSE_HOSTS = frozenset({"ToolbarItem", "ToolbarItemGroup", "SheetChrome"})
 CALL_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\s*$")
 HAND_BUILT_GLYPH = re.compile(r'systemName:\s*"(?:xmark|chevron\.left)"')
@@ -323,10 +340,19 @@ def glass_container(src: Source) -> Iterator[tuple[int, str]]:
         if len(hits) < 2:
             continue
         around = [s for s in spans if s[0] <= decl[0] and decl[1] <= s[1]]
-        if any("GlassEffectContainer" in src.text[s[0]:s[1]] for s in around):
+        if any(name in src.text[s[0]:s[1]] for s in around for name in GLASS_CONTAINER):
             continue
-        yield src.line_of(hits[0]), ("several custom glass views outside a GlassEffectContainer. "
-                                     "Wrap the group in GlassEffectContainer { ... } so the glass blends and stays cheap")
+        yield src.line_of(hits[0]), ("several custom glass views outside a glass container. "
+                                     "Wrap the group in PalGlassContainer { ... } so the glass blends and stays cheap")
+
+
+def glass_toolbar_availability(src: Source) -> Iterator[tuple[int, str]]:
+    for open_index, close_index in _decls(src):
+        line = src.line_of(open_index)
+        header = "\n".join(src.lines[max(0, line - 2):line])
+        if "ToolbarContent" in header and "#available" in src.text[open_index:close_index]:
+            yield line, ("#available in a ToolbarContent builder. Its buildLimitedAvailability fails the Release link "
+                         "across modules; split at the View level (.palPrincipalToolbarItem pattern)")
 
 
 def glass_blue_button(src: Source) -> Iterator[tuple[int, str]]:
@@ -334,7 +360,7 @@ def glass_blue_button(src: Source) -> Iterator[tuple[int, str]]:
         region = src.text[start:end + 1] + src.modifier_chain(end)
         if BLUE.search(region):
             yield src.line_of(start), ("blue on a button. Buttons are neutral Liquid Glass capsules with no blue: "
-                                       ".buttonStyle(.glass), or .glassProminent for the single primary action")
+                                       ".glassButtonStyle(), or .glassButtonStyle(prominent: true) for the single primary action")
 
 
 def glass_sheet_chrome(src: Source) -> Iterator[tuple[int, str]]:
@@ -347,11 +373,11 @@ def glass_sheet_chrome(src: Source) -> Iterator[tuple[int, str]]:
             header = src.text[start:open_index + 1 + (src.close[open_index] - open_index)]
             if TRAILING_PLACEMENT.search(header) and CLOSE_SIDE.search(src.text[start:end + 1]):
                 yield src.line_of(start), ("Close or Cancel on the trailing side. Close sits on the leading side: "
-                                           "SheetChrome, or ToolbarItem(placement: .cancellationAction) with Button(role: .close)")
+                                           "SheetChrome, or ToolbarItem(placement: .cancellationAction) with PalCloseButton")
     for start, open_index, _ in src.calls("Button"):
         args = src.text[open_index:src.close[open_index] + 1]
         if re.match(r'\(\s*(?:String\(localized:\s*)?"Close"', args) and "role:" not in args:
-            yield src.line_of(start), "custom Close button. Use Button(role: .close) or SheetChrome's leading Close"
+            yield src.line_of(start), "custom Close button. Use PalCloseButton or SheetChrome's leading Close"
     for name in (".sheet", ".fullScreenCover"):
         for start, _, end in src.calls(name):
             region = src.text[start:end + 1]
@@ -375,36 +401,24 @@ def _hosting_calls(src: Source, index: int, opened_by: dict[int, int]) -> set[st
     return names
 
 
-def _close_label(src: Source, open_index: int, end: int) -> str:
-    args_end = src.close[open_index]
-    if re.search(r"\baction\s*:", src.text[open_index:args_end + 1]):
-        return src.text[args_end + 1:end + 1]
-    label = re.compile(r"\s*label\s*:\s*\{").match(src.text, end + 1)
-    if not label:
-        return ""
-    brace = label.end() - 1
-    return src.text[brace:src.close.get(brace, brace) + 1]
-
-
 def glass_close_chrome(src: Source) -> Iterator[tuple[int, str]]:
     opened_by = {close: open_index for open_index, close in src.close.items()}
     for start, open_index, end in src.calls("Button"):
         if HAND_BUILT_LABEL.search(src.text[open_index:end + 1]) and CLOSE_OR_BACK_NAME.search(src.modifier_chain(end)):
             yield src.line_of(start), ("hand-built back or close button. Use the NavigationStack back, SheetChrome "
-                                       "(leading Close or Back) or Button(role: .close) in a ToolbarItem")
-        if not CLOSE_ROLE.search(src.text[open_index:src.close[open_index] + 1]):
-            continue
-        if not _hosting_calls(src, start, opened_by) & CLOSE_HOSTS:
-            yield src.line_of(start), ("Button(role: .close) outside the toolbar draws a text pill, not the system xmark. "
-                                       "Host the content in SheetChrome, or put it in "
-                                       "ToolbarItem(placement: .cancellationAction)")
-        if re.search(r"\b(?:Text|Label)\(", _close_label(src, open_index, end)):
-            yield src.line_of(start), ("Button(role: .close) with a Text label draws the word Close instead of the xmark. "
-                                       "Drop the label: Button(role: .close) { dismiss() }")
+                                       "(leading Close or Back) or PalCloseButton in a ToolbarItem")
+        if CLOSE_ROLE.search(src.text[open_index:src.close[open_index] + 1]):
+            yield src.line_of(start), ("Button(role: .close) is macOS 26 only. Use PalCloseButton { dismiss() } in "
+                                       "ToolbarItem(placement: .cancellationAction), or host the content in SheetChrome")
+    for m in PAL_CLOSE_BUTTON.finditer(src.text):
+        if not _hosting_calls(src, m.start(), opened_by) & CLOSE_HOSTS:
+            yield src.line_of(m.start()), ("PalCloseButton outside the toolbar draws a text pill, not the system xmark. "
+                                           "Host the content in SheetChrome, or put it in "
+                                           "ToolbarItem(placement: .cancellationAction)")
     for start, open_index, _ in src.calls("PalClearGlassIconButton"):
         if HAND_BUILT_GLYPH.search(src.text[open_index:src.close[open_index] + 1]):
             yield src.line_of(start), ("hand-built glass close or back button. Use SheetChrome (leading Close or Back) "
-                                       "or Button(role: .close) in a ToolbarItem")
+                                       "or PalCloseButton in a ToolbarItem")
 
 
 def glass_search_field(src: Source, parts: tuple[str, ...]) -> Iterator[tuple[int, str]]:
@@ -456,6 +470,7 @@ def _resolve(src: Source, name: str) -> str:
 
 BLOCK_RULES: tuple[tuple[str, Scope, Callable[..., Iterator[tuple[int, str]]]], ...] = (
     ("glass-container", EVERYWHERE, glass_container),
+    ("glass-toolbar-availability", EVERYWHERE, glass_toolbar_availability),
     ("glass-pill-button", EVERYWHERE, glass_blue_button),
     ("glass-sheet-chrome", EVERYWHERE, glass_sheet_chrome),
     ("glass-close-chrome", SCREENS, glass_close_chrome),

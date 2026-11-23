@@ -174,7 +174,7 @@ struct TeachReviewSheet: View {
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                 Button("Try again") { Task { await model.openReview(from: model.surface) } }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("teachReviewRetry")
             }
             .padding(.horizontal, PalMetrics.rowInset)
@@ -205,7 +205,7 @@ struct TeachReviewSheet: View {
             .scrollIndicators(.hidden)
             HStack {
                 Button("Discard") { model.confirmation = .discardDraft }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("teachReviewDiscard")
                 Spacer(minLength: 0)
                 Button { model.confirmation = .approve } label: {

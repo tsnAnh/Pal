@@ -45,7 +45,7 @@ struct ClarifyCard: View {
             }
             if isMulti, !prompt.choices.isEmpty {
                 Button("Confirm and continue") { submitTyped() }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .disabled(composedAnswer == nil)
                     .chatRowFrame(for: .system)
                     .padding(.top, 8)

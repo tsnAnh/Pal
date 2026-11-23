@@ -87,7 +87,7 @@ struct MacRenameBot: View {
         HStack(spacing: 7) {
             Spacer()
             Button("Cancel") { router.renamingBot = nil }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("renameBotCancel")
             Button {

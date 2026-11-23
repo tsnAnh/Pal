@@ -219,13 +219,13 @@ public struct SecretEntryView: View {
                     .keyboardShortcut(.defaultAction)
                     .accessibilityIdentifier(identifiers.submit)
                 Button(cancelTitle, action: cancel)
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier(identifiers.cancel)
             }
         } else {
             Button(String(localized: "Close"), action: cancel)
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier(identifiers.cancel)
         }

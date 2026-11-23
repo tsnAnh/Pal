@@ -26,7 +26,7 @@ extension ConnectAppsList {
                         Label("Add a custom connector", palIcon: "plus")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("addCustomConnectorButton")
                     .padding(.top, PalMetrics.cardGap)
                     .padding(.horizontal, PalMetrics.screenMargin)
@@ -100,7 +100,7 @@ extension ConnectAppsList {
                 }
             }
             .padding(.horizontal, 2)
-            GlassEffectContainer(spacing: 8) {
+            PalGlassContainer(spacing: 8) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
                     if section.kind == .thisDevice {
                         ForEach(deviceRows.prefix(count)) { macDeviceRow($0) }
@@ -152,11 +152,11 @@ extension ConnectAppsList {
             switch look.action {
             case .allow:
                 Button(localized) { Task { await model.devices.allow(id) } }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("\(identifier)-action")
             case .openSettings:
                 Button(localized) { model.devices.openSettings(for: id) }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("\(identifier)-action")
             case nil:
                 EmptyView()

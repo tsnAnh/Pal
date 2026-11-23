@@ -68,7 +68,7 @@ private struct ViewerImageStage: View {
     }
 
     private var arrows: some View {
-        GlassEffectContainer(spacing: 0) {
+        PalGlassContainer(spacing: 0) {
             HStack {
                 arrow("chevron.left", label: "Previous image", identifier: "imageViewerPrevious", enabled: state.canGoPrevious, delta: -1)
                 Spacer(minLength: 0)

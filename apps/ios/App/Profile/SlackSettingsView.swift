@@ -149,7 +149,7 @@ struct SlackSettingsView: View {
                 Text("Couldn't load these choices").hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary)
                 Text("Check your connection and try again.").hermesText(.rowSubtitle).foregroundStyle(PalTokens.textTertiary)
                 Button { Task { await members.reload() } } label: { Label("Try again", palIcon: "arrow.clockwise") }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("slackPreferencesRetry")
             }
             .frame(maxWidth: .infinity)

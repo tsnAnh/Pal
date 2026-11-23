@@ -109,7 +109,7 @@ struct SlackAudienceSection: View {
         Button { picking = ChatPeopleSearchModel(members: members, picked: audience?.members ?? []) } label: {
             Label(title, palIcon: "plus")
         }
-        .buttonStyle(.glass)
+        .glassButtonStyle()
         .accessibilityIdentifier("slackAudienceAdd")
     }
 }

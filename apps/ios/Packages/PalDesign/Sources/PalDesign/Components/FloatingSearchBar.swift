@@ -44,7 +44,7 @@ public struct FloatingSearchBar: View {
     private var isSearching: Bool { isFocused || !text.isEmpty }
 
     public var body: some View {
-        GlassEffectContainer(spacing: PalMetrics.searchBarLeadingButtonGap) {
+        PalGlassContainer(spacing: PalMetrics.searchBarLeadingButtonGap) {
             HStack(spacing: PalMetrics.searchBarLeadingButtonGap) {
                 if let leadingButton {
                     glassCircle(
@@ -146,7 +146,7 @@ public struct FloatingSearchLauncher: View {
     }
 
     public var body: some View {
-        GlassEffectContainer(spacing: PalMetrics.searchBarLeadingButtonGap) {
+        PalGlassContainer(spacing: PalMetrics.searchBarLeadingButtonGap) {
             HStack(spacing: PalMetrics.searchBarLeadingButtonGap) {
                 if let leadingButton {
                     Button(action: leadingButton.action) {

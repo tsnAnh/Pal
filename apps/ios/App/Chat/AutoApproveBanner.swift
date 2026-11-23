@@ -22,7 +22,7 @@ struct AutoApproveBanner: View {
                         .accessibilityIdentifier("autoApproveBannerTitle")
                     Spacer(minLength: 8)
                     Button("Off") { Task { await autoApprove.setEnabled(false, sessionID: sessionID) } }
-                        .buttonStyle(.glass)
+                        .glassButtonStyle()
                         .disabled(autoApprove.isPending(sessionID))
                         .accessibilityIdentifier("autoApproveBannerOff")
                 }

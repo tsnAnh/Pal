@@ -36,7 +36,7 @@ struct MermaidBlockView: View {
             VStack(alignment: .leading, spacing: 6) {
                 diagram(image)
                 Button("Copy source") { Pasteboard.string = source }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
             }
         case .failed:
             RichSourceFallback(source: source, note: "Could not draw this diagram", offersCopy: true)

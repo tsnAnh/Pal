@@ -8,6 +8,7 @@ struct AskBotIntent: AppIntent {
     static let description = IntentDescription("Ask one of your bots a question and hear its answer.")
     static let replyDeadline = Duration.seconds(25)
     static let longRunningReplyDeadline = Duration.seconds(240)
+    @available(iOS 26, macOS 26, *)
     static let supportedModes: IntentModes = [.background, .foreground(.dynamic)]
 
     @Parameter(title: "Bot")
@@ -36,10 +37,7 @@ struct AskBotIntent: AppIntent {
         } else {
             report = try await Self.ask(question, of: target, deadline: Self.replyDeadline, in: environment)
         }
-        if report.offersChat, systemContext.currentMode.canContinueInForeground {
-            try await continueInForeground(report.dialog)
-            environment.open(target)
-        }
+        try await continueInChat(report, for: target, in: environment)
         return .result(value: report.spoken, dialog: report.dialog)
     }
 

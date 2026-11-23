@@ -32,7 +32,7 @@ struct ConnectCapsule: View {
                     .accessibilityIdentifier(identifier)
             } else {
                 Button(action: perform) { Text(verbatim: state.actionTitle ?? "") }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .opacity(state == .connected ? 0.7 : 1)
                     .accessibilityIdentifier(identifier)
             }
@@ -53,7 +53,7 @@ struct ConnectCapsule: View {
                         Text("Connecting")
                     }
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(true)
                 .accessibilityIdentifier(identifier)
             }

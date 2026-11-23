@@ -27,7 +27,7 @@ struct MacChatBenchSurface: View {
 
     var body: some View {
         ChatTranscriptList(model: model, scroll: scroll, teach: teach, router: router)
-            .safeAreaBar(edge: .bottom) {
+            .palSafeAreaBar(edge: .bottom) {
                 ChatBottomBar(
                     model: model,
                     router: router,

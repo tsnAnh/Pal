@@ -44,7 +44,8 @@ class ViewerRule:
 VIEWER_RULES = (
     ViewerRule(
         "viewer-clear-glass",
-        re.compile(r"\.palGlass\(|\.glassEffect(?:ID|Union|Transition)?\(|\.buttonStyle\(\s*\.glass|\.glassProminent\b"),
+        re.compile(r"\.palGlass\(|\.glassEffect(?:ID|Union|Transition)?\(|\.buttonStyle\(\s*\.glass|\.glassProminent\b"
+                   r"|\.glassButtonStyle\(\s*(?:prominent:\s*false\s*)?\)|\.interactiveGlassButtonStyle\("),
         "regular glass in the image viewer. The viewer floats over the image, so use .palClearGlass(...)",
     ),
     ViewerRule(

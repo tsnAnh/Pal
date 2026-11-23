@@ -153,7 +153,7 @@ struct TelegramView: View {
                 Button(String(localized: "Update token")) {
                     model.beginUpdateToken()
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .accessibilityIdentifier("telegramUpdateTokenButton")
             }
         }
@@ -172,7 +172,7 @@ struct TelegramView: View {
             Button(String(localized: "Disconnect")) {
                 model.confirmsDisconnect = true
             }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .accessibilityIdentifier("telegramDisconnectButton")
         case .restartNeeded:
             Button(String(localized: "Check again")) {

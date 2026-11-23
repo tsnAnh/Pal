@@ -193,7 +193,7 @@ struct KanbanCardView: View {
                 if hidden > 0 {
                     HStack {
                         Button("Show all \(groups.count)") { showsAllEvidence = true }
-                            .buttonStyle(.glass)
+                            .glassButtonStyle()
                             .accessibilityIdentifier("kanbanEvidenceShowAll")
                         Spacer(minLength: 0)
                     }

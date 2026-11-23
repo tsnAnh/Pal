@@ -158,8 +158,8 @@ struct RoomActionCard: View {
                 }
             } else {
                 HStack(spacing: 10) {
-                    Button("Retry", action: retry).buttonStyle(.glass).accessibilityIdentifier("roomRetry")
-                    Button("Discard", role: .destructive, action: discard).buttonStyle(.glass).accessibilityIdentifier("roomDiscard")
+                    Button("Retry", action: retry).glassButtonStyle().accessibilityIdentifier("roomRetry")
+                    Button("Discard", role: .destructive, action: discard).glassButtonStyle().accessibilityIdentifier("roomDiscard")
                 }
                 .disabled(isBusy)
             }

@@ -70,7 +70,7 @@ struct MacSidebar: View {
     private var topBar: some View {
         HStack(spacing: 9) {
             Spacer()
-            GlassEffectContainer(spacing: 10) {
+            PalGlassContainer(spacing: 10) {
                 HStack(spacing: 9) {
                     MacIconButton(systemName: "magnifyingglass", label: String(localized: "Search"), identifier: "rosterSearchField") { router.openSearch() }
                     if rooms.canCreate {

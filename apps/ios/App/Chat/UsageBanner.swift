@@ -41,7 +41,7 @@ struct UsageBanner: View {
             HStack {
                 Spacer()
                 Button("Review Usage", action: review)
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("usageBannerReview")
             }
             .padding(.top, 4)

@@ -150,7 +150,7 @@ struct PermissionsScreen: View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionHeader(title, subtitle: subtitle, accessibilityIdentifier: "permissionsHeader-\(list.rawValue)") {
                 Button("Add Rule") { addingTo = list }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .padding(.trailing, 1)
                     .accessibilityIdentifier("permissionsAddRule-\(list.rawValue)")
             }

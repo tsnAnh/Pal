@@ -26,7 +26,7 @@ struct MessagingSettingsView: View {
             DelayedProgressView().accessibilityIdentifier("messagingSettingsLoading")
         case .unavailable:
             Button("Try again") { Task { await model.load() } }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .accessibilityIdentifier("messagingSettingsRetry")
         case .ready:
             if model.restartNeeded {
@@ -124,7 +124,7 @@ struct MessagingSettingsView: View {
                         Text("Save")
                     }
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(!model.isDirty(platform) || model.isSaving(platform))
                 .accessibilityIdentifier("messagingSave-\(platform.id)")
             }

@@ -22,7 +22,7 @@ struct MacMessageMenuView: View {
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 14, style: .continuous) }
 
     var body: some View {
-        GlassEffectContainer {
+        PalGlassContainer {
             VStack(spacing: 1) {
                 switch page {
                 case .main: mainPage

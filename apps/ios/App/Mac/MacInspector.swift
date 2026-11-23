@@ -92,7 +92,7 @@ private struct InspectorCloseButton: View {
     @Environment(MacShell.self) private var shell
 
     var body: some View {
-        GlassEffectContainer(spacing: 10) {
+        PalGlassContainer(spacing: 10) {
             HStack(spacing: 8) {
                 Menu {
                     Button { profile.beginEditing() } label: { Label("Edit…", palIcon: "square.and.pencil") }

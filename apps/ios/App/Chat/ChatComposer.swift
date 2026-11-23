@@ -354,7 +354,7 @@ private struct ComposerSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        GlassEffectContainer {
+        PalGlassContainer {
             if clear {
                 content.palClearGlass(shape, interactive: false)
             } else {

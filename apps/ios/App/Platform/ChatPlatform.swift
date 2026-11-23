@@ -30,7 +30,7 @@ extension View {
         focusComposer: @escaping () -> Void
     ) -> some View {
         #if os(macOS)
-        safeAreaBar(edge: .top) {
+        palSafeAreaBar(edge: .top) {
             ChatMacHeaderHost(model: model)
         }
         .modifier(MacChatActions(find: find, focusComposer: focusComposer))

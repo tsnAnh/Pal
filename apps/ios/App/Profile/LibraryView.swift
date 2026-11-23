@@ -27,22 +27,17 @@ struct LibraryView: View {
             .padding(.leading, showsChrome ? 0 : 12)
             .padding(.trailing, showsChrome ? 0 : 15)
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
+        .palSoftScrollEdge(for: .top)
         .background {
             if showsChrome { Color(theme.palette.sheetBackground).ignoresSafeArea() }
         }
         .accessibilityIdentifier("libraryScreen")
-        .toolbar {
-            if showsChrome {
-                ToolbarItem(placement: .principal) {
-                    Text("Library")
-                        .hermesText(.sheetTitle)
-                        .foregroundStyle(Color(theme.palette.textPrimary))
-                        .accessibilityAddTraits(.isHeader)
-                        .accessibilityIdentifier("libraryTitle")
-                }
-                .sharedBackgroundVisibility(.hidden)
-            }
+        .palPrincipalToolbarItem(isPresented: showsChrome) {
+            Text("Library")
+                .hermesText(.sheetTitle)
+                .foregroundStyle(Color(theme.palette.textPrimary))
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("libraryTitle")
         }
         .toolbarTitleDisplayMode(.inline)
         .task { model.start() }
@@ -317,7 +312,7 @@ private struct LibraryNotice: View {
                 .multilineTextAlignment(.center)
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("\(accessibilityIdentifier)-action")
                     .padding(.top, 8)
             }

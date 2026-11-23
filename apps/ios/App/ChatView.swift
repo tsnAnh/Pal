@@ -28,7 +28,7 @@ struct ChatView: View {
     var body: some View {
         let _ = PalPerf.event("chat.view.body") // swiftlint:disable:this redundant_discardable_let
         ChatTranscriptList(model: model, scroll: scroll, teach: teach, router: router)
-            .safeAreaBar(edge: .bottom) {
+            .palSafeAreaBar(edge: .bottom) {
                 ChatBottomBar(
                     model: model,
                     router: router,
@@ -43,11 +43,8 @@ struct ChatView: View {
             }
             .iOSOnly { chat in
                 chat
+                    .palPrincipalToolbarItem { ChatTitleButton(model: model, router: router) }
                     .toolbar {
-                        ToolbarItem(placement: .principal) {
-                            ChatTitleButton(model: model, router: router)
-                        }
-                        .sharedBackgroundVisibility(.hidden)
                         ToolbarItem(placement: .trailingBar) {
                             ChatOptionsMenu(model: model, router: router, focused: $composerFocused)
                         }

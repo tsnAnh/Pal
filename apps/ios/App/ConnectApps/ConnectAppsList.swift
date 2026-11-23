@@ -67,7 +67,7 @@ struct ConnectAppsList: View {
         #if os(macOS)
         card { ForEach(data) { row($0) } }
         #else
-        GlassEffectContainer(spacing: 8) { ConnectFlatRows(data, row: row) }
+        PalGlassContainer(spacing: 8) { ConnectFlatRows(data, row: row) }
         #endif
     }
 

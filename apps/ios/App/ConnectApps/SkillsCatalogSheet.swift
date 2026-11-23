@@ -118,7 +118,7 @@ struct SkillsCatalogSheet: View {
         }
         .scrollIndicators(.automatic)
         .scrollDismissesKeyboard(.interactively)
-        .safeAreaBar(edge: .bottom) {
+        .palSafeAreaBar(edge: .bottom) {
             FloatingSearchBar(
                 text: $model.query,
                 prompt: String(localized: "Search skills"),
@@ -155,7 +155,7 @@ struct SkillsCatalogSheet: View {
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                 Button { Task { await model.load() } } label: { Text("Try again") }
-                    .buttonStyle(.glass)
+                    .glassButtonStyle()
                     .accessibilityIdentifier("skillsRetry")
             }
             .padding(.top, 60)
@@ -178,7 +178,7 @@ struct SkillsCatalogSheet: View {
                         Text("Show more")
                     }
                 }
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(model.isLoadingMore)
                 .accessibilityIdentifier("skillsShowMore")
                 .padding(.top, 16)

@@ -67,7 +67,7 @@ struct VideoBlockView: View {
             Button("Open in browser") {
                 ExternalLink.open(url)
             }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -64,7 +64,7 @@ struct MacMessageHoverBar: View {
 
     var body: some View {
         let showsReact = layout.showsReact
-        GlassEffectContainer(spacing: 6) {
+        PalGlassContainer(spacing: 6) {
             HStack(spacing: 0) {
                 if showsReact {
                     Button { openMenu(from: reactFrame) } label: { glyph("face.smiling") }

@@ -83,7 +83,7 @@ private struct MacDialogPanel: View {
 
     private func button(_ action: MacDialogAction) -> some View {
         Button(action.title, role: action.role == .destructive ? .destructive : nil) { request.activate(action) }
-            .buttonStyle(.glass)
+            .glassButtonStyle()
             .accessibilityIdentifier(action.identifier ?? "macDialogAction-\(action.title)")
     }
 

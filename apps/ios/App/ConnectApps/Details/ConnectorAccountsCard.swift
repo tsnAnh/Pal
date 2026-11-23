@@ -236,7 +236,7 @@ struct ConnectorAccountsCard: View {
                 .accessibilityIdentifier("connectorAccountAddConnect")
         } else {
             Button("Connect") {}
-                .buttonStyle(.glass)
+                .glassButtonStyle()
                 .disabled(true)
                 .accessibilityIdentifier("connectorAccountAddConnect")
         }
