@@ -181,16 +181,16 @@ struct MediaWirePayloadTests {
         #expect(wire.durationSeconds == 12.5)
         #expect(wire.width == 1920)
         #expect(wire.height == 1080)
-        #expect(wire.previewUnavailable == nil)
+        #expect(wire.previewReason == nil)
         #expect(wire.dataBase64.flatMap { Data(base64Encoded: $0) } == Data([1, 2, 3]))
     }
 
     @Test("a preview unavailable answer carries the reason and no bytes")
     func unavailableAnswer() throws {
-        let wire = try decode(#"{"kind":"video","size":99,"preview_unavailable":"no_codec"}"#)
-        #expect(wire.previewUnavailable == "no_codec")
-        #expect(wire.dataBase64 == nil)
-        #expect(wire.size == 99)
+        let wire = try decode(#"{"kind":"video","size":0,"total":99,"data_base64":"","preview_reason":"ffmpeg_missing"}"#)
+        #expect(wire.previewReason == "ffmpeg_missing")
+        #expect(wire.dataBase64 == "")
+        #expect(wire.total == 99)
         #expect(wire.durationSeconds == nil)
     }
 

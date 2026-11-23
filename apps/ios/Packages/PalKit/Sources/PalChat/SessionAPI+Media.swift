@@ -11,7 +11,7 @@ struct LibraryMediaPayload: Decodable {
     var durationSeconds: Double?
     var width: Int?
     var height: Int?
-    var previewUnavailable: String?
+    var previewReason: String?
 
     enum CodingKeys: String, CodingKey {
         case dataBase64 = "data_base64"
@@ -23,7 +23,7 @@ struct LibraryMediaPayload: Decodable {
         case durationSeconds = "duration_seconds"
         case width
         case height
-        case previewUnavailable = "preview_unavailable"
+        case previewReason = "preview_reason"
     }
 }
 
@@ -34,12 +34,9 @@ extension SessionAPI {
             "preview": .bool(true),
         ])
         let wire = try decode(LibraryMediaPayload.self, result, "library.asset")
-        let metadata = MediaMetadata(
-            size: wire.size ?? wire.total, duration: wire.durationSeconds, width: wire.width, height: wire.height
-        )
-        if let reason = wire.previewUnavailable { return .unavailable(reason: reason, metadata) }
+        let metadata = MediaMetadata(size: wire.total, duration: wire.durationSeconds, width: wire.width, height: wire.height)
         guard let encoded = wire.dataBase64, let poster = Data(base64Encoded: encoded), !poster.isEmpty else {
-            return .unavailable(reason: "no_poster", metadata)
+            return .unavailable(reason: wire.previewReason ?? "no_poster", metadata)
         }
         return .poster(poster, metadata)
     }
