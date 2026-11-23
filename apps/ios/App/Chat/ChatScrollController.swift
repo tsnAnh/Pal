@@ -123,11 +123,11 @@ final class ChatScrollController {
             guard mode == .following, !revealing, !phase.isMoving,
                   viewport.distanceFromNewest > Self.atNewestTolerance else { return }
             repin = .pinning
-            write(.offset(0))
+            write(.offset(0), reason: .openPin)
         case .pinning:
             guard viewport.distanceFromNewest <= Self.atNewestTolerance else { return }
             repin = .done
-            write(.newest)
+            write(.newest, reason: .openNewest)
         case .done:
             break
         }
@@ -135,6 +135,7 @@ final class ChatScrollController {
 
     func observe(_ phase: ScrollPhase) {
         self.phase = phase
+        ChatScrollTrace.phase(phase, mode: mode)
         if phase.isMoving {
             revealing = false
             revealTask?.cancel()
@@ -146,6 +147,7 @@ final class ChatScrollController {
         guard let first = ids.first else { return }
         if pin?.id != first {
             pin = Pin(id: first, contentMinY: nil)
+            ChatScrollTrace.pin(first, minY: nil, mode: mode)
             pinSlots.pin(first)
         }
     }
@@ -156,6 +158,7 @@ final class ChatScrollController {
         let previous = current.contentMinY
         current.contentMinY = contentMinY
         pin = current
+        ChatScrollTrace.pin(id, minY: contentMinY, mode: mode)
         guard mode == .reading, phase == .idle, let previous, abs(contentMinY - previous) > 0.5 else { return }
         let delta = contentMinY - previous
         guard isVisible else {
@@ -164,7 +167,7 @@ final class ChatScrollController {
             return
         }
         distanceFromNewest += delta
-        write(.offset(distanceFromNewest))
+        write(.offset(distanceFromNewest), reason: .anchor)
     }
 
     func setVisible(_ visible: Bool, rowIDs: [String]) {
@@ -173,7 +176,7 @@ final class ChatScrollController {
         guard visible else { return }
         if anchorDrift != 0, mode == .reading, phase == .idle {
             distanceFromNewest += anchorDrift
-            write(.offset(distanceFromNewest))
+            write(.offset(distanceFromNewest), reason: .drift)
         }
         anchorDrift = 0
         guard syncPending else { return }
@@ -187,28 +190,29 @@ final class ChatScrollController {
             return
         }
         outstanding = nil
+        ChatScrollTrace.rows(ids.count, mode: mode)
         defer {
             lastRowID = ids.last
             knownIDs = Set(ids)
         }
         guard let last = lastRowID, ids.last != last, let anchor = ids.lastIndex(of: last) else {
-            keepNewestInView()
+            keepNewestInView(.keepNewestRows)
             return
         }
         switch mode {
         case .following:
-            keepNewestInView()
+            keepNewestInView(.keepNewestRows)
         case .reading:
             unseen += ids[(anchor + 1)...].count { !knownIDs.contains($0) }
         }
     }
 
-    func contentGrew() {
+    func contentGrew(_ reason: ChatScrollTrace.Reason = .keepNewestGrew) {
         guard isVisible else {
             deferSync()
             return
         }
-        keepNewestInView()
+        keepNewestInView(reason)
     }
 
     private func deferSync() {
@@ -216,23 +220,25 @@ final class ChatScrollController {
         PalPerf.event("chat.scroll.bookkeeping.skipped")
     }
 
-    private func keepNewestInView() {
+    private func keepNewestInView(_ reason: ChatScrollTrace.Reason) {
         guard mode == .following, !phase.isMoving else { return }
         guard !hasMeasured || distanceFromNewest > Self.atNewestTolerance else {
             PalPerf.event("chat.scroll.position.skipped")
             return
         }
-        write(.newest)
+        write(.newest, reason: reason)
     }
 
-    private func write(_ request: ScrollRequest) {
+    private func write(_ request: ScrollRequest, reason: ChatScrollTrace.Reason) {
         if let outstanding, outstanding.request == request,
            abs(outstanding.distanceFromNewest - distanceFromNewest) <= Self.atNewestTolerance {
             PalPerf.event("chat.scroll.position.skipped")
+            ChatScrollTrace.write(reason, applied: false, mode: mode)
             return
         }
         outstanding = Outstanding(request: request, distanceFromNewest: distanceFromNewest)
         request.apply(to: &position)
+        ChatScrollTrace.write(reason, applied: true, mode: mode)
         PalPerf.event("chat.scroll.position.write")
     }
 
@@ -246,7 +252,7 @@ final class ChatScrollController {
         var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
         transaction.disablesAnimations = !glides
         outstanding = nil
-        withTransaction(transaction) { write(.newest) }
+        withTransaction(transaction) { write(.newest, reason: .jump) }
     }
 
     func reveal(_ id: String) {
@@ -255,10 +261,12 @@ final class ChatScrollController {
         revealTask?.cancel()
         revealTask = Task { @MainActor [weak self] in
             await Task.yield()
+            ChatScrollTrace.write(.reveal, applied: true, mode: .reading)
             withAnimation(.easeInOut(duration: 0.25)) { self?.position.scrollTo(id: id, anchor: Self.revealAnchor) }
             for _ in 1..<Self.revealAttempts {
                 try? await Task.sleep(for: Self.revealSettle)
                 guard let self, !Task.isCancelled, self.revealing, !self.visibleIDs.contains(id) else { return }
+                ChatScrollTrace.write(.revealRetry, applied: true, mode: self.mode)
                 self.position.scrollTo(id: id, anchor: Self.revealAnchor)
             }
         }

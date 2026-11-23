@@ -47,7 +47,8 @@ struct ChatTranscriptList: View {
         }
         .onScrollPhaseChange { _, phase in scroll.observe(phase) }
         .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { scroll.visibleRowsChanged($0) }
-        .onChange(of: chrome) { scroll.contentGrew() }
+        .onChange(of: chrome) { scroll.contentGrew(.keepNewestChrome) }
+        .modifier(ChatScrollTraceProbe(chrome: chrome))
         .modifier(ChatRowsSync(model: model, scroll: scroll))
         .modifier(ChatOlderPaging(model: model, scroll: scroll))
         .modifier(ChatScreenAccessibility(model: model))
