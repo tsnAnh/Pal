@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/ios/App/AppIcon.icon/Assets/pal.png" alt="Pal app icon: a white blob face on black" width="128" height="128">
+  <img src="assets/pal/icon.png" alt="Pal app icon: a white blob face on black" width="128" height="128">
 </p>
 
 <h1 align="center">Pal: your own AI agents on iPhone and Mac</h1>
