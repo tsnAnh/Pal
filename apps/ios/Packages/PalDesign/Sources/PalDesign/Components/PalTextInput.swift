@@ -65,7 +65,7 @@ public struct PalGlassTextField: View {
     private let identifier: String?
     private let minHeight: CGFloat
 
-    @ScaledMetric(relativeTo: .body) private var fontSize: CGFloat
+    @ScaledMetric(relativeTo: .body) private var fontSize: CGFloat = 14
     @FocusState private var isFocused: Bool
 
     public init(
