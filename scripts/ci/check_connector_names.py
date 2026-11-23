@@ -7,24 +7,36 @@ Every entry therefore carries an explicit ``name``, and a ``name`` equal to the 
 unless the id is a line of ``scripts/ci/connector_names_allowlist.txt`` (``<id>  <reason>``, two
 spaces before the reason) for a brand that really is spelled that way. A stale allowlist line fails too.
 
+Reads the catalog line by line so it runs on the bare CI interpreter, without the YAML library.
+
 Run: python scripts/ci/check_connector_names.py [catalog.yaml] [allowlist.txt]
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.append(str(ROOT))
-import hermes_yaml as yaml
-
 CATALOG = ROOT / "hermes_cli" / "data" / "pal_connectors.yaml"
 ALLOWLIST = Path(__file__).with_name("connector_names_allowlist.txt")
 
 
 def title_cased(connector_id: str) -> str:
     return connector_id.replace("-", " ").replace("_", " ").title()
+
+
+def _entries(catalog: Path) -> dict[str, str | None]:
+    names: dict[str, str | None] = {}
+    current = None
+    for line in catalog.read_text(encoding="utf-8-sig").splitlines():
+        if match := re.match(r"- id: (\S+)\s*$", line):
+            current = match[1].strip("\"'")
+            names[current] = None
+        elif current and (match := re.match(r"  name: (.*?)\s*$", line)):
+            names[current] = match[1].strip("\"'")
+    return names
 
 
 def _allowlist(path: Path, problems: list[str]) -> set[str]:
@@ -42,8 +54,7 @@ def _allowlist(path: Path, problems: list[str]) -> set[str]:
 def check(catalog: Path, allowlist: Path) -> list[str]:
     problems: list[str] = []
     allowed = _allowlist(allowlist, problems)
-    entries = yaml.safe_load(catalog.read_text(encoding="utf-8-sig"))["connectors"]
-    by_id = {entry["id"]: entry.get("name") for entry in entries}
+    by_id = _entries(catalog)
     seen: dict[str, str] = {}
     for connector_id, name in by_id.items():
         if not isinstance(name, str) or not name.strip():
