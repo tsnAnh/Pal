@@ -246,3 +246,30 @@ class TestInteractiveSurfaces:
         registry.register_global_provider(self._stub("nous", "Nous Research"))
         providers = asyncio.run(api_auth_providers())
         assert [p["name"] for p in providers["providers"]] == ["nous"]
+
+
+def test_file_token_follows_rotation_and_refuses_the_replaced_one(plugin, tmp_path, monkeypatch):
+    token_file = tmp_path / "session-token"
+    old, new = _token(), _token()
+    token_file.write_text(old)
+    monkeypatch.setenv("HERMES_DASHBOARD_SESSION_TOKEN", f"file:{token_file}")
+    provider = plugin.SessionTokenProvider(**plugin._settings())
+    assert provider.verify_session(access_token=old) is not None
+
+    replacement = tmp_path / "session-token.new"
+    replacement.write_text(new)
+    replacement.replace(token_file)
+
+    assert provider.verify_session(access_token=old) is None
+    assert provider.verify_session(access_token=new) is not None
+
+
+def test_file_token_refuses_everything_once_the_file_is_gone(plugin, tmp_path, monkeypatch):
+    token_file = tmp_path / "session-token"
+    token = _token()
+    token_file.write_text(token)
+    monkeypatch.setenv("HERMES_DASHBOARD_SESSION_TOKEN", f"file:{token_file}")
+    provider = plugin.SessionTokenProvider(**plugin._settings())
+    token_file.unlink()
+
+    assert provider.verify_session(access_token=token) is None
