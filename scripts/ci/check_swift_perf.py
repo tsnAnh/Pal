@@ -19,7 +19,7 @@ perf-table-in-text-bubble, perf-hover-pill-outside-tracker, perf-hover-tracker-p
 perf-screen-reads-stream, perf-shell-layout-probe, perf-observed-frame-image, perf-frame-cpu-draw, perf-unguarded-scroll-write,
 perf-foreach-regroup, perf-textkit-outside-layout, perf-row-openurl-closure, perf-markdown-foreach-not-equatable,
 perf-path-description-key, perf-timestamp-uncached, perf-hover-bar-unconditional, perf-textview-scroll,
-perf-test-shared-counter (test files).
+perf-open-main-work, perf-test-shared-counter (test files).
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -134,6 +134,7 @@ SHELL_LAYOUT = in_files(("App", "Mac", "MacShellLayout.swift"))
 SCROLL_CONTROLLER = in_files(("App", "Chat", "ChatScrollController.swift"))
 SELECTABLE_LAYOUT_HOME = ("App", "Chat", "SelectableTextLayout.swift")
 TIMESTAMP_HOME = ("App", "Chat", "ChatTimestampCache.swift")
+OPEN_CACHE_HOMES = (("App", "ConversationCache.swift"), ("App", "RosterModel.swift"))
 PAL_DESIGN_SOURCES = under("Packages", "PalDesign", "Sources")
 STREAMING_MODEL_FIELDS = (
     "rows|rowsNewestFirst|olderHistory|isRunning|workingStatus|hasPendingClarify|hasPendingPrompt|connection|isCatchingUp|isFinding"
@@ -343,6 +344,13 @@ LINE_RULES = (
         main_isolated,
         "JSON encode or decode on the main actor (and a new coder each call). Decode in the detached loader "
         "(CacheStore.loadDetached) and share one static coder",
+    ),
+    LineRule(
+        "perf-open-main-work",
+        re.compile(r"\bCachedTimeline\b|\.cacheable\(|\.mergeNewest\(|\bcache\.load\(bot:|\.seed\("),
+        lambda parts, text: parts[0] == "App" and parts not in OPEN_CACHE_HOMES,
+        "the open path decodes, merges, compares or builds timeline caches in an App (main actor) file. ChatSession (an actor) "
+        "owns restore, merge and persistence; the model only receives finished TimelineSnapshot values",
     ),
     LineRule(
         "perf-queue-sync",
