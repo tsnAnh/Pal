@@ -99,8 +99,7 @@ private struct MacCreateBotNameField: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            TextField("", text: $model.name)
-                .textFieldStyle(.plain)
+            PalTextField("", text: $model.name)
                 .font(.system(size: 14))
                 .foregroundStyle(PalTokens.textPrimary)
                 .multilineTextAlignment(.center)

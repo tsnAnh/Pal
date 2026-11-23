@@ -18,7 +18,7 @@ struct FindBar: View {
             PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 17))
                 .accessibilityHidden(true)
-            TextField("", text: $model.findQuery, prompt: Text("Find in Chat").foregroundStyle(Color(theme.palette.textTertiary)))
+            PalTextField("", text: $model.findQuery, prompt: Text("Find in Chat"))
                 .hermesText(.composerField)
                 .foregroundStyle(Color(theme.palette.textPrimary))
                 .focused($fieldFocused)

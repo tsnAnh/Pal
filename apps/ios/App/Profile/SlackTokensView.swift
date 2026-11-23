@@ -94,7 +94,6 @@ struct SlackTokensView: View {
         return VStack(alignment: .leading, spacing: 5) {
             Text(field.label).hermesText(.rowSubtitle).fontWeight(.semibold).foregroundStyle(PalTokens.textSecondary)
             SecretField(field.label, prompt: field.prefixes.first.map { "\($0)…" } ?? "", text: text, identifier: identifier)
-                .textFieldStyle(.plain)
                 .padding(PalMetrics.screenMargin)
                 .background(PalTokens.control, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
                 .overlay {

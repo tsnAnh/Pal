@@ -18,8 +18,7 @@ struct MacAboutYouCard: View {
             MacCaption("About you")
             MacCard(identifier: "settingsAboutYouCard") {
                 MacRow(title: String(localized: "Name"), identifier: "settingsAboutYouNameRow") {
-                    TextField("Your name", text: $nameDraft)
-                        .textFieldStyle(.plain)
+                    PalTextField("Your name", text: $nameDraft)
                         .multilineTextAlignment(.leading)
                         .font(.system(size: 13))
                         .foregroundStyle(PalTokens.textPrimary)

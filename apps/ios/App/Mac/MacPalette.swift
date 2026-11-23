@@ -109,12 +109,10 @@ struct MacPalette: View {
         HStack(spacing: 12) {
             PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 14))
-            TextField("", text: Bindable(model).query, prompt: Text("Search Bots, Chats, Settings…").foregroundStyle(PalTokens.textTertiary))
-                .textFieldStyle(.plain)
+            PalTextField("", text: Bindable(model).query, prompt: Text("Search Bots, Chats, Settings…"))
                 .font(.system(size: 17))
                 .foregroundStyle(PalTokens.textPrimary)
                 .focused($focused)
-                .focusEffectDisabled()
                 .onSubmit(openSelected)
                 .onKeyPress(.downArrow) { move(1) }
                 .onKeyPress(.upArrow) { move(-1) }

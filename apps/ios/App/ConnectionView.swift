@@ -135,7 +135,6 @@ struct ConnectionView: View {
                 .font(.system(size: SignInMetrics.rowGlyphSize))
                 .frame(width: SignInMetrics.rowGlyphWidth)
             field()
-                .textFieldStyle(.plain)
                 .font(.system(size: SignInMetrics.rowTextSize))
                 .foregroundStyle(tone.primaryText)
             trailing()
@@ -174,7 +173,7 @@ struct ConnectionView: View {
 
     private var usernameRow: some View {
         row(icon: "person") {
-            TextField("Username", text: $model.username, prompt: Text(verbatim: "Username"))
+            PalTextField("Username", text: $model.username, prompt: Text(verbatim: "Username"))
                 .labelsHidden()
                 .textContentType(.username)
                 .autocorrectionDisabled()
@@ -190,7 +189,7 @@ struct ConnectionView: View {
 
     private var passwordRow: some View {
         row(icon: "key") {
-            SecureField("Password", text: $model.password, prompt: Text(verbatim: "Password"))
+            PalTextField("Password", text: $model.password, prompt: Text(verbatim: "Password"), isSecure: true)
                 .labelsHidden()
                 .textContentType(.password)
                 .focused($focus, equals: .password)
@@ -204,10 +203,10 @@ struct ConnectionView: View {
     private var addressField: some View {
         Group {
             #if os(macOS)
-            TextField("Pal address", text: $model.baseURLText, prompt: Text(verbatim: "https://your-host.tailnet.ts.net"))
+            PalTextField("Pal address", text: $model.baseURLText, prompt: Text(verbatim: "https://your-host.tailnet.ts.net"))
                 .labelsHidden()
             #else
-            TextField("https://your-host.tailnet.ts.net", text: $model.baseURLText)
+            PalTextField("https://your-host.tailnet.ts.net", text: $model.baseURLText)
             #endif
         }
         .onChange(of: model.baseURLText, initial: true) { model.addressChanged() }
