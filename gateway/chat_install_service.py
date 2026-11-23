@@ -54,7 +54,7 @@ logger = logging.getLogger(__name__)
 
 CLIENT_EVENTS = frozenset({
     SetupEventKind.credential_saved, SetupEventKind.manual_step_done, SetupEventKind.allow_granted,
-    SetupEventKind.owner_confirmed, SetupEventKind.retry,
+    SetupEventKind.owner_confirmed, SetupEventKind.retry, SetupEventKind.reopen_step,
 })
 CREDENTIAL_FAILURES = frozenset({SetupErrorCode.credential_rejected, SetupErrorCode.credential_expired})
 SETTLE_ATTEMPTS = 3
@@ -189,6 +189,15 @@ class ChatInstallService:
         self.store.set_authorize_link(key, base)
         return base
 
+    def _issue_link(self, provider: ChatProvider, state: SetupState) -> SetupState:
+        try:
+            return self._attach_link(state, self._with_nonce(self._authorize_base(provider, state), setup_key(state)))
+        except StaleRevision:
+            raise
+        except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
+            logger.warning("chat install link failed provider=%s error=%s", state.provider_id, type(exc).__name__)
+            return self._fail(provider, state, self._creation_error_code(exc))
+
     def _drive(self, provider: ChatProvider, state: SetupState) -> SetupState:
         key = setup_key(state)
         if needs_app_creation(state):
@@ -202,13 +211,7 @@ class ChatInstallService:
                 kind=SetupEventKind.app_created, app_id=created.app_id,
                 authorize_link=self._with_nonce(created.authorize_link, key)))
         if state.step is SetupStep.needs_allow and (state.next_action.link is None or state.next_action.kind is not NextActionKind.open_link):
-            try:
-                state = self._attach_link(state, self._with_nonce(self._authorize_base(provider, state), key))
-            except StaleRevision:
-                raise
-            except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
-                logger.warning("chat install link failed provider=%s error=%s", state.provider_id, type(exc).__name__)
-                return self._fail(provider, state, self._creation_error_code(exc))
+            state = self._issue_link(provider, state)
         if state.step is SetupStep.installing:
             state = self._finish(provider, state)
         return state
@@ -266,6 +269,8 @@ class ChatInstallService:
                 new = self._adopt(provider, state, vault_item_id)
             elif event is SetupEventKind.owner_confirmed:
                 new = self._confirm_owner(provider, state, owner_member_id)
+            elif event is SetupEventKind.reopen_step:
+                new = self._reopen(provider, state, manual_step)
             else:
                 new = self._client_event(provider, state, event, manual_step, vault_item_id, refresh_vault_item_id)
         except StaleRevision:
@@ -273,6 +278,15 @@ class ChatInstallService:
         if new is state:
             raise ChatServiceError(GatewayReason.invalid_event, state)
         return new, self._installation_of(new)
+
+    def _reopen(self, provider: ChatProvider, state: SetupState, manual_step: ProviderCapability | None) -> SetupState:
+        if manual_step is not None:
+            return self._apply(provider, state, SetupEvent(kind=SetupEventKind.reopen_step, manual_step=manual_step))
+        if state.step is SetupStep.needs_allow:
+            return self._issue_link(provider, state)
+        if state.step is SetupStep.error and state.resume_step is SetupStep.needs_allow:
+            return self._drive(provider, self._apply(provider, state, SetupEvent(kind=SetupEventKind.retry)))
+        return state
 
     def _client_event(self, provider, state, event, manual_step, vault_item_id, refresh_vault_item_id) -> SetupState:
         if event is SetupEventKind.manual_step_done and manual_step is None and state.step is SetupStep.needs_manual_step:

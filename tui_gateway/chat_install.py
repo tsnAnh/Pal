@@ -217,6 +217,27 @@ def _pending_manual(caps: Capabilities, done: list[ProviderCapability]) -> Provi
     return None
 
 
+def _guided_order(caps: Capabilities) -> list[ProviderCapability]:
+    return [e.capability for e in caps.capabilities if e.capability in SETUP_CAPABILITIES and e.mode is CapabilityMode.guided]
+
+
+def _reopened_done(caps: Capabilities, done: list[ProviderCapability], step: ProviderCapability) -> list[ProviderCapability] | None:
+    order = _guided_order(caps)
+    if step not in order or step not in done:
+        return None
+    undone = order[order.index(step):]
+    return [s for s in done if s not in undone]
+
+
+REOPENABLE_STEPS = (SetupStep.needs_manual_step, SetupStep.needs_allow)
+
+
+def _can_reopen(state: SetupState) -> bool:
+    if state.step is SetupStep.error:
+        return state.resume_step in REOPENABLE_STEPS
+    return state.step in REOPENABLE_STEPS
+
+
 def _action_for(step: SetupStep, manual: ProviderCapability | None, link: str | None, error: SetupError | None) -> NextAction:
     if step is SetupStep.needs_credential:
         return NextAction(kind=NextActionKind.paste_credential, action_id="config_credential")
@@ -256,6 +277,11 @@ def _target(state: SetupState, event: SetupEvent, caps: Capabilities, credential
         if config_credential_failed and caps.requires_config_credential:
             resume = SetupStep.needs_credential
         return resume, {"resume_step": None, "error": None}
+    if kind is SetupEventKind.reopen_step and event.manual_step and _can_reopen(state):
+        done = _reopened_done(caps, state.manual_steps_done, event.manual_step)
+        if done is None:
+            return None
+        return SetupStep.needs_manual_step, {"manual_steps_done": done, "resume_step": None, "error": None}
     if kind is SetupEventKind.begin and step in (SetupStep.not_started, SetupStep.revoked):
         if caps.requires_config_credential and not credential_on_file:
             return SetupStep.needs_credential, {}

@@ -313,6 +313,32 @@ struct StepFlowModelTests {
         #expect(await store.load(flowID: "google")?.stepID == "copy")
     }
 
+    @Test func aRefusedRewindKeepsTheCurrentStepAndAnAcceptedOneMovesBack() async throws {
+        let model = try makeModel(resume: "paste")
+        var asked: [String] = []
+        var accept = false
+        model.rewind = { from, to in
+            asked.append("\(from.id)>\(to.id)")
+            return accept
+        }
+        await model.back()
+        #expect(model.engine.current.id == "paste")
+        accept = true
+        await model.back()
+        #expect(model.engine.current.id == "copy")
+        #expect(asked == ["paste>copy", "paste>copy"])
+    }
+
+    @Test func aRewindThatAlreadyMovedTheFlowBackDoesNotMoveItFurther() async throws {
+        let model = try makeModel(resume: "paste")
+        model.rewind = { [unowned model] _, to in
+            model.follow(steps: StepFlowEngineTests.steps, at: to.id, failure: nil)
+            return true
+        }
+        await model.back()
+        #expect(model.engine.current.id == "copy")
+    }
+
     @Test func aCancelledRunnerLeavesTheStepWithoutAdvancing() async throws {
         let resume = StepFlowProgress(flowID: "google", stepID: "prepare")
         let engine = try #require(StepFlowEngine(flowID: "google", steps: StepFlowEngineTests.steps, resume: resume))

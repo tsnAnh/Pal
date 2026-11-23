@@ -30,7 +30,7 @@ public enum ChatSetupStep: String, ChatWireEnum {
 public enum ChatSetupEventKind: String, ChatWireEnum {
     case begin = "begin", credentialSaved = "credential_saved", appCreated = "app_created"
     case manualStepDone = "manual_step_done", allowGranted = "allow_granted", ownerConfirmed = "owner_confirmed"
-    case installed = "installed", failed = "failed", retry = "retry", revoked = "revoked", unknown
+    case installed = "installed", failed = "failed", retry = "retry", reopenStep = "reopen_step", revoked = "revoked", unknown
 }
 
 public enum ChatNextActionKind: String, ChatWireEnum {

@@ -891,7 +891,7 @@ export interface ChatInstallAdvanceParams {
   refresh_vault_item_id?: string | null
   owner_member_id?: string | null
 }
-export type SetupEventKind = 'begin' | 'credential_saved' | 'app_created' | 'manual_step_done' | 'allow_granted' | 'owner_confirmed' | 'installed' | 'failed' | 'retry' | 'revoked'
+export type SetupEventKind = 'begin' | 'credential_saved' | 'app_created' | 'manual_step_done' | 'allow_granted' | 'owner_confirmed' | 'installed' | 'failed' | 'retry' | 'reopen_step' | 'revoked'
 export interface ChatSpacesListResult {
   spaces: SpaceRef[]
 }
@@ -8716,7 +8716,7 @@ export interface RpcMethods {
   'chat.desk.decide': { params: ChatDeskDecideParams; result: ChatDeskDecideResult }
   /** Questions, hand-offs and sends the bot is holding for its owner, with the exact texts. Defaults to everything still waiting. */
   'chat.desk.list': { params: ChatDeskListParams; result: ChatDeskListResult }
-  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. */
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. reopen_step goes back: manual_step names a guided step already done, which and every guided step after it are asked for again (needs_manual_step); without manual_step it reissues the allow link. From needs_manual_step, needs_allow or an error in either; invalid_event for an automatic step, one not yet reached or any other state. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
@@ -9842,7 +9842,7 @@ export interface CanonicalRpcMethods {
   'chat.desk.decide': { params: ChatDeskDecideParams; result: ChatDeskDecideResult }
   /** Questions, hand-offs and sends the bot is holding for its owner, with the exact texts. Defaults to everything still waiting. */
   'chat.desk.list': { params: ChatDeskListParams; result: ChatDeskListResult }
-  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. */
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. manual_step_done for app_level_credential requires vault_item_id with the pasted key (invalid_event without it). owner_confirmed takes owner_member_id. reopen_step goes back: manual_step names a guided step already done, which and every guided step after it are asked for again (needs_manual_step); without manual_step it reissues the allow link. From needs_manual_step, needs_allow or an error in either; invalid_event for an automatic step, one not yet reached or any other state. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }

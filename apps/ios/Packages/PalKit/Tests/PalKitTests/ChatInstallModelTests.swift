@@ -64,6 +64,7 @@ actor FakeChatInstallClient: ChatInstallClient {
     var bound: [ChatBindingWire] = []
     var identityResult: ChatIdentityUpdateResult?
     var identityError: ChatInstallClientError?
+    var advanceError: ChatInstallClientError?
 
     init(_ capabilities: [ChatCapabilitiesWire], _ state: ChatSetupStateWire) {
         self.capabilities = capabilities
@@ -75,6 +76,7 @@ actor FakeChatInstallClient: ChatInstallClient {
     func set(_ state: ChatSetupStateWire) { current.state = state }
     func setSpaces(_ spaces: [ChatSpaceRefWire], _ bindings: [ChatBindingWire]) { spaceList = spaces; bound = bindings }
     func markUnsupported() { unsupported = true }
+    func failAdvance(_ error: ChatInstallClientError?) { advanceError = error }
     func setInstallation(_ installation: ChatInstallationWire?) { current.installation = installation }
     func failProviders(_ error: ChatInstallClientError) { providersError = error }
     func setIdentity(_ result: ChatIdentityUpdateResult?, error: ChatInstallClientError? = nil) { identityResult = result; identityError = error }
@@ -90,7 +92,11 @@ actor FakeChatInstallClient: ChatInstallClient {
         return current
     }
     func begin(_ scope: ChatInstallScope) async throws { calls.append("begin") }
-    func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws { calls.append("advance"); advances.append(advance) }
+    func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws {
+        calls.append("advance")
+        advances.append(advance)
+        if let advanceError { throw advanceError }
+    }
     func spaces(_ scope: ChatInstallScope) async throws -> [ChatSpaceRefWire] { calls.append("spaces"); return spaceList }
     func join(_ scope: ChatInstallScope, spaceId: String) async throws -> ChatSpaceJoinResult {
         calls.append("join")
@@ -148,6 +154,36 @@ struct ChatInstallModelTests {
             #expect(model.screen == screen, "\(snapshot.step)")
             #expect(model.primaryAction == action, "\(snapshot.step)")
         }
+    }
+
+    @Test func reopeningAGuidedStepSendsTheReopenEventWithTheRevisionTheClientSaw() async throws {
+        let allow = ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]
+        let (model, client) = try await model(try chatState("needs_allow", 7, action: allow, done: ["set_icon", "app_level_credential"]))
+        let accepted = await model.reopen(.appLevelCredential)
+        #expect(accepted)
+        #expect(await client.advances == [ChatInstallAdvance(event: .reopenStep, expectedRevision: 7, manualStep: .appLevelCredential)])
+    }
+
+    @Test func aGatewayThatRefusesToReopenKeepsTheStateAndReportsItWasNotAccepted() async throws {
+        let allow = ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]
+        let (model, client) = try await model(try chatState("needs_allow", 7, action: allow, done: ["set_icon"]))
+        await client.failAdvance(.failed(.gateway))
+        let accepted = await model.reopen(.setIcon)
+        #expect(!accepted)
+        #expect(model.state?.step == .needsAllow && model.state?.revision == 7)
+    }
+
+    @Test func reopeningIsOnlyAskedFromTheStepsThatCanGoBackAndForGuidedTasks() async throws {
+        for step in ["not_started", "needs_credential", "creating_app", "installing", "needs_owner", "ready"] {
+            let (model, client) = try await model(try chatState(step, 3))
+            let accepted = await model.reopen(.setIcon)
+            #expect(!accepted, "\(step)")
+            #expect(await client.advances.isEmpty, "\(step)")
+        }
+        let (model, client) = try await model(try chatState("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]))
+        let accepted = await model.reopen(.unattendedRefresh)
+        #expect(!accepted)
+        #expect(await client.advances.isEmpty)
     }
 
     @Test func pythonFixtureReadyStateLandsOnReady() async throws {
