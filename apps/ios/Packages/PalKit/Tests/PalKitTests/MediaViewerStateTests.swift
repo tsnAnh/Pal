@@ -50,7 +50,8 @@ struct MediaViewerStateTests {
         let atFirst = try viewer(opening: first, inRow: "u1")
         let atSecond = try viewer(opening: second, inRow: "u1")
         let atThird = try viewer(opening: third, inRow: "a1")
-        #expect([atFirst.index, atSecond.index, atThird.index] == [0, 1, 2])
+        let landed: [Int] = [atFirst.index, atSecond.index, atThird.index]
+        #expect(landed == [0, 1, 2])
     }
 
     @Test("the same video opened from its second row lands on the second entry")
@@ -133,7 +134,7 @@ struct MediaViewerStateTests {
         state?.goNext()
         state?.record(two, for: ConversationMediaList.itemID(rowID: "u1", media: second))
         let leftovers = MediaViewerState.close(&state)
-        #expect(Set(leftovers) == [one, two])
+        #expect(Set(leftovers) == Set([one, two]))
         #expect(state == nil)
     }
 
