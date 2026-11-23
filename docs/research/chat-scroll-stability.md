@@ -11,10 +11,10 @@ floating over the text. This is round six on the same symptom, so this note trea
 
 ## Evidence level
 
-Everything below comes from reading the code at `0228552c`, the six earlier pull requests, and public sources. None
-of it is measured. The cloud session cannot build Swift or run a Mac or an iPhone. The trace instrumentation and the
-bench scenarios in commit 2 of this pull request are there so the chief can measure it on the owner's Mac. Each
-hypothesis below names the trace signature that confirms or rules it out.
+The root cause and hypotheses below come from reading the code at `0228552c`, the six earlier pull requests, and
+public sources. One measured trace now exists. See **Measured** below. It is one Release run of `40f10e88` on the
+owner's Mac with `PAL_SCROLL_TRACE=1`: about 2 minutes, 1586 lines. The CSV sits on the Pi. This session worked
+from the coordinator's summary of it and checked each claim against the code, not against the CSV rows.
 
 ## Root cause (by reading; trace pending)
 
@@ -68,6 +68,74 @@ change and controller write. `anchor` below is the pinned row's position relativ
 
 H1 and H7 together reproduce the screenshot with no other bug. H2 and H3 explain the repeated jumping. The trace
 decides the ranking.
+
+## Measured (owner's Mac, `40f10e88`, Release, one run)
+
+The run went: open the Engineering Manager chat, scroll history, send while the bot streamed, resize the window,
+switch chat. The first analyser counted 17 jumps at the 1 pt threshold. In the flipped list `offset_y = -inset_top`
+is the newest edge, and `distance = offset_y + inset_top`. Line numbers are on this branch. The trace commit shifted
+`ChatScrollController.swift` by a few lines from `0228552c`.
+
+| t (s) | What the trace shows | Hypothesis | Writer in code | Real move? |
+|---|---|---|---|---|
+| 0.420; 102.18 (switch back) | open bounce: distance 0 → 35 → 0 (and 0 → 9 → 0). The geometry moved *before* any write, then `open-pin` and `open-newest` land 1 ms apart | H5 is the **repair**, not the cause. The displacement comes first, from first layout settling (H1 or H4) | repin `ChatScrollController.swift:116-133`. It fires only because `distance > 0.5` already (`:123`) | yes, one or two frames |
+| 8.08 to 8.355 | send. The composer grows 103 pt (`inset_top` 92 → 195), rows 151 → 152 → 153, geometry `offset -107`, distance 88. `keep-newest-rows` applied, then `skip keep-newest-grew`, a one-frame overshoot to distance 479, back at 8.355 | H1 plus H6, plus two writes resolving in one pass (H3 shape, unproven) | keep-newest `:199`, `:204` → `:229`; the skip is the #340 guard `:233-237` | yes |
+| 8.722 to 9.621 | displaced again (distance 172), and it **stays** displaced 0.9 s while the mode is following. It is restored only when rows change 153 → 149 | **H8 (new): following mode has no repair for a geometry-only displacement** | `observe` (`:97-114`) never calls `keepNewestInView`. `contentGrew` runs only when the content height grew (`ChatTranscriptList.swift:46`) or chrome changed (`:50`). The chrome path checks the distance from the *previous* geometry (`ChatScrollController.swift:225`), sees 0 and returns without a write. That path logs no trace line, only `PalPerf` `chat.scroll.position.skipped` | yes: the owner's "jumps down" |
+| 21.603 to 21.614 | distance 0 → 89 → 0 within 2 ms with **no writer**, while `content_h` flips 32677 ↔ 33080 (403 pt) three times in 20 ms | layout oscillation: H3 (SwiftUI id anchoring) or H4 (a row whose height alternates). One guess is a width toggle reflowing a long message, which needs a width column to prove | none in app code | yes, two frames |
+| 26.222, 28.556, 30.798 | reading mode: drifts of −3, −6, −6 pt while `content_h` grows 39265 → 44323 | H4 (heights refined above the viewport in layout terms), or H2 if a reply was streaming | the `rowMoved` correction `:155-171` lands a frame late, and is skipped while moving (`:162`) | yes, small |
+| 53.777, 59.446, 64.362, 70.322, 76.32 (×2) | viewport unchanged (offset −92, inset 92, distance 0). `pin_min_y` goes 0 → 44 when one 44 pt row is appended, then the pin moves to the new row | none. **Analyser artefact** | the probe reports the *same* pinned row pushed 44 pt by the new newest row (`rowMoved` `:155`), then `visibleRowsChanged` (`:145-153`) re-pins. In following mode at the edge that push is the intended "new message appears" | no |
+
+The 6 artefact lines are gone with the fixed analyser (finding D, below). That leaves **11 of the 17** as real
+viewport moves: the open bounces, the send displacement and its 0.9 s hold, the layout oscillation, and three small
+reading drifts. That count is an inference from the summary. It was not re-run on the CSV, which is not in this
+session. Confirm it with `python3 apps/ios/Tools/perf/scroll_trace.py pal-scroll-trace.csv`. The fixed analyser
+counts a bounce out and back as two viewport jumps.
+
+**Finding D, corrected.** The coordinator's reading is right that these lines are not visible jumps. It is wrong about
+the mechanism. The pin id does *not* change between the two flagged lines. The same pinned row really moved 44 pt
+in content space, because a new row was inserted above it in layout (`ChatPinProbe`,
+`ChatScrollController.swift:285-297`). The pin moves to the new row only on the next visibility callback. The
+analyser change: in following mode only `distance` counts (a `viewport` jump). Rows growing at the newest edge while
+the list stays at the edge are intended. The pinned-row test (an `anchor` jump) now applies only in reading mode, and
+only between two lines with the same pin. The summary line reports `viewport=` and `anchor=` separately.
+
+**Open bounce, one claim discarded.** The idea that `offset(0)` "ignores the 92 pt top inset" does not fit the code.
+`open-newest` is written only after a geometry callback reports `distance <= 0.5` (`:128-130`). Two writes 1 ms
+apart therefore mean `scrollTo(y: 0)` landed on the newest edge, so `scrollTo(y:)` is measured from the same
+inset-adjusted origin as `distance`. Check it in the CSV: the `geo` line between the two writes should show
+distance 0.
+
+**What removed four rows at 9.621 s (153 → 149).** It is not the outbox echo. A pending row
+(`submission:<id>`, `ChatModel.swift:741-746`) is replaced one-for-one by the timeline row with the same id
+(`known`, `:729-732`; alias `:718-724`). Candidates, most likely first:
+1. The live overlay settling into the stored turn. `Timeline.settleOverlay` drops live items once their stored entry
+   binds (`PalChat/Timeline.swift:372-389`, `dropLiveItems` at `:387`), and the stored parts can be fewer than the
+   live items they replace.
+2. Folding into bot-thread links (`Timeline.fold`, `:584`, called from `rows(links:)` `:220`).
+3. Clarify answers merging (`ChatModel.swift:803`).
+4. Empty assistant rows filtered (`ChatModel.swift:795`).
+
+The streaming reply itself is not a row while it streams (`Timeline.isShown`, `:575-581`). The trace logs only a row
+count, so it cannot tell these apart. The next trace build should log counts per id prefix (`submission:`, `stream:`,
+`row-`).
+
+**Second chat, 53 to 76 s.** Rows grow 8 → 31 → 66 → 103 → 117 while `content_h` shrinks 21821 → 12623. This fits
+the flip. Older pages append at the layout end far from the viewport, and LazyVStack replaces estimates with
+smaller measured heights there. The newest edge does not move. Not a jump.
+
+**Trace gaps for the next build.** Container width (for 21.6 s), the requested `y` of each write, a line for the
+`keepNewestInView` stale-distance return (`:225-228`), and row counts per id prefix.
+
+### The measurements against the options
+
+| Signature | A (keep flip, one writer) | B (top-down, system anchors) | C (UIKit and AppKit lists) |
+|---|---|---|---|
+| open bounce (0.42 s, 102.18 s) | removes the repin pair. The first-layout displacement stays and needs one write | removes: `defaultScrollAnchor(.bottom)` sets the initial offset inside layout, with no repin | removes |
+| send: composer +103 pt, overshoot (8.08 s) | removes only if the one writer reacts to inset changes with fresh geometry | removes: the bar is a system safe-area inset applied in the same pass, and `.sizeChanges` keeps the bottom | removes |
+| 0.9 s hold off the edge (8.72 s, H8) | removes, if the machine repairs following mode on every geometry event (the missing transition) | removes: the system anchor follows the edge, with no app event needed | removes |
+| layout oscillation, no writer (21.6 s) | leaves it | probably removes it if the flip or id anchoring is the cause. Not proven | removes, since layout is owned |
+| reading drifts −3 / −6 pt (26 to 31 s) | leaves them (a correction a frame late) | moves them to the prepend case above the viewport. It depends on id anchoring, the known risk (FB20979569) | removes |
+| artefacts (53 to 76 s) | n/a | n/a | n/a |
 
 ## Writers map
 
@@ -174,12 +242,18 @@ The pattern across the field: a still chat list has **one owner** of layout and 
 | Cost | about 1 to 2 units: machine, migration, lint | about 2 to 3 units: prototype and bench, migration, lint, iPhone and Mac verify; deletes about 150 lines (`chrome`, margins, `ChatPinProbe`, `ChatPinSlots`, repin, drift, outstanding, flips) | about 6 to 10 units: two representables; re-home `SelectableTextView` (Mac TextKit sizing), hover bars, message menus, find reveal, drops, image viewer anchors, accessibility, the bench probes |
 | Risk | low to ship; high that the symptom returns (round seven) | medium: prepend anchoring and the OS bugs above; mitigated by the bench gate | high: largest change, two platforms, regressions in text selection and accessibility |
 
-**Recommendation: B, gated by a prototype.** B is the only option that removes the triggers by geometry instead of
-correcting them. The composer inset and the streaming growth stop being events the controller handles. The one
-part SwiftUI may get wrong, prepending older pages above the viewport, is rare, starts from a user scroll, and can
-be anchored by the state machine in one place. If the bench shows prepend or the iOS 26 variable-height bug jumping
-under B, fall back to A's state machine on top of B's top-down geometry (one correction write, prepend only). That
-is still better than A, because H1 and H2 stay gone. C is the escape hatch only if B fails on both OSes.
+**Recommendation after the trace: still B, gated by a prototype.** The trace backs the design reading. The largest
+visible fault is not a bad write. It is a *missing* one: following mode has no transition for "geometry moved, rows
+did not" (H8, 0.9 s displaced). That is the class B removes by construction, because the system anchor applies on
+every layout, with no app event. B also removes the open bounce and the send displacement. It leaves one open risk:
+the small reading drifts become prepend-above-viewport cases, and the prototype bench must show those still.
+If they do not stay still, fall back to A's state machine on top of B's top-down geometry (one correction, prepend
+only). C stays the escape hatch.
+
+An interim option for the owner, not done in this unit: a one-line repair in `observe` that writes newest while
+following and idle whenever `distance > 0.5`. It would remove H8, the 0.9 s hold, on today's flipped list. It
+adds a seventh writer to the same fight, can bring back the #340 bounce, and leaves the drifts and the oscillation.
+Recommended only if B cannot start soon.
 
 ## The design that removes the class
 
@@ -304,3 +378,5 @@ Record the macOS version, because the composer path differs between 15 (`safeAre
 5. Which macOS version is the screenshot from (15 or 26)? This decides which composer path to test first.
 6. Did the screenshot follow a small upward scroll, or appear on its own while a reply streamed? This separates H7
    from H1 and H2 before the trace arrives.
+7. Ship the interim `observe` repair for H8 before B lands? Recommended: **no, unless B cannot start this week.** It
+   adds a writer, and the trace shows the writers are the problem.
