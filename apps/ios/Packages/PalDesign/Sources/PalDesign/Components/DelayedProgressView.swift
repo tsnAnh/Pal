@@ -2,6 +2,11 @@ import SwiftUI
 
 public enum LoadingPolicy {
     public static let silentWindow: Duration = .seconds(5)
+    public static let catchUpNoticeWindow: Duration = .milliseconds(150)
+
+    public static func waited(_ delay: Duration) async -> Bool {
+        (try? await Task.sleep(for: delay)) != nil
+    }
 }
 
 public struct DelayedReveal<Content: View>: View {
