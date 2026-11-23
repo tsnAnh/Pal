@@ -1,11 +1,18 @@
 import Foundation
 import PalBotProfile
+import PalProtocol
 import Testing
 
 @Suite("Chat install link")
 struct ChatInstallLinkTests {
-    private func parse(_ text: String) -> ChatInstallLink? {
-        URL(string: text).flatMap { ChatInstallLink(url: $0) }
+    private func parse(_ text: String, scheme: PalURLScheme = .release) -> ChatInstallLink? {
+        URL(string: text).flatMap { ChatInstallLink(url: $0, scheme: scheme) }
+    }
+
+    @Test func eachBuildAcceptsOnlyItsOwnScheme() {
+        #expect(parse("dev.tsnanh.hermes.bot.dev://chat/install-done", scheme: .development) == .installDone)
+        #expect(parse("dev.tsnanh.hermes.bot://chat/install-done", scheme: .development) == nil)
+        #expect(parse("dev.tsnanh.hermes.bot.dev://chat/install-done", scheme: .release) == nil)
     }
 
     @Test func acceptsTheExactInstallDoneLink() {

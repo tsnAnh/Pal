@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse
 from starlette.concurrency import run_in_threadpool
 
 from gateway.chat_install_service import RedirectOutcome
+from tools.connectors.app_scheme import AppScheme
 from tui_gateway.chat_install import REDIRECT_PATH
 
 router = APIRouter()
@@ -19,17 +20,20 @@ _HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 _PAGE = ('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
          '<title>Pal</title><body style="font-family:-apple-system,system-ui,sans-serif;margin:3rem 1.5rem">'
          '<p>{message}</p>{link}')
-APP_RETURN_LINK = "dev.tsnanh.hermes.bot://chat/install-done"
-_RETURN = f'<p><a href="{APP_RETURN_LINK}">Return to Pal</a></p>'
+_RETURN = '<p><a href="{link}">Return to Pal</a></p>'
 _PAGES = {
-    RedirectOutcome.completed: (200, "Done. Go back to Pal to finish.", _RETURN),
-    RedirectOutcome.denied: (200, "Nothing was installed. Go back to Pal to try again.", _RETURN),
-    RedirectOutcome.rejected: (400, "This link has expired or was already used. Go back to Pal and start again.", ""),
-    RedirectOutcome.failed: (500, "Something went wrong and nothing was installed. Go back to Pal to try again.", _RETURN),
+    RedirectOutcome.completed: (200, "Done. Go back to Pal to finish.", True),
+    RedirectOutcome.denied: (200, "Nothing was installed. Go back to Pal to try again.", True),
+    RedirectOutcome.rejected: (400, "This link has expired or was already used. Go back to Pal and start again.", False),
+    RedirectOutcome.failed: (500, "Something went wrong and nothing was installed. Go back to Pal to try again.", True),
 }
 
 
-def _complete(code: str, state: str, error: str) -> RedirectOutcome:
+def return_link(scheme: AppScheme) -> str:
+    return _RETURN.format(link=scheme.link("//chat/install-done"))
+
+
+def _complete(code: str, state: str, error: str) -> tuple[RedirectOutcome, AppScheme]:
     from gateway.chat_install_runtime import build_service
     from hermes_constants import get_hermes_home
     return build_service(get_hermes_home()).complete_redirect(state, code or None, error or None)
@@ -38,8 +42,9 @@ def _complete(code: str, state: str, error: str) -> RedirectOutcome:
 @router.get(REDIRECT_PATH)
 async def chat_install_callback(code: str = "", state: str = "", error: str = "") -> HTMLResponse:
     try:
-        outcome = await run_in_threadpool(_complete, code, state, error)
+        outcome, scheme = await run_in_threadpool(_complete, code, state, error)
     except Exception:  # health: allow BLE001 -- the page must not echo anything, any failure reads as an expired link
-        outcome = RedirectOutcome.rejected
-    status, message, link = _PAGES[outcome]
-    return HTMLResponse(_PAGE.format(message=message, link=link), status_code=status, headers=_HEADERS)
+        outcome, scheme = RedirectOutcome.rejected, AppScheme.release
+    status, message, returns = _PAGES[outcome]
+    return HTMLResponse(
+        _PAGE.format(message=message, link=return_link(scheme) if returns else ""), status_code=status, headers=_HEADERS)

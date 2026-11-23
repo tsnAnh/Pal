@@ -5,6 +5,7 @@ import logging
 
 from gateway import oauth_client_setup as setup_mod
 from hermes_cli.shared_catalog_connectors import owner_state_home, owner_write_scope, requested_profile_home
+from tools.connectors.app_scheme import AppScheme
 from tui_gateway.contracts.connectors import (
     ConnectorCatalogStatus,
     ConnectorErrorReason,
@@ -120,7 +121,8 @@ def _connect_mcp(provider: str, store, request) -> OAuthClientConnectResult:
     else:
         flow_cfg = target.cfg
     if gateway:
-        result = mcp_oauth_sessions.start_gateway_flow(home, target.connection, flow_cfg, gateway)
+        result = mcp_oauth_sessions.start_gateway_flow(
+            home, target.connection, flow_cfg, gateway, AppScheme.parse(request.app_scheme))
     else:
         result = mcp_oauth_sessions.start_flow(
             home, target.connection, flow_cfg, client_redirect_uri=request.client_redirect_uri)
@@ -133,7 +135,7 @@ def connect(request) -> OAuthClientConnectResult:
     try:
         if provider not in setup_mod.GOOGLE_PROVIDERS:
             return _connect_mcp(provider, store, request)
-        link = setup_mod.google_begin(store, _home(), _public_url(), provider)
+        link = setup_mod.google_begin(store, _home(), _public_url(), provider, AppScheme.parse(request.app_scheme))
     except setup_mod.SetupError as exc:
         _raise(exc.reason)
     except OAuthClientRpcError:

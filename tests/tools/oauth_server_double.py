@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from tools.connectors.mcp_oauth_redirect import APP_REDIRECT_SCHEME
+from tools.connectors.app_scheme import AppScheme
 
 APP, GATEWAY, LOOPBACK = "app", "gateway", "loopback"
 ALL_REDIRECT_KINDS = frozenset({APP, GATEWAY, LOOPBACK})
@@ -27,7 +27,7 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 def redirect_kind(uri: str) -> str | None:
     parts = urlsplit(uri)
-    if parts.scheme == APP_REDIRECT_SCHEME:
+    if parts.scheme in AppScheme:
         return APP
     if parts.scheme == "https":
         return GATEWAY

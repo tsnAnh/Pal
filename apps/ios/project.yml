@@ -49,9 +49,10 @@ targets:
         CFBundleName: $(PAL_DISPLAY_NAME)
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
-          - CFBundleURLName: dev.tsnanh.hermes.bot
+          - CFBundleURLName: $(PAL_URL_SCHEME)
             CFBundleURLSchemes:
-              - dev.tsnanh.hermes.bot
+              - $(PAL_URL_SCHEME)
+        PalURLScheme: $(PAL_URL_SCHEME)
         NSPhotoLibraryAddUsageDescription: Pal saves your bot's picture to Photos so you can add it in Slack.
         NSMicrophoneUsageDescription: Pal listens while you dictate a message or talk to a bot in voice mode.
         NSSpeechRecognitionUsageDescription: Pal turns your speech into text on this device for dictation and voice mode.
@@ -86,6 +87,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.pal
         PAL_DISPLAY_NAME: Pal
+        PAL_URL_SCHEME: dev.tsnanh.hermes.bot
         PRODUCT_NAME: Pal
         PRODUCT_MODULE_NAME: Pal
         TARGETED_DEVICE_FAMILY: "1,2"
@@ -103,6 +105,7 @@ targets:
         Debug:
           PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]: dev.tsnanh.pal.development
           PAL_DISPLAY_NAME[sdk=macosx*]: Pal Dev
+          PAL_URL_SCHEME[sdk=macosx*]: dev.tsnanh.hermes.bot.dev
           ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
     dependencies:
       - package: Sparkle

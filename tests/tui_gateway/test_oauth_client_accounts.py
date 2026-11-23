@@ -17,7 +17,7 @@ def started(monkeypatch):
         flows.append({"name": name, "cfg": cfg})
         return {"session_id": f"s{len(flows)}", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
-    def fake_gateway(home, name, cfg, redirect_uri):
+    def fake_gateway(home, name, cfg, redirect_uri, app_scheme):
         flows.append({"name": name, "cfg": cfg})
         return {"session_id": f"s{len(flows)}", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 

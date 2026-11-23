@@ -154,7 +154,7 @@ def test_figma_connects_through_the_preregistered_mcp_path(root, public_url, mon
         started.update(name=name, cfg=cfg)
         return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
-    def fake_gateway(home, name, cfg, redirect_uri):
+    def fake_gateway(home, name, cfg, redirect_uri, app_scheme):
         started.update(name=name, cfg=cfg, redirect_uri=redirect_uri)
         return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 

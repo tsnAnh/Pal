@@ -12,10 +12,12 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from gateway import chat_install_runtime
-from gateway.chat_install_store import ChatInstallStore
+from gateway.chat_install_store import ChatInstallStore, digest
+from gateway.device_registry import install_root
 from hermes_cli.web_routers import chat_install as route
 from tests.gateway.chat_install_harness import HTTPS, RecordingControl, db_bytes, forbidden_in, nonce_of, register_fakes, walk_json
 from tests.tui_gateway.contracts.chat_provider_fakes import FAKE_TOKEN, AuthorizeOnlyFake, CredentialAppFake
+from tools.connectors.app_scheme import AppScheme
 from tui_gateway import chat_install as ci
 from tui_gateway import server
 from tui_gateway.contracts import METHODS
@@ -57,14 +59,14 @@ def state_of(response: dict) -> wire.SetupState:
     return wire.SetupState.model_validate(response["result"]["state"])
 
 
-def drive_to_allow(provider_id: str) -> wire.SetupState:
-    state = state_of(call("chat.install.begin", provider_id=provider_id))
+def drive_to_allow(provider_id: str, **scheme) -> wire.SetupState:
+    state = state_of(call("chat.install.begin", provider_id=provider_id, **scheme))
     if state.step is wire.SetupStep.needs_credential:
         state = state_of(call("chat.install.advance", provider_id=provider_id, event="credential_saved",
-                              expected_revision=state.revision, vault_item_id="vault-config"))
+                              expected_revision=state.revision, vault_item_id="vault-config", **scheme))
     if state.step is wire.SetupStep.needs_manual_step:
         state = state_of(call("chat.install.advance", provider_id=provider_id, event="manual_step_done",
-                              expected_revision=state.revision))
+                              expected_revision=state.revision, **scheme))
     assert state.step is wire.SetupStep.needs_allow
     return state
 
@@ -142,7 +144,7 @@ def test_second_redirect_never_creates_a_second_installation(env):
     store = ChatInstallStore(env.home)
     service = chat_install_runtime.build_service(env.home)
     fresh = store.issue_nonce((BOT, "fake-authorize", "w1"))
-    assert service.complete_redirect(fresh, CODE, None).value == "completed"
+    assert service.complete_redirect(fresh, CODE, None)[0].value == "completed"
     assert len(env.providers["fake-authorize"].installs) == 1
     assert len(env.control.applied) == 1
     assert store.installation(again.installation_id).id == again.installation_id
@@ -386,6 +388,58 @@ def test_done_page_links_back_into_the_app_without_code_or_state(env):
     assert replay.status_code == 400 and "dev.tsnanh" not in replay.text
 
 
+DEV = AppScheme.development.value
+RELEASE = AppScheme.release.value
+
+
+@pytest.mark.parametrize("sent,returned", [
+    ({"app_scheme": DEV}, DEV),
+    ({"app_scheme": RELEASE}, RELEASE),
+    ({}, RELEASE),
+    ({"app_scheme": "javascript:alert(1)"}, RELEASE),
+    ({"app_scheme": "https://evil.example"}, RELEASE),
+    ({"app_scheme": DEV + ".evil"}, RELEASE),
+    ({"app_scheme": DEV.upper()}, RELEASE),
+    ({"app_scheme": ""}, RELEASE),
+])
+@pytest.mark.parametrize("provider", ["fake-credential", "fake-authorize"])
+def test_done_page_returns_to_the_pal_that_started_the_install(env, provider, sent, returned):
+    state = drive_to_allow(provider, **sent)
+    page = allow(env, state)
+    assert page.status_code == 200
+    assert f'href="{returned}://chat/install-done"' in page.text
+    assert page.text.count("://") == 1
+
+
+def test_denied_page_returns_to_the_pal_that_started_the_install(env):
+    denied = env.client.get("/webapp/chat-install/callback", params={
+        "error": "access_denied", "state": nonce_of(drive_to_allow("fake-authorize", app_scheme=DEV).next_action.link)})
+    assert denied.status_code == 200 and f'href="{DEV}://chat/install-done"' in denied.text
+
+
+def test_failed_page_returns_to_the_pal_that_started_the_install(env):
+    def boom(state, code):
+        raise RuntimeError("provider text")
+
+    env.providers["fake-authorize"].complete_install = boom
+    failed = allow(env, drive_to_allow("fake-authorize", app_scheme=DEV))
+    assert failed.status_code == 500 and f'href="{DEV}://chat/install-done"' in failed.text
+
+
+def test_an_install_started_before_the_scheme_column_existed_returns_to_the_release_app(env):
+    import sqlite3
+    path = install_root(env.home) / "chat_install.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    legacy = sqlite3.connect(path)
+    legacy.executescript(
+        "CREATE TABLE nonces (digest TEXT PRIMARY KEY, bot TEXT NOT NULL, provider_id TEXT NOT NULL,"
+        " workspace TEXT NOT NULL, expires_at REAL NOT NULL); PRAGMA user_version=1;")
+    legacy.execute("INSERT INTO nonces VALUES (?, ?, ?, ?, ?)", (digest("old-nonce"), BOT, "p", "w", 10**12))
+    legacy.commit()
+    legacy.close()
+    assert ChatInstallStore(env.home).consume_nonce("old-nonce") == ((BOT, "p", "w"), AppScheme.release)
+
+
 def test_credential_saved_hands_both_vault_items_to_the_provider(env):
     provider = env.providers["fake-credential"]
     state = state_of(call("chat.install.begin", provider_id="fake-credential"))
@@ -467,9 +521,9 @@ def test_secrets_stay_out_of_the_database_and_nonces_are_stored_hashed(env):
 def test_authorize_link_keeps_provider_query_and_replaces_a_state_param(env):
     service = chat_install_runtime.build_service(env.home)
     key = (BOT, "fake-authorize", "w1")
-    plain = service._with_nonce("https://x.invalid/allow?scope=a,b&state=provider", key)
+    plain = service._with_nonce("https://x.invalid/allow?scope=a,b&state=provider", key, AppScheme.release)
     assert plain.startswith("https://x.invalid/allow?scope=a%2Cb&state=") and "provider" not in plain
-    assert service._with_nonce("https://x.invalid/allow", key).count("?") == 1
+    assert service._with_nonce("https://x.invalid/allow", key, AppScheme.release).count("?") == 1
     assert ci.REDIRECT_PATH == "/webapp/chat-install/callback"
 
 

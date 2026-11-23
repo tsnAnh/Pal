@@ -18,11 +18,14 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
 from gateway.device_registry import install_root
+from hermes_cli.sqlite_util import add_column_if_missing
+from tools.connectors.app_scheme import NONCE_COLUMN_DDL, AppScheme
 from tools.connectors.mcp_oauth_redirect import GATEWAY_CALLBACK_PATH
 
 logger = logging.getLogger(__name__)
 
 DB_NAME = "oauth_clients.db"
+SCHEMA_VERSION = 1
 NONCE_TTL_SECONDS = 600.0
 HTTP_TIMEOUT_SECONDS = 15.0
 GOOGLE_REDIRECT_PATH = "/webapp/google-install/callback"
@@ -39,7 +42,7 @@ CONSOLE_URLS = {
     ADS_PROVIDER: "https://console.cloud.google.com/apis/credentials",
 }
 
-SCHEMA = """
+SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS clients (
     provider_id TEXT PRIMARY KEY,
     vault_home TEXT NOT NULL,
@@ -61,9 +64,17 @@ CREATE TABLE IF NOT EXISTS nonces (
     profile_home TEXT NOT NULL,
     verifier TEXT NOT NULL,
     redirect_uri TEXT NOT NULL,
-    expires_at REAL NOT NULL
+    expires_at REAL NOT NULL,
+    {NONCE_COLUMN_DDL}
 );
 """
+
+
+def _initialize(conn: sqlite3.Connection) -> None:
+    conn.executescript(SCHEMA)
+    if conn.execute("PRAGMA user_version").fetchone()[0] < SCHEMA_VERSION:
+        add_column_if_missing(conn, "nonces", "app_scheme", NONCE_COLUMN_DDL)
+        conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 
 class ConnectionStatus(Enum):
@@ -97,6 +108,7 @@ class PendingSignIn:
     profile_home: str
     verifier: str
     redirect_uri: str
+    app_scheme: AppScheme = AppScheme.release
 
 
 def _digest(raw: str) -> str:
@@ -124,7 +136,7 @@ class OAuthClientStore:
     def _open(self) -> sqlite3.Connection:
         from hermes_cli.sqlite_util import open_db
         conn = open_db(self._path, db_label=DB_NAME, busy_timeout_ms=10_000,
-                       initialize=lambda c: c.executescript(SCHEMA))
+                       initialize=_initialize)
         with contextlib.suppress(OSError):
             os.chmod(self._path, 0o600)
         return conn
@@ -197,10 +209,10 @@ class OAuthClientStore:
                          (pending.provider_id, pending.profile_home))
             conn.execute("DELETE FROM nonces WHERE expires_at <= ?", (self._clock(),))
             conn.execute(
-                "INSERT INTO nonces (digest, provider_id, profile_home, verifier, redirect_uri, expires_at)"
-                " VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO nonces (digest, provider_id, profile_home, verifier, redirect_uri, expires_at, app_scheme)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (_digest(raw), pending.provider_id, pending.profile_home, pending.verifier, pending.redirect_uri,
-                 self._clock() + ttl))
+                 self._clock() + ttl, pending.app_scheme.value))
         return raw
 
     def consume_nonce(self, raw: str) -> PendingSignIn | None:
@@ -212,7 +224,8 @@ class OAuthClientStore:
             conn.execute("DELETE FROM nonces WHERE digest=?", (wanted,))
         if row["expires_at"] <= self._clock():
             return None
-        return PendingSignIn(row["provider_id"], row["profile_home"], row["verifier"], row["redirect_uri"])
+        return PendingSignIn(
+            row["provider_id"], row["profile_home"], row["verifier"], row["redirect_uri"], AppScheme.parse(row["app_scheme"]))
 
 
 def resolve_client(record: ClientRecord) -> tuple[str, str]:
@@ -286,7 +299,7 @@ def _challenge(verifier: str) -> str:
 
 
 def google_begin(store: OAuthClientStore, profile_home, public_url: str | None,
-                 provider: str = GOOGLE_PROVIDER) -> str:
+                 provider: str = GOOGLE_PROVIDER, app_scheme: AppScheme = AppScheme.release) -> str:
     from hermes_cli.pal_connectors import load_pal_connectors
     redirect_uri = google_redirect_url(public_url)
     if redirect_uri is None:
@@ -297,7 +310,7 @@ def google_begin(store: OAuthClientStore, profile_home, public_url: str | None,
     client_id, _ = resolve_client(record)
     entry = next(e for e in load_pal_connectors() if e.id == provider)
     verifier = secrets.token_urlsafe(64)
-    state = store.issue_nonce(PendingSignIn(provider, profile_key(profile_home), verifier, redirect_uri))
+    state = store.issue_nonce(PendingSignIn(provider, profile_key(profile_home), verifier, redirect_uri, app_scheme))
     scopes = list(entry.scopes) if provider == ADS_PROVIDER else [*GOOGLE_IDENTITY_SCOPES, *entry.scopes]
     params = {
         "client_id": client_id, "redirect_uri": redirect_uri, "response_type": "code",
@@ -355,15 +368,15 @@ def _store_google_token(pending: PendingSignIn, client_id: str, client_secret: s
 
 
 def google_complete(store: OAuthClientStore, raw_state: str, code: str | None, error: str | None,
-                    exchange: Callable[[str, dict[str, str]], dict] | None = None) -> RedirectOutcome:
+                    exchange: Callable[[str, dict[str, str]], dict] | None = None) -> tuple[RedirectOutcome, AppScheme]:
     pending = store.consume_nonce(raw_state) if raw_state else None
     if pending is None or pending.provider_id not in GOOGLE_PROVIDERS:
-        return RedirectOutcome.rejected
+        return RedirectOutcome.rejected, AppScheme.release
     provider = pending.provider_id
     if error:
-        return RedirectOutcome.denied
+        return RedirectOutcome.denied, pending.app_scheme
     if not code:
-        return RedirectOutcome.rejected
+        return RedirectOutcome.rejected, pending.app_scheme
     from hermes_cli.pal_connectors import load_pal_connectors
     record = store.client(client_provider(provider))
     previous = store.connection(provider, pending.profile_home)
@@ -381,9 +394,9 @@ def google_complete(store: OAuthClientStore, raw_state: str, code: str | None, e
         logger.warning("google install exchange failed provider=%s error=%s", provider, type(exc).__name__)
         store.set_connection(provider, pending.profile_home, ConnectionStatus.needs_reconnect,
                              previous[1] if previous else None)
-        return RedirectOutcome.denied
+        return RedirectOutcome.denied, pending.app_scheme
     store.set_connection(provider, pending.profile_home, ConnectionStatus.connected, item)
-    return RedirectOutcome.completed
+    return RedirectOutcome.completed, pending.app_scheme
 
 
 def google_remove(store: OAuthClientStore, profile_home, provider: str = GOOGLE_PROVIDER) -> None:

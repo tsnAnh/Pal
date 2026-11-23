@@ -22,10 +22,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>dev.tsnanh.hermes.bot</string>
+			<string>$(PAL_URL_SCHEME)</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>dev.tsnanh.hermes.bot</string>
+				<string>$(PAL_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
@@ -59,6 +59,8 @@
 	<array>
 		<string>INSendMessageIntent</string>
 	</array>
+	<key>PalURLScheme</key>
+	<string>$(PAL_URL_SCHEME)</string>
 	<key>SUAutomaticallyUpdate</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>

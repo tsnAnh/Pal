@@ -2,6 +2,7 @@ import AuthenticationServices
 import Foundation
 import PalAuth
 import PalConnect
+import PalProtocol
 
 @MainActor
 final class WebAuthenticationBrowser: NSObject, CallbackAuthorizationBrowser, ASWebAuthenticationPresentationContextProviding {
@@ -22,7 +23,7 @@ final class WebAuthenticationBrowser: NSObject, CallbackAuthorizationBrowser, AS
                 }
                 let session = ASWebAuthenticationSession(
                     url: url,
-                    callback: .customScheme("dev.tsnanh.hermes.bot")
+                    callback: .customScheme(PalURLScheme.current.rawValue)
                 ) { @Sendable [weak self] _, _ in
                     Task { @MainActor in self?.finish?() }
                 }
