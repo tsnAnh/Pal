@@ -52,23 +52,5 @@ struct ComputerFrameDeliveryTests {
         #expect(shown)
         #expect(!view.isHidden)
     }
-
-    @Test("control: an already visible view shows the same frame")
-    func controlVisibleViewShowsFrame() async throws {
-        let image = try Self.solidImage()
-        let sink = ComputerFrameSink()
-        let host = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 240))
-        let view = FrameImageView(frame: host.bounds)
-        view.isHidden = false
-        host.addSubview(view)
-        let window = Self.onScreen(host)
-        defer { window.orderOut(nil) }
-        view.bind(sink)
-
-        sink.submit(image)
-        let shown = try await Self.settle { view.layer?.contents != nil }
-
-        #expect(shown)
-    }
 }
 #endif

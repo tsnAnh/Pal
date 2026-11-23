@@ -7,7 +7,6 @@ final class FrameImageView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        isHidden = true
         layer?.contentsGravity = .resize
         layer?.magnificationFilter = .linear
         layer?.minificationFilter = .trilinear
@@ -33,7 +32,6 @@ final class FrameImageView: NSView {
         CATransaction.setDisableActions(true)
         layer?.contents = image
         CATransaction.commit()
-        isHidden = false
     }
 }
 #endif
