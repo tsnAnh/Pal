@@ -60,6 +60,7 @@ final class ChatScrollController {
     @ObservationIgnored private var hasMeasured = false
     @ObservationIgnored private var syncPending = false
     @ObservationIgnored private var anchorDrift: CGFloat = 0
+    @ObservationIgnored private var outstanding: Outstanding?
     static let revealSettle = Duration.milliseconds(250)
     static let revealAttempts = 12
 
@@ -67,6 +68,23 @@ final class ChatScrollController {
         case idle
         case pinning
         case done
+    }
+
+    private enum ScrollRequest: Equatable {
+        case newest
+        case offset(CGFloat)
+
+        func apply(to target: inout ScrollPosition) {
+            switch self {
+            case .newest: target.scrollTo(edge: .top)
+            case let .offset(y): target.scrollTo(y: y)
+            }
+        }
+    }
+
+    private struct Outstanding {
+        let request: ScrollRequest
+        let distanceFromNewest: CGFloat
     }
 
     private struct Pin {
@@ -79,6 +97,9 @@ final class ChatScrollController {
     func observe(_ viewport: ChatViewport, tracksOpen: Bool = false) {
         if tracksOpen, !phase.isMoving, abs(viewport.distanceFromNewest - distanceFromNewest) > 0.5 {
             PalPerf.event("chat.open.jump")
+        }
+        if let outstanding, abs(viewport.distanceFromNewest - outstanding.distanceFromNewest) > Self.atNewestTolerance {
+            self.outstanding = nil
         }
         distanceFromNewest = viewport.distanceFromNewest
         hasMeasured = true
@@ -102,11 +123,11 @@ final class ChatScrollController {
             guard mode == .following, !revealing, !phase.isMoving,
                   viewport.distanceFromNewest > Self.atNewestTolerance else { return }
             repin = .pinning
-            write { $0.scrollTo(y: 0) }
+            write(.offset(0))
         case .pinning:
             guard viewport.distanceFromNewest <= Self.atNewestTolerance else { return }
             repin = .done
-            write { $0.scrollTo(edge: .top) }
+            write(.newest)
         case .done:
             break
         }
@@ -143,7 +164,7 @@ final class ChatScrollController {
             return
         }
         distanceFromNewest += delta
-        write { $0.scrollTo(y: distanceFromNewest) }
+        write(.offset(distanceFromNewest))
     }
 
     func setVisible(_ visible: Bool, rowIDs: [String]) {
@@ -152,7 +173,7 @@ final class ChatScrollController {
         guard visible else { return }
         if anchorDrift != 0, mode == .reading, phase == .idle {
             distanceFromNewest += anchorDrift
-            write { $0.scrollTo(y: distanceFromNewest) }
+            write(.offset(distanceFromNewest))
         }
         anchorDrift = 0
         guard syncPending else { return }
@@ -165,6 +186,7 @@ final class ChatScrollController {
             deferSync()
             return
         }
+        outstanding = nil
         defer {
             lastRowID = ids.last
             knownIDs = Set(ids)
@@ -200,17 +222,17 @@ final class ChatScrollController {
             PalPerf.event("chat.scroll.position.skipped")
             return
         }
-        write { $0.scrollTo(edge: .top) }
+        write(.newest)
     }
 
-    private func write(_ change: (inout ScrollPosition) -> Void) {
-        var next = position
-        change(&next)
-        guard next != position else {
+    private func write(_ request: ScrollRequest) {
+        if let outstanding, outstanding.request == request,
+           abs(outstanding.distanceFromNewest - distanceFromNewest) <= Self.atNewestTolerance {
             PalPerf.event("chat.scroll.position.skipped")
             return
         }
-        position = next
+        outstanding = Outstanding(request: request, distanceFromNewest: distanceFromNewest)
+        request.apply(to: &position)
         PalPerf.event("chat.scroll.position.write")
     }
 
@@ -223,7 +245,8 @@ final class ChatScrollController {
         let glides = animated && distanceFromNewest <= viewportHeight * Self.jumpGlideViewports
         var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
         transaction.disablesAnimations = !glides
-        withTransaction(transaction) { position.scrollTo(edge: .top) }
+        outstanding = nil
+        withTransaction(transaction) { write(.newest) }
     }
 
     func reveal(_ id: String) {

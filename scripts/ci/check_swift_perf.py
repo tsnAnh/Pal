@@ -282,7 +282,7 @@ LINE_RULES = (
         re.compile(r"^\s*(?:self\.)?position\.scrollTo\(\s*(?:y:|edge:)"),
         SCROLL_CONTROLLER,
         "ScrollPosition written without an equality guard: ChatScrollController.position is observed, so every write "
-        "re-runs the list even when the position is unchanged. Write through write { $0.scrollTo(...) }, which skips an equal position",
+        "re-runs the list even when the position is unchanged. Write through write(.newest) or write(.offset(y)), which skips a request the scroll view still owes",
     ),
     LineRule(
         "perf-foreach-regroup",
