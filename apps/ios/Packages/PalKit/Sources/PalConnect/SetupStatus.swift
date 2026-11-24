@@ -50,6 +50,7 @@ public struct SetupStatus: Sendable, Equatable {
     public var method: String?
     public var trace: String?
     public var gatewayVersion: String?
+    public var link: SetupLink?
 
     public init(
         kind: SetupStatusClass = .internalFault, title: String, reason: String, actionTitle: String, code: String,
