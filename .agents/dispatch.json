@@ -1,5 +1,6 @@
 {
-  "backend": "claude",
+  "backend": "t3code",
+  "t3code": { "project": "f0a3ac7a-7846-426f-b80f-a1c630ec5faa", "base_ref": "origin/main", "max_in_flight": 2 },
   "max_in_flight": 10,
   "forbidden_paths": [
     "infra/",
