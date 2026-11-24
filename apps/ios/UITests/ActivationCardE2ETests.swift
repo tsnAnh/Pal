@@ -14,62 +14,35 @@ final class ActivationCardE2ETests: E2ETestCase {
         try await super.setUp()
     }
 
-    func test1DenyLeavesServerDisabled() throws {
+    func test1InstalledServerTurnsOnWithoutAsking() throws {
         let app = openOwnerChat()
         XCTAssertEqual(try fixtureEnabled(Self.owner), false, "the fixture starts disabled")
 
         send(app, Self.prompt)
-        waitForCard(app, value: "open")
-        shot(app, "activation-card-open")
-        XCTAssertEqual(try fixtureEnabled(Self.owner), false, "an unanswered card enables nothing")
-
-        tapWhenStill(newestCard(app).buttons["connectionDeny-\(Self.server)"])
-        waitForValue(state(app), "skipped", "denied target state")
         waitForCard(app, value: "settled")
-        shot(app, "activation-card-denied")
-
-        waitFor(bubbles(app, "assistantBubble", containing: "\(Self.server)=skipped").firstMatch, timeout: 60, "assistant names the skipped state")
-        XCTAssertEqual(try fixtureEnabled(Self.owner), false, "deny leaves the server disabled")
-        XCTAssertNil(try fixtureEnabled(Self.bystander), "the other bot is untouched")
-        XCTAssertFalse(try profileLog(Self.owner).contains("fixture_echo"), "a denied server is never started")
-    }
-
-    func test2AllowEnablesAndDiscovers() throws {
-        let app = openOwnerChat()
-        XCTAssertEqual(try fixtureEnabled(Self.owner), false, "the fixture starts disabled")
-
-        send(app, Self.prompt)
-        waitForCard(app, value: "open")
-        tapWhenStill(newestCard(app).buttons["connectionAllow-\(Self.server)"])
-        waitForValue(state(app), "connected", "allowed target state", timeout: 60)
-        waitForCard(app, value: "settled")
+        waitForValue(state(app), "connected", "target state", timeout: 60)
+        assertNoDecisionButtons(app)
         shot(app, "activation-card-connected")
 
         waitFor(bubbles(app, "assistantBubble", containing: "\(Self.server)=connected").firstMatch, timeout: 60, "assistant names the connected state")
-        XCTAssertEqual(try fixtureEnabled(Self.owner), true, "allow enables the server for the asking bot")
+        XCTAssertEqual(try fixtureEnabled(Self.owner), true, "the server is enabled for the asking bot")
         XCTAssertNil(try fixtureEnabled(Self.bystander), "the other bot is untouched")
         XCTAssertTrue(try profileLog(Self.owner).contains("fixture_echo"), "the gateway discovered the server's tool")
     }
 
-    func test3ReopenRestoresOneCard() throws {
+    func test2ReopenRestoresOneCard() throws {
         let app = openOwnerChat()
 
         send(app, Self.prompt)
-        waitForCard(app, value: "open")
-        assertOneCard(app, value: "open", "before leaving")
-
-        reopenOwnerChat(app)
-        waitForCard(app, value: "open")
-        assertOneCard(app, value: "open", "after reopening an open operation")
-
-        tapWhenStill(newestCard(app).buttons["connectionDeny-\(Self.server)"])
-        waitForValue(state(app), "skipped", "denied target state")
         waitForCard(app, value: "settled")
+        waitForValue(state(app), "connected", "target state", timeout: 60)
+        assertOneCard(app, value: "settled", "before leaving")
 
         reopenOwnerChat(app)
         waitForCard(app, value: "settled")
-        waitForValue(state(app), "skipped", "settled state restored")
-        assertOneCard(app, value: "settled", "after reopening a settled operation")
+        waitForValue(state(app), "connected", "settled state restored")
+        assertOneCard(app, value: "settled", "after reopening")
+        assertNoDecisionButtons(app)
         shot(app, "activation-card-reopened")
 
         try control("kill-gateway")
@@ -77,9 +50,15 @@ final class ActivationCardE2ETests: E2ETestCase {
         try control("start-gateway")
         waitGone(app.descendants(matching: .any)["reconnectingIndicator"], timeout: 90, "reconnected after the gateway restart")
         waitForCard(app, value: "settled")
-        waitForValue(state(app), "skipped", "settled state after the gateway restart")
+        waitForValue(state(app), "connected", "settled state after the gateway restart")
         assertOneCard(app, value: "settled", "after the gateway restart")
-        XCTAssertEqual(try fixtureEnabled(Self.owner), false, "the server stays disabled across the restart")
+    }
+
+    private func assertNoDecisionButtons(_ app: XCUIApplication) {
+        let card = newestCard(app)
+        XCTAssertFalse(card.buttons["connectionAllow-\(Self.server)"].exists, "no Allow button")
+        XCTAssertFalse(card.buttons["connectionDeny-\(Self.server)"].exists, "no Don't allow button")
+        XCTAssertFalse(card.buttons["connectionRetry-\(Self.server)"].exists, "no Try again on a connected target")
     }
 
     private func openOwnerChat() -> XCUIApplication {
@@ -106,18 +85,6 @@ final class ActivationCardE2ETests: E2ETestCase {
 
     private func state(_ app: XCUIApplication) -> XCUIElement {
         newestCard(app).descendants(matching: .any)["connectionState-\(Self.server)"]
-    }
-
-    private func tapWhenStill(_ element: XCUIElement, timeout: TimeInterval = 10) {
-        let deadline = Date().addingTimeInterval(timeout)
-        var last = element.exists ? element.frame : .null
-        while Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.3)
-            let current = element.exists ? element.frame : .null
-            if current == last, element.isHittable { break }
-            last = current
-        }
-        element.hit()
     }
 
     private func waitForCard(_ app: XCUIApplication, value: String, timeout: TimeInterval = 60) {

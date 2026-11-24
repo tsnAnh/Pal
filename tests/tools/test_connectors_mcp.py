@@ -2,7 +2,8 @@
 
 Contracts:
 - the backend owns the work: authorize mints its own URL, install writes credentials and installs,
-  enable flips the flag; the card only says approved / skipped / continue
+  enable flips the flag; enable asks nothing, install asks the owner through the question form first,
+  and the card only reports progress, takes the credentials a waiting install asked for, and Try again
 - a card claim of any other state moves nothing
 - off the desktop there is no card: the work runs at once and the result carries the link
 - catalog validation: install is catalog-only, enable/authorize need a configured server
@@ -154,6 +155,44 @@ def _linear(**kw):
     return {"name": "linear", "mcp": True, **kw}
 
 
+class FormAsker:
+    """The clarify callback a surface binds for the tool call: records every question it is shown
+    and answers each one with ``pick`` (a label, or None for no answer)."""
+
+    def __init__(self, pick="Install and set up (Recommended)", outcome="submitted"):
+        self.pick, self.outcome = pick, outcome
+        self.asked = []
+        self.details = []
+
+    def __call__(self, questions):
+        self.asked.append(questions)
+        return {"answers": {q["qid"]: self.pick for q in questions}, "outcome": self.outcome}
+
+    def sink(self, text):
+        self.details.append(text)
+        return True
+
+
+@contextlib.contextmanager
+def _asking(asker):
+    from tools.details_bubble import bound_details_sink
+    from tools.mcp_elicitation_form import bound_form_asker
+
+    with bound_form_asker(asker), bound_details_sink(getattr(asker, "sink", None)):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _attended():
+    with patch("tools.approval_context._no_user_can_answer", return_value=False), \
+         patch("tools.connectors.install_form._entry", return_value=SimpleNamespace(
+             description="Issue tracking. Plans and tracks work.",
+             auth=SimpleNamespace(type="api_key", env=[SimpleNamespace(name="LINEAR_API_KEY", prompt="a Linear API key",
+                                                                        required=True)]))), \
+         patch("tools.connectors.mcp_launch.launch_for", return_value={"kind": "remote", "target": "https://mcp.linear.app/mcp"}):
+        yield
+
+
 # ---------------------------------------------------------------------------
 # the card round-trip: the backend does the work, the card answers approved / skipped
 # ---------------------------------------------------------------------------
@@ -191,7 +230,8 @@ def test_install_waits_for_the_credentials_it_declares_and_installs_with_them():
     )
     answer = json.dumps({"targets": [{"name": "figma", "status": "approved", "env": {"FIGMA_TOKEN": "tok-1"}}]})
     callback = _answering(answer)
-    out = _mcp({"action": "install", "connectors": [_mcp_target("figma")]}, callback, mcp_backend=backend)
+    with _asking(FormAsker()):
+        out = _mcp({"action": "install", "connectors": [_mcp_target("figma")]}, callback, mcp_backend=backend)
 
     (offered,) = callback.seen[0]["targets"]
     assert offered["state"] == TargetState.pending.value
@@ -205,12 +245,12 @@ def test_install_waits_for_the_credentials_it_declares_and_installs_with_them():
     assert "tool_describe" in settled["tools_listing"] and "tool_call" in settled["tools_listing"]
 
 
-def test_a_card_claim_other_than_approved_or_skipped_moves_nothing(backend):
+def test_a_card_claim_other_than_approved_moves_nothing(backend):
     answer = json.dumps({"targets": [{"name": "paper", "status": "connected", "tools": ["x"]}],
                          "settled_by": "continue"})
-    out = _mcp({"action": "enable", "connectors": [_mcp_target("paper")]}, _answering(answer), mcp_backend=backend)
+    out = _mcp({"action": "authorize", "connectors": [_mcp_target("paper")]}, _answering(answer), mcp_backend=backend)
 
-    assert backend.calls == []
+    assert backend.calls == [("start_oauth", "paper")]
     (settled,) = out["targets"]
     assert settled["state"] == TargetState.not_connected.value
     assert out["settled_by"] == SettleReason.continue_.value
@@ -218,7 +258,7 @@ def test_a_card_claim_other_than_approved_or_skipped_moves_nothing(backend):
 
 def test_no_answer_settles_by_deadline_and_marks_targets_not_connected(backend):
     with patch("tools.connectors.operation.OPERATION_DEADLINE_SECONDS", 0.05):
-        out = _mcp({"action": "install", "connectors": [_linear()]}, _answering(None), mcp_backend=backend)
+        out = _mcp({"action": "authorize", "connectors": [_linear()]}, _answering(None), mcp_backend=backend)
     assert out["settled_by"] == SettleReason.deadline.value
     assert out["targets"][0]["state"] == TargetState.not_connected.value
     assert "error" not in out
@@ -228,13 +268,191 @@ def test_mcp_secrets_never_reach_the_model():
     backend = FakeBackend(missing_env=["LINEAR_API_KEY"], registration_error="sk-secret was rejected")
     answer = json.dumps({"targets": [{"name": "linear", "status": "approved",
                                       "env": {"LINEAR_API_KEY": "sk-secret"}}]})
-    out = _mcp({"action": "install", "connectors": [_linear()]}, _answering(answer), mcp_backend=backend)
+    with _asking(FormAsker()):
+        out = _mcp({"action": "install", "connectors": [_linear()]}, _answering(answer), mcp_backend=backend)
     payload = json.dumps(out)
     assert "sk-secret" not in payload
     assert "[REDACTED]" in payload
     assert out["targets"][0]["state"] == TargetState.connected.value
     assert out["targets"][0]["tools"] == []
     assert out["targets"][0]["discovery_error"] == "[REDACTED] was rejected"
+
+
+# ---------------------------------------------------------------------------
+# no consent step: an installed connector turns on, a new one asks through the question form
+# ---------------------------------------------------------------------------
+
+_BANNED = ("allow", "deny", "don't allow")
+
+
+def test_enabling_an_installed_connector_settles_connected_with_no_card_and_no_question(backend):
+    asker = FormAsker()
+    callback = _answering(None)
+    with _asking(asker):
+        out = _mcp({"action": "enable", "connectors": [_mcp_target("paper")]}, callback, mcp_backend=backend)
+
+    assert callback.seen == [] and asker.asked == [] and asker.details == []
+    assert ("enable", "paper") in backend.calls
+    (target,) = out["targets"]
+    assert target["state"] == TargetState.connected.value
+    assert out["status"] == "settled" and out["note"].startswith("Turned on for this bot")
+    assert live.current("s1") is None
+
+
+def test_a_connector_that_is_not_installed_asks_the_form_once_with_the_install_option_first(backend):
+    asker = FormAsker()
+    callback = _answering(None)
+    with _asking(asker):
+        _mcp({"action": "install", "connectors": [_linear()]}, callback, mcp_backend=backend)
+
+    (questions,) = asker.asked
+    (question,) = questions
+    assert question["question"] == "Install Linear for this bot?"
+    assert question["choices"] == ["Install and set up (Recommended)", "Not now"]
+    assert question["choices_offered"] == ["Install and set up", "Not now"]
+    assert question["multi_select"] is False
+    (details,) = asker.details
+    assert "Linear" in details and "https://mcp.linear.app/mcp" in details and "LINEAR_API_KEY" not in details
+    assert "a Linear API key" in details
+    shown = " ".join([question["question"], *question["choices"], details]).casefold()
+    assert not any(word in shown for word in _BANNED)
+
+
+def test_picking_install_starts_the_existing_install_and_the_card_only_reports_it(backend):
+    callback = _answering(None)
+    with _asking(FormAsker()), patch("tools.connectors.operation.OPERATION_DEADLINE_SECONDS", 0.3):
+        out = _mcp({"action": "install", "connectors": [_linear()]}, callback, mcp_backend=backend)
+
+    assert ("install", "linear", {}) in backend.calls
+    (offered,) = callback.seen[0]["targets"]
+    assert offered["state"] in (TargetState.initiated.value, TargetState.connected.value)
+    assert out["targets"][0]["state"] == TargetState.connected.value
+
+
+@pytest.mark.parametrize("pick", ["Not now", "Maybe later, ask Bob first", None])
+def test_not_now_or_another_answer_settles_declined_and_installs_nothing(backend, pick):
+    callback = _answering(None)
+    with _asking(FormAsker(pick=pick)):
+        out = _mcp({"action": "install", "connectors": [_linear()]}, callback, mcp_backend=backend)
+
+    assert not any(call[0] == "install" for call in backend.calls)
+    assert callback.seen == []
+    (target,) = out["targets"]
+    assert target["state"] == TargetState.declined.value
+    assert "do not offer or retry it in this turn" in target["detail"]
+    assert out["settled_by"] == SettleReason.all_resolved.value
+    assert "declined" in out["note"]
+
+
+def test_an_unanswered_form_declines_without_installing(backend):
+    with _asking(FormAsker(outcome="timed_out")):
+        out = _mcp({"action": "install", "connectors": [_linear()]}, _answering(None), mcp_backend=backend)
+
+    assert not any(call[0] == "install" for call in backend.calls)
+    assert out["targets"][0]["state"] == TargetState.declined.value
+
+
+def test_one_form_answers_each_connector_of_a_call_on_its_own(backend):
+    class Picky(FormAsker):
+        def __call__(self, questions):
+            self.asked.append(questions)
+            return {"answers": {"q0": "Install and set up (Recommended)", "q1": "Not now"}, "outcome": "submitted"}
+
+    asker = Picky()
+    with _asking(asker), patch("tools.connectors.operation.OPERATION_DEADLINE_SECONDS", 0.3):
+        out = _mcp({"action": "install", "connectors": [_mcp_target("figma"), _mcp_target("notion")]},
+                   _answering(None), mcp_backend=backend)
+
+    assert len(asker.asked) == 1 and len(asker.asked[0]) == 2
+    states = {t["name"]: t["state"] for t in out["targets"]}
+    assert states == {"figma": TargetState.connected.value, "notion": TargetState.declined.value}
+    assert [c for c in backend.calls if c[0] == "install"] == [("install", "figma", {})]
+
+
+def test_an_unattended_run_settles_not_installed_with_a_reason_and_never_installs(backend):
+    callback = _answering(None)
+    out = _mcp({"action": "install", "connectors": [_linear()]}, callback, mcp_backend=backend)
+
+    assert not any(call[0] == "install" for call in backend.calls)
+    assert callback.seen == [] and live.current("s1") is None
+    (target,) = out["targets"]
+    assert target["state"] == TargetState.failed.value
+    assert target["detail"].startswith("Not installed:") and "no one to ask" in target["detail"]
+
+
+def test_a_run_nobody_can_answer_never_asks_even_when_a_form_is_bound(backend):
+    asker = FormAsker()
+    with patch("tools.approval_context._no_user_can_answer", return_value=True), _asking(asker):
+        out = _mcp({"action": "install", "connectors": [_linear()]}, _answering(None), mcp_backend=backend)
+
+    assert asker.asked == []
+    assert not any(call[0] == "install" for call in backend.calls)
+    assert out["targets"][0]["state"] == TargetState.failed.value
+
+
+def test_no_card_surface_installs_only_after_the_form_picks_install(backend):
+    with _asking(FormAsker()):
+        out = _off_desktop({"action": "install", "connectors": [_linear()]}, mcp_backend=backend)
+    assert ("install", "linear", {}) in backend.calls
+    assert out["targets"][0]["state"] == TargetState.connected.value
+
+    declined = FakeBackend()
+    with _asking(FormAsker(pick="Not now")):
+        out = _off_desktop({"action": "install", "connectors": [_linear()]}, mcp_backend=declined)
+    assert declined.calls == []
+    assert out["targets"][0]["state"] == TargetState.declined.value
+
+
+def test_the_card_no_longer_takes_an_allow_or_a_skip_for_an_mcp_row():
+    from tools.connectors import mcp
+    from tools.connectors.operation import ConnectionOperation, IllegalTransition, Target
+
+    for state in (TargetState.pending, TargetState.initiated):
+        operation = ConnectionOperation([Target("paper", "mcp", "install")], session_key="s1")
+        mcp._RUNNERS[operation.op_id] = mcp.open_runner("install", FakeBackend())
+        try:
+            if state == TargetState.initiated:
+                operation.transition("paper", TargetState.initiated, mcp.Actor.backend_watcher)
+            with pytest.raises(IllegalTransition):
+                apply_answer(operation, json.dumps({"targets": [{"name": "paper", "status": "skipped"}]}))
+            apply_answer(operation, json.dumps({"targets": [{"name": "paper", "status": "approved"}]}))
+            assert operation.target("paper").state == state
+        finally:
+            mcp._RUNNERS.pop(operation.op_id, None)
+
+
+def test_the_credential_answer_is_idempotent_and_installs_once():
+    backend = FakeBackend(missing_env=["LINEAR_API_KEY"])
+    answer = json.dumps({"targets": [{"name": "linear", "status": "approved", "env": {"LINEAR_API_KEY": "k"}}]})
+    seen = []
+
+    def callback(payload):
+        seen.append(payload)
+
+        def respond():
+            operation = live.get("s1", payload["op_id"])
+            apply_answer(operation, answer)
+            apply_answer(operation, answer)
+
+        threading.Timer(0.01, respond).start()
+
+    with _asking(FormAsker()), patch("tools.connectors.operation.OPERATION_DEADLINE_SECONDS", 0.5):
+        out = _mcp({"action": "install", "connectors": [_linear()]}, callback, mcp_backend=backend)
+
+    assert [c for c in backend.calls if c[0] == "install"] == [("install", "linear", {"LINEAR_API_KEY": "k"})]
+    assert out["targets"][0]["state"] == TargetState.connected.value
+
+
+def test_no_connector_prompt_or_tool_text_offers_allow_or_deny(backend):
+    from tools.connectors.tool import MANAGE_CONNECTIONS_SCHEMA
+
+    asker = FormAsker(pick="Not now")
+    with _asking(asker):
+        _mcp({"action": "install", "connectors": [_linear()]}, _answering(None), mcp_backend=backend)
+    prompts = [json.dumps(q) for qs in asker.asked for q in qs] + asker.details
+    prompts.append(MANAGE_CONNECTIONS_SCHEMA["description"])
+    for text in prompts:
+        assert not any(word in text.casefold() for word in _BANNED), text
 
 
 # ---------------------------------------------------------------------------
@@ -308,27 +526,27 @@ def _agent(callback):
 def test_inline_executor_hands_the_agent_callback_to_the_tool(backend):
     from agent.inline_tool_executors import INLINE_TOOL_EXECUTORS, InlineToolContext
 
-    callback = _answering(json.dumps({"targets": [{"name": "paper", "status": "approved"}]}))
+    callback = _answering(json.dumps({"targets": [{"name": "paper", "status": "connected"}], "settled_by": "continue"}))
     with patch("tools.connectors.run.WATCH_INTERVAL_SECONDS", 0.01):
         out = json.loads(INLINE_TOOL_EXECUTORS["manage_connections"](
-            _agent(callback), {"action": "enable", "connectors": [_mcp_target("paper")]}, InlineToolContext("task")))
+            _agent(callback), {"action": "authorize", "connectors": [_mcp_target("paper")]}, InlineToolContext("task")))
     assert len(callback.seen) == 1
-    assert out["targets"][0]["state"] == TargetState.connected.value
+    assert out["targets"][0]["state"] == TargetState.not_connected.value
 
 
 def test_setup_mcp_replay_shim_translates_to_an_mcp_target(backend):
     from agent.inline_tool_executors import INLINE_TOOL_EXECUTORS, InlineToolContext
 
-    callback = _answering(json.dumps({"targets": [{"name": "linear", "status": "skipped"}]}))
-    with patch("tools.connectors.run.WATCH_INTERVAL_SECONDS", 0.01):
+    callback = _answering(json.dumps({"targets": [{"name": "linear", "status": "approved",
+                                                  "env": {"LINEAR_API_KEY": "k"}}]}))
+    backend.missing_env = ["LINEAR_API_KEY"]
+    with patch("tools.connectors.run.WATCH_INTERVAL_SECONDS", 0.01), _asking(FormAsker()):
         out = json.loads(INLINE_TOOL_EXECUTORS["setup_mcp"](
             _agent(callback), {"server": "linear", "action": "install", "reason": "old convo"}, InlineToolContext("task", tool_call_id="call-9")))
     (target,) = callback.seen[0]["targets"]
     assert (target["name"], target["kind"], target["action"], target["state"]) == ("linear", "mcp", "install", "pending")
     assert callback.seen[0]["tool_call_id"] == "call-9"
-    assert out["targets"][0]["state"] == TargetState.skipped.value
-
-
+    assert out["targets"][0]["state"] == TargetState.connected.value
 
 
 # ---------------------------------------------------------------------------

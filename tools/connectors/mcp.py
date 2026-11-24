@@ -10,7 +10,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from hermes_constants import hermes_home_key
+from tools.clarify_tool import MAX_QUESTIONS
 from tools.connectors.contract import Actor, SettleReason, TargetState
+from tools.connectors.install_form import Verdict, ask_install
 from tools.connectors.live import operation_session_key
 from tools.connectors.operation import ConnectionOperation, DetachedOperation, IllegalTransition, Target
 from tools.connectors.run import Kind, run_operation
@@ -24,12 +26,12 @@ logger = logging.getLogger(__name__)
 PREPARE_WAIT_SECONDS = 30.0
 
 NOTE = (
-    "Settled once; do not re-ask on your own for any target the user skipped or that timed out, but "
-    "a later request from the USER for that same app is not a re-ask — run it. Connected "
-    "targets' tools are available now through tool_describe/tool_call and are named under "
-    "tools_listing. A target with discovery_error is authorized but its tools are unavailable; "
-    "retry discovery with manage_connections using that target's authorize or install action "
-    "without asking for consent again."
+    "Settled once; do not re-ask or retry on your own, in this turn, for any target the owner declined "
+    "(declined) or that timed out, but a later request from the USER for that same app is not a "
+    "re-ask — run it. Connected targets' tools are available now through tool_describe/tool_call and "
+    "are named under tools_listing. A target with discovery_error is authorized but its tools are "
+    "unavailable; retry discovery with manage_connections using that target's enable or authorize "
+    "action."
 )
 
 NO_CARD_NOTE = (
@@ -37,9 +39,15 @@ NO_CARD_NOTE = (
     "open it in a browser, then ask them to say when they are done. Connected targets' tools are "
     "available now through tool_describe/tool_call and are named under tools_listing. A target with "
     "discovery_error is authorized but its tools are unavailable; retry discovery with "
-    "manage_connections using that target's authorize or install action without asking for consent "
-    "again. Do not re-ask on your own for skipped or timed-out targets, but a later request from "
-    "the USER for that same app is not a re-ask — run it."
+    "manage_connections using that target's enable or authorize action. Do not re-ask or retry on your "
+    "own for declined, failed-to-install or timed-out targets, but a later request from the USER for "
+    "that same app is not a re-ask — run it."
+)
+
+ENABLED_NOTE = (
+    "Turned on for this bot with no approval step. Connected targets' tools are available now through "
+    "tool_describe/tool_call and are named under tools_listing. A target with discovery_error is on but "
+    "its tools are unavailable; run authorize for it."
 )
 
 
@@ -719,10 +727,10 @@ def _nothing(runner: _Runner, operation: ConnectionOperation, target: Target, en
     """Authorize needs no approval: the row's verb opens the link the flow already minted."""
 
 
-_PREPARE = {"authorize": _start_oauth, "install": _declare_env, "enable": _nothing}
-_APPROVE = {"authorize": _nothing, "install": _start_install, "enable": _do_enable}
-_RETRY = {"authorize": _start_oauth, "install": _start_install, "enable": _do_enable}
-_OBSERVE = {"authorize": _observe_oauth, "install": _observe_install, "enable": _observe_worker}
+_PREPARE = {"authorize": _start_oauth, "install": _declare_env}
+_APPROVE = {"authorize": _nothing, "install": _start_install}
+_RETRY = {"authorize": _start_oauth, "install": _start_install}
+_OBSERVE = {"authorize": _observe_oauth, "install": _observe_install}
 _NO_CARD = {"authorize": _start_oauth, "install": _install_now, "enable": _do_enable}
 
 
@@ -737,9 +745,10 @@ def _answer_env(entry: dict[str, Any]) -> dict[str, str]:
 
 
 def apply_answer(operation: ConnectionOperation, raw: str) -> None:
-    """Fold the card's ``connection.respond`` payload into the operation: a skip, an approval that
-    starts the backend's work, and Continue. The card never reports an outcome, so any other claim
-    moves nothing."""
+    """Fold the card's ``connection.respond`` payload into the operation: the credentials a waiting
+    install asked for, Try again on a failed row, and Continue; a hosted connector row can still be
+    skipped. An MCP row has no Allow or Skip, and the card never reports an outcome, so any other
+    claim moves nothing."""
     try:
         answer = json.loads(raw)
     except (TypeError, ValueError):
@@ -755,40 +764,22 @@ def apply_answer(operation: ConnectionOperation, raw: str) -> None:
             continue
         status = str(entry.get("status") or "").lower()
         if status == "skipped":
-            # A row the backend resolved before this move landed has nothing to move; the rest of
-            # the answer still applies. A settled operation is frozen. The check and the move are
-            # not one step, so the refusal itself is the witness, not a read taken before it.
-            kept = _cancel_attempt(runner, target)
+            if target.kind == "mcp":
+                raise IllegalTransition(f"mcp {target.name}: the owner declines at the question form, not on the card")
             try:
-                operation.transition(target.name, TargetState.skipped, Actor.user,
-                                     **({"detail": kept} if kept else {}))
+                operation.transition(target.name, TargetState.skipped, Actor.user)
             except IllegalTransition:
                 if not target.resolved and not operation.settled:
                     raise
         elif status == "approved" and runner is not None:
             if target.state == TargetState.pending:
-                runner.run(_APPROVE, operation, target, _answer_env(entry))
+                if target.required_env:
+                    runner.run(_APPROVE, operation, target, _answer_env(entry))
             elif target.state in (TargetState.failed, TargetState.expired):
                 # Connect on the form a failed row reopened: the same attempt, with the new values.
                 runner.run(_RETRY, operation, target, _answer_env(entry))
     if answer.get("settled_by") == SettleReason.continue_.value and not operation.all_resolved:
         operation.settle(SettleReason.continue_)
-
-
-AUTHORIZATION_KEPT = ("the authorization had already completed when this was canceled, so it was "
-                      "kept; run the same action again to list the tools")
-
-
-def _cancel_attempt(runner: Optional[_Runner], target: Target) -> str:
-    """Stop the target's OAuth attempt so a late reply cannot be adopted. Returns the note for a
-    cancel that lost the race: the attempt had committed, and a completed authorization stays."""
-    work = runner.work.pop(target.name, None) if runner is not None else None
-    flow = getattr(getattr(work, "attempt", None), "flow", None)
-    if flow is None:
-        return ""
-    from tools.connectors.mcp_oauth import cancel_attempt
-
-    return AUTHORIZATION_KEPT if cancel_attempt(flow) else ""
 
 
 def retry(operation: ConnectionOperation, names: list[str]) -> Optional[str]:
@@ -812,14 +803,42 @@ def retry(operation: ConnectionOperation, names: list[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-def _no_card_result(runner: _Runner, names: list[str], action: str, session_key: str) -> str:
+def _decline(operation: ConnectionOperation, target: Target, verdict: Verdict) -> None:
+    if verdict.unattended:
+        _fail(operation, target, verdict.detail)
+    else:
+        _move(operation, target, TargetState.declined, Actor.user, detail=verdict.detail)
+
+
+def _no_card_result(runner: _Runner, names: list[str], action: str, session_key: str,
+                    verdicts: Optional[dict[str, Verdict]] = None) -> str:
     operation = DetachedOperation([Target(n, "mcp", action) for n in names], session_key=session_key)
     for target in operation.targets:
-        runner.run(_NO_CARD, operation, target)
+        verdict = (verdicts or {}).get(target.name)
+        if verdict is not None and not verdict.install:
+            _decline(operation, target, verdict)
+        else:
+            runner.run(_NO_CARD, operation, target)
+    operation.settle_if_all_resolved()
     payload = operation.result(with_urls=True)
     payload["status"] = "initiated" if any(t.state == TargetState.initiated for t in operation.targets) else "settled"
-    payload["note"] = NO_CARD_NOTE
+    payload["note"] = ENABLED_NOTE if action == "enable" else NO_CARD_NOTE
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _consent_prepare(runner: _Runner, verdicts: dict[str, Verdict]) -> Callable[[ConnectionOperation], None]:
+    def prepare(operation: ConnectionOperation) -> None:
+        runner.prepare(operation)
+        for target in operation.targets:
+            verdict = verdicts.get(target.name)
+            if verdict is None or target.state != TargetState.pending:
+                continue
+            if verdict.install:
+                runner.run(_APPROVE, operation, target)
+            else:
+                _decline(operation, target, verdict)
+
+    return prepare
 
 
 def run_mcp_operation(
@@ -835,18 +854,24 @@ def run_mcp_operation(
     error = validate_mcp_names(action, names, hosted_names)
     if error:
         return tool_error(error)
+    if action == "install" and len(names) > MAX_QUESTIONS:
+        return tool_error(f"install at most {MAX_QUESTIONS} connectors in one call.")
     runner = open_runner(action, backend)
     session_key = operation_session_key(session_id)
+    if action == "enable":
+        return _no_card_result(runner, names, action, session_key)
+    verdicts = ask_install(names) if action == "install" else {}
     # Every interactive surface that renders the card attaches this callback. Registry dispatch and
     # messaging sessions attach none, so they receive the link instead of opening an unanswerable op.
-    if connection_callback is None:
-        return _no_card_result(runner, names, action, session_key)
+    if connection_callback is None or any(v.unattended for v in verdicts.values()):
+        return _no_card_result(runner, names, action, session_key, verdicts)
     try:
         from tools.connectors.mcp_launch import launch_for
 
+        prepare = _consent_prepare(runner, verdicts) if verdicts else runner.prepare
         return run_operation(
             [Target(n, "mcp", action, launch=launch_for(action, n)) for n in names],
-            Kind(prepare=runner.prepare, observe=runner.observe, note=NOTE),
+            Kind(prepare=prepare, observe=runner.observe, note=NOTE),
             session_key=session_key, tool_call_id=tool_call_id,
             connection_callback=connection_callback, with_urls_in_result=False,
         )

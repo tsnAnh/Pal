@@ -43,6 +43,7 @@ class ConnectionTargetState(WireEnum):
     initiated = "initiated"
     connected = "connected"
     skipped = "skipped"
+    declined = "declined"
     failed = "failed"
     expired = "expired"
     not_connected = "not_connected"
@@ -262,7 +263,8 @@ method("connectors.operation.wake", params=ConnectionOperationParams, result=Con
 
 
 class ConnectionAnswerStatus(WireEnum):
-    """What the card says about one row: ``tools/connectors/mcp.py::apply_answer``."""
+    """What the card says about one row: ``tools/connectors/mcp.py::apply_answer``. ``skipped`` is a
+    catalog (plugin or skill) row's Skip only; an MCP row is declined at the question form."""
 
     approved = "approved"
     skipped = "skipped"

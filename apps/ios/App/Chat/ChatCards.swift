@@ -56,11 +56,9 @@ struct ConnectionRequestCard: View {
         return card.isOpen(now: now) ? .open : .lapsed
     }
 
-    private var isActionable: Bool { card.isActionable(now: now) }
-
     private var closingNote: String? {
         let operation = card.operation
-        let resolved = operation.targets.contains { $0.state == .connected || $0.state == .skipped }
+        let resolved = operation.targets.contains { $0.state == .connected || $0.state == .skipped || $0.state == .declined }
         switch phase {
         case .open: return nil
         case .settled: return operation.settledBy == .deadline && !resolved ? String(localized: "This request timed out") : nil
@@ -70,16 +68,12 @@ struct ConnectionRequestCard: View {
         }
     }
 
-    private func prompt(for target: ConnectionTarget) -> String {
-        let name = target.name
-        return target.action == "enable" ? String(localized: "Let this bot use \(name)?") : String(localized: "Set up \(name)?")
-    }
-
     private func stateLine(for target: ConnectionTarget) -> String? {
         switch target.state {
         case .initiated: String(localized: "Turning on…")
         case .connected: Self.connectedLine(toolCount: target.tools.count)
-        case .skipped: String(localized: "Not allowed")
+        case .declined: String(localized: "Not installed")
+        case .skipped: String(localized: "Skipped")
         case .failed: String(localized: "Couldn't turn on")
         case .notConnected: String(localized: "Not turned on")
         case .expired: String(localized: "Timed out")
@@ -95,29 +89,8 @@ struct ConnectionRequestCard: View {
         }
     }
 
-    private static func label(for decision: ConnectionDecision) -> String {
-        switch decision {
-        case .allow: String(localized: "Allow")
-        case .deny: String(localized: "Don't allow")
-        case .tryAgain: String(localized: "Try again")
-        }
-    }
-
-    private static func identifier(for decision: ConnectionDecision, target: String) -> String {
-        switch decision {
-        case .allow: "connectionAllow-\(target)"
-        case .deny: "connectionDeny-\(target)"
-        case .tryAgain: "connectionRetry-\(target)"
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if isActionable {
-                Text("Needs your OK")
-                    .font(.headline)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-            }
             if let note = closingNote {
                 Text(note)
                     .font(.body)
@@ -130,7 +103,6 @@ struct ConnectionRequestCard: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(theme.palette.cardStroke), lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectionCard")
         .accessibilityValue(phase.rawValue)
@@ -145,7 +117,7 @@ struct ConnectionRequestCard: View {
         let decisions = card.decisions(for: target, now: now)
         let busy = answering.contains(Self.answerKey(opID: card.operation.opID, target: target.name))
         return VStack(alignment: .leading, spacing: 8) {
-            Text(decisions.contains(.allow) || decisions.contains(.deny) ? prompt(for: target) : target.name)
+            Text(target.name)
                 .font(.body)
                 .foregroundStyle(Color(theme.palette.textPrimary))
                 .accessibilityIdentifier("connectionState-\(target.name)")
@@ -173,11 +145,11 @@ struct ConnectionRequestCard: View {
                 .tint(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("connectionDetails-\(target.name)")
             }
-            ForEach(decisions, id: \.self) { decision in
-                Button(Self.label(for: decision)) { decide(target, decision) }
+            if decisions.contains(.tryAgain) {
+                Button(String(localized: "Try again")) { decide(target, .tryAgain) }
                     .glassButtonStyle()
                     .disabled(busy)
-                    .accessibilityIdentifier(Self.identifier(for: decision, target: target.name))
+                    .accessibilityIdentifier("connectionRetry-\(target.name)")
             }
         }
     }

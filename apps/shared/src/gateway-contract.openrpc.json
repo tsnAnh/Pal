@@ -19828,7 +19828,7 @@
         "type": "object"
       },
       "ConnectionAnswerStatus": {
-        "description": "What the card says about one row: ``tools/connectors/mcp.py::apply_answer``.",
+        "description": "What the card says about one row: ``tools/connectors/mcp.py::apply_answer``. ``skipped`` is a\ncatalog (plugin or skill) row's Skip only; an MCP row is declined at the question form.",
         "enum": [
           "approved",
           "skipped"
@@ -20691,6 +20691,7 @@
           "initiated",
           "connected",
           "skipped",
+          "declined",
           "failed",
           "expired",
           "not_connected"

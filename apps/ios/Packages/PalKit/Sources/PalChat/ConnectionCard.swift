@@ -2,16 +2,9 @@ import Foundation
 import PalProtocol
 
 public enum ConnectionDecision: Sendable, Hashable {
-    case allow
-    case deny
     case tryAgain
 
-    var answerStatus: String {
-        switch self {
-        case .allow, .tryAgain: "approved"
-        case .deny: "skipped"
-        }
-    }
+    var answerStatus: String { "approved" }
 }
 
 public struct ConnectionCard: Sendable, Hashable {
@@ -33,10 +26,8 @@ public struct ConnectionCard: Sendable, Hashable {
 
     public func decisions(for target: ConnectionTarget, now: Date) -> [ConnectionDecision] {
         guard isOpen(now: now) else { return [] }
-        let isMCP = target.kind == "mcp"
         switch target.state {
-        case .pending: return isMCP ? [.allow, .deny] : [.deny]
-        case .failed, .expired: return isMCP ? [.tryAgain] : []
+        case .failed, .expired: return target.kind == "mcp" ? [.tryAgain] : []
         default: return []
         }
     }
