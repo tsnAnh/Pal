@@ -53,10 +53,10 @@ The principle block is present once in the stable tier of all nine committed sur
 
 | Instrument | Where | What it does |
 |---|---|---|
-| Rubric v1 | `evals/proactive_eval/rubric.json`, `rubric.py` | Seven criteria, one deterministic rule. The judge only supplies criteria flags; the label is computed by code, so the label never drifts with a judge's mood. `python -m evals.proactive_eval rubric` prints it as Markdown. |
-| Transcript miner | `evals/proactive_eval/mining.py`, `cli.py mine` | Reads the store through `open_persistence_reader` (read-only, never creates or repairs a store) and `list_recent_sessions` and `read_transcript` with lineage, the same reads `tools/session_search_tool.py` uses. Emits counts and pattern class ids per bot and ISO week. Never emits text. |
+| Rubric v1 | `gateway/proactive_scorecard/rubric.json`, `rubric.py` | Seven criteria, one deterministic rule. The judge only supplies criteria flags; the label is computed by code, so the label never drifts with a judge's mood. `python -m evals.proactive_eval rubric` prints it as Markdown. |
+| Transcript miner | `gateway/proactive_scorecard/mining.py`, `evals/proactive_eval/cli.py mine` | Reads the store through `open_persistence_reader` (read-only, never creates or repairs a store) and `list_recent_sessions` and `read_transcript` with lineage, the same reads `tools/session_search_tool.py` uses. Emits counts and pattern class ids per bot and ISO week. Never emits text. |
 | Replay harness | `evals/proactive_eval/replay.py`, `models.py`, `variants.json` | Scenario in, prompt variants, a simulated owner who answers only from the record, a judge from a different model family, rubric scores, paired bootstrap against baseline, a 10 percent spot-check list, and a held-out ledger. |
-| Ask quality | rubric `ask_quality`, `mining.py`, `replay.py` | The second principle as counts: options present, recommended first, bare yes or no, no options and no default, batched, asks per task, missed needed asks. See section 7. |
+| Ask quality | rubric `ask_quality`, `gateway/proactive_scorecard/mining.py`, `evals/proactive_eval/replay.py` | The second principle as counts: options present, recommended first, bare yes or no, no options and no default, batched, asks per task, missed needed asks. See section 7. |
 | Idle reach | `cli.py reach` | Counts acted and dismissed offers per week and domain from the JSON that `hermes proactive log --json` prints. No store access, no titles. |
 | Prompt-surface regression | `tests/agent/test_proactive_first_prompt_surface.py` | Runs in CI. See section 6. |
 
