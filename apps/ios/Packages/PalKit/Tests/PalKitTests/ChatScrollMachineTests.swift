@@ -297,6 +297,17 @@ struct ChatScrollMachineTests {
         #expect(machine.unseen == 0)
     }
 
+    @Test func namesMatchTheTraceVocabulary() {
+        #expect(ChatScrollMachine.State.programmatic(.bottom).name == "programmatic")
+        #expect(ChatScrollMachine.Event.revealRetry.name == "revealRetry")
+        #expect(ChatScrollMachine.Event.geometry(bottomGeo()).name == "geometry")
+        #expect(ChatScrollMachine.Command.restore(anchor("a")).name == "restore")
+        #expect(ChatScrollMachine.Command.none.name == "none")
+    }
+}
+
+@Suite("Chat scroll machine bottom zone")
+struct ChatScrollMachineBottomZoneTests {
     @Test func thresholdsLeaveADeadBandBetweenHideAndShow() {
         #expect(ChatScrollMachine.hideDistance < ChatScrollMachine.showDistance)
         #expect(ChatScrollMachine.atBottomTolerance < ChatScrollMachine.hideDistance)
@@ -378,13 +389,5 @@ struct ChatScrollMachineTests {
         _ = machine.handle(.geometry(bottomGeo()))
         #expect(machine.handle(.geometry(awayGeo(30, content: 1100))) == .scrollToBottom(animated: false))
         #expect(machine.state == .pinnedToBottom)
-    }
-
-    @Test func namesMatchTheTraceVocabulary() {
-        #expect(ChatScrollMachine.State.programmatic(.bottom).name == "programmatic")
-        #expect(ChatScrollMachine.Event.revealRetry.name == "revealRetry")
-        #expect(ChatScrollMachine.Event.geometry(bottomGeo()).name == "geometry")
-        #expect(ChatScrollMachine.Command.restore(anchor("a")).name == "restore")
-        #expect(ChatScrollMachine.Command.none.name == "none")
     }
 }

@@ -171,27 +171,42 @@ struct UserBubble: View {
                 }
                 .bubbleWidth(.trailing)
             }
-            status
+            failedStatus
         }
         .chatRowFrame(for: .user)
+        .overlay(alignment: .bottomTrailing) { pendingStatus }
         .modifier(SendRise(isFresh: delivery == .sending))
     }
 
     @ViewBuilder
-    private var status: some View {
+    private var pendingStatus: some View {
         switch delivery {
-        case .sent:
-            EmptyView()
         case .sending:
-            Label("Sending", palIcon: "arrow.up.circle", ink: .secondary)
-                .font(.caption)
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .accessibilityIdentifier("deliverySending")
+            pendingLabel("Sending", symbol: "arrow.up.circle", identifier: "deliverySending")
         case .waitingForConnection:
-            Label("Waiting for connection", palIcon: "clock", ink: .secondary)
-                .font(.caption)
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .accessibilityIdentifier("deliveryWaitingForConnection")
+            pendingLabel("Waiting for connection", symbol: "clock", identifier: "deliveryWaitingForConnection")
+        case .sent, .failed:
+            EmptyView()
+        }
+    }
+
+    private func pendingLabel(_ title: LocalizedStringKey, symbol: String, identifier: String) -> some View {
+        Label(title, palIcon: symbol, ink: .secondary)
+            .font(.caption)
+            .foregroundStyle(Color(theme.palette.textSecondary))
+            .fixedSize()
+            .alignmentGuide(.bottom) { $0[.top] - Self.pendingStatusGap }
+            .allowsHitTesting(false)
+            .accessibilityIdentifier(identifier)
+    }
+
+    private static let pendingStatusGap: CGFloat = 2
+
+    @ViewBuilder
+    private var failedStatus: some View {
+        switch delivery {
+        case .sent, .sending, .waitingForConnection:
+            EmptyView()
         case .failed(let id):
             Button { retry(id) } label: {
                 Label("Not sent. Tap to retry", palIcon: "exclamationmark.circle.fill", ink: .destructive)
