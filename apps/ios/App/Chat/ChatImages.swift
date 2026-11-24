@@ -142,23 +142,27 @@ struct ChatImageGrid: View {
 
     @Environment(\.chatImageOpener) private var opener
 
-    private static let single: CGFloat = 220
-    private static let tile: CGFloat = 108
-    static let previewMaxPixels = [Int(single * 3), Int(tile * 3)]
+    #if os(macOS)
+    private static let single = CGSize(width: 320, height: 320)
+    #else
+    private static let single = CGSize(width: 220, height: 300)
+    #endif
+    private static let tile = CGSize(width: 108, height: 108)
+    static let previewMaxPixels = [Int(single.width * 3), Int(tile.width * 3)]
     private static let spacing: CGFloat = 4
 
     var body: some View {
         Group {
             if images.count == 1, let only = images.first {
-                ChatImageTile(reference: only, width: Self.single, height: Self.single * 0.75) { opener?(only) }
+                ChatImageTile(reference: only, box: Self.single, followsRatio: true) { opener?(only) }
             } else {
-                let columns = Array(repeating: GridItem(.fixed(Self.tile), spacing: Self.spacing), count: 2)
+                let columns = Array(repeating: GridItem(.fixed(Self.tile.width), spacing: Self.spacing), count: 2)
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Self.spacing) {
                     ForEach(images) { image in
-                        ChatImageTile(reference: image, width: Self.tile, height: Self.tile) { opener?(image) }
+                        ChatImageTile(reference: image, box: Self.tile, followsRatio: false) { opener?(image) }
                     }
                 }
-                .frame(width: Self.tile * 2 + Self.spacing, alignment: .leading)
+                .frame(width: Self.tile.width * 2 + Self.spacing, alignment: .leading)
             }
         }
         .accessibilityElement(children: .contain)
@@ -168,20 +172,34 @@ struct ChatImageGrid: View {
 
 private struct ChatImageTile: View {
     let reference: ImageReference
-    let width: CGFloat
-    let height: CGFloat
+    let box: CGSize
+    let followsRatio: Bool
     let open: () -> Void
 
     var body: some View {
-        ChatImageSource(reference: reference, thumbnail: true, maxPixel: Int(width * 3)) { phase, retry in
-            AnyView(tile(phase, retry: retry))
+        ChatImageSource(reference: reference, thumbnail: true, maxPixel: Int(box.width * 3)) { phase, retry in
+            let size = displaySize(phase)
+            return AnyView(
+                tile(phase, size: size, retry: retry)
+                    .frame(width: size.width, height: size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+            )
         }
-        .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+    }
+
+    private func displaySize(_ phase: ChatImagePhase) -> CGSize {
+        guard followsRatio else { return box }
+        let pixels: (width: Int, height: Int)?
+        if case .loaded(let image) = phase {
+            pixels = (image.width, image.height)
+        } else {
+            pixels = ChatImageDecoder.originalSize(id: reference.id).map { (Int($0.width), Int($0.height)) }
+        }
+        return ChatImageFit.size(ratio: ChatImageFit.ratio(pixelWidth: pixels?.width, pixelHeight: pixels?.height), in: box)
     }
 
     @ViewBuilder
-    private func tile(_ phase: ChatImagePhase, retry: @escaping () -> Void) -> some View {
+    private func tile(_ phase: ChatImagePhase, size: CGSize, retry: @escaping () -> Void) -> some View {
         switch phase {
         case .loading:
             ZStack {
@@ -193,9 +211,9 @@ private struct ChatImageTile: View {
             Button(action: open) {
                 Image(platformImage: PlatformImage(cgImage: image))
                     .resizable()
-                    .scaledToFill()
-                    .frame(width: width, height: height)
-                    .clipped()
+                    .scaledToFit()
+                    .frame(width: size.width, height: size.height)
+                    .background(PalTokens.agentBubble)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Image \(reference.name). Tap to enlarge"))
@@ -211,7 +229,7 @@ private struct ChatImageTile: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 8)
                 }
-                .frame(width: width, height: height)
+                .frame(width: size.width, height: size.height)
                 .background(PalTokens.agentBubble)
             }
             .buttonStyle(.plain)
