@@ -169,6 +169,7 @@ final class ChatModel {
     @ObservationIgnored var builtWithBaseline = false
     @ObservationIgnored var generatedImageIDs: Set<String> = []
     @ObservationIgnored private(set) var rebuilds = RebuildCounts()
+    let streamPacer = StreamingCommitPacer()
     private var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
@@ -764,6 +765,7 @@ final class ChatModel {
             commit(patch)
         } else {
             rebuilds.full += 1
+            streamPacer.reset()
             publish(builtRows())
             reapAdmitted()
         }
@@ -825,11 +827,9 @@ final class ChatModel {
         publishWindow()
     }
 
-    private func commit(_ patch: StreamingRowPatch) {
-        built[patch.sourceID] = patch.built
-        guard let last = rows.indices.last, rows[last] != patch.row else { return }
-        rows[last] = patch.row
-        rowsNewestFirst[0] = patch.row
+    func show(_ patch: StreamingRowPatch) {
+        guard let last = rows.indices.last, rows[last].id == patch.row.id, rows[last] != patch.row else { return }
+        (rows[last], rowsNewestFirst[0]) = (patch.row, patch.row)
     }
 
     private func publishActivity() {

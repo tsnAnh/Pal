@@ -12,6 +12,7 @@ enum ChatScrollTrace {
         "epoch_s", "kind", "reason", "mode", "phase", "offset_y", "inset_top", "inset_bottom", "content_h",
         "container_h", "distance", "safe_top", "safe_bottom", "pin", "pin_min_y", "rows", "layout", "width",
         "event", "state", "command", "writer", "offset_delta", "at_bottom", "button", "user_scrolling",
+        "content_delta", "content_source",
     ].joined(separator: ",") + "\n"
     static let isOn = ProcessInfo.processInfo.environment[environmentKey] == "1"
 
@@ -67,10 +68,11 @@ enum ChatScrollTrace {
     }
 
     private static func sampleFields(_ sample: ChatScrollSample?) -> [String] {
-        guard let sample else { return ["", "", "", "", ""] }
+        guard let sample else { return ["", "", "", "", "", "", ""] }
         return [
             sample.writer.rawValue, number(sample.offsetDelta), sample.isAtBottom ? "1" : "0",
             sample.showsButton ? "1" : "0", sample.userScrolling ? "1" : "0",
+            number(sample.contentDelta), sample.contentSource.rawValue,
         ]
     }
 

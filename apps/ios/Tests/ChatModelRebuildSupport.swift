@@ -53,7 +53,7 @@ func rebuildRoster() throws -> RosterModel {
 let rebuildBotName = "scout"
 
 @MainActor
-func rebuildChatModel(lastSeen: Date? = nil) throws -> ChatModel {
+func rebuildChatModel(lastSeen: Date? = nil, streamInterval: Duration = .zero) throws -> ChatModel {
     let roster = try rebuildRoster()
     let row = BotRow(
         name: rebuildBotName, isDefault: false, isPrimary: false, isPinned: false, displayName: "Scout", conversationID: nil,
@@ -63,7 +63,9 @@ func rebuildChatModel(lastSeen: Date? = nil) throws -> ChatModel {
     let defaults = try #require(UserDefaults(suiteName: "chat-model-rebuild-\(UUID().uuidString)"))
     let store = ChatLastSeenStore(defaults: defaults)
     if let lastSeen { store.record(lastSeen, for: rebuildBotName) }
-    return ChatModel(bot: row, links: BotLinks(connection: roster.connection), roster: roster, lastSeenStore: store)
+    let model = ChatModel(bot: row, links: BotLinks(connection: roster.connection), roster: roster, lastSeenStore: store)
+    model.streamPacer.interval = streamInterval
+    return model
 }
 
 let rebuildStart = Date(timeIntervalSince1970: 1_800_000_000)

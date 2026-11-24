@@ -101,16 +101,10 @@ private struct ChatTranscriptRows: View {
                     .padding(.top, 8)
             }
             ForEach(model.windowRows) { row in
-                ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
-                    router.push(.botThread(BotThreadRoute(
-                        botName: model.bot.name,
-                        threadID: link.threadID,
-                        focusExchangeID: link.exchangeID
-                    )))
-                }
-                .equatable()
-                .chatListRow()
-                .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row)) { scroll.rowLaidOut(row.id, frame: $0) })
+                rowView(row, source: source)
+                    .equatable()
+                    .chatListRow()
+                    .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row), streaming: row.isStreaming) { scroll.rowLaidOut(row.id, frame: $0) })
             }
             VStack(spacing: 0) { footer(ink: ink) }
                 .animation(PalMotion.Pop(reduceMotion: reduceMotion).animation, value: showsWorkingRow)
@@ -131,6 +125,19 @@ private struct ChatTranscriptRows: View {
         #if os(iOS)
         .containerRelativeFrame(.horizontal)
         #endif
+        .background(alignment: .topLeading) {
+            ChatRowMeasureLayer(model: model, scroll: scroll) { row, source in rowView(row, source: source) }
+        }
+    }
+
+    private func rowView(_ row: ChatRow, source: ChatRowContextSource) -> ChatRowView {
+        ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
+            router.push(.botThread(BotThreadRoute(
+                botName: model.bot.name,
+                threadID: link.threadID,
+                focusExchangeID: link.exchangeID
+            )))
+        }
     }
 
     @ViewBuilder
@@ -165,10 +172,18 @@ private struct ChatTranscriptRows: View {
 
 private struct ChatRowHeightFloor: ViewModifier {
     let floor: CGFloat?
+    let streaming: Bool
     let laidOut: (CGRect) -> Void
     @State private var settled = false
+    @State private var reserved: CGFloat = 0
+    @ScaledMetric(relativeTo: .body) private var bodySize = PalTextStyle.chatBody.size
 
     private static let settleLimit = Duration.seconds(1)
+
+    private var minimum: CGFloat? {
+        if streaming { return reserved }
+        return settled ? nil : floor
+    }
 
     func body(content: Content) -> some View {
         let _ = ChatOpenMetrics.rowBody() // swiftlint:disable:this redundant_discardable_let
@@ -178,13 +193,25 @@ private struct ChatRowHeightFloor: ViewModifier {
             } action: { frame in
                 laidOut(frame)
                 if let floor, !settled, frame.height >= floor - 0.5 { settled = true }
+                reserve(frame.height)
             }
-            .frame(minHeight: settled ? nil : floor, alignment: .top)
+            .frame(minHeight: minimum, alignment: .top)
             .task {
                 guard floor != nil, !settled else { return }
                 try? await Task.sleep(for: Self.settleLimit)
                 settled = true
             }
+    }
+
+    private func reserve(_ height: CGFloat) {
+        guard streaming else {
+            if reserved != 0 { reserved = 0 }
+            return
+        }
+        let next = CGFloat(StreamingHeightReserve.reserved(
+            measured: Double(height), current: Double(reserved), line: Double(ChatLineBox(fontSize: bodySize).height)
+        ))
+        if next != reserved { reserved = next }
     }
 }
 

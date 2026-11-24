@@ -56,4 +56,20 @@ struct ChatRowHeightCacheTests {
         cache.record("c", height: 0, width: 390)
         #expect(cache.height(for: "c", width: 390) == 20)
     }
+
+    @Test func unmeasuredPicksTheNewestRowsWithoutAHeightUpToTheLimit() {
+        var cache = ChatRowHeightCache()
+        cache.record("c", height: 40, width: 390)
+        let ids = ["a", "b", "c", "d", "e"]
+        #expect(cache.unmeasured(in: ids, width: 390, limit: 2) == ["e", "d"])
+        #expect(cache.unmeasured(in: ids, width: 390, limit: 10) == ["e", "d", "b", "a"])
+        #expect(cache.unmeasured(in: ids, width: 390, skipping: ["e"], limit: 2) == ["d", "b"])
+        #expect(cache.unmeasured(in: ids, width: 390, limit: 0).isEmpty)
+    }
+
+    @Test func aNewWidthLeavesEveryRowUnmeasured() {
+        var cache = ChatRowHeightCache()
+        cache.record("a", height: 40, width: 390)
+        #expect(cache.unmeasured(in: ["a"], width: 500, limit: 1) == ["a"])
+    }
 }
