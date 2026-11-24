@@ -33,7 +33,7 @@ COMPLIANT_CONTROLLER = (
     "    private(set) var machine = ChatScrollMachine()\n"
     "    func observe(_ geometry: ScrollGeometry) {\n"
     "        let y = geometry.contentOffset.y\n"
-    "        perform(machine.handle(.geometry(y)))\n"
+    "        performNextTurn(machine.handle(.geometry(y)))\n"
     "    }\n"
     "    func perform(_ command: ChatScrollMachine.Command) {\n"
     "        switch command {\n"
@@ -108,10 +108,29 @@ def test_mains_flipped_list_fails_on_each_old_writer(tmp_path):
 
 def test_scroll_to_outside_perform_fails_and_inside_passes(tmp_path):
     outside = COMPLIANT_CONTROLLER.replace(
-        "        perform(machine.handle(.geometry(y)))\n", "        position.scrollTo(y: y)\n"
+        "        performNextTurn(machine.handle(.geometry(y)))\n", "        position.scrollTo(y: y)\n"
     )
     found = _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=outside))
     assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:5:") and found[0].endswith(FIX)
+
+
+def test_a_scroll_write_inside_the_layout_commit_fails(tmp_path):
+    inside = COMPLIANT_CONTROLLER.replace("performNextTurn(machine", "perform(machine")
+    found = _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=inside))
+    assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:5:") and "layout commit" in found[0] and found[0].endswith(FIX)
+
+
+def test_a_direct_perform_outside_the_layout_callbacks_passes(tmp_path):
+    outside = COMPLIANT_CONTROLLER.replace("    func perform(", "    func jump() { perform(.none) }\n    func perform(")
+    assert _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=outside)) == []
+
+
+def test_the_transcript_loop_over_the_whole_model_fails(tmp_path):
+    whole = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(model.rows) { Text($0.id) } }")
+    found = _scan(_tree(tmp_path / "a", App__Chat__ChatTranscriptList_swift=whole))
+    assert len(found) == 1 and "model.windowRows" in found[0] and found[0].endswith(FIX)
+    windowed = whole.replace("model.rows", "model.windowRows")
+    assert _scan(_tree(tmp_path / "b", App__Chat__ChatTranscriptList_swift=windowed)) == []
 
 
 def test_perform_ends_at_its_closing_brace(tmp_path):

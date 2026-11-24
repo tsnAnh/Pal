@@ -26,6 +26,10 @@ final class ChatScrollController {
     @ObservationIgnored private var recordedIDs: Set<String> = []
     @ObservationIgnored private var lastRows: [String: ChatRow] = [:]
     @ObservationIgnored private var revealTask: Task<Void, Never>?
+    @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
+    @ObservationIgnored private var deferredWrite: Task<Void, Never>?
+
+    var isPinnedToBottom: Bool { machine.state == .pinnedToBottom }
 
     func observe(_ geometry: ScrollGeometry) {
         ChatOpenMetrics.geometry()
@@ -50,7 +54,7 @@ final class ChatScrollController {
                 ChatScrollTrace.machine(event: "geometry", state: machine.state.name, command: command.name)
             }
         }
-        perform(command)
+        performNextTurn(command)
     }
 
     func observe(_ phase: ScrollPhase) {
@@ -60,6 +64,9 @@ final class ChatScrollController {
         isMoving = moving
         if moving {
             revealTask?.cancel()
+            deferredWrite?.cancel()
+            deferredWrite = nil
+            deferred = (.none, nil)
             pendingRestore = nil
             send(.userScrollBegan)
         } else {
@@ -92,7 +99,7 @@ final class ChatScrollController {
             recordedIDs.insert(id)
         }
         guard let pending = pendingRestore, pending.rowID == id else { return }
-        perform(.restore(pending), frame: frame)
+        performNextTurn(.restore(pending), frame: frame)
     }
 
     func minHeight(for row: ChatRow) -> CGFloat? {
@@ -130,14 +137,28 @@ final class ChatScrollController {
         }
     }
 
+    private func performNextTurn(_ command: ChatScrollMachine.Command, frame: CGRect? = nil) {
+        guard command != .none else { return }
+        deferred = (command, frame)
+        guard deferredWrite == nil else { return }
+        deferredWrite = Task { @MainActor [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            deferredWrite = nil
+            let (command, frame) = deferred
+            deferred = (.none, nil)
+            perform(command, frame: frame)
+        }
+    }
+
     func perform(_ command: ChatScrollMachine.Command, frame: CGRect? = nil) {
         switch command {
         case .none:
             break
         case .scrollToBottom(let animated):
-            let distance = lastGeometry?.distanceFromBottom ?? 0
+            let distanceFromBottom = lastGeometry?.distanceFromBottom ?? 0
+            guard machine.state != .pinnedToBottom || distanceFromBottom > ChatScrollMachine.atBottomTolerance else { return }
             let height = lastGeometry?.containerHeight ?? 0
-            let glides = animated && distance <= height * Self.glideViewports
+            let glides = animated && distanceFromBottom <= height * Self.glideViewports
             var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
             transaction.disablesAnimations = !glides
             notePositionWrite()

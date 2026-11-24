@@ -11,6 +11,11 @@ else in ``App/Chat/**/*.swift``, ``App/ChatView*.swift`` and ``App/Platform/Chat
   inset; the composer rides ``palSafeAreaBar``), a ``.scrollPosition(`` outside ``App/Chat/ChatTranscriptList.swift``
   and a second one inside it;
 * ``ChatScrollController.swift`` must reference ``ChatScrollMachine``;
+* ``observe(_ geometry:)`` and ``rowLaidOut`` run inside the scroll view's layout commit: they hand their command to
+  ``performNextTurn(`` (one write on the next run-loop turn), never to ``perform(`` (a write inside the commit
+  re-runs the whole list and froze a 14,000-message chat);
+* the transcript ``ForEach`` in ``ChatTranscriptList.swift`` iterates ``model.windowRows``, never ``model.rows``
+  (the full transcript; a long chat would lay out thousands of rows);
 * reading ``contentOffset`` is allowed only in ``ChatScrollController.swift`` and ``ChatScrollTrace.swift``.
 
 ``scripts/ci/chat_scroll_single_writer_allowlist.txt`` waives a needle in one file for a list that is not the
@@ -34,6 +39,9 @@ PLATFORM = "App/Platform/ChatPlatform.swift"
 ALLOWLIST = Path(__file__).with_name("chat_scroll_single_writer_allowlist.txt")
 FIX = "route it through ChatScrollMachine: emit a command and let ChatScrollController.perform apply it"
 PERFORM = re.compile(r"\bfunc perform\(")
+LAYOUT_CALLBACK = re.compile(r"\bfunc (?:observe\(_ geometry|rowLaidOut)\b")
+DIRECT_PERFORM = re.compile(r"(?<![\w.])perform\(")
+FULL_TRANSCRIPT_LOOP = re.compile(r"\bForEach\(\s*model\.rows\b")
 STRING = re.compile(r'"(?:\\.|[^"\\])*"')
 OFFSET_READ = re.compile(r"\bcontentOffset\b")
 SCROLL_POSITION = ".scrollPosition("
@@ -99,13 +107,13 @@ def code_lines(text: str) -> list[tuple[int, str, str]]:
     return result
 
 
-def perform_lines(lines: list[tuple[int, str, str]]) -> set[int]:
+def body_lines(lines: list[tuple[int, str, str]], opening: re.Pattern[str]) -> set[int]:
     inside: set[int] = set()
     depth = 0
     open_body = False
     tracking = False
     for number, _, code in lines:
-        if not tracking and PERFORM.search(code):
+        if not tracking and opening.search(code):
             tracking = True
         if tracking:
             inside.add(number)
@@ -133,9 +141,16 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
     for path in chat_files(root):
         rel = path.relative_to(root).as_posix()
         lines = code_lines(path.read_text(encoding="utf-8-sig"))
-        writer = perform_lines(lines) if rel == CONTROLLER else set()
+        writer = body_lines(lines, PERFORM) if rel == CONTROLLER else set()
+        layout = body_lines(lines, LAYOUT_CALLBACK) if rel == CONTROLLER else set()
         for number, raw, code in lines:
             flagged = False
+            if number in layout and DIRECT_PERFORM.search(code):
+                report(rel, number, raw, "a scroll write inside the layout commit (perform( in a layout callback); use performNextTurn(")
+                flagged = True
+            if rel == LIST_VIEW and FULL_TRANSCRIPT_LOOP.search(code):
+                report(rel, number, raw, "the transcript ForEach over model.rows (the whole transcript); iterate model.windowRows")
+                flagged = True
             if number not in writer:
                 for pattern, what in WRITES:
                     if pattern.search(code):

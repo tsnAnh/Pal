@@ -184,6 +184,9 @@ final class RebuildHarness {
         #expect(model.rowIDs == oracle.rowIDs, context)
         #expect(model.rowsNewestFirst == Array(model.rows.reversed()), context)
         #expect(model.rowIDs == model.rows.map(\.id), context)
+        #expect(model.windowRows == model.rows, context)
+        #expect(model.windowRowIDs == model.rowIDs, context)
+        #expect(model.hiddenOlder == 0, context)
         #expect(model.findMatches == oracle.findMatches, context)
         #expect(model.findPosition == oracle.findPosition, context)
         #expect(model.currentFindRowID == oracle.currentFindRowID, context)
@@ -202,6 +205,9 @@ func rebuildNotifications(_ model: ChatModel, _ body: () -> Void) -> [String: In
         ("rows", { _ = model.rows }),
         ("rowsNewestFirst", { _ = model.rowsNewestFirst }),
         ("rowIDs", { _ = model.rowIDs }),
+        ("windowRows", { _ = model.windowRows }),
+        ("windowRowIDs", { _ = model.windowRowIDs }),
+        ("hiddenOlder", { _ = model.hiddenOlder }),
         ("connection", { _ = model.connection }),
         ("isRunning", { _ = model.isRunning }),
         ("workingStatus", { _ = model.workingStatus }),

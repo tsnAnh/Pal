@@ -101,11 +101,11 @@ private struct ChatTranscriptRows: View {
         let ink = BubblePalette.ink(accent: source.accent)
         LazyVStack(alignment: .leading, spacing: 0) {
             if !model.rows.isEmpty {
-                OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
+                OlderHistoryRow(state: model.olderHistoryShown, ink: ink) { model.wantOlder() }
                     .chatListRow()
                     .padding(.top, 8)
             }
-            ForEach(model.rows) { row in
+            ForEach(model.windowRows) { row in
                 ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
                     router.push(.botThread(BotThreadRoute(
                         botName: model.bot.name,

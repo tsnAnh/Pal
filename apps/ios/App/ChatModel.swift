@@ -112,6 +112,10 @@ final class ChatModel {
     private(set) var rows: [ChatRow] = []
     private(set) var rowsNewestFirst: [ChatRow] = []
     private(set) var rowIDs: [String] = []
+    private(set) var windowRows: [ChatRow] = []
+    private(set) var windowRowIDs: [String] = []
+    private(set) var hiddenOlder = 0
+    @ObservationIgnored var window = ChatRowWindow()
     private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
     private(set) var workingStatus: String?
@@ -205,6 +209,7 @@ final class ChatModel {
     }
 
     func wantOlder() {
+        if hiddenOlder > 0 { return expandWindow() }
         guard let session, olderHistory.canLoad else { return }
         Task { await session.wantOlder() }
     }
@@ -773,6 +778,14 @@ final class ChatModel {
         guard assignIfChanged(\.rows, next) else { return }
         assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
         assignIfChanged(\.rowIDs, next.map(\.id))
+        publishWindow()
+    }
+
+    func publishWindow() {
+        let range = window.resolve(rowIDs)
+        assignIfChanged(\.windowRows, Array(rows[range]))
+        assignIfChanged(\.windowRowIDs, Array(rowIDs[range]))
+        assignIfChanged(\.hiddenOlder, range.lowerBound)
     }
 
     private func commit(_ patch: StreamingRowPatch) {
@@ -780,6 +793,7 @@ final class ChatModel {
         guard let last = rows.indices.last, rows[last] != patch.row else { return }
         rows[last] = patch.row
         rowsNewestFirst[0] = patch.row
+        windowRows[windowRows.count - 1] = patch.row
     }
 
     private func publishActivity() {
