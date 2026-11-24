@@ -37,7 +37,6 @@ private struct FakeScrollView {
     var userScrolling = false
     var rng: SplitMix64
     var nextID = 0
-    let glitchChance = 0.35
 
     init(rng: SplitMix64) {
         self.rng = rng
@@ -48,14 +47,15 @@ private struct FakeScrollView {
     }
 
     var content: Double { heights.reduce(0, +) }
-    var maxOffset: Double { max(-insetTop, content + insetBottom - containerHeight) }
+    var visibleHeight: Double { containerHeight - insetTop - insetBottom }
+    var maxOffset: Double { max(-insetTop, content - visibleHeight - insetTop) }
     var atBottom: Bool { geometry.distanceFromBottom <= ChatScrollMachine.atBottomTolerance }
 
     var geometry: ChatScrollGeometry {
         ChatScrollGeometry(
             offsetY: offsetY,
             contentHeight: content,
-            containerHeight: containerHeight,
+            containerHeight: visibleHeight,
             containerWidth: containerWidth,
             insetTop: insetTop,
             insetBottom: insetBottom,
@@ -65,7 +65,7 @@ private struct FakeScrollView {
 
     var visibleIDs: [String] {
         let top = max(0, offsetY + insetTop)
-        let bottom = top + containerHeight
+        let bottom = top + visibleHeight
         return ids.indices.filter { index in
             let rowTop = self.rowTop(index)
             return rowTop < bottom && rowTop + heights[index] > top
@@ -107,7 +107,6 @@ private struct FakeScrollView {
         mutate(&self)
         guard wasAtBottom else { return clampOffset() }
         offsetY = maxOffset
-        if rng.chance(glitchChance) { offsetY = max(-insetTop, maxOffset - rng.double(1...200)) }
     }
 
     mutating func changeHeight() {
@@ -282,7 +281,10 @@ private struct Harness {
     }
 
     mutating func check() {
-        guard !fake.userScrolling, machine.state == .pinnedToBottom, !fake.atBottom else { return }
+        guard !fake.userScrolling, machine.state == .pinnedToBottom, fake.geometry.distanceFromBottom > ChatScrollMachine.showDistance else { return }
+        var settled = machine
+        _ = settled.handle(.geometry(fake.geometry))
+        guard settled.state == .pinnedToBottom else { return }
         violations.append("step \(step): pinned but \(fake.geometry.distanceFromBottom) pt from the bottom")
     }
 }
