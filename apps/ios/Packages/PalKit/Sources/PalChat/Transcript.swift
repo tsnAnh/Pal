@@ -550,7 +550,7 @@ public struct Transcript: Sendable, Equatable {
             }
             return
         }
-        if admission.status != .queued, lastUserTurnIsUnanswered(text: text) { return }
+        if admission.status != .queued, lastUserTurnIsUnanswered(text: text, distinct: admission.inputID != nil) { return }
         items.append(TranscriptItem(
             id: id,
             content: .user(text: text, delivery: admission.status == .queued ? .queued : .sent),
@@ -558,11 +558,11 @@ public struct Transcript: Sendable, Equatable {
         ))
     }
 
-    private func lastUserTurnIsUnanswered(text: String) -> Bool {
+    private func lastUserTurnIsUnanswered(text: String, distinct: Bool) -> Bool {
         for item in items.reversed() {
             switch item.content {
             case .assistant(_, _, let streaming): if !streaming { return false }
-            case .user(let existing, _): return existing == text
+            case .user(let existing, _): return existing == text && !(distinct && item.id.hasPrefix("submission:"))
             default: continue
             }
         }
