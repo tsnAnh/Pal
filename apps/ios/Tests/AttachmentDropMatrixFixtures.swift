@@ -46,14 +46,17 @@ final class MatrixFixtures {
 
     init() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+        let drawn = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
             NSColor.systemTeal.setFill()
             rect.fill()
             return true
         }
-        let tiff = try #require(image.tiffRepresentation)
-        bitmap = try #require(NSBitmapImageRep(data: tiff))
-        png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let tiff = try #require(drawn.tiffRepresentation)
+        let rep = try #require(NSBitmapImageRep(data: tiff))
+        let encodedPNG = try #require(rep.representation(using: .png, properties: [:]))
+        image = drawn
+        bitmap = rep
+        png = encodedPNG
     }
 
     func encoded(_ type: UTType) -> Data {

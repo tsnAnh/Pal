@@ -166,12 +166,16 @@ private enum MatrixPaneState: String, CaseIterable {
 }
 
 @MainActor
+private func conforms(_ offered: String, to registered: String) -> Bool {
+    if offered == registered { return true }
+    guard let offeredType = UTType(offered), let registeredType = UTType(registered) else { return false }
+    return offeredType.conforms(to: registeredType)
+}
+
+@MainActor
 private func registers(_ view: NSView, for offered: [String]) -> Bool {
     view.registeredDraggedTypes.contains { registered in
-        offered.contains { type in
-            type == registered.rawValue
-                || (UTType(type).flatMap { offeredType in UTType(registered.rawValue).map { offeredType.conforms(to: $0) } } ?? false)
-        }
+        offered.contains { conforms($0, to: registered.rawValue) }
     }
 }
 
@@ -271,10 +275,13 @@ struct AttachmentDropMatrixTests {
             rigs.append((state, rig))
         }
         defer { rigs.forEach { $0.1.close() } }
-        let registered = rigs.first.map { rig in
-            ([rig.1.hosting as NSView] + descendants(of: rig.1.hosting)).filter { !$0.registeredDraggedTypes.isEmpty }
-                .map { "\(shortName($0)): \($0.registeredDraggedTypes.map(\.rawValue))" }
-        } ?? []
+        var registered: [String] = []
+        if let first = rigs.first?.1 {
+            let views: [NSView] = [first.hosting] + descendants(of: first.hosting)
+            for view in views where !view.registeredDraggedTypes.isEmpty {
+                registered.append("\(shortName(view)): \(view.registeredDraggedTypes.map(\.rawValue))")
+            }
+        }
         let (frameRows, hitRows) = claimantRows(fixtures, rigs)
         var deliveryRows: [String] = []
         for source in fixtures.sources {
