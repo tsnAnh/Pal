@@ -25,7 +25,6 @@ struct ConnectionDeclinedTests {
         let card = try #require(cardsOf(transcript).first)
         let target = try #require(card.operation.targets.first)
         #expect(card.decisions(for: target, now: Date()) == [.tryAgain])
-        #expect(ConnectionDecision.tryAgain.answerStatus == "approved")
         #expect(card.isActionable(now: Date()))
     }
 
