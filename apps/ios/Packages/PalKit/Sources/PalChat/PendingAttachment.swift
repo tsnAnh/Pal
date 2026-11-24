@@ -55,8 +55,10 @@ public struct PendingAttachments: Equatable, Sendable {
         items.removeAll { $0.id == id }
     }
 
-    public mutating func removeAll() {
-        items.removeAll()
+    @discardableResult
+    public mutating func removeAll() -> [PendingAttachment] {
+        defer { items.removeAll() }
+        return items
     }
 
     public mutating func setState(_ state: PendingAttachment.State, for id: UUID) {

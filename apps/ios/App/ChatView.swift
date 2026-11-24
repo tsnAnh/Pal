@@ -66,6 +66,9 @@ struct ChatView: View {
             )
             .background(PlatformVariant.pick(mac: PalTokens.content, iOS: Color(theme.palette.canvas)))
             .messageMenuPresenter().composerActivity(focused: composerFocused)
+            .typeToFocusComposer(draft: $draft, focused: $composerFocused) {
+                model.suspendsTypeToFocus || isVoiceModePresented || router.sheet != nil
+            }
             .task { model.start() }
             .onDisappear {
                 dictation.stop()

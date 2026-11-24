@@ -52,6 +52,10 @@ struct ChatBottomBar: View {
                 model.clearPendingDraft()
                 focused.wrappedValue = true
             }
+            .onChange(of: model.restoredDraft, initial: true) { _, restored in
+                guard restored != nil, let text = model.consumeRestoredDraft(), draft.isEmpty else { return }
+                draft = text
+            }
             .onChange(of: model.replyTarget) { _, target in
                 if target != nil { focused.wrappedValue = true }
             }
@@ -143,5 +147,6 @@ struct ChatBottomBar: View {
             attachCapture: { image in Task { await AttachmentStager.stage(image: image, into: model.attachmentSink) } },
             attach: model.attachIntake
         )
+        .onChange(of: draft) { _, text in model.noteDraft(text) }
     }
 }

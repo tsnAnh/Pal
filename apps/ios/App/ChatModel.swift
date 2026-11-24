@@ -126,7 +126,9 @@ final class ChatModel {
     var isOpening = true
     var sendError: String?
     private(set) var answeringConnections: Set<String> = []
-    private var pending = PendingAttachments()
+    var pending = PendingAttachments()
+    var restoredDraft: String?
+    @ObservationIgnored var draftWork: Task<Void, Never>?
     var attachments: [PendingAttachment] { pending.items }
     private var localImages: [String: Data] = [:]
     private(set) var slashItems: [SlashItem] = []
@@ -241,6 +243,7 @@ final class ChatModel {
     }
 
     func stop() {
+        flushDraft()
         markViewed()
         ChatOpenTrace.finish(bot: bot.name)
         running?.cancel()
@@ -289,7 +292,7 @@ final class ChatModel {
             case .file(let reference): body = body.isEmpty ? reference : body + "\n" + reference
             }
         }
-        pending.removeAll()
+        let sentAttachments = pending.removeAll()
         let provisional = OutboxEntry(
             submissionID: UUID().uuidString, botID: bot.name, text: body, attachments: images,
             createdAt: Date(), state: .pending, attempts: 0
@@ -303,12 +306,14 @@ final class ChatModel {
                     botID: bot.name, text: body, attachments: images, submissionID: provisional.submissionID
                 )
                 unsaved.removeAll { $0.submissionID == entry.submissionID }
+                forgetInDraft(sentAttachments.map(\.id))
                 await refreshOutbox()
                 _ = await outbox.deliver(entry.submissionID)
                 await refreshOutbox()
             } catch {
                 unsaved.removeAll { $0.submissionID == provisional.submissionID }
                 await refreshOutbox()
+                keepDraft(text: text, attachments: sentAttachments)
                 sendError = String(localized: "Your message could not be saved.")
             }
         }
@@ -387,16 +392,20 @@ final class ChatModel {
         sendError = nil
     }
 
-    func attachPhoto(_ upload: PreparedUpload) {
-        stage(PendingAttachment(kind: .image, name: upload.filename, thumbnail: upload.thumbnail)) { [weak self] session in
+    func attachPhoto(_ upload: PreparedUpload, id: UUID = UUID(), remember: Bool = true) {
+        let attachment = PendingAttachment(id: id, kind: .image, name: upload.filename, thumbnail: upload.thumbnail)
+        if remember { rememberInDraft(attachment, data: upload.data, mime: Self.imageMime(of: upload.filename)) }
+        stage(attachment) { [weak self] session in
             let staged = try await session.attachImage(upload.data, filename: upload.filename)
             await self?.keepLocalImage(upload.data, forHostPath: staged.path)
             return .image(staged.promptAttachment)
         }
     }
 
-    func attachFile(_ upload: PreparedUpload, mime: String) {
-        stage(PendingAttachment(kind: .file, name: upload.filename, thumbnail: nil)) { session in
+    func attachFile(_ upload: PreparedUpload, mime: String, id: UUID = UUID(), remember: Bool = true) {
+        let attachment = PendingAttachment(id: id, kind: .file, name: upload.filename, thumbnail: nil)
+        if remember { rememberInDraft(attachment, data: upload.data, mime: mime) }
+        stage(attachment) { session in
             let staged = try await session.attachFile(upload.data, name: upload.filename, mime: mime)
             return .file(referenceText: staged.refText)
         }
@@ -404,6 +413,7 @@ final class ChatModel {
 
     func removeAttachment(_ id: UUID) {
         pending.remove(id)
+        forgetInDraft([id])
     }
 
     var imageLoader: ChatImageLoader {
@@ -584,6 +594,7 @@ final class ChatModel {
         }
         let before = await session.timelineSnapshot
         await restoreSession(session)
+        await restoreDraft()
         let current = await session.timelineSnapshot
         if before.rows.isEmpty, !current.rows.isEmpty {
             showCacheFrame(current)
@@ -907,15 +918,16 @@ final class ChatModel {
         findSearch?.cancel()
         findSearch = nil
         pendingReveal = nil
-        if findMatches.isEmpty { searchOlder(excluding: []) }
+        if findMatches.isEmpty { searchOlder(excluding: [], after: .milliseconds(300)) }
     }
 
-    private func searchOlder(excluding known: Set<String>) {
+    private func searchOlder(excluding known: Set<String>, after pause: Duration = .zero) {
         let needle = findQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty, let session, olderHistory.canLoad else { return }
         let knownKeys = Set((snapshot?.rows ?? []).filter { known.contains(rowID(for: $0)) }.map(\.id))
         findSearch?.cancel()
         findSearch = Task { [weak self] in
+            if pause > .zero, (try? await Task.sleep(for: pause)) == nil { return }
             let key = await session.reveal { row in
                 !knownKeys.contains(row.id) && Self.matches(row.item, needle: needle)
             }

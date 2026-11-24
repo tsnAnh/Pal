@@ -24,10 +24,18 @@ final class BotLinks {
     private var links: [String: BotLink] = [:]
     private let warm = WarmSessionPool()
     let snapshots = ChatSnapshotMemory()
+    let drafts: DraftStore
+    private let draftFlush: DraftFlushTriggers
     private(set) lazy var heights = ChatRowHeightStore(cache: connection.cache) { [unowned connection] in connection.accountKey }
 
-    init(connection: ConnectionModel) {
+    init(connection: ConnectionModel, drafts: DraftStore = DraftStore(directory: BotLinks.draftsDirectory, diagnostics: .osLog())) {
         self.connection = connection
+        self.drafts = drafts
+        draftFlush = DraftFlushTriggers(store: drafts)
+    }
+
+    static var draftsDirectory: URL {
+        URL.applicationSupportDirectory.appending(path: "drafts", directoryHint: .isDirectory)
     }
 
     func link(for bot: String) throws -> BotLink {
