@@ -211,7 +211,7 @@ private struct Harness {
     mutating func apply(_ command: ChatScrollMachine.Command) {
         switch command {
         case .none: return
-        case .scrollToBottom: fake.landOnBottom()
+        case .scrollToBottom, .clampToContent: fake.landOnBottom()
         case .restore(let anchor): fake.land(on: anchor)
         case .scrollToRow(let id): fake.landNear(rowID: id)
         }
