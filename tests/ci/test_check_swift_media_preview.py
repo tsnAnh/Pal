@@ -138,3 +138,11 @@ def test_clean_tree_exits_zero_silently(tmp_path: Path) -> None:
     root = _tree(tmp_path, {TILE: CLEAN_TILE, MAC: "Text(caption)\n"})
     proc = subprocess.run([sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True, check=False)
     assert (proc.returncode, proc.stdout) == (0, "")
+
+
+@pytest.mark.parametrize("name", ["DocumentCard", "DocumentFileCard"])
+def test_document_cards_are_covered(tmp_path: Path, name: str) -> None:
+    rel = f"App/Chat/Media/{name}.swift"
+    assert _found(tmp_path, rel, CLEAN_TILE) == []
+    assert [rule for rule, _ in _found(tmp_path, rel, OVERLAY_STROKE)] == ["media-no-stroke"]
+    assert [rule for rule, _ in _found(tmp_path, rel, "ChatBubble { card }")] == ["media-no-bubble"]

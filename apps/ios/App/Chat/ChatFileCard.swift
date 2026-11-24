@@ -34,7 +34,11 @@ struct ChatFileStack: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(files) { file in
-                ChatFileCard(file: file, isStreaming: isStreaming)
+                if let kind = ChatDocumentKind(fileName: file.name) {
+                    DocumentFileCard(file: file, kind: kind, isStreaming: isStreaming)
+                } else {
+                    ChatFileCard(file: file, isStreaming: isStreaming)
+                }
             }
         }
         .accessibilityIdentifier("chatFileStack")
