@@ -253,6 +253,9 @@ public struct StepFlowEngine: Sendable, Equatable {
 
     public mutating func setSwitch(_ id: String, _ on: Bool) {
         guard case .switches(let groups) = current.kind, groups.contains(where: { $0.switches.contains { $0.id == id } }) else { return }
+        if on, let group = groups.first(where: { $0.exclusive && $0.switches.contains { $0.id == id } }) {
+            for item in group.switches { switches[item.id] = false }
+        }
         switches[id] = on
         if isFailed { phase = .ready }
     }

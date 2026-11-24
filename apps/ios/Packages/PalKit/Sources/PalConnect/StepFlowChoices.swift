@@ -31,11 +31,13 @@ public struct SetupSwitch: Sendable, Equatable, Identifiable {
     public var subtitleWhenOff: String?
     public var isOn: Bool
     public var confirmTurningOff: SetupConfirmation?
+    public var showsInitial: Bool
 
     public init(
         id: String, title: String, subtitle: String = "", subtitleWhenOff: String? = nil, isOn: Bool = false,
-        confirmTurningOff: SetupConfirmation? = nil
+        confirmTurningOff: SetupConfirmation? = nil, showsInitial: Bool = false
     ) {
+        self.showsInitial = showsInitial
         self.id = id
         self.title = title
         self.subtitle = subtitle
@@ -51,8 +53,12 @@ public struct SetupSwitchGroup: Sendable, Equatable, Identifiable {
     public var switches: [SetupSwitch]
     public var needsOneOn: Bool
     public var emptyNote: String?
+    public var exclusive: Bool
 
-    public init(id: String, header: String? = nil, switches: [SetupSwitch], needsOneOn: Bool = false, emptyNote: String? = nil) {
+    public init(
+        id: String, header: String? = nil, switches: [SetupSwitch], needsOneOn: Bool = false, emptyNote: String? = nil, exclusive: Bool = false
+    ) {
+        self.exclusive = exclusive
         self.id = id
         self.header = header
         self.switches = switches

@@ -210,7 +210,7 @@ public struct DiscordFlowRunner: Sendable {
         return status
     }
 
-    private func saveToken(_ token: String) async throws {
+    public func saveToken(_ token: String) async throws {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let verification = try await service.verifySetup(entry, step: DiscordFlow.tokenStep, values: [DiscordFlow.tokenField.id: trimmed])
         guard verification.result.ok else {
@@ -236,13 +236,19 @@ public struct DiscordFlowRunner: Sendable {
         try await service.saveDiscord(guildIDs: ids.sorted(), readOnly: values[DiscordFlow.readOnlyID] != "0")
     }
 
-    private func inviteKind(for step: FlowStep) async throws -> FlowStep.Kind {
-        guard case .openAndCheck(let current) = step.kind else { throw SetupStatusError(SetupStatus(code: "internal")) }
+    public func inviteLinks() async throws -> [SetupLink] {
         let fresh = try await service.catalogEntry(slug: entry.slug)
         let links = fresh?.setupGuide?.steps.first { $0.id == DiscordFlow.gatewayInviteStep }?.links ?? []
-        guard let first = links.first else {
+        guard !links.isEmpty else {
             throw SetupStatusError(SetupStatus(code: "gateway_outdated", method: "connectors.catalog", subject: "Discord"))
         }
+        return links
+    }
+
+    private func inviteKind(for step: FlowStep) async throws -> FlowStep.Kind {
+        guard case .openAndCheck(let current) = step.kind else { throw SetupStatusError(SetupStatus(code: "internal")) }
+        let links = try await inviteLinks()
+        let first = links[0]
         var open = current
         open.link = SetupLink(label: current.link.label, url: first.url)
         open.copies = links.map { SetupCopy(label: $0.label, value: $0.url.absoluteString) }

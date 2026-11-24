@@ -158,6 +158,31 @@ public struct ChatNextActionWire: Decodable, Sendable, Hashable {
 public struct ChatSetupErrorWire: Decodable, Sendable, Hashable {
     public var code: ChatSetupErrorCode
     public var fix: ChatFixAction
+    public var reason: String?
+    public var permissions: [String]
+    public var retryAfterSeconds: Int?
+
+    public init(code: ChatSetupErrorCode, fix: ChatFixAction, reason: String? = nil, permissions: [String] = [], retryAfterSeconds: Int? = nil) {
+        self.code = code
+        self.fix = fix
+        self.reason = reason
+        self.permissions = permissions
+        self.retryAfterSeconds = retryAfterSeconds
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case code, fix, reason, permissions
+        case retryAfterSeconds = "retry_after_seconds"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decode(ChatSetupErrorCode.self, forKey: .code)
+        fix = try container.decode(ChatFixAction.self, forKey: .fix)
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        permissions = try container.decodeIfPresent([String].self, forKey: .permissions) ?? []
+        retryAfterSeconds = try container.decodeIfPresent(Int.self, forKey: .retryAfterSeconds)
+    }
 }
 
 public struct ChatSetupStateWire: Decodable, Sendable, Hashable {

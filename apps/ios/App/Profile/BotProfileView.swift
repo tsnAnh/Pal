@@ -137,6 +137,11 @@ struct BotProfileView: View {
                     accessibilityIdentifier: "profileSlackRow"
                 ) { router.push(.slack(botName: model.botName)) }
                 SettingsRow.navigate(
+                    String(localized: "Add to Discord"),
+                    icon: .symbol("bubble.left.and.bubble.right"),
+                    accessibilityIdentifier: "profileDiscordRow"
+                ) { router.push(.discord(botName: model.botName)) }
+                SettingsRow.navigate(
                     String(localized: "Model"),
                     icon: .symbol("cpu"),
                     accessibilityIdentifier: "profileModelRow"
