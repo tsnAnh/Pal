@@ -15,4 +15,10 @@ struct PalMotionTests {
         #expect(PalMotion.popOutDuration > 0.1)
         #expect(PalMotion.popOutDuration <= 0.2)
     }
+
+    @Test("a settled card collapses its height with Reduce Motion off and only fades with it on")
+    func settleChoice() {
+        #expect(PalMotion.Settle.height(reduceMotion: false) != nil)
+        #expect(PalMotion.Settle.height(reduceMotion: true) == nil)
+    }
 }

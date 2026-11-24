@@ -48,13 +48,13 @@ struct ChatTranscriptList: View {
         .modifier(ChatScreenAccessibility(model: model))
         .paneOverflowProbe("chat.pane")
         .overlay(alignment: .bottom) {
-            if scroll.showsJumpButton, !model.isFinding {
+            if showsJumpButton {
                 ChatJumpToNewest(scroll: scroll)
                     .padding(.bottom, 4)
                     .transition(pop.transition)
             }
         }
-        .animation(pop.animation, value: scroll.showsJumpButton)
+        .animation(pop.animation, value: showsJumpButton)
         .modifier(ChatFindReveal(model: model, scroll: scroll))
         .task(id: model.connection) {
             connectionIsSlow = false
@@ -68,6 +68,16 @@ struct ChatTranscriptList: View {
     private static let catchUpNoticeDelay = LoadingPolicy.catchUpNoticeWindow
 
     private var pop: PalMotion.Pop { PalMotion.Pop(reduceMotion: reduceMotion) }
+
+    private var showsJumpButton: Bool {
+        ChatJumpButtonPolicy.shows(scrollWants: scroll.showsJumpButton, finding: model.isFinding, newestIsQuestion: model.newestRowIsQuestion)
+    }
+}
+
+enum ChatJumpButtonPolicy {
+    static func shows(scrollWants: Bool, finding: Bool, newestIsQuestion: Bool) -> Bool {
+        scrollWants && !finding && !newestIsQuestion
+    }
 }
 
 private struct ChatTranscriptRows: View {
