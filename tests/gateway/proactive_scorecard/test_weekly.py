@@ -81,17 +81,13 @@ def test_the_headline_names_what_moved_most_and_holds_no_text(make):
 
 def test_one_offer_per_iso_week(make):
     home = make()
-    first, authority = deliver(home, weekly.offer_due(home, local_now()))
+    item = weekly.offer_due(home, local_now())
+    first, authority = deliver(home, item)
     assert first.disposition is reach.Disposition.ALERTED and len(authority.runner.sent) == 1
     weekly._attempted.clear()
     assert weekly.offer_due(home, local_now()) is None
-    again, _ = deliver(home, weekly.offer_due(home, local_now() - timedelta(days=7)) or first_item(home))
-    assert [row["producer_key"] for row in rows(home)].count(f"scorecard:{last_week(local_now())}") == 1
-
-
-def first_item(home):
-    return reach.Offer(producer_key=f"scorecard:{last_week(local_now())}", domain=weekly.DOMAIN,
-                       kind=OfferKind.SUGGEST, consent=Consent.INITIATED, title="t", body="b")
+    deliver(home, item)
+    assert [row["producer_key"] for row in rows(home)] == [f"scorecard:{last_week(local_now())}"]
 
 
 def test_a_muted_scorecard_lands_silently(make):

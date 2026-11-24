@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Protocol
 
 from gateway.proactive_scorecard.patterns import (
-    correction_classes, hands_back, is_bare_yes_no, matched_criteria, option_labels, question_count,
-    question_text, states_default, states_recommendation,
+    correction_classes, hands_back, is_bare_yes_no, is_chase, makes_promise, matched_criteria, option_labels,
+    question_count, question_text, states_default, states_recommendation,
 )
 from gateway.proactive_scorecard.rubric import RUBRIC_VERSION, Criterion, Label, label_from_criteria
 
@@ -19,6 +19,7 @@ SCHEMA = "proactive-eval-mine/1"
 DEFAULT_EXCLUDED_SOURCES = ("kanban", "subagent", "tool", "cron")
 CONTEXT_MESSAGES = 3
 CHARS_PER_TOKEN = 4
+COMMITMENT_EVENT_ACTIONS = frozenset({"promise", "update", "close"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +37,7 @@ class Message:
     ts: float
     asks: tuple[AskItem, ...] = ()
     truth: Label | None = None
+    records_commitment: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +98,9 @@ class Stats:
     asks_no_options_no_default: int = 0
     handbacks: int = 0
     owner_tokens: int = 0
+    owner_chases: int = 0
+    promise_turns: int = 0
+    unrecorded_promises: int = 0
     done_owner_turns: list[int] = field(default_factory=list)
     criteria: Counter = field(default_factory=Counter)
     corrections: Counter = field(default_factory=Counter)
@@ -118,6 +123,8 @@ class Stats:
                 "no_options_no_default_share": _ratio(self.asks_no_options_no_default, self.asks),
             },
             "handbacks": self.handbacks,
+            "owner_chases": self.owner_chases, "promise_turns": self.promise_turns,
+            "unrecorded_promises": self.unrecorded_promises,
             "owner_corrections_per_100_turns": round(100 * sum(self.corrections.values()) / self.owner_turns, 2)
             if self.owner_turns else None,
             "owner_tokens_per_task": round(self.owner_tokens / self.sessions, 1) if self.sessions else None,
@@ -181,6 +188,27 @@ def _record_question(stats: Stats, verdict, message: Message) -> None:
         stats.truth_agree += message.truth is verdict.label
 
 
+def _assistant_spans(messages: Sequence[Message]) -> Iterator[list[Message]]:
+    span: list[Message] = []
+    for message in messages:
+        if message.role == "user":
+            if span:
+                yield span
+            span = []
+        else:
+            span.append(message)
+    if span:
+        yield span
+
+
+def _record_follow_through(stats: Stats, session: MinedSession) -> None:
+    stats.owner_chases += sum(1 for m in session.messages if m.role == "user" and is_chase(m.text))
+    for span in _assistant_spans(session.messages):
+        if any(makes_promise(m.text) for m in span):
+            stats.promise_turns += 1
+            stats.unrecorded_promises += not any(m.records_commitment for m in span)
+
+
 def _analyse(session: MinedSession, judge: QuestionJudge | None, buckets: dict[str, Stats], total: Stats) -> None:
     owner_turns = sum(1 for m in session.messages if m.role == "user")
     if not owner_turns:
@@ -208,12 +236,21 @@ def _analyse(session: MinedSession, judge: QuestionJudge | None, buckets: dict[s
     last = session.messages[-1]
     finished = last.role == "assistant" and not last_was_question
     for stats in (week, total):
+        _record_follow_through(stats, session)
         stats.sessions += 1
         stats.owner_turns += owner_turns
         if finished:
             stats.done_owner_turns.append(owner_turns)
         else:
             stats.open_sessions += 1
+
+
+def tally(source: SessionSource, *, since: float | None = None, until: float | None = None,
+          judge: QuestionJudge | None = None) -> Stats:
+    total = Stats()
+    for session in source.sessions(since, until):
+        _analyse(session, judge, {}, total)
+    return total
 
 
 def mine(sources: dict[str, SessionSource], *, since: float | None = None, until: float | None = None,
@@ -240,25 +277,35 @@ def _text_of(content) -> str:
     return ""
 
 
-def _clarify_asks(tool_calls) -> tuple[AskItem, ...]:
-    asks: list[AskItem] = []
+def _calls(tool_calls) -> Iterator[tuple[str, dict]]:
     for call in tool_calls if isinstance(tool_calls, list) else ():
         function = call.get("function") if isinstance(call, dict) else None
         body = function or call or {}
-        if body.get("name") != "clarify":
-            continue
         arguments = body.get("arguments") or call.get("input")
         if isinstance(arguments, str):
             try:
                 arguments = json.loads(arguments)
             except json.JSONDecodeError:
                 arguments = None
-        for item in (arguments or {}).get("questions") or ():
+        yield str(body.get("name") or ""), arguments if isinstance(arguments, dict) else {}
+
+
+def _clarify_asks(tool_calls) -> tuple[AskItem, ...]:
+    asks: list[AskItem] = []
+    for name, arguments in _calls(tool_calls):
+        if name != "clarify":
+            continue
+        for item in arguments.get("questions") or ():
             if isinstance(item, dict) and str(item.get("question") or "").strip():
                 choices = tuple(str(c) for c in item.get("choices") or () if str(c).strip())
                 asks.append(AskItem(str(item["question"]).strip(), choices, item.get("recommend") is not False,
                                     str(item.get("default") or "").strip()))
     return tuple(asks)
+
+
+def _records_commitment(tool_calls) -> bool:
+    return any(name == "commitment" and arguments.get("action") in COMMITMENT_EVENT_ACTIONS
+               for name, arguments in _calls(tool_calls))
 
 
 class PersistenceSource:
@@ -280,7 +327,8 @@ class PersistenceSource:
                     continue
                 rows = store.messages.read_transcript(entry.session_id, TranscriptRead(include_lineage=True))
                 messages = tuple(
-                    Message(row.role, _text_of(row.content), float(row.timestamp), _clarify_asks(row.tool_calls))
+                    Message(row.role, _text_of(row.content), float(row.timestamp), _clarify_asks(row.tool_calls),
+                            records_commitment=_records_commitment(row.tool_calls))
                     for row in rows
                     if row.role in ("user", "assistant") and not row.compressed_summary)
                 if messages:

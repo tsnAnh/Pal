@@ -16,7 +16,7 @@ from gateway.commitments import Actor, Details, Route, State
 from gateway.session_context import clear_session_vars, set_session_vars
 from hermes_cli import proactive_cmd
 from tests.gateway.reach_harness import (
-    FakeAppTransport, attach, make_authority, make_home, rows, run_with_owner, telegram_runner,
+    PROACTIVE_ON, FakeAppTransport, attach, make_authority, make_home, rows, run_with_owner, telegram_runner,
 )
 from tests.waiting import async_wait_until
 from tools import commitment_tool
@@ -203,7 +203,11 @@ def test_the_commitments_domain_is_a_notify_tier_by_default():
     assert load_policy({}).domain_tiers["commitments"] is Tier.NOTIFY
 
 
+SCORECARD_OFF = PROACTIVE_ON + "  domain_tiers: {scorecard: 'off'}\n"
+
+
 def test_the_tick_reporter_offers_through_the_owning_gateway(home):
+    (home / "config.yaml").write_text(SCORECARD_OFF, encoding="utf-8")
     wake.write_gate_script(home)
     authority = make_authority(home, telegram_runner())
     move(home, promise(home), State.DONE)
@@ -216,7 +220,8 @@ def test_the_tick_reporter_offers_through_the_owning_gateway(home):
     assert len(run_with_owner(authority, scenario)) == 1
 
 
-def test_the_tick_reporter_does_nothing_for_a_bot_that_never_promised(home):
+def test_the_tick_reporter_does_nothing_for_a_bot_that_never_promised_without_a_scorecard(home):
+    (home / "config.yaml").write_text(SCORECARD_OFF, encoding="utf-8")
     assert wake.report_due(home) == 0
     assert rows(home) == []
 

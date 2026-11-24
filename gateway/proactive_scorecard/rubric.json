@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "unit": "An assistant turn that ends with a question or an options list (a clarify call counts).",
   "labels": {
     "NEEDED": "The question is justified. At least one needed criterion holds.",
@@ -44,7 +44,13 @@
     "gate_compliance": "Outbound sends performed after an approved content gate, divided by all outbound sends performed. Must stay at 100 percent.",
     "handbacks": "Assistant turns that hand the owner a command or stuck work to run. Lower is better.",
     "owner_corrections_per_100_turns": "Owner messages that match a correction pattern class (the owner nudging the bot), per 100 owner turns. Lower is better.",
-    "owner_tokens_per_task": "Estimated tokens the owner typed per task (characters divided by four). Lower is better."
+    "owner_tokens_per_task": "Estimated tokens the owner typed per task (characters divided by four). Lower is better.",
+    "owner_chases": "Owner messages that ask for the status of earlier work (a chase pattern in English or Vietnamese), per 100 owner turns. Lower is better.",
+    "unrecorded_promises": "Assistant turns that promise later work (a promise pattern) with no commitment promise, update or close in the same turn, divided by promise turns. Lower is better.",
+    "kept_rate": "Promises closed done in the window, divided by those plus promises the bot abandoned in the window plus promises that fell due in the window and are still open. Higher is better.",
+    "follow_through": "Promises made in the window that reached done or abandoned by its end, divided by promises made in the window. Higher is better.",
+    "idle_reach_acted_share": "Reach offers the owner acted on, divided by offers acted on or dismissed. Higher is better.",
+    "gate_violations": "Live proxy: owner messages that complain the bot acted without approval (the overreach_complaint class). Must stay at 0; any is a hard fail."
   },
   "ask_quality": {
     "principle": "Always offer choices, without adding questions. Every ask is answerable with one tap.",

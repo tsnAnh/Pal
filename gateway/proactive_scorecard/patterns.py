@@ -188,3 +188,26 @@ def states_default(text: str) -> bool:
 def hands_back(text: str) -> bool:
     folded = fold(text)
     return any(pattern.search(folded) for pattern in _HANDBACK)
+
+
+_CHASE = _compile(
+    r"\b(any (update|news|progress)|what'?s the status|is it (done|ready|finished)|(done|ready|finished) yet)\b",
+    r"\b(how'?s it going|where are we (on|with)|did you (finish|get to) (it|that|this)|how far along)\b",
+    r"\b(xong chua|lam xong chua|the nao roi|sao roi|toi dau roi|den dau roi|co gi moi (chua|khong)|bao gio xong)\b",
+    r"\bda (lam|gui|xong) chua\b",
+)
+_PROMISE = _compile(
+    r"\bi('ll| will) (check back|follow up|get back to you|let you know|report back|ping you|keep an eye|monitor"
+    r"|circle back|update you)\b",
+    r"\b(toi|minh|em) se (bao lai|bao cho|kiem tra lai|cap nhat|theo doi|gui lai|quay lai|nhac)\b",
+)
+
+
+def is_chase(text: str) -> bool:
+    folded = fold(text)
+    return any(pattern.search(folded) for pattern in _CHASE)
+
+
+def makes_promise(text: str) -> bool:
+    folded = fold(text)
+    return any(pattern.search(folded) for pattern in _PROMISE)
