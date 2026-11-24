@@ -125,7 +125,7 @@ def test_quoted_yaml_reads_preserve_source_policy(ops, env, tmp_path, monkeypatc
     result = json.loads(finalize_foreground_result(
         command=command, result=raw, env=env, env_type="local", effective_task_id="quoted-yaml",
         task_id="quoted-yaml", session_id=None, session_key="quoted-yaml", workdir=str(tmp_path),
-        command_cwd=str(tmp_path), approval_note=None,
+        command_cwd=str(tmp_path),
     ))
     expected = text.replace('"shortsecret"', '"***"') if secret_source else text
     assert result["output"] == expected.strip()
@@ -158,7 +158,7 @@ def test_credential_store_reads_mask_the_stored_secret(ops, env, tmp_path, monke
     result = json.loads(finalize_foreground_result(
         command=command, result=raw, env=env, env_type="local", effective_task_id="cred-store",
         task_id="cred-store", session_id=None, session_key="cred-store", workdir=str(tmp_path),
-        command_cwd=str(tmp_path), approval_note=None,
+        command_cwd=str(tmp_path),
     ))
     assert secret not in result["output"]
 

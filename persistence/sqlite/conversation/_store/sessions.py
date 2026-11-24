@@ -765,18 +765,6 @@ def update_session_runtime_lock(
     )
 
 
-def set_session_yolo(holder: StoreHolder, session_id: str, enabled: bool) -> None:
-    """Persist the per-session YOLO flag so ``/yolo`` survives ``--resume``; no-op without a row."""
-    if not session_id:
-        return
-    _write_model_config_patch(holder, session_id, {"yolo_mode": bool(enabled)})
-
-
-def session_yolo_enabled(session_meta: Optional[dict[str, Any]]) -> bool:
-    """Persisted YOLO flag; False on any parse failure (resume must never enable the bypass)."""
-    return bool(_parse_model_config((session_meta or {}).get("model_config")).get("yolo_mode"))
-
-
 def get_session(holder: StoreHolder, session_id: str) -> Optional[dict[str, Any]]:
     """Get a session by ID (drains queued token deltas first so cost readers see exact totals)."""
     holder.flush_for_read()

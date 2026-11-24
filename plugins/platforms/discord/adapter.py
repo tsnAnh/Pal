@@ -151,12 +151,6 @@ _NATIVE_SLASH_COMMAND_SPECS: tuple = (
      "/voice {mode}", None),
     ("update", "slash.update.description", (), "/update", "platform.discord.command.update.followup"),
     ("restart", "platform.discord.command.restart.description", (), "/restart", "platform.discord.command.restart.followup"),
-    ("approve", "slash.approve.description",
-     (("scope", str, "", "platform.discord.command.approve.arg_scope", None),),
-     "/approve {scope}", None),
-    ("deny", "platform.discord.command.deny.description",
-     (("scope", str, "", "platform.discord.command.deny.arg_scope", None),),
-     "/deny {scope}", None),
     # /thread: template None -> registered by _register_thread_slash (auth-gated defer).
     ("thread", "platform.discord.command.thread.description", (), None, None),
     ("queue", "platform.discord.command.queue.description",
@@ -308,7 +302,7 @@ from gateway.platforms.helpers import (
 from gateway.platforms.helpers import cancel_task, inline_document_text
 from utils import atomic_json_write, env_float
 from gateway.platforms.base import (
-    BasePlatformAdapter, ExecApprovalPrompt, SendResult, unauthorized_action_notice,
+    BasePlatformAdapter, SendResult, unauthorized_action_notice,
     cache_image_from_url, cache_image_from_bytes_async, cache_audio_from_url, cache_audio_from_bytes_async,
     cache_document_from_bytes_async, SUPPORTED_DOCUMENT_TYPES, _TEXT_INJECT_EXTENSIONS,
     _prefix_within_utf16_limit, utf16_len, validate_inbound_media_size,
@@ -1156,9 +1150,7 @@ class VoiceReceiver:
 
 
 from plugins.platforms.discord.adapter_config_readers import (
-    _DISCORD_PROMPT_TIMEOUT_DEFAULT, _DISCORD_PROMPT_TIMEOUT_MIN, _read_discord_prompt_timeout, _read_dm_role_auth_guild,
-    _resolve_exec_approval_admin_gate)
-from plugins.platforms.discord.adapter_exec_approval_view import build_exec_approval_view
+    _DISCORD_PROMPT_TIMEOUT_DEFAULT, _DISCORD_PROMPT_TIMEOUT_MIN, _read_discord_prompt_timeout, _read_dm_role_auth_guild)
 from plugins.platforms.discord.adapter_component_auth import opener_refusal
 
 
@@ -5513,16 +5505,6 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
             body = body[: max(0, budget - len(truncated_suffix))] + truncated_suffix
         return f"{prefix}{body}{suffix}"
 
-    def _approval_mention_content(self) -> Optional[str]:
-        """User mentions for approval prompts, gated on ``discord.approval_mentions``
-        (``DISCORD_APPROVAL_MENTIONS``). Only numeric allowlist entries; default off."""
-        if not self._extra_or_env_flag("approval_mentions", "DISCORD_APPROVAL_MENTIONS", "false", truthy=True):
-            return None
-        user_ids = sorted(uid for uid in self._allowed_user_ids if str(uid).isdigit())
-        if not user_ids:
-            return None
-        return " ".join(f"<@{uid}>" for uid in user_ids)
-
     async def _send_prompt(
         self, chat_id: str, metadata: Optional[dict], build, *, fail_log: Optional[str] = None,
     ) -> SendResult:
@@ -5545,99 +5527,13 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
                 logger.warning("[%s] %s failed: %s", self.name, fail_log, e)
             return SendResult(success=False, error=str(e))
 
-    # Payload lives in plain content: embeds can be invisible/detached on web/mobile. Properties, not
-    # class constants: the wording comes from the catalog for the language active at send time.
-    @property
-    def _EA_HEADER(self) -> str:
-        return (f"⚠️ **{t('gateway.exec_approval.header')}**\n\n"
-                f"{t('platform.discord.approval.question')}\n\n"
-                f"**{t('platform.discord.approval.requested_command_label')}**\n")
-
-    _EA_CODE_OPEN = "```bash\n"
-    _EA_CODE_CLOSE = "\n```\n"
-
-    @property
-    def _EA_REASON_LABEL(self) -> str:
-        return f"**{t('gateway.exec_approval.reason_label')}:** "
-
-    @property
-    def _EA_SMART_DENY_LINE(self) -> str:
-        line = t("gateway.exec_approval.smart_deny_line")
-        label, sep, rest = line.partition(":")
-        return "\n\n" + (f"**{label}:**{rest}" if sep else f"**{line}**")
-    # The reason shares the 2000-char content cap with the command; unbounded it would starve
-    # the command preview to zero and push the content past the cap.
-    _EA_REASON_BUDGET = 300
-    _EA_CARD_CAP = MAX_MESSAGE_LENGTH
-
-    def _exec_approval_cmd_budget(self, description: str, smart_denied: bool) -> int:
-        # Mentions ride in front of the content and count against the 2000-char message cap too.
-        mention = len(self._approval_mention_content() or "") + 1
-        return max(0, super()._exec_approval_cmd_budget(description, smart_denied) - mention)
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Send an approval with content as its canonical payload and an embed for state."""
-        require_admin, admin_user_ids = _resolve_exec_approval_admin_gate(getattr(self.config, "extra", None))
-        choices = set(prompt.choices)
-        view = ExecApprovalView(
-            session_key=prompt.session_key, allowed_user_ids=self._allowed_user_ids,
-            allowed_role_ids=self._allowed_role_ids, require_admin=require_admin,
-            admin_user_ids=admin_user_ids, allow_permanent="always" in choices,
-            allow_session="session" in choices, smart_denied=prompt.smart_denied,
-            request_id=prompt.request_id, allow_once="once" in choices, approval_extra=getattr(self.config, "extra", None),
-        )
-        # Observe BEFORE sending, so a request that settles while the card is in flight still
-        # reports its real reason; ``pending_retire`` holds it until the card exists.
-        if view.request_id and not self._observe_exec_approval_settle(prompt.session_key, view):
-            view.pending_retire = "gone"  # already gone: how it ended is unknown
-
-        def _build(_channel):
-            content = prompt.text
-            mention_content = self._approval_mention_content()
-            if mention_content:
-                content = f"{mention_content}\n{content}"
-            embed = discord.Embed(
-                title=_truncate_discord_component_text(f"⚠️ {t('gateway.exec_approval.header')}", _DISCORD_EMBED_TITLE_LIMIT),
-                color=discord.Color.orange(),
-            )
-            send_kwargs: dict[str, Any] = {"content": content, "embed": embed, "view": view}
-            if mention_content:
-                allowed_mentions_cls = getattr(discord, "AllowedMentions", None)
-                if allowed_mentions_cls is not None:
-                    send_kwargs["allowed_mentions"] = allowed_mentions_cls(
-                        users=True, roles=False, everyone=False, replied_user=False,
-                    )
-            return send_kwargs, view
-        result = await self._send_prompt(prompt.chat_id, prompt.metadata, _build)
-        if result.success and view.pending_retire:
-            await view.retire(view.pending_retire)
-        return result
-
-    def _observe_exec_approval_settle(self, session_key: str, view) -> bool:
-        """Retire ``view`` when its request settles (before it is sent: via ``view.pending_retire``)."""
-        from tools.approval import observe_gateway_settle
-        loop = asyncio.get_running_loop()
-
-        def retire(reason):
-            def schedule():
-                if view._message is None:  # still in flight (or its send failed)
-                    view.pending_retire = reason
-                    return
-                task = loop.create_task(view.retire(reason))
-                self._background_tasks.add(task)
-                task.add_done_callback(self._background_tasks.discard)
-                task.add_done_callback(_consume_background_task_result)
-            loop.call_soon_threadsafe(schedule)
-
-        return observe_gateway_settle(session_key, view.request_id, retire)
-
     async def send_slash_confirm(
         self, chat_id: str, title: str, message: str, session_key: str,
         confirm_id: str, metadata: Optional[dict] = None,
     ) -> SendResult:
         """Send a three-button slash-command confirmation prompt."""
         def _build(_channel):
-            # Header-only card (same rule as the exec approval prompt): the message lives in
+            # Header-only card: the message lives in
             # content only, so embed-rendering clients don't see it twice (#114693).
             header = title or t("platform.discord.approval.confirm_title")
             embed = discord.Embed(title=_truncate_discord_component_text(header, _DISCORD_EMBED_TITLE_LIMIT), color=discord.Color.orange())
@@ -5673,7 +5569,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
             return str(c).strip()
 
         def _build(_channel):
-            # Header-only card (same rule as the exec approval prompt): the question and hint live
+            # Header-only card: the question and hint live
             # in content only, so embed-rendering clients don't see them twice (#114693).
             clarify_title = t("platform.discord.prompt.clarify_title")
             embed = discord.Embed(
@@ -6240,7 +6136,7 @@ class DiscordAdapter(DiscordLiveGatesMixin, DiscordAuthorizationMixin, DiscordMe
 def _define_discord_view_classes() -> None:
     """Register Discord UI view classes as module globals.
     Called at module load and after a lazy install so the classes exist whenever DISCORD_AVAILABLE."""
-    global ExecApprovalView, SlashConfirmView, UpdatePromptView, ModelPickerView, ClarifyChoiceView, ChoicePickerView
+    global SlashConfirmView, UpdatePromptView, ModelPickerView, ClarifyChoiceView, ChoicePickerView
     global VaultCodeView
 
     class _HermesView(discord.ui.View):
@@ -6339,7 +6235,6 @@ def _define_discord_view_classes() -> None:
             self._disable_all()
             await self._expire_embed(t("platform.discord.prompt.expired_footer"))
 
-    ExecApprovalView = build_exec_approval_view(discord, _HermesView, unauthorized=_unauthorized)
     VaultCodeView = build_vault_code_view(discord, _HermesView)
 
     class SlashConfirmView(_HermesView):
@@ -7137,13 +7032,6 @@ def _apply_yaml_config(yaml_cfg: dict, discord_cfg: dict) -> dict | None:
     _gate("allowed_roles", "DISCORD_ALLOWED_ROLES", from_platform_extra=True)
     _gate("allow_all_users", "DISCORD_ALLOW_ALL_USERS", from_platform_extra=True, lower=True)
     _gate("allow_bots", "DISCORD_ALLOW_BOTS", from_platform_extra=True, lower=True)
-    approval_mentions_cfg = (
-        discord_cfg["approval_mentions"] if "approval_mentions" in discord_cfg
-        else platform_extra_cfg.get("approval_mentions")
-    )
-    if approval_mentions_cfg is not None:
-        seeded_extra["approval_mentions"] = approval_mentions_cfg
-        _env_default("DISCORD_APPROVAL_MENTIONS", str(approval_mentions_cfg).lower())
     _gate("free_response_channels", "DISCORD_FREE_RESPONSE_CHANNELS", from_platform_extra=False)
     for key, env_key in (
         ("auto_thread", "DISCORD_AUTO_THREAD"),

@@ -138,7 +138,6 @@ def test_status_line_keeps_every_classic_status_bar_field(monkeypatch):
     monkeypatch.setattr(HermesCLI, "_get_status_bar_snapshot", lambda self: snapshot)
     monkeypatch.setattr(HermesCLI, "_get_tui_terminal_width", lambda self: 400)
     monkeypatch.setattr(HermesCLI, "_get_status_bar_field_set", lambda self: None)
-    monkeypatch.setattr(HermesCLI, "_is_session_yolo_active", lambda self: False)
     monkeypatch.setattr(HermesCLI, "_vim_mode_label", lambda self: "")
     monkeypatch.setattr(HermesCLI, "_cache_hit_rate", lambda self, snap, precision=1: (28.9, "◎ 28.9%"))
     monkeypatch.setattr("hermes_cli.cli_modern_layout.hint_pairs", lambda cli: [])

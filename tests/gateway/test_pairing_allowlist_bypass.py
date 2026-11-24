@@ -397,13 +397,13 @@ def test_whatsapp_live_allowlist_denies_when_env_key_removed(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_matrix_pairing_revoke_denies_live_message_and_approval_without_restart(store):
-    """The runner's live pairing verdict must gate both Matrix messages and approvals."""
+async def test_matrix_pairing_revoke_denies_live_message_and_picker_reaction_without_restart(store):
+    """The runner's live pairing verdict must gate both Matrix messages and prompt reactions."""
     from unittest.mock import AsyncMock, patch
 
     from gateway.config import GatewayConfig, PlatformConfig
     from gateway.run import GatewayRunner
-    from plugins.platforms.matrix.adapter import MatrixAdapter, _MatrixApprovalPrompt
+    from plugins.platforms.matrix.adapter import MatrixAdapter, _MatrixPickerPrompt
 
     user_id = "@paired:example.org"
     room_id = "!room:example.org"
@@ -437,35 +437,36 @@ async def test_matrix_pairing_revoke_denies_live_message_and_approval_without_re
     adapter._send_invalid_reaction_feedback = AsyncMock()
 
     async def react(prompt_id: str, reaction_id: str):
-        prompt = _MatrixApprovalPrompt(
+        on_selected = AsyncMock(return_value="")
+        prompt = _MatrixPickerPrompt(
             session_key=f"session-{prompt_id}",
             chat_id=room_id,
             message_id=prompt_id,
+            choices={"✅": ("apply",)},
+            on_selected=on_selected,
             requester_user_id=user_id,
-            request_id=f"req-{prompt_id}",
         )
-        adapter._approval_prompts_by_event[prompt_id] = prompt
+        adapter._choice_picker_prompts_by_event[prompt_id] = prompt
         event = SimpleNamespace(
             sender=user_id,
             event_id=reaction_id,
             room_id=room_id,
             content={"m.relates_to": {"event_id": prompt_id, "key": "✅"}},
         )
-        with patch("tools.approval.resolve_gateway_approval", return_value=1) as resolve:
-            await adapter._on_reaction(event)
-        return prompt, resolve
+        await adapter._on_reaction(event)
+        return prompt, on_selected
 
-    before_prompt, before_resolve = await react("$before", "$reaction-before")
+    before_prompt, before_selected = await react("$before", "$reaction-before")
     assert before_prompt.resolved is True
-    before_resolve.assert_called_once_with("session-$before", "once", request_id="req-$before")
+    before_selected.assert_awaited_once()
 
     assert store.revoke("matrix", user_id) is True
     assert store.is_approved("matrix", user_id) is False
     assert runner._is_user_authorized(source) is False
 
-    after_prompt, after_resolve = await react("$after", "$reaction-after")
+    after_prompt, after_selected = await react("$after", "$reaction-after")
     assert after_prompt.resolved is False
-    after_resolve.assert_not_called()
+    after_selected.assert_not_called()
 
 
 def test_matrix_pairing_revoke_purges_live_allowlist_snapshot(store, monkeypatch):

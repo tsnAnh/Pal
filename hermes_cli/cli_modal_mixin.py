@@ -18,6 +18,7 @@ from agent.i18n import t
 from hermes_cli.callbacks import prompt_for_secret
 from typing import Optional
 
+_CONSENT_TIMEOUT_S = 300
 _TIMED_OUT = object()  # sentinel returned by _poll_modal_queue when the deadline passes
 
 # Typed answers accepted by the slash-confirm modal, mapped onto the canonical choice values.
@@ -30,8 +31,6 @@ _CONFIRM_ALIASES = {
 # Resolved at call time (``_approval_outcome_label``) so the active language applies.
 _APPROVAL_OUTCOME_KEYS = {
     "once": "cli.approval.outcome_once",
-    "session": "cli.approval.outcome_session",
-    "always": "cli.approval.outcome_always",
     "deny": "cli.approval.outcome_deny"}
 
 
@@ -1068,32 +1067,24 @@ class CLIModalMixin:
             _cprint(f"\n{_DIM}  {t('cli.secret.sudo_skipped')}{_RST}")
         return result
 
-    def _approval_callback(self, command: str, description: str,
-                           *, allow_permanent: bool = True,
-                           allow_session: bool = True,
-                           smart_denied: bool = False) -> str:
-        """Dangerous-command approval through the prompt_toolkit UI (agent thread).
-
-        Choices: once / session / always / deny (see ``_approval_choices``), plus 'view' for long
-        commands. ``_approval_lock`` serializes concurrent requests (parallel delegation subtasks)
+    def _approval_callback(self, command: str, description: str, *, title: str = "", **_scope) -> str:
+        """Owner-decision consent (held draft, payment, spend limit, sampling) through the
+        prompt_toolkit UI (agent thread). Choices: once / deny, plus 'view' for long text.
+        ``_approval_lock`` serializes concurrent requests (parallel delegation subtasks)
         so the shared ``_approval_state`` / ``_approval_deadline`` aren't clobbered.
         """
-        from cli import CLI_CONFIG, _DIM, _RST, _cprint
+        from cli import _DIM, _RST, _cprint
 
         with self._approval_lock:
-            timeout = int(CLI_CONFIG.get("approvals", {}).get("timeout", 300))
             response_queue = queue.Queue()
             self._approval_state = {
                 "command": command,
                 "description": description,
-                "choices": self._approval_choices(
-                    command,
-                    allow_permanent=allow_permanent,
-                    allow_session=allow_session,
-                    smart_denied=smart_denied),
+                "title": title,
+                "choices": self._approval_choices(command),
                 "selected": 0,
                 "response_queue": response_queue}
-            self._approval_deadline = _time.monotonic() + timeout
+            self._approval_deadline = _time.monotonic() + _CONSENT_TIMEOUT_S
             self._ring_bell(prompt=True, context=t("cli.approval.bell_context"), detail=command)
             self._paint_now()
 
@@ -1110,23 +1101,14 @@ class CLIModalMixin:
                 "⚠", t("cli.approval.label"), command, _approval_outcome_label(result))
             return result
 
-    def _approval_choices(self, command: str, *, allow_permanent: bool = True,
-                          allow_session: bool = True,
-                          smart_denied: bool = False) -> list[str]:
-        """Smart-DENY overrides and re-ask-every-time gates (allow_session=False) show only
-        once/deny; ``allow_permanent=False`` for another reason hides only 'always'."""
-        if smart_denied or not allow_session:
-            choices = ["once", "deny"]
-        elif allow_permanent:
-            choices = ["once", "session", "always", "deny"]
-        else:
-            choices = ["once", "session", "deny"]
+    def _approval_choices(self, command: str) -> list[str]:
+        choices = ["once", "deny"]
         if len(command) > 70:
             choices.append("view")
         return choices
 
     def _handle_approval_selection(self) -> None:
-        """Process the currently selected dangerous-command approval choice."""
+        """Process the currently selected consent choice."""
         state = self._approval_state
         if not state:
             return

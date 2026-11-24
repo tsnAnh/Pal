@@ -12,7 +12,7 @@ private func temporaryDirectory() throws -> URL {
 
 @Suite("Bot errand control", .serialized)
 struct BotErrandControlTests {
-    private struct Rig {
+    struct Rig {
         let script: BotScript
         let gateway: FakeGateway
         let hub: SessionHub
@@ -41,7 +41,7 @@ struct BotErrandControlTests {
         }
     }
 
-    private func rig(configure: (BotScript) -> Void = { _ in }) async throws -> Rig {
+    func rig(configure: (BotScript) -> Void = { _ in }) async throws -> Rig {
         let script = BotScript()
         configure(script)
         let gateway = try await FakeGateway.start(script.handle)
@@ -95,7 +95,8 @@ struct BotErrandControlTests {
     @Test func answeringWhileOnlyAnApprovalIsOpenPointsAtTheApproval() async throws {
         let rig = try await rig()
         try await rig.running()
-        try await rig.raise("approval", id: "a1", seq: 3, extra: ["command": "ls", "choices": ["once", "deny"]])
+        let draft: [String: JSONValue] = ["question": "Send this message?", "command": "hi", "draft": ["text": "hi"], "choices": ["once", "deny"]]
+        try await rig.raise("approval", id: "a1", seq: 3, extra: draft)
         guard case .nothingToAnswer(let waiting?) = try await rig.errand.answer("yes", deadline: .seconds(1)) else {
             Issue.record("expected nothingToAnswer with the approval")
             return
@@ -121,36 +122,6 @@ struct BotErrandControlTests {
         try await rig.raise("clarify", id: "p1", seq: 3)
         let answer = try await rig.errand.answer("x", deadline: .milliseconds(300))
         #expect(answer == .answered(.stillWorking))
-        await rig.finish()
-    }
-
-    @Test(arguments: [(ApprovalDecision.approve, "once"), (ApprovalDecision.deny, "deny")])
-    func decidingSendsTheMatchingChoice(decision: ApprovalDecision, choice: String) async throws {
-        let rig = try await rig()
-        try await rig.running()
-        try await rig.raise("approval", id: "a1", seq: 3, extra: ["command": "rm -rf build", "choices": ["once", "session", "always", "deny"]])
-        let prompt = try #require(try await rig.errand.pendingApproval())
-        try await rig.errand.decide(decision, on: prompt)
-        let sent = rig.script.calls("approval.respond")
-        #expect(sent.count == 1)
-        #expect(sent[0]["choice"]?.stringValue == choice)
-        #expect(sent[0]["prompt_id"]?.stringValue == "a1")
-        await rig.finish()
-    }
-
-    @Test func approvingAPromptThatOffersNoOnceChoiceSendsNothing() async throws {
-        let rig = try await rig()
-        try await rig.running()
-        try await rig.raise("approval", id: "a1", seq: 3, extra: ["choices": ["deny"]])
-        let prompt = try #require(try await rig.errand.pendingApproval())
-        await #expect(throws: ErrandError.notAccepted) { try await rig.errand.decide(.approve, on: prompt) }
-        #expect(rig.script.calls("approval.respond").isEmpty)
-        await rig.finish()
-    }
-
-    @Test func noPendingApprovalReadsAsNil() async throws {
-        let rig = try await rig()
-        #expect(try await rig.errand.pendingApproval() == nil)
         await rig.finish()
     }
 

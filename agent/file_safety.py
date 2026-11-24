@@ -267,9 +267,7 @@ def get_nt_namespace_error(path: str, *, verb: str = "Access") -> Optional[str]:
 
 def build_write_denied_paths(home: str) -> set[str]:
     """Return exact sensitive paths that must never be written."""
-    # ``~/.ssh/config`` is deliberately NOT hard-denied: no key bytes, and editing
-    # it is routine. It can carry ProxyCommand / Match exec, so it goes through the
-    # approval gate instead (_approval_paths_by_key).
+    # ``~/.ssh/config`` is deliberately NOT hard-denied: no key bytes, and editing it is routine.
     home_files = (
         (".ssh", "authorized_keys"), (".ssh", "id_rsa"), (".ssh", "id_ed25519"),
         *((name,) for name in HOME_CREDENTIAL_FILES),
@@ -336,19 +334,19 @@ def get_safe_write_roots() -> set[str]:
     return roots
 
 
-# Login shell startup files: approval-gated for the file tools and, via
-# tools.approval_detection._SHELL_RC_FILES, for terminal writes. One inventory so the two
-# gates cannot drift apart (#85321).
+# Login shell startup files, shared with tools.approval_detection._SHELL_RC_FILES for terminal writes.
 SHELL_RC_FILES: tuple[str, ...] = (".bashrc", ".zshrc", ".profile", ".bash_profile", ".zprofile")
 
 
-def _approval_paths_by_key(home: str) -> dict[str, str]:
-    """Paths that need human APPROVAL to write but are not hard-denied credentials -> the approval key.
+UNATTENDED_WRITE_CLASSES = {
+    "ssh_config_write": "SSH client config file(s)",
+    "shell_rc_write": "shell startup file(s)",
+}
 
-    ``~/.ssh/config`` holds no key bytes but can carry ``ProxyCommand`` / ``Match exec``; shell rc
-    files run at login. Interactive file tools prompt; callers without a human channel fail closed.
-    Each class has its own key so an approve-always answer for ``~/.ssh/config`` never authorizes
-    ``~/.bashrc`` (or vice versa)."""
+
+def _unattended_write_paths_by_class(home: str) -> dict[str, str]:
+    """``~/.ssh/config`` can carry ``ProxyCommand`` / ``Match exec`` and shell rc files run at login: not
+    credentials, so never hard-denied, but an unattended context applies its approvals mode to them."""
     paths = {os.path.realpath(os.path.join(home, ".ssh", "config")): "ssh_config_write"}
     paths.update({os.path.realpath(os.path.join(home, name)): "shell_rc_write" for name in SHELL_RC_FILES})
     return paths
@@ -387,10 +385,8 @@ def _classify_write_denial(path: str, *, entry: bool = False) -> Optional[str]:
 
 def _classify_resolved_write_denial(homes: set[str], resolved: str) -> Optional[str]:
     """Credential / protected-subpath / safe-root verdict for an already-resolved path."""
-    # Only ``~/.ssh/config`` skips the credential deny (so the ``.ssh/`` prefix doesn't swallow it)
-    # and reaches the approval prompt. Shell rc files need no exemption, and granting one would let
-    # ``~/.bashrc`` -> ``~/.ssh/authorized_keys`` turn the credential deny into a shell_rc_write
-    # prompt. The protected-subpath and HERMES_WRITE_SAFE_ROOT checks below still apply.
+    # Only ``~/.ssh/config`` skips the credential deny (so the ``.ssh/`` prefix doesn't swallow it).
+    # The protected-subpath and HERMES_WRITE_SAFE_ROOT checks below still apply.
     key = deny_key(resolved)
     ssh_configs = {deny_key(os.path.realpath(os.path.join(home, ".ssh", "config"))) for home in homes}
     if key not in ssh_configs and any(
@@ -433,24 +429,12 @@ def get_write_denied_error(path: str, *, verb: str = "Write", entry: bool = Fals
     return f"{verb} denied: '{path}' is a protected system/credential file." if denial else None
 
 
-def is_write_approval_required(path: str) -> bool:
-    """Return True if ``path`` is an approval-gated write target.
-
-    These paths (``~/.ssh/config`` and login shell rc files) are not
-    credentials and are not hard-denied, but a write to them must be
-    confirmed by a human because they can influence process execution
-    (SSH ``ProxyCommand``, or commands in ``~/.bashrc``). Callers with
-    an interactive/gateway channel should prompt; callers without one
-    should treat this as a block (fail closed).
-    """
-    return write_approval_key(path) is not None
-
-
-def write_approval_key(path: str) -> Optional[str]:
-    """Approval key gating a write to ``path`` (``ssh_config_write`` / ``shell_rc_write``), or None."""
+def unattended_write_class(path: str) -> Optional[str]:
+    """``ssh_config_write`` / ``shell_rc_write`` when ``path`` is one of those files, else None."""
     homes, resolved = _homes_and_resolved(local_drive_spelling(path))
     key = deny_key(resolved)
-    return next((k for home in homes for p, k in _approval_paths_by_key(home).items() if deny_key(p) == key), None)
+    return next((k for home in homes for p, k in _unattended_write_paths_by_class(home).items()
+                 if deny_key(p) == key), None)
 
 
 # Secret-bearing project-local env file basenames, blocked anywhere on disk.

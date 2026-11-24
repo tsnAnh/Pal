@@ -333,7 +333,7 @@ method("approval.received", params=ApprovalReceivedParams, result=ApprovalReceiv
 
 
 class ApprovalRespondParams(SessionParams):
-    """``choice`` is one of the offered ``approval`` choices (once / session / always / deny); ``all``
+    """``choice`` is one of the offered ``approval`` choices (once / deny); ``all``
     resolves every pending approval, ``request_id`` a specific one, neither the oldest."""
 
     choice: str | None = None  # default "deny"
@@ -349,7 +349,7 @@ class ApprovalRespondResult(Result):
 
 
 method("approval.respond", params=ApprovalRespondParams, result=ApprovalRespondResult,
-       doc="Deliver the user's decision on a dangerous command (falls back to durable identity on a stale sid).")
+       doc="Deliver the user's decision on a held draft or consent (falls back to durable identity on a stale sid).")
 
 
 # ── voice ─────────────────────────────────────────────────────────────────────────────────────

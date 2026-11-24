@@ -649,73 +649,6 @@ class GatewayBusySessionMixin:
             message = t("gateway.busy.drain_rejected", action=self._status_action_gerund())
         await self._send_busy_reply(event, adapter, message)
 
-    # Bare-word approval replies → (verb, args) for the synthesized slash command. English words
-    # (and the thumbs) always match; ``approval.inputs.*`` adds the active language's synonyms.
-    _PLAINTEXT_APPROVAL_EXTRA_WORDS: dict[str, tuple] = {"👍": ("approve", ""), "👎": ("deny", "")}
-    _PLAINTEXT_APPROVAL_INPUT_KEYS: tuple[tuple[str, tuple], ...] = (
-        ("approve", ("approve", "")), ("deny", ("deny", "")),
-        ("always", ("approve", "always")), ("session", ("approve", "session")))
-
-    def _plaintext_approval_words(self) -> dict[str, tuple]:
-        """Word → (verb, args) for the active language: the English list ∪ ``t("approval.inputs.<k>")``."""
-        words: dict[str, tuple] = dict(self._PLAINTEXT_APPROVAL_EXTRA_WORDS)
-        for input_key, verb_args in self._PLAINTEXT_APPROVAL_INPUT_KEYS:
-            for word in approval_input_words(input_key):
-                words.setdefault(word, verb_args)
-        return words
-
-    async def _route_plaintext_approval_while_busy(self, event: MessageEvent, session_key: str) -> bool:
-        """Route a bare "yes"/"no" to the approval handlers while a dangerous-command approval blocks.
-
-        Returns True when the message was consumed as an approval response.
-        """
-        # A bare "yes" while blocked on a dangerous-command approval must reach the approval handler,
-        # not queue behind a turn that can't start until it resolves (auto-deny deadlock). Gated on
-        # has_blocking_approval so a conversational "yes" never fires a command.
-        try:
-            from tools.approval import has_blocking_approval
-            # --- Approval response routing (#46866) --- When the agent is blocked waiting for a
-            # dangerous-command approval, plain-text responses like "yes" or "approve" must be routed to the
-            # approval handler instead of being steered/queued/interrupted. Slash forms (/approve, /deny)
-            # already bypass to the runner at the base-adapter guard. This handles the bare-word forms
-            # (Signal/SMS users naturally type "yes" rather than "/approve"). Gating on
-            # has_blocking_approval(session_key) is the disambiguator that keeps a conversational "yes" from
-            # triggering a dangerous command when no approval is actually pending (design intent — see
-            # run.py "Pending exec approvals are handled by /approve and /deny" note). We reuse the
-            # canonical /approve and /deny handlers rather than re-deriving the resolution + i18n messaging:
-            # they resolve the waiting thread, resume typing, AND return a localized confirmation string.
-            # The busy-handler path does not auto-send that return, so we deliver it ourselves (mirroring
-            # the draining-case send above).
-            if event.allow_gateway_control and has_blocking_approval(session_key):
-                _raw_text = (event.text or "").strip().lower()
-                _match = self._plaintext_approval_words().get(_raw_text)
-                if _match is not None:
-                    _verb, _normalized_args = _match
-                    _approval_handler = (
-                        self._handle_approve_command if _verb == "approve" else self._handle_deny_command
-                    )
-                    # Synthesize "/approve [args]" / "/deny" so the slash handlers parse modifiers via
-                    # event.get_command_args(). Always a literal "/": is_command()/get_command_args()
-                    # don't recognize per-platform display prefixes ("!" on Slack/Matrix).
-                    event.text = f"/{_verb} {_normalized_args}".rstrip()
-                    _reply = await _approval_handler(event)
-                    logger.info(
-                        "Approval response via plain text: session=%s verb=%s args=%r",
-                        session_key, _verb, _normalized_args,
-                    )
-                    _adapter = self._delivery_adapter_for(event.source)
-                    if _adapter and _reply:
-                        _text, _eph_ttl = _adapter._unwrap_ephemeral(_reply)
-                        if _text:
-                            await self._send_busy_reply(event, _adapter, _text, plain_anchor=True)
-                    return True
-        except Exception:
-            logger.warning(
-                "Plain-text approval routing failed for session %s; "
-                "falling through to busy handling", session_key, exc_info=True,
-            )
-        return False
-
     async def _resolve_busy_steer_or_redirect(
         self, event: MessageEvent, session_key: str, effective_mode: str, running_agent: Any
     ) -> GatewayRunner._BusySteerOutcome:
@@ -977,8 +910,6 @@ class GatewayBusySessionMixin:
         if self._draining:  # gateway restarting/stopping
             await self._send_busy_drain_notice(event, session_key, effective_mode)
             return True
-        if await self._route_plaintext_approval_while_busy(event, session_key):
-            return True
         adapter = self._delivery_adapter_for(event.source)
         if not adapter:
             return False  # let default path handle it
@@ -1061,14 +992,14 @@ class GatewayBusySessionMixin:
     _COMMAND_HANDLER_ALIASES = {"bg": "_handle_background_command", "sethome": "_handle_set_home_command"}
     # Ordinary slash handlers shared by idle and busy dispatch.
     _PLAIN_COMMANDS = (
-        "status", "context", "restart", "approve", "deny", "pause", "discard", "agents", "bg", "btw",
-        "kanban", "subgoal", "heartbeat", "busy", "yolo", "verbose", "footer", "help",
+        "status", "context", "restart", "pause", "discard", "agents", "bg", "btw",
+        "kanban", "subgoal", "heartbeat", "busy", "verbose", "footer", "help",
         "commands", "profile", "login", "update", "version", "autoprune",
     )
     # Dispatched only on the idle path (busy dispatch has its own allowlist).
     _IDLE_COMMANDS = (
         "topic", "whoami", "platform", "stop", "reasoning", "memory", "skills", "fast",
-        "approvals", "model", "codex-runtime", "personality", "suggestions", "save", "retry",
+        "model", "codex-runtime", "personality", "suggestions", "save", "retry",
         "sethome", "compress", "usage", "topup", "insights", "reload-mcp", "reload-skills",
         "bundles", "debug", "title", "resume", "sessions", "branch", "rollback", "diff", "goal",
         "loop", "refine", "review", "voice", "curator",

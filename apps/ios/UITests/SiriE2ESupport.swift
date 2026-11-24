@@ -50,16 +50,9 @@ class SiriE2ETestCase: E2ETestCase {
                 _ = try await definitions.intents["StopBotIntent"].makeIntent(bot: bot).run()
             } else {
                 _ = try? await definitions.intents["AnswerBotIntent"].makeIntent(bot: bot, answer: "vanilla").run()
-                denyAnyOpenApproval(in: app)
             }
             try await Task.sleep(for: .seconds(2))
         }
-    }
-
-    func denyAnyOpenApproval(in app: XCUIApplication) {
-        if !app.descendants(matching: .any)["chatScreen"].exists, app.buttons["botRow-bot-alpha"].exists { app.buttons["botRow-bot-alpha"].tap() }
-        let last = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'approvalChoice-'")).allElementsBoundByIndex.last
-        if let last, last.waitForExistence(timeout: 5) { last.tap() }
     }
 
     func stubRequests() throws -> [[String: Any]] {
@@ -85,21 +78,5 @@ class SiriE2ETestCase: E2ETestCase {
 
     func userTexts(_ request: [String: Any]) -> [String] {
         (request["messages"] as? [[String: Any]] ?? []).filter { $0["role"] as? String == "user" }.compactMap { $0["content"] as? String }
-    }
-
-    func run<Value: Sendable>(
-        within seconds: Double,
-        _ operation: @escaping @Sendable () async throws -> Value
-    ) async throws -> Value? {
-        try await withThrowingTaskGroup(of: Value?.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                return nil
-            }
-            let first = try await group.next() ?? nil
-            group.cancelAll()
-            return first
-        }
     }
 }

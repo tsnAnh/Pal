@@ -63,10 +63,6 @@ _VOICE_MODE_BY_ARG = {
 _FOOTER_STATE_BY_ARG = {**dict.fromkeys(("on", "enable", "true", "1"), True),
                         **dict.fromkeys(("off", "disable", "false", "0"), False)}
 
-# /approve modifier tokens -> approval choice (default "once").
-_APPROVE_CHOICE_BY_ARG = {**dict.fromkeys(("always", "permanent", "permanently"), "always"),
-                          **dict.fromkeys(("session", "ses"), "session")}
-
 
 _WINDOWS_UPDATE_HELPER = """
 import os, subprocess, sys
@@ -269,26 +265,6 @@ class GatewaySlashCommandsMixin(
             # session's record. See #6672.
             self._evict_cached_agent(session_key)
         return _set_approval
-
-    async def _deliver_approval_confirmation(self, event: MessageEvent, confirmation_text: str, verb: str):
-        """Return *confirmation_text* for normal delivery, or push it on native-streaming adapters
-        (WeCom msgtype:"stream"), which need it sent directly with control-lane metadata (reliable
-        proactive send, not the finalized reply stream). ``is not True``: mocks auto-create attrs."""
-        source = event.source
-        adapter = self._delivery_adapter_for(source)  # the receiving bot, not the default profile's
-        if adapter:
-            adapter.resume_typing_for_chat(source.chat_id)  # agent is about to continue
-        if getattr(adapter, "SUPPORTS_NATIVE_STREAMING", False) is not True:
-            return confirmation_text
-        if adapter:
-            try:
-                await adapter.send(
-                    source.chat_id, confirmation_text, reply_to=event.message_id,
-                    metadata={"is_approval_prompt": True, "force_proactive_send": True})
-            except Exception as exc:
-                logger.warning("Failed to send /%s confirmation to %s: %s", verb, source.chat_id,
-                               exc, exc_info=True)
-        return None
 
     def _typed_command_prefix_for(self, platform) -> str:
         """The prefix users can always type to reach Hermes commands (adapter ``typed_command_prefix``,
@@ -949,35 +925,6 @@ class GatewaySlashCommandsMixin(
             out = out[:3000] + t("gateway.skills.diff_truncated", pending_id=pending_id)
         return out
 
-    async def _handle_approvals_command(self, event: MessageEvent) -> str:
-        """Show or persist the profile-wide dangerous-command approval mode."""
-        from gateway.slash_access import policy_for_runner_source
-        from hermes_cli.approval_mode import run_approval_mode_command
-        requested = event.get_command_args().strip() or None
-        # This mutates profile-wide security policy. The central slash gate can allow selected
-        # commands to non-admin users, so enforce admin again at this side-effect boundary.
-        # Unconfigured policies remain unrestricted.
-        policy = policy_for_runner_source(self, event.source)
-        if requested and not policy.is_admin(event.source.user_id):
-            return t("gateway.approvals.admin_only")
-        # Approval checks load config dynamically; do not evict the cached agent or alter its
-        # system prompt/tool schema (prompt-cache prefix is sacred).
-        return run_approval_mode_command(requested).message
-
-    async def _handle_yolo_command(self, event: MessageEvent) -> str | EphemeralReply:
-        """Handle /yolo — toggle dangerous command approval bypass for this session only. The flag is
-        persisted on the routing entry so it survives a gateway restart."""
-        from tools.approval_yolo import toggle_session_yolo
-        session_key = self._session_key_for_source(event.source)
-        persisted, persist = False, None
-        if (store := self.session_store) is not None:
-            # A first-message /yolo has no routing entry yet; materialize it so the flag has a home.
-            persisted = (await self.async_session_store.get_or_create_session(event.source)).yolo is True
-            persist = lambda on: store.set_session_yolo(session_key, on)
-        # Off the loop: the persist is a routing-store write (thread-safe, like AsyncSessionStore's calls).
-        enable = await asyncio.to_thread(toggle_session_yolo, session_key, persisted=persisted, persist=persist)
-        return EphemeralReply(t("gateway.yolo.enabled" if enable else "gateway.yolo.disabled"))
-
     async def _handle_verbose_command(self, event: MessageEvent) -> str:
         """Handle /verbose — cycle tool progress display mode (off → new → all → verbose → log) per
         *current platform*, saved to ``display.platforms.<platform>.tool_progress``. Gated by
@@ -1201,77 +1148,6 @@ class GatewaySlashCommandsMixin(
             desc = info.get("description") or t("gateway.bundles.default_desc", count=len(skills))
             lines += [t("gateway.bundles.item", slug=info["slug"], desc=desc, count=len(skills))] + [f"    · {s}" for s in skills]
         return "\n".join(lines + ["", t("gateway.bundles.invoke_hint")])
-
-    def _blocking_approval_or_stale(self, event: MessageEvent, stale_key: str, none_key: str,
-                                    resolve_all: bool = False, choice: str = "once"):
-        """``(session_key, None, request_ids)`` when an agent thread is blocked on approval and the
-        sender may answer the approvals this command selects (*choice* names its ``/approve`` or
-        ``/deny`` for the chat's slash policy: the bare-word "always" lands here without dispatch's
-        gate), else ``(session_key, reply, [])``.
-        A pending-approvals entry with no blocked thread is a stale prompt: drop it and say so."""
-        from tools.approval import has_blocking_approval
-        session_key = self._session_key_for_source(event.source)
-        if has_blocking_approval(session_key):
-            from gateway.relay.admitted_authors import answer_admitted
-            from gateway.approval_actor import answerable_request_ids, refusal_text
-            from gateway.slash_access import policy_for_runner_source
-            ids, requester = answerable_request_ids(
-                session_key, event.sender_id(), resolve_all=resolve_all, choice=choice,
-                admin_ids=policy_for_runner_source(self, event.source), admitted=answer_admitted(event))
-            return (session_key, refusal_text(requester), []) if requester else (session_key, None, ids)
-        _approval_state = self._peek_session_state(session_key)
-        if _approval_state is not None and _approval_state.persistent.approvals is not None:
-            _approval_state.persistent.approvals = None
-            return session_key, t(stale_key), []
-        return session_key, t(none_key), []
-
-    async def _handle_approve_command(self, event: MessageEvent) -> Optional[str]:
-        """Handle /approve — unblock waiting agent thread(s). They block inside tools/approval.py;
-        signalling the event resumes them so the command executes inline (same flow as the CLI)."""
-        from tools.approval import resolve_gateway_approval
-        # Args: "all", "all session", "all always", "session", "always" ("always" beats "session").
-        args = event.get_command_args().strip().lower().split()
-        session_key, stale, request_ids = self._blocking_approval_or_stale(
-            event, "gateway.approval_expired", "gateway.approve.no_pending", resolve_all="all" in args)
-        if stale:
-            return stale
-        choices = {_APPROVE_CHOICE_BY_ARG[a] for a in args if a in _APPROVE_CHOICE_BY_ARG}
-        choice = "always" if "always" in choices else "session" if "session" in choices else "once"
-        # Exactly the approvals the sender was checked against, never "the oldest" again.
-        count = sum(resolve_gateway_approval(session_key, choice, request_id=rid) for rid in request_ids)
-        if not count:
-            return t("gateway.approve.no_pending")
-        confirmation_text = t(f"gateway.approve.{choice}_{'plural' if count > 1 else 'singular'}", count=count)
-        logger.info("User approved %d dangerous command(s) via /approve (%s)", count, choice)
-        return await self._deliver_approval_confirmation(event, confirmation_text, "approve")
-
-    async def _handle_deny_command(self, event: MessageEvent) -> str:
-        """Handle /deny — reject pending dangerous command(s) with a definitive BLOCKED result, as in
-        the CLI. ``/deny`` denies the oldest; ``/deny all`` denies everything.
-
-        ``/deny <reason>`` (or ``/deny all <reason>``) attaches a one-line reason that is relayed back to
-        the agent so it can adapt instead of only hearing "denied". Ported from qwibitai/nanoclaw#2832.
-        """
-        from tools.approval import resolve_gateway_approval
-        # A leading "all" denies every pending command; the rest (or the whole arg string without
-        # "all") is the optional deny reason relayed to the agent, capped to a sane one-liner.
-        raw_args = event.get_command_args().strip()
-        tokens = raw_args.split()
-        resolve_all = bool(tokens) and tokens[0].lower() == "all"
-        session_key, stale, request_ids = self._blocking_approval_or_stale(
-            event, "gateway.deny.stale", "gateway.deny.no_pending", resolve_all=resolve_all, choice="deny")
-        if stale:
-            return stale
-        reason = (raw_args[len(tokens[0]):].strip() if resolve_all else raw_args)[:280].strip()
-        count = sum(resolve_gateway_approval(session_key, "deny", reason=reason or None, request_id=rid)
-                    for rid in request_ids)
-        if not count:
-            return t("gateway.deny.no_pending")
-        logger.info("User denied %d dangerous command(s) via /deny%s", count,
-                    " (with reason)" if reason else "")
-        key = "gateway.deny.denied" + ("_reason" if reason else "") + ("_plural" if count > 1 else "_singular")
-        confirmation_text = t(key, count=count, reason=reason)
-        return await self._deliver_approval_confirmation(event, confirmation_text, "deny")
 
     async def _handle_curator_command(self, event: MessageEvent) -> str:
         """Handle /curator — the ``hermes curator`` handler set (status by default), as main's CLI ran

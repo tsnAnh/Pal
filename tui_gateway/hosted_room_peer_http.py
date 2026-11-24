@@ -627,36 +627,6 @@ class PeerRunsHTTPClient:
             "approval": status.get("approval"),
             **{key: status[key] for key in ("tool", "progress_at") if key in status}}
 
-    def approve_receipt(
-        self, *, task_id: str, execution_generation: int, request_id: str, choice: str, grant: str
-    ) -> Mapping[str, Any] | None:
-        """Resolve approval for the exact durable remote run."""
-        record = self._receipt(task_id, execution_generation)
-        if record is None:
-            return None
-        request_id = str(request_id or "").strip()
-        if not request_id:
-            raise PeerRunsHTTPError("an exact approval request_id is required")
-        self._require_room_grant(grant)
-        cached = self._status_cache.get(str(record["run_id"]), {})
-        identity = cached.get("approvals", {}).get(request_id)
-        if identity is None:
-            status = self._poll_receipt(record, grant=grant)
-            if "execution_generation" in status:
-                if (status.get("approval") or {}).get("request_id") != request_id:
-                    raise PeerRunsHTTPError("room approval is no longer pending")
-                identity = {"request_id": request_id, "execution_generation": status["execution_generation"]}
-            else:
-                identity = {"request_id": request_id}
-        try:
-            return self._post_run_action(record, "approval", body={"choice": choice, **identity}, grant=grant)
-        except PeerRunsHTTPError as exc:
-            if exc.error_code in {"stale_generation", "approval_not_pending", "approval_not_active"}:
-                raise PeerRunsHTTPError(
-                    "room approval is no longer pending", status_code=exc.status_code,
-                    error_code=exc.error_code) from exc
-            raise
-
     def _post_run_action(
         self, record: Mapping[str, Any], action: str, *, body: dict[str, Any], grant: str
     ) -> dict[str, Any]:

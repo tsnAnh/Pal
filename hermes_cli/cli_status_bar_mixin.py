@@ -998,7 +998,7 @@ class CLIStatusBarMixin:
 
         Fields: model, context_detail, context_pct, cache_hit, latency, tps, compressions,
         bg_tasks, bg_processes, bg_subagents, goal, git_branch (opt-in only), duration,
-        prompt_elapsed, idle_since, focus, yolo, stash, battery, title, total_tokens
+        prompt_elapsed, idle_since, focus, stash, battery, title, total_tokens
         (opt-in only). Order is fixed; the config controls visibility only.
         """
         from cli import CLI_CONFIG
@@ -1017,7 +1017,7 @@ class CLIStatusBarMixin:
         return result
 
     def _status_bar_segments(
-        self, snapshot, width: int, field_set, yolo_active: bool, *, styled: bool) -> list:
+        self, snapshot, width: int, field_set, *, styled: bool) -> list:
         """Ordered status-bar segments for one width tier (<52 / <76 / wide), each a list of
         ``(style, text)`` fragments. Shared by the plain-text and prompt_toolkit renderers so
         the two can never drift; ``styled`` selects the graphical context bar."""
@@ -1099,8 +1099,6 @@ class CLIStatusBarMixin:
                     add(name, _DIM, label)
         if focus_label:
             add("focus", _STRONG, focus_label)
-        if yolo_active:
-            add("yolo", "class:status-bar-yolo", t("cli.status_bar.yolo_badge"))
         if wide:
             # Session token total (Σ) — opt-in only via an explicit fields list.
             total_tokens = snapshot.get("session_total_tokens", 0)
@@ -1120,7 +1118,7 @@ class CLIStatusBarMixin:
             show_title = field_set is None or "title" in field_set
             session_title = (snapshot.get("session_title") or "") if show_title else ""
             segs = self._status_bar_segments(
-                snapshot, width, field_set, self._is_session_yolo_active(), styled=False)
+                snapshot, width, field_set, styled=False)
             parts = ["".join(t for _, t in seg) for seg in segs] or [f"☤ {model_short}"]
             # Narrow bars always join the battery with │; wider tiers use the tier separator.
             if battery_label:
@@ -1154,7 +1152,7 @@ class CLIStatusBarMixin:
 
             session_title = (snapshot.get("session_title") or "") if _ok("title") else ""
             segs = self._status_bar_segments(
-                snapshot, width, field_set, self._is_session_yolo_active(), styled=True)
+                snapshot, width, field_set, styled=True)
             sep = " · " if width < 76 else " │ "
             frags: list = []
             for seg in segs or [[(_SB, " ☤ "), (_STRONG, snapshot["model_short"])]]:

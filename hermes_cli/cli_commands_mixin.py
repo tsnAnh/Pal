@@ -707,15 +707,13 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin, CLIHandoffMixin):
             self._display_resumed_history()
         else:
             _cp(f"  {_t('resume.resumed_empty', session_id=target_id, title=title_part)}")
-        # Same contract as startup --resume: retarget the tool cwd, restore the persisted YOLO
-        # bypass (approval session key changed) and the model/provider (else config default).
+        # Same contract as startup --resume: retarget the tool cwd and restore the model/provider (else config default).
         # Retarget the process + tool cwd to where the session was started, so a mid-chat /resume (and
         # /sessions <id>, which delegates here) lands in the same directory as a startup `hermes
         # -c`/`--resume`. The startup resume paths already call this; without it, the terminal/code-exec
         # tools and relative-path resolution keep operating in the wrong repo. Idempotent and a no-op when
         # the session recorded no cwd. See #38562.
         self._restore_session_cwd(session_meta)
-        self._restore_session_yolo(session_meta)
         self._restore_session_model(session_meta)
 
     def _resolve_resume_target(self, target: str):
@@ -773,11 +771,9 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin, CLIHandoffMixin):
         from gateway.slash_commands_branch_thread import parse_branch_args
         _, branch_name = parse_branch_args(_command_arg(cmd_original))
         now = datetime.now()
-        from tools.approval_yolo import transfer_session_yolo, with_session_yolo
-        # Create the child BEFORE ending the parent: a failed create_session or gateway branch (or its /yolo
-        # carry) must leave the session the user is still on open, not ended "branched" with no branch (#11030).
+        # Create the child BEFORE ending the parent: a failed create_session or gateway branch must leave the session the user is still on open, not ended "branched" with no branch (#11030).
         # The stable ``_branched_from`` marker keeps the branch visible in /resume + /sessions even after the
-        # parent is re-ended with a different end_reason; with_session_yolo keeps a live /yolo on the branch.
+        # parent is re-ended with a different end_reason.
         # The child sends the parent's exact system prompt: a row without one makes the branch's first turn
         # rebuild (re-probing the workspace), losing the copied transcript's warm cache if the repo moved since.
         try:
@@ -792,8 +788,8 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin, CLIHandoffMixin):
             self._session_db.create_session(
                 session_id=new_session_id, source=os.environ.get("HERMES_SESSION_SOURCE", "cli"),
                 model=self.model, parent_session_id=parent_session_id, system_prompt=parent_prompt or None,
-                model_config=with_session_yolo({"max_iterations": self.max_turns, "reasoning_config":
-                                                self.reasoning_config, "_branched_from": parent_session_id}, parent_session_id))
+                model_config={"max_iterations": self.max_turns, "reasoning_config":
+                              self.reasoning_config, "_branched_from": parent_session_id})
         except Exception as e:
             return _cp(f"  {_gt('branch.create_failed', error=e)}")
         _end_current_session(self, "branched")
@@ -807,8 +803,9 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin, CLIHandoffMixin):
                 for msg in self.conversation_history], chunk_rows=500)
         with suppress(Exception):
             self._session_db.set_session_title(new_session_id, branch_title)
-        # Switch to the new session
-        transfer_session_yolo(self.session_id, new_session_id)
+        # Switch to the new session; the chat keeps its MCP spend total
+        from tools.mcp_tool_costs import transfer_session
+        transfer_session(self.session_id, new_session_id)
         self.session_id, self.session_start, self._pending_title = new_session_id, now, None
         self._resumed = True  # Prevents auto-title generation
         _sync_process_session_id(new_session_id)
@@ -1778,13 +1775,7 @@ class CLICommandsMixin(CLICommandsSessionToolsMixin, CLIHandoffMixin):
             with suppress(Exception):
                 _cp(_dim_line(line))
 
-    # ---- persisted display toggles: /approvals, /footer, /timestamps ----------------------
-    def _handle_approvals_command(self, cmd_original: str) -> None:
-        """Show or persist the profile-wide dangerous-command approval mode."""
-        from hermes_cli.approval_mode import run_approval_mode_command
-        parts = (cmd_original or "").strip().split(None, 1)
-        result = run_approval_mode_command(parts[1] if len(parts) > 1 else None)
-        _cp(f"  {result.message}")
+    # ---- persisted display toggles: /footer, /timestamps ----------------------
 
     def _toggle_setting(self, arg: str, current: bool, *, usage: str, status_line: str,
                         config_key: str, label: str, failed: str):

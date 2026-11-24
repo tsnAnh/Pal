@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class MacModalsE2ETests: BotProfileTestCase {
     private static let sections: [(id: String, title: String)] = [
-        ("general", "General"), ("computer", "Computer"), ("permissions", "Permissions"),
+        ("general", "General"), ("computer", "Computer"),
         ("vault", "Vault"), ("providers", "Model providers"), ("usage", "Usage & Billing"), ("updates", "Updates"),
     ]
 

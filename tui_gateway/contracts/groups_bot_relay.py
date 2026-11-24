@@ -107,7 +107,6 @@ class RoomExecutionPolicy(Result):
     version: int
     target_profile: str
     enabled_toolsets: list[str]
-    approval_mode: str
     max_iterations: int
     policy_digest: str
 

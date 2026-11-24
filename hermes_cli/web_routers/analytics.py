@@ -15,7 +15,7 @@ from hermes_cli.config import get_config_path, read_raw_config
 from hermes_cli.web_deps import late
 from hermes_cli.web_routers._common import corrupt_store_as_status, http_failure
 from hermes_cli.web_server_profiles import (
-    _approval_mode_of, _aux_task_summary, _aux_usage_rows, _broadcast_gateway_session_info, _is_other_profile, _merge_aux_into_by_model,
+    _aux_task_summary, _aux_usage_rows, _merge_aux_into_by_model,
 )
 from hermes_cli.web_models import RawConfigUpdate
 
@@ -66,11 +66,7 @@ async def update_config_raw(body: RawConfigUpdate, profile: Optional[str] = None
             # Full-document replacement: the editor owns the whole file; never
             # merge omitted sections back from disk.
             # See #62723.
-            approvals_mode_changed = _approval_mode_of(parsed) != _approval_mode_of(read_raw_config())
             save_config(parsed, merge_existing=False)
-        # Same indicator refresh as the schema-driven save.
-        if approvals_mode_changed and not _is_other_profile(body.profile or profile):
-            _broadcast_gateway_session_info()
         return {"ok": True}
 
     with http_failure("PUT /api/config/raw failed", 500, detail="Internal server error"):

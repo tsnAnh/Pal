@@ -964,9 +964,6 @@ def _(rid, params: dict) -> dict:
             live = _find_live_session_by_key(ctx.target, ctx.profile_home)
         if live is not None:
             return _resume_reuse_live(ctx, *live)
-        from persistence.conversation.sessions import session_yolo_enabled
-        from tools.approval_yolo import restore_session_yolo  # a fresh backend starts with an empty set
-        restore_session_yolo(ctx.target, session_yolo_enabled((ctx.found or {}).get("model_config")))
         if ctx.lazy:
             return _resume_lazy(ctx)
         return _resume_eager(ctx) if ctx.eager_build else (

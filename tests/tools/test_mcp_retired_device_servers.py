@@ -5,7 +5,6 @@ import pytest
 
 from hermes_cli import mcp_config
 from hermes_cli.config import load_config
-from hermes_cli.profile_admin_guard import ProfileAdminDenied
 from hermes_constants import get_hermes_home
 from tools import mcp_tool_config, mcp_tool_discovery
 from tui_gateway import server
@@ -65,17 +64,6 @@ def test_an_entry_that_has_a_url_is_never_taken_for_the_retired_transport():
 
     assert _saved() == {"odd": kept}
 
-
-def test_a_refused_removal_leaves_discovery_working(monkeypatch):
-    _write({"t3code": STALE, "notes": NOTES})
-
-    def refuse(*_args, **_kwargs):
-        raise ProfileAdminDenied()
-
-    monkeypatch.setattr("hermes_cli.mcp_config._remove_mcp_server", refuse)
-
-    assert "notes" in mcp_tool_config._load_mcp_config()
-    assert load_config()["mcp_servers"]["t3code"] == STALE
 
 
 @pytest.mark.parametrize("entry", [None, "t3code", []])

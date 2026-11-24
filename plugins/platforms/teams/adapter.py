@@ -19,7 +19,6 @@ import json
 import logging
 import re
 import sys
-import uuid
 from collections import deque
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -49,18 +48,15 @@ def _probe_teams_sdk_available() -> bool:
 TEAMS_SDK_AVAILABLE = _probe_teams_sdk_available()
 # SDK symbols stay None until check_teams_requirements() binds them (via _SDK_IMPORTS below).
 ClientOptions = App = ActivityContext = MessageActivity = ConversationReference = None  # type: ignore[assignment,misc]
-TypingActivityInput = AdaptiveCardInvokeActivity = AdaptiveCardActionCardResponse = None  # type: ignore[assignment,misc]
-AdaptiveCardActionMessageResponse = AdaptiveCardInvokeResponse = InvokeResponse = None  # type: ignore[assignment,misc]
-HttpRequest = HttpResponse = HttpRouteHandler = AdaptiveCard = ExecuteAction = TextBlock = None  # type: ignore[assignment,misc]
+TypingActivityInput = None  # type: ignore[assignment,misc]
+HttpRequest = HttpResponse = HttpRouteHandler = None  # type: ignore[assignment,misc]
 HttpMethod = str  # type: ignore[assignment,misc]
 
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.helpers import MessageDeduplicator
 from gateway.platforms.base import (
-    gateway_trust_env, BasePlatformAdapter, ExecApprovalPrompt, SendResult, cache_image_from_url, cache_media_bytes_async,
+    gateway_trust_env, BasePlatformAdapter, SendResult, cache_image_from_url, cache_media_bytes_async,
     describe_proxy_error, env_proxy_for_redaction)
-from gateway.platforms.base_exec_approval import approval_timeout_seconds, format_approval_deadline_line
-from agent.i18n import t
 from gateway.platforms.event import MessageEvent, MessageType
 from gateway.platforms._shared import (
     coerce_port, extra_or_secret as _extra_or_secret, get_scoped_secret as _get_scoped_secret,
@@ -255,11 +251,7 @@ _SDK_IMPORTS = {
     "microsoft_teams.common.http.client": ("ClientOptions",),
     "microsoft_teams.api": ("MessageActivity", "ConversationReference"),
     "microsoft_teams.api.activities.typing": ("TypingActivityInput",),
-    "microsoft_teams.api.activities.invoke.adaptive_card": ("AdaptiveCardInvokeActivity",),
-    "microsoft_teams.api.models.adaptive_card": ("AdaptiveCardActionCardResponse", "AdaptiveCardActionMessageResponse"),
-    "microsoft_teams.api.models.invoke_response": ("InvokeResponse", "AdaptiveCardInvokeResponse"),
-    "microsoft_teams.apps.http.adapter": ("HttpMethod", "HttpRequest", "HttpResponse", "HttpRouteHandler"),
-    "microsoft_teams.cards": ("AdaptiveCard", "ExecuteAction", "TextBlock")}
+    "microsoft_teams.apps.http.adapter": ("HttpMethod", "HttpRequest", "HttpResponse", "HttpRouteHandler")}
 
 
 # NOTE: ``check_requirements`` is the
@@ -328,25 +320,6 @@ _CHAT_TYPES = {"personal": "dm", "groupChat": "group", "channel": "channel"}
 _MEDIA_KIND_PRECEDENCE = (
     ("document", MessageType.DOCUMENT), ("image", MessageType.PHOTO),
     ("video", MessageType.VIDEO), ("audio", MessageType.AUDIO))
-_APPROVAL_CHOICES = {"approve_once": "once", "approve_session": "session", "approve_always": "always", "deny": "deny"}
-# choice → catalog key of the card footer; resolved through ``t()`` at click time, never at import.
-_APPROVAL_LABEL_KEYS = {
-    "once": "platform.teams.approval.resolved_once", "session": "platform.teams.approval.resolved_session",
-    "always": "platform.teams.approval.resolved_always", "deny": "platform.teams.approval.resolved_deny",
-}
-
-
-def _approval_body(cmd: str, desc: str, *, always: bool = False) -> list:
-    """Adaptive Card body blocks for an approval prompt; unless ``always``, empty ``cmd``/``desc`` omit their blocks."""
-    body = []
-    if cmd or always:
-        body.append(TextBlock(text=f"⚠️ {t('gateway.exec_approval.header')}", wrap=True, weight="Bolder"))
-        body.append(TextBlock(text=f"```\n{cmd}\n```", wrap=True))
-    if desc or always:
-        body.append(TextBlock(text=f"{t('gateway.exec_approval.reason_label')}: {desc}", wrap=True, isSubtle=True))
-    return body
-
-
 class TeamsAdapter(BasePlatformAdapter):
     """Microsoft Teams adapter using the microsoft-teams-apps SDK."""
     # Answers /p/<profile>/... on the default listener for a served secondary (shared_ingress).
@@ -377,7 +350,6 @@ class TeamsAdapter(BasePlatformAdapter):
         self._sent_ids: deque = deque(maxlen=500)
         # prompt id → (command preview, reason) for the resolved card; button data carries only the id,
         # because a copy per button can push a long non-ASCII command past Teams' ~28 KB card cap.
-        self._approval_previews: dict[str, tuple[str, str]] = {}
 
     @staticmethod
     def _parse_require_mention(config) -> bool:
@@ -420,12 +392,6 @@ class TeamsAdapter(BasePlatformAdapter):
             @self._app.on_message
             async def _handle_message(ctx: ActivityContext[MessageActivity]):
                 await self._on_message(ctx)
-
-            @self._app.on_card_action
-            async def _handle_card_action(
-                ctx: ActivityContext[AdaptiveCardInvokeActivity],
-            ) -> InvokeResponse[AdaptiveCardActionMessageResponse]:
-                return await self._on_card_action(ctx)
 
             self._wire_plugin_handlers(self._app)
             await self._app.initialize()
@@ -509,7 +475,7 @@ class TeamsAdapter(BasePlatformAdapter):
             return
         conv = activity.conversation
         conv_id = getattr(conv, "id", None)
-        if conv_id:  # cache the conversation reference for proactive sends (approval cards, etc.)
+        if conv_id:  # cache the conversation reference for proactive sends
             self._conv_refs[conv_id] = ctx.conversation_ref
         text = activity.text if hasattr(activity, "text") and activity.text else ""
         if self._require_mention and getattr(conv, "conversation_type", None) != "personal":
@@ -609,13 +575,6 @@ class TeamsAdapter(BasePlatformAdapter):
                 logger.warning("[teams] Failed to cache attachment '%s' (%s): %s", att_name or content_url, content_type, e)
         return None
 
-    async def _send_card(self, chat_id: str, card: AdaptiveCard) -> Any:
-        """Send an AdaptiveCard, using a stored ConversationReference when available."""
-        from microsoft_teams.api import MessageActivityInput
-        if not self._app:
-            return None
-        return await self._send_via_conv_ref(chat_id, MessageActivityInput().add_card(card), card)
-
     async def _send_via_conv_ref(self, chat_id: str, activity: Any, fallback: Any) -> Any:
         """Send ``activity`` through the cached ConversationReference, else ``App.send(fallback)``."""
         conv_ref = self._conv_refs.get(chat_id)
@@ -631,106 +590,6 @@ class TeamsAdapter(BasePlatformAdapter):
         sent_id = getattr(result, "id", None)
         if isinstance(sent_id, str) and sent_id:
             self._sent_ids.append(sent_id)
-
-    @staticmethod
-    def _invoke_message(text: str) -> InvokeResponse[AdaptiveCardActionMessageResponse]:
-        return InvokeResponse(status=200, body=AdaptiveCardActionMessageResponse(value=text))
-
-    @staticmethod
-    def _invoke_card(body: list) -> InvokeResponse[AdaptiveCardActionMessageResponse]:
-        card = AdaptiveCard().with_version("1.4").with_body(body)
-        return InvokeResponse(status=200, body=AdaptiveCardActionCardResponse(value=card))
-
-    async def _on_card_action(
-        self, ctx: ActivityContext[AdaptiveCardInvokeActivity]
-    ) -> InvokeResponse[AdaptiveCardActionMessageResponse]:
-        from tools.approval import has_blocking_approval, resolve_gateway_approval_card
-
-        data = ctx.activity.value.action.data or {}
-        hermes_action = data.get("hermes_action", "")
-        session_key = data.get("session_key", "")
-        if not hermes_action or not session_key:
-            return self._invoke_message(t("platform.teams.approval.unknown_action"))
-        denied = self._card_action_denied(ctx.activity.from_)
-        if denied:
-            return self._invoke_message(denied)
-        choice = _APPROVAL_CHOICES.get(hermes_action)
-        if not choice:
-            return self._invoke_message(t("platform.teams.approval.unknown_action"))
-        from gateway.approval_actor import approval_refusal, refusal_text
-        clicker = getattr(ctx.activity.from_, "aad_object_id", None) or getattr(ctx.activity.from_, "id", "")
-        if requester := approval_refusal(session_key, clicker, extra=self.config.extra, request_id=data.get("request_id"),
-                                         choice=choice):
-            return self._invoke_message(refusal_text(requester))  # shown to the clicker; card keeps its buttons
-        # Cards from an older build carry cmd/desc in the button data instead.
-        cmd, desc = self._approval_previews.get(data.get("prompt_id", ""), (data.get("cmd", ""), data.get("desc", "")))
-        if not has_blocking_approval(session_key) or not resolve_gateway_approval_card(
-                session_key, choice, data.get("request_id"), actor_id=clicker, extra=self.config.extra):
-            body = _approval_body(cmd, desc)
-            return self._invoke_card([*body, TextBlock(text=t("platform.shared.approval_expired"), wrap=True)])
-        body = _approval_body(cmd, desc)
-        body.append(TextBlock(text=t(_APPROVAL_LABEL_KEYS[choice]), wrap=True, weight="Bolder"))
-        return self._invoke_card(body)
-
-    @staticmethod
-    def _card_action_denied(from_account: Any) -> Optional[str]:
-        """Default-deny gate for approval clicks: require TEAMS_ALLOWED_USERS or an explicit
-        TEAMS_ALLOW_ALL_USERS=true opt-in, else anyone who can message the bot could approve.
-        Returns the user-facing denial text, or ``None`` when allowed."""
-        # Scoped reads: under multiplex os.environ is the DEFAULT profile's allow-all/allowlist.
-        if _get_scoped_secret("TEAMS_ALLOW_ALL_USERS", "").strip().lower() in {"1", "true", "yes"}:
-            return None
-        allowed_csv = _get_scoped_secret("TEAMS_ALLOWED_USERS", "").strip()
-        if not allowed_csv:
-            logger.warning(
-                "[teams] card action rejected: TEAMS_ALLOWED_USERS not configured "
-                "and TEAMS_ALLOW_ALL_USERS not set — default deny")
-            return t("platform.teams.approval.requires_allowlist")
-        clicker_id = getattr(from_account, "aad_object_id", None) or getattr(from_account, "id", "")
-        allowed_ids = {uid.strip() for uid in allowed_csv.split(",") if uid.strip()}
-        if "*" not in allowed_ids and clicker_id not in allowed_ids:
-            logger.warning("[teams] Unauthorized card action by %s — ignoring", clicker_id)
-            return t("platform.shared.not_authorized")
-        return None
-
-    _EA_CMD_BUDGET = 2000
-    _EA_PREVIEWS_KEPT = 256
-    _EA_CARD_ACTIONS = {"once": "approve_once", "session": "approve_session", "always": "approve_always", "deny": "deny"}
-    _EA_CARD_STYLES = {"primary": "positive", "danger": "destructive"}
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Adaptive Card: the shared text is split into its header / fenced command / reason blocks."""
-        if not self._app:
-            return SendResult(success=False, error="Teams app not initialized")
-        # The resolved card shows the prompt's own command preview, looked up by id on click.
-        cmd = self._truncate_preview(prompt.command, self._EA_CMD_BUDGET)
-        prompt_id = uuid.uuid4().hex
-        self._approval_previews[prompt_id] = (cmd, prompt.description)
-        if len(self._approval_previews) > self._EA_PREVIEWS_KEPT:
-            self._approval_previews.pop(next(iter(self._approval_previews)))
-        btn_data_base = {"session_key": prompt.session_key, "prompt_id": prompt_id}
-        if prompt.request_id:
-            btn_data_base["request_id"] = prompt.request_id
-        actions = []
-        for label, choice, style in prompt.actions:
-            kw = {"style": self._EA_CARD_STYLES[style]} if style else {}
-            actions.append(ExecuteAction(
-                title=label, verb="hermes_approve",
-                data={**btn_data_base, "hermes_action": self._EA_CARD_ACTIONS[choice]}, **kw))
-        body = _approval_body(cmd, prompt.description, always=True)
-        if cmd != prompt.command:  # the shared shortened-preview notice: where the rest is, or why Deny only
-            body.append(TextBlock(wrap=True, text=t("gateway.exec_approval.truncated_" + (
-                "full_above" if "once" in prompt.choices else "deny_only"), total=len(prompt.command))))
-        body.append(TextBlock(text=format_approval_deadline_line(approval_timeout_seconds()), wrap=True))
-        if prompt.smart_denied:
-            body.append(TextBlock(text=self._EA_SMART_DENY_LINE.strip(), wrap=True))
-        card = AdaptiveCard().with_version("1.4").with_body(body).with_actions(actions)
-        try:
-            result = await self._send_card(prompt.chat_id, card)
-            return SendResult(success=True, message_id=getattr(result, "id", None) if result else None)
-        except Exception as e:
-            logger.error("[teams] send_exec_approval failed: %s", (shown := describe_proxy_error(e, env_proxy_for_redaction(*_TEAMS_SDK_URLS))) or e, exc_info=not shown)
-            return SendResult(success=False, error=shown or str(e), retryable=True)
 
     async def send(
         self, chat_id: str, content: str, reply_to: Optional[str] = None, metadata: Optional[dict[str, Any]] = None

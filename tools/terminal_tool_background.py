@@ -157,7 +157,7 @@ def spawn_background_process(
     *, command: str, env: Any, env_type: str, effective_task_id: str, task_id: Optional[str],
     session_key: str, workdir: Optional[str], cwd: str, effective_pty: bool,
     cwd_key: Optional[str] = None,
-    notify_on_complete: bool, watch_patterns: Optional[list[str]], approval_note: Optional[str],
+    notify_on_complete: bool, watch_patterns: Optional[list[str]],
     completion_output_chars: int = 0,
     internal_policy: Any = None,
     pty_disabled_reason: Optional[str],
@@ -206,8 +206,6 @@ def spawn_background_process(
             used = getattr(proc_session, "cwd", None)
             if used and used not in (effective_cwd, _msys_to_windows_path(effective_cwd)):
                 result_data["cwd_fallback"] = _cwd_fallback_note({"requested": effective_cwd, "used": used})
-        if approval_note:
-            result_data["approval"] = approval_note
         if pty_disabled_reason:
             result_data["pty_note"] = pty_disabled_reason
         if auto_backgrounded:

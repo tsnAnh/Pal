@@ -47,8 +47,7 @@ def test_redirect_tokenization(redirect, expected):
 
 @pytest.mark.parametrize("redirect", ["0</dev/null", "0<&0", "0<&3"])
 @pytest.mark.parametrize("later", ["", " -e 'get version of me'"])
-def test_fd_input_redirect_is_opaque_manual_only(redirect, later):
-    from tools.approval import SMART_MANUAL_ONLY_DESCRIPTIONS
+def test_fd_input_redirect_is_opaque(redirect, later):
     from tools.approval_applescript import OSASCRIPT_OPAQUE_DESCRIPTION
 
     found, description, _ = detect_dangerous_command(
@@ -56,7 +55,6 @@ def test_fd_input_redirect_is_opaque_manual_only(redirect, later):
     )
     assert found
     assert description == OSASCRIPT_OPAQUE_DESCRIPTION
-    assert description in SMART_MANUAL_ONLY_DESCRIPTIONS
 
 
 @pytest.mark.parametrize("suffix", [

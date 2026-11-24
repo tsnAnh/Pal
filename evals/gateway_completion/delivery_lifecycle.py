@@ -72,7 +72,6 @@ async def main():
                     effective_pty=False,
                     notify_on_complete=notify,
                     watch_patterns=patterns,
-                    approval_note=None,
                     pty_disabled_reason=None,
                 )
             )

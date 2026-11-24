@@ -1,6 +1,6 @@
 """Per-session setting commands of the classic CLI on the shared gateway (``slash.exec``).
 
-On main ``/personality`` ``/busy`` ``/approvals`` ``/footer`` ``/fast`` changed this process's own
+On main ``/personality`` ``/busy`` ``/footer`` ``/fast`` changed this process's own
 agent or config. Rewired, the session's agent lives in the gateway, so the gateway's handler
 decides and applies the change (gateway/session_setting_commands.py; RULING §1: one behaviour per
 command, every surface) and the CLI prints its reply. Client-side state the CLI itself enforces
@@ -35,7 +35,7 @@ def _watch_reviewer(cli, _arg):
 
 # Reports the owner already lays out (main's own line builders): printed as is.
 _VERBATIM = frozenset({"toolsets"})
-GATEWAY_SETTINGS = {"personality": None, "busy": _mirror_busy, "approvals": None, "footer": None, "fast": None,
+GATEWAY_SETTINGS = {"personality": None, "busy": _mirror_busy, "footer": None, "fast": None,
                     "refine": None, "review": _watch_reviewer, "cron": None,
                     "toolsets": None}
 

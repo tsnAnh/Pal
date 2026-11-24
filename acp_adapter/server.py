@@ -264,7 +264,6 @@ class _TurnCallbacks:
     step_cb: Any = None
     stream_delta_cb: Any = None
     approval_cb: Any = None
-    edit_approval_requester: Any = None
     streamed: bool = False
     tool_call_ids: Any = None
     tool_call_meta: Any = None
@@ -325,11 +324,6 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
             current_mode_id=current,
             available_modes=[SessionMode(id=m, name=n, description=d) for m, (_p, n, d) in self._MODES.items()],
         )
-
-    def _edit_approval_policy_for_state(self, state: SessionState) -> tuple[str, str | None]:
-        mode = str(getattr(state, "mode", "") or self._MODE_DEFAULT)
-        policy = self._MODE_TO_EDIT_APPROVAL_POLICY.get(mode, self._EDIT_APPROVAL_POLICY_DEFAULT)
-        return policy, state.cwd
 
     def _build_model_state(self, state: SessionState) -> SessionModelState | None:
         """Authenticated providers + models, from the shared Hermes inventory (same substrate
@@ -806,7 +800,7 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
 
     def _run_agent_turn(
         self, *, state: SessionState, session_id: str, user_text: str, user_content: Any, conn: Any,
-        loop: asyncio.AbstractEventLoop, approval_cb: Any, edit_approval_requester: Any,
+        loop: asyncio.AbstractEventLoop, approval_cb: Any,
     ) -> dict:
         """Executor-thread body of one turn, run inside ``contextvars.copy_context()`` so
         ContextVar writes are isolated from concurrent sessions.
@@ -837,17 +831,9 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
                 terminal_tool.set_approval_callback(approval_cb)
                 return lambda: terminal_tool.set_approval_callback(previous)
 
-            def _edit_approval() -> Callable[[], None]:
-                from acp_adapter.edit_approval import reset_edit_approval_requester, set_edit_approval_requester
-
-                token = set_edit_approval_requester(edit_approval_requester)
-                return lambda: reset_edit_approval_requester(token)
-
             _bind_guarded(stack, "session context", _session_context)
             if approval_cb:
                 _bind_guarded(stack, "approval callback", _approval)
-            if edit_approval_requester:
-                _bind_guarded(stack, "edit approval requester", _edit_approval)
             stack.callback(reset_hermes_interactive_context, set_hermes_interactive_context(True))
             # Tools tag side-effects with the ACP session (``kanban_create``); save/restore it.
             stack.callback(_restore_env, "HERMES_SESSION_ID", os.environ.get("HERMES_SESSION_ID"))
@@ -912,7 +898,7 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
             try:
                 return self._run_agent_turn(
                     state=state, session_id=session_id, user_text=user_text, user_content=user_content, conn=conn,
-                    loop=loop, approval_cb=cbs.approval_cb, edit_approval_requester=cbs.edit_approval_requester,
+                    loop=loop, approval_cb=cbs.approval_cb,
                 )
             finally:
                 # Still on the executor thread: ``_send_update`` blocks on the loop, so flushing
@@ -958,9 +944,8 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
             # Shared with the step callback so a runtime that projects
             # ``tool.completed`` closes each call once, not twice.
             turn_state: dict[str, Any] = {}
-            policy_getter = lambda: self._edit_approval_policy_for_state(state)
             cbs.tool_progress_cb = make_tool_progress_cb(
-                conn, session_id, loop, tool_call_ids, tool_call_meta, edit_approval_policy_getter=policy_getter,
+                conn, session_id, loop, tool_call_ids, tool_call_meta,
                 turn_state=turn_state,
             )
             # Per-session allocator: a new turn must never reuse a previous turn's
@@ -980,15 +965,6 @@ class HermesACPAgent(SlashCommandsMixin, acp.Agent):
             # Closes the synthetic permission-request bubble once the user has answered.
             send_update = lambda update: _send_update(conn, session_id, loop, update)
             cbs.approval_cb = make_approval_callback(conn.request_permission, loop, session_id, send_update=send_update)
-            try:
-                from acp_adapter.edit_approval import make_acp_edit_approval_requester
-
-                cbs.edit_approval_requester = make_acp_edit_approval_requester(
-                    conn.request_permission, loop, session_id, auto_approve_getter=policy_getter,
-                    send_update=send_update,
-                )
-            except Exception:
-                logger.debug("Could not create ACP edit approval requester", exc_info=True)
 
         agent = state.agent
         agent.tool_progress_callback = cbs.tool_progress_cb

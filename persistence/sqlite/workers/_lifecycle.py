@@ -18,7 +18,7 @@ _IDENTITY_FIELDS = frozenset({
     'parent_session_id', 'cwd', 'profile_name', 'git_repo_root', 'origin_json', 'display_name',
 })
 _CREATE_FIELDS = _IDENTITY_FIELDS | {'source', 'model', 'model_config', 'system_prompt'}
-_CONSTRUCTOR_CONFIG = frozenset({'max_iterations', 'max_tokens', 'reasoning_config', 'yolo_mode'})
+_CONSTRUCTOR_CONFIG = frozenset({'max_iterations', 'max_tokens', 'reasoning_config'})
 
 
 def worker_create(holder, conn, session_id, payload):

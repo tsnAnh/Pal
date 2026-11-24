@@ -6,23 +6,24 @@ from typing import Any
 
 import pytest
 
+from hermes_cli.profile_admin_guard import CREATE_REFUSED_MESSAGE
 from tests.e2e.core.bots._creation import CREATE_COMMANDS, CREATE_IDS, LAUNCH_MODEL, launch_world
 from tests.e2e.core.bots._world import World
 from tests.e2e.core.history._helpers import InProcessSession
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall
 
 APPROVALS_OFF = {"approvals": {"mode": "off"}}
+STORED_MODES = {"manual": {"approvals": {"mode": "manual"}}, "smart": {"approvals": {"mode": "smart"}},
+                "off": APPROVALS_OFF}
 
 
 class Human:
-    def __init__(self, verdict: str) -> None:
-        self.verdict = verdict
+    def __init__(self) -> None:
         self.asked: list[str] = []
 
-    def __call__(self, command: str, description: str, *, allow_permanent: bool = True,
-                 allow_session: bool = True, smart_denied: bool = False) -> str:
+    def __call__(self, command: str, description: str, **_kwargs: Any) -> str:
         self.asked.append(command)
-        return self.verdict
+        return "deny"
 
 
 @pytest.fixture
@@ -31,15 +32,11 @@ def attached(tmp_path: Path, monkeypatch):
 
     servers: list[FakeLLMServer] = []
 
-    def make(extra: dict[str, Any] | None = None, *, session_yolo: bool = False):
+    def make(extra: dict[str, Any] | None = None):
         srv = FakeLLMServer()
         srv.start()
         servers.append(srv)
         w = launch_world(tmp_path, srv.base_url, extra)
-        w.catalog_skill("catalog-one", enabled_for=["default"])
-        w.catalog_skill("catalog-two", enabled_for=["default"])
-        w.save_catalog_mcp({"shared-docs": {"url": "http://127.0.0.1:9/mcp"}})
-        w.update_config("default", {"mcp_servers": {"shared-docs": {"enabled": True}}})
         monkeypatch.setenv("HOME", str(w.home))
         monkeypatch.setenv("HERMES_HOME", str(w.default))
         monkeypatch.setenv("PATH", f"{w.shim_dir}:{os.environ['PATH']}")
@@ -47,9 +44,6 @@ def attached(tmp_path: Path, monkeypatch):
         monkeypatch.setenv("HERMES_SESSION_KEY", "e2e-bot-session")
         monkeypatch.setenv("HERMES_STATE_DB_GUARD_BYPASS", "1")
         monkeypatch.chdir(w.workdir)
-        if session_yolo:
-            from tools.approval import enable_session_yolo
-            enable_session_yolo("e2e-bot-session")
         return w, srv
 
     yield make
@@ -58,101 +52,60 @@ def attached(tmp_path: Path, monkeypatch):
     cleanup_all_environments()
     for srv in servers:
         srv.stop()
-    try:
-        from tools.approval import disable_session_yolo
-        disable_session_yolo("e2e-bot-session")
-    except Exception:
-        pass
 
 
-def run_attached_turn(w: World, srv: FakeLLMServer, command: str, human: Human) -> None:
+def run_attached_turn(w: World, srv: FakeLLMServer, command: str, human: Human) -> list[str]:
     from tools.terminal_tool import set_approval_callback
 
     srv.push(ToolCall("terminal", {"command": command}), Text("done"))
     set_approval_callback(human)
     session = InProcessSession(srv.base_url, w.default, "e2e-bot-session")
-    session.turn("please run the maintenance step")
+    result = session.turn("please run the maintenance step")
     session.db.close()
+    return [str(m.get("content")) for m in result["messages"] if m.get("role") == "tool"]
 
 
-def test_the_approval_seam_reaches_a_human_for_an_ordinary_dangerous_command(attached) -> None:
-    w, srv = attached()
+@pytest.mark.parametrize("mode", list(STORED_MODES))
+def test_a_dangerous_command_runs_without_asking_whatever_mode_the_profile_stored(attached, mode: str) -> None:
+    w, srv = attached(STORED_MODES[mode])
     victim = w.workdir / "victim-dir"
     victim.mkdir()
     (victim / "f.txt").write_text("x", encoding="utf-8")
-    human = Human("deny")
+    human = Human()
     run_attached_turn(w, srv, f"rm -rf {victim}", human)
-    assert human.asked and "rm -rf" in human.asked[0]
-    assert victim.exists()
+    assert human.asked == []
+    assert not victim.exists()
 
 
-def test_a_bot_is_created_with_the_launching_profiles_model_and_nothing_else_when_a_human_approves(attached) -> None:
+@pytest.mark.parametrize("command", CREATE_COMMANDS + ["hermes bot create evo --display-name 'Evo Bot'"],
+                         ids=[*CREATE_IDS, "bot-create-named"])
+@pytest.mark.parametrize("mode", list(STORED_MODES))
+def test_an_agent_cannot_create_a_bot_in_any_mode_and_no_human_is_asked(attached, mode: str, command: str) -> None:
+    w, srv = attached(STORED_MODES[mode])
+    human = Human()
+    tool_results = run_attached_turn(w, srv, command, human)
+    assert human.asked == []
+    assert any(CREATE_REFUSED_MESSAGE in content for content in tool_results), tool_results
+    assert not w.profile_exists("evil") and not w.profile_exists("evo")
+
+
+def test_a_profile_delete_runs_without_asking(attached) -> None:
     w, srv = attached()
-    human = Human("once")
-    run_attached_turn(w, srv, "hermes bot create evo --display-name 'Evo Bot'", human)
+    w.add_bot("victim")
+    human = Human()
+    run_attached_turn(w, srv, "hermes profile delete victim --yes", human)
+    assert human.asked == []
+    assert not w.profile_exists("victim")
 
-    assert any("bot create evo" in c for c in human.asked), f"no human was asked: {human.asked}"
+
+def test_a_bot_created_by_the_owner_from_the_cli_carries_the_launching_profiles_model_and_nothing_else(tmp_path: Path) -> None:
+    with FakeLLMServer() as srv:
+        w = launch_world(tmp_path, srv.base_url)
+        w.hermes_ok("default", "bot", "create", "evo", "--display-name", "Evo Bot")
     assert w.profile_exists("evo")
     cfg = w.config("evo")
     assert cfg["model"]["default"] == LAUNCH_MODEL
-    assert {"catalog-one", "catalog-two"} <= set(cfg.get("skills", {}).get("disabled", []))
-    assert w.visible_markers("evo") == set()
-    assert "MARK_CATALOG_ONE" in w.visible_markers("default")
     servers = cfg.get("mcp_servers") or {}
     assert not any((entry or {}).get("enabled", True) for entry in servers.values()), servers
     memory_files = [p for p in (w.home_of("evo") / "memories").rglob("*") if p.is_file()]
     assert all("launch-profile-private-fact" not in p.read_text(encoding="utf-8") for p in memory_files)
-    assert all(p.read_text(encoding="utf-8").strip() == "" for p in memory_files)
-
-
-def test_a_bot_is_created_with_its_soul_after_exactly_one_human_approval(attached) -> None:
-    from tools.terminal_tool import set_approval_callback
-
-    w, srv = attached()
-    soul = "You are Evo, a focused research bot. Draft only; never send without the owner's OK.\n"
-    soul_file = w.workdir / "evo-soul.md"
-    soul_file.write_text(soul, encoding="utf-8")
-    srv.push(ToolCall("terminal", {"command": "hermes bot create --help"}),
-             ToolCall("terminal", {"command": f"hermes bot create evo --soul-file {soul_file} --json"}),
-             Text("done"))
-    human = Human("once")
-    set_approval_callback(human)
-    session = InProcessSession(srv.base_url, w.default, "e2e-bot-session")
-    session.turn("make me a research bot")
-    session.db.close()
-
-    assert len(human.asked) == 1 and "bot create evo" in human.asked[0], human.asked
-    assert w.profile_exists("evo")
-    assert (w.home_of("evo") / "SOUL.md").read_text(encoding="utf-8") == soul
-    assert w.config("evo")["model"]["default"] == LAUNCH_MODEL
-
-
-def test_a_bot_created_from_a_chat_runs_the_model_that_chat_runs_rather_than_the_config_default(attached) -> None:
-    from hermes_state import SessionDB
-
-    w, srv = attached()
-    live_route = {"provider": "openai-codex", "base_url": "https://chatgpt.com/backend-api/codex",
-                  "api_mode": "codex_responses"}
-    db = SessionDB(db_path=w.default / "state.db")
-    db.create_session("e2e-bot-session", "desktop", model="gpt-live-e2e",
-                      model_config={"model": "gpt-live-e2e", **live_route, "follow_profile_config": True})
-    db.close()
-
-    run_attached_turn(w, srv, "hermes bot create evo", Human("once"))
-
-    assert w.profile_exists("evo")
-    model = w.config("evo")["model"]
-    assert {key: model.get(key) for key in ("default", *live_route)} == {"default": "gpt-live-e2e", **live_route}
-
-
-@pytest.mark.parametrize("command", CREATE_COMMANDS + ["hermes profile delete victim --yes"],
-                         ids=[*CREATE_IDS, "profile-delete"])
-@pytest.mark.parametrize("mode", ["manual", "approvals-off", "session-yolo"])
-def test_a_human_who_denies_stops_bot_commands_in_every_approval_mode(attached, mode: str, command: str) -> None:
-    w, srv = attached(APPROVALS_OFF if mode == "approvals-off" else None, session_yolo=mode == "session-yolo")
-    w.add_bot("victim")
-    human = Human("deny")
-    run_attached_turn(w, srv, command, human)
-    assert human.asked, f"{mode}: `{command}` ran without asking a human"
-    assert not w.profile_exists("evil")
-    assert w.profile_exists("victim")

@@ -12,7 +12,6 @@ import pytest
 from plugins.platforms.discord.adapter import (
     ChoicePickerView,
     ClarifyChoiceView,
-    ExecApprovalView,
     ModelPickerView,
     SlashConfirmView,
     UpdatePromptView,
@@ -36,7 +35,6 @@ async def _noop(*_a, **_k):
 
 def _views():
     return {
-        "exec": ExecApprovalView(session_key="s", allowed_user_ids=set()),
         "slash": SlashConfirmView(session_key="s", confirm_id="c", allowed_user_ids=set()),
         "update": UpdatePromptView(session_key="s", allowed_user_ids=set()),
         "clarify": ClarifyChoiceView(choices=["a"], clarify_id="c", allowed_user_ids=set()),
@@ -52,7 +50,6 @@ def _views():
 @pytest.mark.parametrize(
     "name,call",
     [
-        ("exec", lambda v, i: v._resolve(i, "once", None, "x")),
         ("slash", lambda v, i: v._resolve(i, "once", None, "x")),
         ("update", lambda v, i: v._respond(i, "y", None, "x")),
         ("clarify", lambda v, i: v._resolve_choice(i, 0, "a")),
@@ -92,8 +89,7 @@ async def test_unauthorized_click_uses_the_shared_notice(monkeypatch, name, call
 )
 async def test_answered_view_is_released(monkeypatch, tmp_path, name, call):
     """An answer stops the view: its timeout can't later stamp "expired" over the answer, and
-    a long ``discord_prompt_timeout`` doesn't keep answered views registered (exec cards:
-    test_discord_approval_lifecycle)."""
+    a long ``discord_prompt_timeout`` doesn't keep answered views registered)."""
     from tools import slash_confirm
 
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
@@ -108,7 +104,7 @@ async def test_answered_view_is_released(monkeypatch, tmp_path, name, call):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["exec", "slash", "update", "clarify"])
+@pytest.mark.parametrize("name", ["slash", "update", "clarify"])
 async def test_on_timeout_disables_and_greys_embed(name):
     view = _views()[name]
     embed = SimpleNamespace(color=None, set_footer=lambda *, text: setattr(embed, "footer", text))
@@ -119,11 +115,7 @@ async def test_on_timeout_disables_and_greys_embed(name):
     assert all(child.disabled for child in view.children)
     assert embed.footer
     assert embed.color is not None
-    # Exec cards remove controls entirely so competing timeout edits cannot
-    # reattach a retired approval view.
-    msg.edit.assert_awaited_once_with(embed=embed, view=None if name == "exec" else view)
-    if name == "exec":
-        assert view.is_finished()
+    msg.edit.assert_awaited_once_with(embed=embed, view=view)
 
 
 @pytest.mark.asyncio

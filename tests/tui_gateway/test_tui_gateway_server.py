@@ -3934,7 +3934,6 @@ def test_session_resume_profile_uses_profile_db_cwd(monkeypatch, tmp_path):
     from tools import approval
 
     monkeypatch.setattr(approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(approval, "load_permanent_allowlist", lambda: None)
 
     try:
         # eager_build: asserts the synchronous build receives the profile's db
@@ -6113,7 +6112,6 @@ def test_init_session_fires_reset_hook(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     sid = "sid"
     try:
@@ -8563,172 +8561,6 @@ def test_session_create_drops_pending_title_on_valueerror(monkeypatch):
         server._sessions.pop("sid", None)
 
 
-def test_config_set_yolo_toggles_session_scope():
-    from tools.approval import clear_session, is_session_yolo_enabled
-
-    server._sessions["sid"] = _session()
-    try:
-        resp_on = server.handle_request(
-            {
-                "id": "1",
-                "method": "config.set",
-                "params": {"session_id": "sid", "key": "yolo"},
-            }
-        )
-        assert resp_on["result"]["value"] == "1"
-        assert is_session_yolo_enabled("session-key") is True
-
-        resp_off = server.handle_request(
-            {
-                "id": "2",
-                "method": "config.set",
-                "params": {"session_id": "sid", "key": "yolo"},
-            }
-        )
-        assert resp_off["result"]["value"] == "0"
-        assert is_session_yolo_enabled("session-key") is False
-    finally:
-        clear_session("session-key")
-        server._sessions.clear()
-
-
-def test_config_set_yolo_stale_session_id_is_refused_not_process_scoped(monkeypatch):
-    """A runtime id the backend no longer holds must answer 4001 so the client resumes, not flip
-    the process HERMES_YOLO_MODE that every child spawned afterwards inherits."""
-    monkeypatch.setenv("HERMES_YOLO_MODE", "0")  # setenv, not delenv: undo must also drop a leaked "1"
-
-    with patch.dict(server._sessions, {}, clear=True):
-        resp = server.handle_request(
-            {
-                "id": "1",
-                "method": "config.set",
-                "params": {"session_id": "reaped-sid", "key": "yolo", "value": "1"},
-            }
-        )
-
-    assert resp.get("error", {}).get("code") == 4001, resp
-    assert os.environ["HERMES_YOLO_MODE"] == "0"
-
-
-def test_config_set_yolo_global_scope_writes_approvals_mode(tmp_path, monkeypatch):
-    """Shift+click the desktop zap -> scope="global" flips persistent approvals.mode."""
-    import hermes_yaml as yaml
-
-    cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(yaml.safe_dump({"approvals": {"mode": "manual"}}), encoding="utf-8")
-    monkeypatch.setattr(server, "_hermes_home", tmp_path)
-
-    resp_on = server.handle_request(
-        {
-            "id": "1",
-            "method": "config.set",
-            "params": {"key": "yolo", "scope": "global"},
-        }
-    )
-    assert resp_on["result"]["value"] == "1"
-    assert resp_on["result"]["scope"] == "global"
-    assert yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig"))["approvals"]["mode"] == "off"
-
-    resp_off = server.handle_request(
-        {
-            "id": "2",
-            "method": "config.set",
-            "params": {"key": "yolo", "scope": "global"},
-        }
-    )
-    assert resp_off["result"]["value"] == "0"
-    assert yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig"))["approvals"]["mode"] == "manual"
-
-
-def test_config_get_approval_mode_uses_smart_default_when_key_is_missing(
-    tmp_path, monkeypatch
-):
-    import hermes_yaml as yaml
-
-    monkeypatch.setattr(server, "_hermes_home", tmp_path)
-    # Point the canonical resolver (load_config → env HERMES_HOME) at the
-    # temp home too, so the smart default is asserted against THIS config
-    # rather than whatever the developer's real ~/.hermes happens to hold.
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    (tmp_path / "config.yaml").write_text(
-        yaml.safe_dump({"approvals": {"timeout": 15}})
-    )
-
-    response = server.handle_request(
-        {"id": "1", "method": "config.get", "params": {"key": "approvals.mode"}}
-    )
-    assert response["result"]["value"] == "smart"
-
-
-def test_config_get_approval_mode_fails_safe_to_manual_for_invalid_explicit_value(
-    tmp_path, monkeypatch
-):
-    import hermes_yaml as yaml
-
-    monkeypatch.setattr(server, "_hermes_home", tmp_path)
-    # _load_approval_mode delegates to the canonical resolver in
-    # tools.approval, which reads via hermes_cli.config.load_config —
-    # that path resolves HERMES_HOME from the environment, not
-    # server._hermes_home.
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    (tmp_path / "config.yaml").write_text(
-        yaml.safe_dump({"approvals": {"mode": "sometimes"}})
-    )
-
-    response = server.handle_request(
-        {"id": "1", "method": "config.get", "params": {"key": "approvals.mode"}}
-    )
-    assert response["result"]["value"] == "manual"
-
-
-def test_config_get_approval_mode_normalizes_yaml_off(tmp_path, monkeypatch):
-    import hermes_yaml as yaml
-
-    monkeypatch.setattr(server, "_hermes_home", tmp_path)
-    # See fail-safe test above: the canonical resolver reads via
-    # load_config, which resolves HERMES_HOME from the environment.
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    (tmp_path / "config.yaml").write_text(
-        yaml.safe_dump({"approvals": {"mode": False}})
-    )
-
-    response = server.handle_request(
-        {"id": "1", "method": "config.get", "params": {"key": "approvals.mode"}}
-    )
-    assert response["result"]["value"] == "off"
-
-
-def test_config_set_approval_mode_persists_three_way_value_and_emits_live_status(
-    tmp_path, monkeypatch
-):
-    import hermes_yaml as yaml
-
-    monkeypatch.setattr(server, "_hermes_home", tmp_path)
-    # config.set writes via server._hermes_home, but the post-write
-    # session.info emit resolves the effective mode through the canonical
-    # tools.approval resolver (load_config → env HERMES_HOME).
-    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
-    emitted = []
-    monkeypatch.setattr(server, "_emit", lambda *args: emitted.append(args))
-    server._sessions["sid"] = {"agent": object(), "session_key": "profile-session"}
-
-    try:
-        resp = server.handle_request(
-            {
-                "id": "1",
-                "method": "config.set",
-                "params": {"key": "approvals.mode", "value": "manual"},
-            }
-        )
-    finally:
-        server._sessions.clear()
-
-    assert resp["result"] == {"key": "approvals.mode", "value": "manual"}
-    assert yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8-sig"))["approvals"]["mode"] == "manual"
-    assert emitted and emitted[0][0:2] == ("session.info", "sid")
-    assert emitted[0][2]["approval_mode"] == "manual"
-
-
 def test_pet_gallery_quoted_false_enabled_reports_disabled(tmp_path, monkeypatch):
     """display.pet.enabled: "false" (quoted) must report enabled=False.
 
@@ -8797,48 +8629,6 @@ def test_pet_info_known_revision_elides_spritesheet(monkeypatch):
     # No revision (legacy callers): full payload.
     resp = server.handle_request({"id": "3", "method": "pet.info", "params": {}})
     assert resp["result"]["spritesheetBase64"] == "A" * 1024
-
-
-def test_config_set_approval_mode_rejects_unknown_value():
-    resp = server.handle_request(
-        {
-            "id": "1",
-            "method": "config.set",
-            "params": {"key": "approvals.mode", "value": "sometimes"},
-        }
-    )
-
-    assert resp["error"]["code"] == 4002
-
-
-def test_config_set_yolo_global_scope_honors_explicit_value(tmp_path, monkeypatch):
-    """An explicit value pins global approvals.mode regardless of prior state."""
-    import hermes_yaml as yaml
-
-    cfg_path = tmp_path / "config.yaml"
-    cfg_path.write_text(yaml.safe_dump({"approvals": {"mode": "manual"}}), encoding="utf-8")
-    monkeypatch.setattr(server, "_hermes_home", tmp_path)
-
-    resp = server.handle_request(
-        {
-            "id": "1",
-            "method": "config.set",
-            "params": {"key": "yolo", "scope": "global", "value": "1"},
-        }
-    )
-    assert resp["result"]["value"] == "1"
-    assert yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig"))["approvals"]["mode"] == "off"
-
-    # Setting it on again is idempotent — stays off.
-    resp_again = server.handle_request(
-        {
-            "id": "2",
-            "method": "config.set",
-            "params": {"key": "yolo", "scope": "global", "value": "1"},
-        }
-    )
-    assert resp_again["result"]["value"] == "1"
-    assert yaml.safe_load(cfg_path.read_text(encoding="utf-8-sig"))["approvals"]["mode"] == "off"
 
 
 def test_config_set_fast_updates_live_agent_session_scoped(monkeypatch):
@@ -9017,21 +8807,6 @@ def test_config_busy_get_and_set(monkeypatch):
     )
     assert set_resp["result"]["value"] == "interrupt"
     assert ("display.busy_input_mode", "interrupt") in writes
-
-
-def test_config_set_yolo_process_scope_treats_false_like_env_as_disabled(monkeypatch):
-    monkeypatch.setenv("HERMES_YOLO_MODE", "false")
-
-    resp = server.handle_request(
-        {
-            "id": "1",
-            "method": "config.set",
-            "params": {"key": "yolo"},
-        }
-    )
-
-    assert resp["result"]["value"] == "1"
-    assert os.environ.get("HERMES_YOLO_MODE") == "1"
 
 
 def test_config_get_statusbar_survives_non_dict_display(monkeypatch):
@@ -11994,7 +11769,6 @@ def test_commands_catalog_filters_gateway_only_commands_and_keeps_status_visible
 
     assert "/status" in pairs
     assert canon["/status"] == "/status"
-    assert "/approvals" in pairs
 
     assert "/topic" not in pairs
     assert "/approve" not in pairs
@@ -15299,7 +15073,6 @@ def test_session_create_close_race_does_not_orphan_resources(monkeypatch):
         "unregister_gateway_notify",
         lambda key: unregistered_keys.append(key),
     )
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     # Start: session.create spawns _build thread, returns synchronously
     resp = server.handle_request(
@@ -15413,7 +15186,6 @@ def test_session_create_no_race_keeps_worker_alive(monkeypatch):
         "unregister_gateway_notify",
         lambda key: unregistered_keys.append(key),
     )
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     # Isolate from sibling-test leakage: daemon build threads from prior
     # session.create tests in the same shard process mutate the shared
@@ -15556,7 +15328,6 @@ def test_session_create_continues_when_state_db_is_unavailable(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {"id": "1", "method": "session.create", "params": {"cols": 80}}
@@ -16287,7 +16058,6 @@ def test_session_create_persists_seeded_branch_child(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     seeded = [
         {"role": "user", "content": "hello from parent"},
@@ -16414,7 +16184,6 @@ def test_session_create_branch_seed_failure_does_not_break_create(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {
@@ -16486,7 +16255,6 @@ def test_session_create_seed_failure_after_row_compensates(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {
@@ -16546,7 +16314,6 @@ def test_session_create_seed_disk_full_keeps_row_for_retry(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     records: list = []
 
@@ -16605,7 +16372,6 @@ def test_session_create_without_parent_still_defers_row(monkeypatch):
     import tools.approval as _approval
 
     monkeypatch.setattr(_approval, "register_gateway_notify", lambda key, cb: None)
-    monkeypatch.setattr(_approval, "load_permanent_allowlist", lambda: None)
 
     resp = server.handle_request(
         {"id": "1", "method": "session.create", "params": {"cols": 80}}

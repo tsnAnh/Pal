@@ -460,6 +460,6 @@ def test_identity_writes_respect_the_memory_write_approval_gate_and_never_queue(
     w = bots(tmp_path, extra={"memory": {"write_approval": True}})
     before = identity_state(w, "alice")
     result = run_write(w, "alice", purpose_operations())
-    assert result["success"] is False and "cannot wait in the approval queue" in result["error"], result
+    assert result["success"] is False and "cannot wait in the review queue" in result["error"], result
     assert identity_state(w, "alice") == before
     assert not list((w.home_of("alice") / "pending").rglob("*.json"))

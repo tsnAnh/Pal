@@ -142,51 +142,19 @@ public struct RoomPendingAction: Sendable, Equatable, Identifiable {
     public let memberID: String
     public let taskID: String
     public let executionGeneration: Int
-    public let requestID: String?
-    public let approvalRequestID: String?
-    public let promptID: String?
-    public let command: String
-    public let description: String
-    public let choices: [String]
 
     public var id: String { "\(kind):\(memberID):\(taskID):\(executionGeneration)" }
-    public var isApproval: Bool { kind == "approval" }
 
     public init?(_ json: JSONValue) {
-        guard let kind = json["kind"]?.stringValue,
+        guard let kind = json["kind"]?.stringValue, kind != "approval",
               let memberID = json["member_id"]?.stringValue,
               let taskID = json["task_id"]?.stringValue,
               let generation = json["execution_generation"]?.intValue
         else { return nil }
-        let approval = json["approval"] ?? .null
         self.kind = kind
         self.memberID = memberID
         self.taskID = taskID
         executionGeneration = generation
-        requestID = json["request_id"]?.stringValue
-        approvalRequestID = approval["request_id"]?.stringValue
-        promptID = approval["prompt_id"]?.stringValue
-        command = approval["command"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        description = approval["description"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        choices = (approval["choices"]?.arrayValue ?? []).compactMap(\.stringValue)
-    }
-
-    public var shownCommand: String {
-        isSyntheticLabel ? "" : command
-    }
-
-    private var isSyntheticLabel: Bool {
-        command.range(of: #"^<[^>]+> \("#, options: .regularExpression) != nil
-    }
-
-    public var canAllowOnce: Bool {
-        guard isApproval, let requestID, !requestID.isEmpty, choices.contains("once") else { return false }
-        let matches = (approvalRequestID.map { $0 == requestID } ?? true) && (promptID.map { $0 == requestID } ?? true)
-        return matches && (!shownCommand.isEmpty || (isSyntheticLabel && !description.isEmpty))
-    }
-
-    public var canDeny: Bool {
-        isApproval && requestID?.isEmpty == false && choices.contains("deny")
     }
 }
 
@@ -260,7 +228,6 @@ public enum RoomError: Error, Sendable, Equatable {
     case invalidName
     case invalidCursor
     case attachmentTooLarge
-    case unavailable
 }
 
 public enum RoomRosterProblem: Sendable, Equatable {
@@ -400,17 +367,6 @@ public struct RoomsService: Sendable {
         ])
         guard let room = result["room"].flatMap(Room.init) else { throw BotsError.invalidResponse }
         return room
-    }
-
-    public func approve(roomID: String, action: RoomPendingAction, allow: Bool) async throws {
-        guard action.isApproval, let requestID = action.requestID, allow ? action.canAllowOnce : action.canDeny else {
-            throw RoomError.unavailable
-        }
-        _ = try await call("groups.approve", [
-            "room_id": .string(roomID), "member_id": .string(action.memberID), "task_id": .string(action.taskID),
-            "execution_generation": .int(action.executionGeneration), "request_id": .string(requestID),
-            "choice": .string(allow ? "once" : "deny"),
-        ])
     }
 
     public func retry(roomID: String, action: RoomPendingAction) async throws {

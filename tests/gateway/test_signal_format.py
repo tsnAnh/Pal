@@ -5,6 +5,8 @@ strikethrough, monospace, code blocks, headings, and — critically — the
 false-positive regressions that caused spurious italics in production.
 """
 
+import re
+
 import pytest
 
 from plugins.platforms.signal.signal_format import markdown_to_signal
@@ -342,6 +344,10 @@ def test_fenced_command_round_trips_amid_styled_prose(command):
     assert len(_find_style(styles, "ITALIC")) == 1
 
 
+def code_fence(command):
+    return "`" * max(3, max((len(run) for run in re.findall(r"`+", command)), default=0) + 1)
+
+
 @pytest.mark.parametrize("command", [
     "echo " + "`" * 3 + " ; rm -rf /tmp/*/x*",
     "printf '" + "`" * 3 + "' && rm -rf ~~/home~~",
@@ -350,9 +356,7 @@ def test_fenced_command_round_trips_amid_styled_prose(command):
     "printf '" + "`" * 3 + "x" + "`" * 3 + "' && rm -rf /srv/*/c*",
 ])
 def test_command_with_a_backtick_run_round_trips_inside_its_longer_fence(command):
-    """code_fence() wraps a command holding ``` in a longer fence; the ``` inside must not close it."""
-    from gateway.platforms.base_exec_approval import code_fence
-
+    """A fence longer than any backtick run wraps a command holding ``` in a longer fence; the ``` inside must not close it."""
     fence = code_fence(command)
     md = f"Approve?\n{fence}\n{command}\n{fence}\nThis is **dangerous**."
     text, styles = _m2s(md)
@@ -365,8 +369,6 @@ def test_command_with_a_backtick_run_round_trips_inside_its_longer_fence(command
 
 def test_backtick_run_kept_in_a_longer_fence_does_not_pair_with_a_later_fence():
     """A ``` kept inside one block must not open a new block with the next fence in the message."""
-    from gateway.platforms.base_exec_approval import code_fence
-
     command = "echo " + "`" * 3 + " x"
     fence = code_fence(command)
     text, styles = _m2s(f"{fence}\n{command}\n{fence}\nThen **this**:\n```\nlater\n```")

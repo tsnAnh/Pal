@@ -31,39 +31,6 @@ def _raise_approval(key):
     approval_mod._gateway_queues.setdefault(key, []).append(_ApprovalEntry({"command": "rm -rf notes"}))
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["interrupt", "steer"])
-@pytest.mark.parametrize(("follow_uid", "follow_name", "alice_answers", "bob_answers"), [
-    (222, "Bob", False, False),           # Bob's input joined Alice's turn: neither member answers
-    (111, "Alice Example", True, False),  # Alice's own follow-up: still bound to Alice
-], ids=["other-member", "same-member"])
-async def test_a_folded_follow_up_rebinds_the_running_turns_approvals(
-        mode, follow_uid, follow_name, alice_answers, bob_answers):
-    from gateway.approval_actor import approval_refusal
-
-    write_approvers([])
-    adapter = _observe_adapter()
-    alice = _observed_event(adapter, 111, "Alice Example", "summarize the repo")
-    follow = _observed_event(adapter, follow_uid, follow_name, "actually delete the notes dir")
-    key = build_session_key(alice.source)
-    runner = GatewayRunner(config=GatewayConfig())
-    agent = _Agent()
-    turn = runner._session_state(key).turn
-    turn.agent, turn.event = agent, alice
-    tokens = runner._set_session_env(build_session_context(alice.source, GatewayConfig(), event=alice))
-    try:
-        worker = copy_context()  # the turn's worker copied its context when Alice's turn started
-    finally:
-        runner._clear_session_env(tokens)
-
-    outcome = await runner._resolve_busy_steer_or_redirect(follow, key, mode, agent)
-    assert outcome.redirected or outcome.steered
-    worker.run(_raise_approval, key)
-
-    assert (approval_refusal(key, "111") is None) is alice_answers
-    assert (approval_refusal(key, "222") is None) is bob_answers
-    assert approval_refusal(key, "444", extra={"group_allow_admin_from": ["444"]}) is None
-
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("follow_uid", "follow_name", "actor"), [

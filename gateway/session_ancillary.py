@@ -220,8 +220,8 @@ async def approvals(connection, ref, params, *, ack=False):
         return {'acknowledged': route is not None and ack_gateway_approval(route, params['request_id'])}
     from gateway.session_held_drafts import pending_cards
     return {'approvals': [{'request_id': prompt['prompt_id'], 'command': prompt['command'],
-                           'description': prompt['description'], 'choices': list(prompt['choices']),
-                           'allow_permanent': 'always' in prompt['choices']} for _, prompt in pending]
+                           'description': prompt['description'], 'choices': list(prompt['choices'])}
+                          for _, prompt in pending]
             + await pending_cards(authority)}
 
 

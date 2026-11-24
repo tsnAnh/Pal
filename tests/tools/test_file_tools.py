@@ -887,47 +887,31 @@ class TestNotFoundCache:
 
 
 
-class TestSSHConfigWriteGate:
-    """~/.ssh/config can run commands (ProxyCommand / Match exec), so a write
-    routes through the approval gate and fails closed with nobody to approve.
-    #93201: the gate call once raised TypeError (missing required kwarg)
-    instead of returning an approval decision — drive the real gate end to end."""
+class TestSSHConfigWrite:
+    """``~/.ssh/config`` is an ordinary write for a session with a person in it; a ``-q`` session applies
+    ``approvals.single_query_mode`` to it, as it does to a dangerous command."""
 
-    @pytest.fixture()
+    @pytest.fixture
     def ssh_config(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HOME", str(tmp_path))
+        (tmp_path / ".ssh").mkdir()
         return tmp_path / ".ssh" / "config"
 
-    def test_no_human_present_blocks_and_writes_nothing(self, ssh_config):
+    def test_write_goes_through_without_asking(self, ssh_config):
         from tools.file_tools import write_file_tool
 
-        result = json.loads(write_file_tool(str(ssh_config), "Host x\n  ProxyCommand evil\n"))
-        assert "BLOCKED" in result["error"]
-        assert not ssh_config.exists()
+        result = json.loads(write_file_tool(str(ssh_config), "Host x\n"))
+        assert not result.get("error"), result
+        assert ssh_config.read_text(encoding="utf-8") == "Host x\n"
 
-    def test_single_query_session_denies_with_the_q_mode_message(self, ssh_config, monkeypatch):
+    def test_single_query_session_refuses_it_by_default(self, ssh_config, monkeypatch):
         monkeypatch.setenv("HERMES_SINGLE_QUERY_SESSION", "1")
-        monkeypatch.setenv("HERMES_INTERACTIVE", "1")  # `hermes chat -q` exports it too
+        monkeypatch.setenv("HERMES_INTERACTIVE", "1")
         from tools.file_tools import write_file_tool
 
-        result = json.loads(write_file_tool(str(ssh_config), "Host x\n  ProxyCommand evil\n"))
-        assert "BLOCKED" in result["error"]
-        assert "single-query" in result["error"]
+        result = json.loads(write_file_tool(str(ssh_config), "Host x\n"))
+        assert "BLOCKED" in result.get("error", "") and "approvals.single_query_mode" in result["error"], result
         assert not ssh_config.exists()
-
-    def test_relative_path_is_gated_from_the_task_cwd_not_the_process_cwd(self, ssh_config, tmp_path,
-                                                                           monkeypatch):
-        """A gateway-hosted turn's workspace is not the process cwd: the gate must judge the path
-        the write will actually land on, or a relative spelling skips approval."""
-        ws, elsewhere = tmp_path / "ws", tmp_path / "elsewhere"
-        for d in (ws, elsewhere, ssh_config.parent):
-            d.mkdir()
-        (ws / "sshdir").symlink_to(ssh_config.parent, target_is_directory=True)
-        monkeypatch.setenv("TERMINAL_CWD", str(ws))
-        monkeypatch.chdir(elsewhere)
-        from tools.file_tools_write_guards import _check_approval_required_write
-
-        assert "BLOCKED" in (_check_approval_required_write(["sshdir/config"], "ssh-gate-task") or "")
 
 
 class TestSecretFileReadRedaction:

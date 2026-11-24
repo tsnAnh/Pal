@@ -441,7 +441,6 @@ class GatewayAgentCacheMixin:
             pending_skills_reload_notes.pop(session_key, None)
         state = self._peek_session_state(session_key)
         if state is not None:
-            state.persistent.approvals = None
             state.persistent.update_prompt_pending = False
         for mod, attr, what in (
             ("tools.slash_confirm", "clear", "slash-confirm"), ("tools.approval", "clear_session", "approval"),
@@ -454,16 +453,6 @@ class GatewayAgentCacheMixin:
                 clear(session_key)
             except Exception as e:
                 logger.debug("Failed to clear %s state for session boundary %s: %s", what, session_key, e)
-        # The persisted /yolo copy dies with the in-memory one, or the next turn's restore revives it. None, not
-        # False: the next conversation follows its launch policy again (seeded once per boundary), and a
-        # toggle-less chat stays off.
-        store = getattr(self, "session_store", None)
-        if store is not None:
-            try:
-                store.set_session_yolo(session_key, None)
-            except Exception:
-                # Never fails the boundary itself, but a surviving ON would come back after a restart.
-                logger.warning("Failed to clear persisted yolo for session boundary %s", session_key, exc_info=True)
 
     def _begin_session_run_generation(self, session_key: str) -> int:
         """Claim a fresh, monotonically increasing run generation token (NEVER reset): a late result

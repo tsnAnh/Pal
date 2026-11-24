@@ -91,8 +91,7 @@ def _scan_context_content(content: str, filename: str, *, user_authored: bool = 
     cloned repo's docs); blocking, not warning, because the file would otherwise enter the prompt verbatim.
 
     *user_authored* (SOUL.md in the user's own HERMES_HOME): a hit is WARNED and the file still loads.
-    SOUL.md sits in the same trust class as config.yaml — file-tool writes to it go through the
-    protected-instruction approval gate (``tools/file_tools_write_guards.py``) and project checkouts never
+    SOUL.md sits in the same trust class as config.yaml — project checkouts never
     supply it — so a user who *documents* "ignore previous instructions" in their security guidance
     must not lose their whole identity file to a one-line log entry (#112570). Project-dir files
     (repo AGENTS.md / .cursorrules / .hermes.md) arrive with the checkout and keep blocking, and so does

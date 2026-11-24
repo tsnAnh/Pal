@@ -275,7 +275,7 @@ class GatewayACPAgent(GatewayReplyMixin, acp.Agent):
                 or "acp-editor-policy-v1" not in descriptor.get("capabilities", [])):
             raise GatewayClientError("acp_policy_unavailable")
         from hermes_cli.gateway_chat import env_launch_flags
-        # `hermes acp --yolo` / `--safe-mode` / ... reach this process as their env equivalents; the
+        # `hermes acp --safe-mode` / ... reach this process as their env equivalents; the
         # owner does not inherit them, so they freeze into this session's policy or not at all.
         flags = env_launch_flags()
         if flags.get("safe_mode") or flags.get("ignore_user_config"):
@@ -1194,15 +1194,9 @@ class GatewayACPAgent(GatewayReplyMixin, acp.Agent):
             _build_permission_options, _build_permission_tool_call, _OPTION_ID_TO_HERMES,
         )
         choices = prompt["choices"]
-        options = [option for option in _build_permission_options(
-            allow_permanent="always" in choices, allow_session="session" in choices)
-            if _OPTION_ID_TO_HERMES[option.option_id] in choices]
+        options = [option for option in _build_permission_options() if _OPTION_ID_TO_HERMES[option.option_id] in choices]
         try:
-            if 'edit' in prompt:
-                from acp_adapter.edit_approval import EditProposal, build_acp_edit_tool_call
-                tool_call = build_acp_edit_tool_call(EditProposal(**prompt['edit']))
-            else:
-                tool_call = _build_permission_tool_call(prompt.get('command', ''), prompt.get('description', ''))
+            tool_call = _build_permission_tool_call(prompt.get('command', ''), prompt.get('description', ''))
             response = await self._conn.request_permission(session_id=self._editor_id(session_id),
                 tool_call=tool_call, options=options)
             await self._close_card(self._editor_id(session_id), tool_call, options, response)

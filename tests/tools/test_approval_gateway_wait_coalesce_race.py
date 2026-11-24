@@ -152,13 +152,13 @@ def test_identical_requests_racing_to_lead_send_one_prompt(monkeypatch):
     assert settled.wait(10)
     prompts = len(notified)
     queued = len(mod._gateway_queues.get(SESSION_KEY, []))
-    # One /approve answers the only prompt (and, on failure, every duplicate so the threads exit).
-    mod.resolve_gateway_approval(SESSION_KEY, "session", resolve_all=True)
+    # One /deny answers the only prompt (and, on failure, every duplicate so the threads exit).
+    mod.resolve_gateway_approval(SESSION_KEY, "deny", resolve_all=True)
     for thread in threads:
         thread.join(10)
     assert (prompts, queued) == (1, 1)
     assert sorted((r["resolved"], r["choice"], bool(r.get("coalesced"))) for r in results) == [
-        (True, "session", False), (True, "session", True)]
+        (True, "deny", False), (True, "deny", True)]
 
 
 def test_followers_released_by_once_share_one_fresh_prompt(monkeypatch):

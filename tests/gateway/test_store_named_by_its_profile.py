@@ -77,16 +77,6 @@ def test_a_wake_finds_the_session_in_its_profiles_store(tmp_path, store_elsewher
     assert session_owned_by_profile(SimpleNamespace(_runtime_profile_homes=[("worker", home)]), "worker", "s")
 
 
-def test_approvals_suggest_reads_the_current_profiles_store(store_elsewhere, capsys):
-    import json
-    from argparse import Namespace
-    from hermes_cli.approvals_suggest import suggest_command
-    home = _home()
-    _seed(home, "s", "cli")
-    assert suggest_command(Namespace(db=None, days=0, min_count=1, limit=20, apply_indices=None, json=True)) == 0
-    assert json.loads(capsys.readouterr().out)["proposals"] == []
-
-
 def test_a_recreated_worktree_is_locked_for_the_profiles_store(tmp_path, monkeypatch, store_elsewhere):
     import subprocess
     from hermes_cli.tui_worktree_resume import record_tui_worktree, recreate_tui_worktree

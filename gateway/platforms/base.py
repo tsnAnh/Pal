@@ -441,10 +441,6 @@ from gateway.platforms.helpers import fence_state_after, reply_file_off, try_rep
 from gateway.platforms.base_post_delivery import run_post_delivery_callback
 from gateway.platforms.base_delivery_ledger import (
     finalize_final_obligation, ledger_attempted, ledger_bracket, record_final_obligation)
-from gateway.platforms.base_exec_approval import (
-    approval_timeout_seconds, ea_action_labels, ea_default_reason_text, ea_header_text,
-    ea_reason_label_text, ea_smart_deny_line_text, exec_approval_cmd_budget, format_approval_deadline_line,
-    card_shows_whole_command, render_exec_approval)
 from gateway.platforms.base_streaming_tts import (
     AudioFormat, StreamingTTSHandle, streaming_tts_should_skip_whole_file, streaming_tts_turn_key)
 from gateway.platforms.event import MessageEvent, MessageType, ProcessingOutcome
@@ -1546,28 +1542,6 @@ def coerce_plaintext_gateway_command(event: MessageEvent) -> None:
 
 
 @dataclass
-class ExecApprovalPrompt:
-    """One exec-approval prompt, ready for a platform to render natively (see
-    ``BasePlatformAdapter.send_exec_approval``). ``actions`` rows are ``(label, choice, style)``
-    with ``choice`` in ``once`` / ``session`` / ``always`` / ``deny`` — the vocabulary
-    ``tools.approval.resolve_gateway_approval`` accepts — and ``style`` in ``primary`` /
-    ``danger`` / ``""``."""
-    chat_id: str
-    session_key: str
-    text: str
-    actions: list[tuple[str, str, str]]
-    command: str
-    description: str
-    smart_denied: bool
-    metadata: Optional[dict[str, Any]] = None
-    request_id: Optional[str] = None  # the ``tools.approval`` request this card answers (and only that one)
-
-    @property
-    def choices(self) -> list[str]:
-        return [choice for _, choice, _ in self.actions]
-
-
-@dataclass
 class SendResult:
     """Result of sending a message."""
     success: bool
@@ -2624,117 +2598,17 @@ class BasePlatformAdapter(_SessionModelSettingsMixin, SenderAdmissionMixin, ABC)
             # No running loop (unit tests): close the coroutine to avoid a never-awaited warning.
             coro.close()
 
-    # ── ``_format_exec_approval`` templates; adapters override only the MARKUP (bold, HTML,
-    # fences) — the words come from ``gateway.platforms.base_exec_approval`` so every surface
-    # says the same thing.
-    # ``_EA_HEADER`` / ``_EA_REASON_LABEL`` / ``_EA_SMART_DENY_LINE`` / ``_EA_ACTION_LABELS`` are
-    # properties (not class attrs) so the active ``display.language`` is read per render;
-    # subclasses may still shadow them with plain class attributes carrying their own markup.
-    _EA_CODE_OPEN: str = "```\n"
-    _EA_CODE_CLOSE: str = "\n```\n"
-    _EA_DEADLINE_PREFIX: str = "\n\n"  # separates the deadline line from the reason line
-    _EA_CMD_BUDGET: int = 3000
-    _EA_CARD_CAP: int = 0  # >0: the whole card must fit this cap, so the preview gets what the rest leaves
-    _EA_REASON_BUDGET: int = 0  # 0 = the reason is never truncated
-
-    @property
-    def _EA_HEADER(self) -> str:
-        return f"⚠️ {ea_header_text()}\n\n"
-
-    @property
-    def _EA_REASON_LABEL(self) -> str:
-        return f"{ea_reason_label_text()}: "
-
-    @property
-    def _EA_SMART_DENY_LINE(self) -> str:
-        return f"\n\n{ea_smart_deny_line_text()}"
-
     @staticmethod
     def _truncate_preview(text: str, budget: int, suffix: str = "...") -> str:
         """Truncate ``text`` to ``budget`` chars, appending ``suffix`` when cut."""
         text = str(text or "")
         return text[:budget] + suffix if len(text) > budget else text
 
-    def _ea_escape(self, text: str) -> str:
-        """Escape hook for command preview/reason; HTML-mode platforms (Telegram) override."""
-        return text
-
-    def _ea_fit(self, text: str, budget: int, suffix: str = "...", escape: Optional[Callable[[str], str]] = None) -> str:
-        """``_truncate_preview`` measured after ``escape`` (default ``_ea_escape``) in
-        ``message_len_fn`` units: the platform cap applies to the wire payload, and escaping
-        expands (``&`` → ``&amp;``), so a raw-length cut can still overflow. Returns raw text (the
-        caller escapes); ``suffix`` rides outside ``budget`` like ``_truncate_preview``."""
-        escape = escape or self._ea_escape
+    def _fit_preview(self, text: str, budget: int, suffix: str = "...", escape: Optional[Callable[[str], str]] = None) -> str:
+        """``_truncate_preview`` measured after ``escape`` in ``message_len_fn`` units: the platform cap
+        applies to the wire payload and escaping expands it. Returns raw text; ``suffix`` rides outside ``budget``."""
+        escape = escape or (lambda s: s)
         return fit_prefix(str(text or ""), budget, lambda s: self.message_len_fn(escape(s)), suffix)
-
-    def _exec_approval_cmd_budget(self, description: str, smart_denied: bool) -> int:
-        """Chars of command preview that fit; platforms with a hard message cap set ``_EA_CARD_CAP``."""
-        return exec_approval_cmd_budget(self, description, smart_denied)
-
-    def _ea_deadline_line(self) -> str:
-        """The "doing nothing means it will NOT run" line, with the configured approvals.timeout."""
-        return self._EA_DEADLINE_PREFIX + self._ea_escape(format_approval_deadline_line(approval_timeout_seconds()))
-
-    def _format_exec_approval(
-        self, command: str, description: Optional[str] = None, smart_denied: bool = False,
-        full_command_shown: bool = False) -> str:
-        """Shared exec-approval prompt text: header + fenced (truncated) command + why it was flagged +
-        the deadline line, plus the smart-deny line (``base_exec_approval.render_exec_approval``)."""
-        return render_exec_approval(self, str(command or ""), ea_default_reason_text() if description is None
-                                    else description, smart_denied, full_command_shown)[0]
-
-    # ── Exec-approval prompt (template method). The choice set is one rule for every button
-    # surface — three separate "same fix × N adapters" commits motivated lifting it here.
-    _EA_ACTION_STYLES: dict[str, str] = {"once": "primary", "deny": "danger"}
-
-    @property
-    def _EA_ACTION_LABELS(self) -> dict[str, str]:
-        return ea_action_labels()
-
-    def _exec_approval_actions(
-            self, *, allow_permanent: bool, allow_session: bool, smart_denied: bool) -> list[tuple[str, str, str]]:
-        """``(label, choice, style)`` rows for the approval buttons. A smart deny is an owner
-        override for one operation only, so it offers neither the session nor the permanent tier;
-        the permanent tier is never offered without the session tier."""
-        choices = ["once"]
-        if not smart_denied and allow_session:
-            choices.append("session")
-            if allow_permanent:
-                choices.append("always")
-        choices.append("deny")
-        return [(self._EA_ACTION_LABELS[c], c, self._EA_ACTION_STYLES.get(c, "")) for c in choices]
-
-    @classmethod
-    def supports_exec_approval_buttons(cls) -> bool:
-        """True when the adapter renders native approval buttons (overrides the prompt hook);
-        the runner otherwise sends the plain-text ``/approve`` prompt."""
-        return cls._send_exec_approval_prompt is not BasePlatformAdapter._send_exec_approval_prompt
-
-    async def send_exec_approval(
-        self, chat_id: str, command: str, session_key: str, description: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None, allow_permanent: bool = True, allow_session: bool = True,
-        smart_denied: bool = False, request_id: Optional[str] = None,
-    ) -> SendResult:
-        """Interactive exec-approval prompt; a press resolves via ``tools.approval.resolve_gateway_approval``.
-        Text and choice set are shared; adapters render them natively in ``_send_exec_approval_prompt``.
-        A preview that cannot hold the whole command is preceded by the full command; when that cannot
-        be sent, the card offers Deny only — nobody approves a command they could not read."""
-        description = ea_default_reason_text() if description is None else description
-        command = str(command or "")
-        actions = self._exec_approval_actions(
-            allow_permanent=allow_permanent, allow_session=allow_session, smart_denied=smart_denied)
-        text, truncated = render_exec_approval(self, command, description, smart_denied, True)
-        # The request was created Deny-only; Approve goes live once the card or the full command shows it whole.
-        if not await card_shows_whole_command(self, chat_id, session_key, request_id, command, metadata, truncated):
-            text = render_exec_approval(self, command, description, smart_denied, False)[0]
-            actions = [row for row in actions if row[1] == "deny"]
-        return await self._send_exec_approval_prompt(ExecApprovalPrompt(
-            chat_id=chat_id, session_key=session_key, metadata=metadata, command=command, description=description,
-            smart_denied=smart_denied, request_id=request_id, text=text, actions=actions))
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Render ``prompt`` with the platform's native buttons; the default has none."""
-        return SendResult(success=False, error="Not supported")
 
     @staticmethod
     def _format_choice_page(options: list, page: int, per_page: int) -> tuple[list, dict[str, Any]]:

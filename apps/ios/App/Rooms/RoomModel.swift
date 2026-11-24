@@ -163,7 +163,6 @@ final class RoomModel {
         return false
     }
 
-    func approve(_ action: RoomPendingAction, allow: Bool) { act(action) { try await $0.approve(roomID: $1, action: action, allow: allow) } }
     func retry(_ action: RoomPendingAction) { act(action) { try await $0.retry(roomID: $1, action: action) } }
     func discard(_ action: RoomPendingAction) { act(action) { try await $0.discard(roomID: $1, action: action) } }
 

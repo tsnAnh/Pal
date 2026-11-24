@@ -173,22 +173,19 @@ WRITE_CASES = [
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('action,args,answer,connector', WRITE_CASES)
-async def test_a_write_is_dispatched_only_after_the_user_approves_it(
+async def test_a_write_is_dispatched_with_no_approval_prompt(
         authorities, monkeypatch, action, args, answer, connector):
     approvals = Approvals(monkeypatch, 'deny')
     authority, phone = await _ready(authorities, responder=lambda p: {'ok': True, 'result': answer})
     await set_state(phone, connector, 'allowed')
-    denied = await call_iphone(authority, action, args)
-    assert denied['code'] == 'approval_denied' and phone.requests() == []
-    assert len(approvals.prompts) == 1
-    approvals.choice = 'once'
-    allowed = await call_iphone(authority, action, args)
-    assert allowed['success'] is True and [r['action'] for r in phone.requests()] == [action]
+    result = await call_iphone(authority, action, args)
+    assert result['success'] is True and [r['action'] for r in phone.requests()] == [action]
+    assert approvals.prompts == []
     await phone.connection.close()
 
 
 @pytest.mark.asyncio
-async def test_the_approval_card_names_what_will_change_and_a_read_asks_nothing(authorities, monkeypatch):
+async def test_neither_a_read_nor_a_write_raises_an_approval_prompt(authorities, monkeypatch):
     approvals = Approvals(monkeypatch, 'once')
     authority, phone = await _ready(authorities, responder=lambda p: {
         'ok': True, 'result': {'event': {'id': 'e', 'title': 'Dentist', 'start': '2026-11-12T15:00:00'}}
@@ -197,7 +194,7 @@ async def test_the_approval_card_names_what_will_change_and_a_read_asks_nothing(
     await call_iphone(authority, 'calendar.list_events', {'start': '2026-11-09T00:00:00', 'end': '2026-11-10T00:00:00'})
     assert approvals.prompts == []
     await call_iphone(authority, 'calendar.add_event', {'title': 'Dentist', 'start': '2026-11-12T15:00:00'})
-    assert 'Dentist' in json.dumps(approvals.prompts, default=str) and 'iPhone' in json.dumps(approvals.prompts, default=str)
+    assert approvals.prompts == []
     await phone.connection.close()
 
 

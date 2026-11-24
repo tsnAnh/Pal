@@ -94,11 +94,6 @@ class LocalSessionAdapter(BasePlatformAdapter):
     async def get_chat_info(self, chat_id):
         return {'id': chat_id, 'type': 'dm'}
 
-    async def send_exec_approval(self, **kwargs):
-        # The existing callback owns registration in PendingControls. An ACK here
-        # selects that rendering path without a plaintext fallback or a second waiter.
-        return SendResult(success=True, message_id=uuid.uuid4().hex)
-
     async def send_clarify(self, chat_id, question, choices, clarify_id, session_key, metadata=None):
         error = self._unanswerable_clarify(chat_id)
         if error is not None:
@@ -530,7 +525,7 @@ def local_session_info(authority, ref):
 
 def _classic_cli_fields(authority, ref, live, agent, policy):
     """What main's HermesCLI read off itself for /status, the status bar and the exit summary: the
-    stored title, archived flag, and times, the session's yolo, api_mode, the loaded tool count and a
+    stored title, archived flag, and times, api_mode, the loaded tool count and a
     masked credential hint (never the key). Lazy sessions report what is known without building an
     agent. ``archived`` is a JSON boolean (``bool(row.get("archived"))``), never SQLite ``1``:
     Desktop's hidden Bot Chat probe uses ``archived === true``."""
@@ -541,10 +536,6 @@ def _classic_cli_fields(authority, ref, live, agent, policy):
     row = None
     with contextlib.suppress(Exception):
         row = store.sessions.get(stored_id)
-    yolo = bool(policy is not None and getattr(policy, 'yolo', False))
-    with contextlib.suppress(Exception):
-        from tools.approval import is_session_yolo_enabled
-        yolo = yolo or is_session_yolo_enabled(live.route)
     api_mode = getattr(agent, 'api_mode', None) if agent is not None else None
     if api_mode is None and policy is not None:
         with contextlib.suppress(Exception):
@@ -556,7 +547,7 @@ def _classic_cli_fields(authority, ref, live, agent, policy):
     tools = getattr(agent, 'tools', None) if agent is not None else None
     started = row.started_at if row is not None else None
     return {'title': row.title if row is not None else None, 'started_at': started,
-            'last_active_at': (row.last_activity_at if row is not None else None) or started, 'yolo': yolo,
+            'last_active_at': (row.last_activity_at if row is not None else None) or started,
             'archived': bool(row.archived) if row is not None else False,
             'api_mode': api_mode or None, 'tool_count': len(tools) if isinstance(tools, list) else None,
             'credential_hint': hint}

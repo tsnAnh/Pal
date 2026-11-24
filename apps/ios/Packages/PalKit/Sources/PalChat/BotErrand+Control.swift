@@ -39,20 +39,9 @@ extension BotErrand {
         return .answered(await outcome(within: deadline) { $0.errandOutcome(for: mark) })
     }
 
-    public func pendingApproval() async throws -> PendingPrompt? {
-        try await ensureLive()
-        return await session.state.transcript.pendingPrompts.first { $0.kind == .approval }
-    }
-
     public func pendingQuestion() async throws -> PendingPrompt? {
         try await ensureLive()
         return await session.state.transcript.pendingPrompts.first { $0.kind == .clarify }
-    }
-
-    public func decide(_ decision: ApprovalDecision, on prompt: PendingPrompt) async throws {
-        guard let choice = decision.choice(in: prompt) else { throw ErrandError.notAccepted }
-        try await ensureLive()
-        try await control { try await session.answerApproval(prompt, choice: choice) }
     }
 
     public func stop(settle: Duration = Self.defaultStopSettle) async throws -> StopOutcome {

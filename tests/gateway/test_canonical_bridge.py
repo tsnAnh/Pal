@@ -33,7 +33,6 @@ async def test_the_authority_serves_exactly_the_declared_bridge(bots):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('method,params,keys', [
-    ('permissions.get', {}, {'auto_review', 'approval_mode', 'ask', 'allow'}),
     ('library.list', {}, {'items', 'next_before', 'index_complete'}),
     ('account.subscriptions', {}, {'subscriptions'}),
     ('cron.manage', {}, {'success'}),
@@ -48,8 +47,6 @@ async def test_a_read_grant_gets_the_sidecar_answer_for_every_read_verb(bots, me
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('method,params', [
-    ('permissions.set_auto_review', {'enabled': False}),
-    ('permissions.rules.add', {'list': 'ask', 'text': 'ask before deleting files'}),
     ('cron.manage', {'action': 'add', 'schedule': 'every 1h', 'prompt': 'ping'}),
     ('cron.manage', {'action': 'run', 'name': 'whatever'}),
     ('shared_metrics.set', {'enabled': False}),
@@ -66,13 +63,12 @@ async def test_a_control_verb_refuses_a_read_only_grant_and_changes_nothing(bots
 
 @pytest.mark.asyncio
 async def test_a_grant_without_read_cannot_read(bots):
-    response = await call(bots.connect(capabilities=['session:control']), 'permissions.get', {})
+    response = await call(bots.connect(capabilities=['session:control']), 'library.list', {})
     assert failure(response)['message'] == 'permission_denied'
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('method,params,field', [
-    ('permissions.get', {'bogus': 1}, 'bogus'),
     ('library.list', {'limit': 'many'}, 'limit'),
     ('profiles.rename', {'name': 'alpha', 'new_name': 'x', 'extra': True}, 'extra'),
     ('vault.add', {'secret': 'hunter2', 'sneaky': 1}, 'sneaky'),
@@ -198,21 +194,9 @@ async def test_hosted_connector_accounts_are_served_and_removing_one_needs_contr
 
 
 @pytest.mark.asyncio
-async def test_a_routed_write_lands_in_the_owning_profiles_home_only(bots):
-    connection = bots.connect(host=True)
-    changed = await call(connection, 'permissions.set_auto_review', {'profile': 'alpha', 'enabled': False})
-    assert 'error' not in changed, changed
-    assert (await call(connection, 'permissions.get', {'profile': 'alpha'}))['result']['auto_review'] is False
-    assert (await call(connection, 'permissions.get', {}))['result']['auto_review'] is True
-    assert (await call(connection, 'permissions.get', {'profile': 'beta'}))['result']['auto_review'] is True
-    assert config_of(get_profile_dir('alpha')) != config_of(get_profile_dir('beta'))
-    assert 'auto_review' not in str(config_of(bots.root))
-
-
-@pytest.mark.asyncio
 async def test_a_profile_bound_grant_cannot_reach_another_profile(bots):
     connection = bots.connect('alpha')
-    assert failure(await call(connection, 'permissions.get', {'profile': 'beta'}))['message'] == 'profile_mismatch'
+    assert failure(await call(connection, 'library.list', {'profile': 'beta'}))['message'] == 'profile_mismatch'
     assert failure(await call(connection, 'profiles.configure', {'name': 'beta', 'description': 'x'}),
                    )['message'] == 'profile_mismatch'
     assert failure(await call(connection, 'profiles.rename', {'name': 'beta', 'new_name': 'gamma'}),
@@ -224,9 +208,9 @@ async def test_a_profile_bound_grant_cannot_reach_another_profile(bots):
 
 @pytest.mark.asyncio
 async def test_the_sidecars_refusal_keeps_its_code_message_and_data(bots):
-    response = await call(bots.connect(), 'permissions.rules.remove', {'id': '  '})
-    error = failure(response, 5320)
-    assert error['message'] and error['data']['code'] == 'invalid_id', response
+    response = await call(bots.connect(), 'cron.manage', {'action': 'trigger_issue', 'name': 'x'})
+    error = failure(response, 4001)
+    assert error['message'] and error['data']['field'] == 'action', response
 
 
 @pytest.mark.asyncio

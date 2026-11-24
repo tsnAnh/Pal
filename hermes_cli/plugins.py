@@ -305,7 +305,6 @@ class PluginManager(PluginLoaderMixin, PluginDispatchMixin, PluginLedgerMixin):
         self._portable_mcp_servers: dict[str, dict[str, Any]] = {}
         self._portable_mcp_server_plugins: dict[str, str] = {}
         self._aux_tasks: dict[str, dict[str, Any]] = {}
-        self._approval_transports: dict[str, Any] = {}
         self._slack_action_handlers: list[tuple] = []
         self._platform_handler_factories: dict[str, list[tuple]] = {}
         # Process-owned discovery listeners (``on_plugin_loaded``); never cleared by unload().
@@ -568,32 +567,6 @@ class PluginManager(PluginLoaderMixin, PluginDispatchMixin, PluginLedgerMixin):
         if verdict.log:
             logger.log(*verdict.log)
         return False
-
-    def register_approval_transport(self, name: str, present_fn: Callable, *, plugin_id: str) -> None:
-        """Manager-level registration (public API kept for out-of-tree plugins); the PluginContext
-        method is the tracked path plugins normally use. Same validation, no unload tracking."""
-        from hermes_cli.approval_transport import RegisteredApprovalTransport
-        clean = str(name).strip().lower()
-        if clean == "builtin":
-            raise ValueError("approval transport name 'builtin' is reserved")
-        if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", clean):
-            raise ValueError("approval transport name must match [a-z0-9][a-z0-9_-]{0,63}")
-        if not callable(present_fn):
-            raise TypeError("approval transport present_fn must be callable")
-        if clean in self._approval_transports:
-            owner = self._approval_transports[clean].plugin_id
-            raise ValueError(f"approval transport {clean!r} is already registered by {owner!r}")
-        self._approval_transports[clean] = RegisteredApprovalTransport(
-            name=clean, present=present_fn, plugin_id=plugin_id, profile_home=str(get_hermes_home().resolve()),
-        )
-        logger.info("Plugin %s registered approval transport: %s", plugin_id, clean)
-
-    def get_approval_transport(self, name: str):
-        """Return a transport only inside the profile that registered it."""
-        registered = self._approval_transports.get(str(name).strip().lower())
-        if registered is None or registered.profile_home != str(get_hermes_home().resolve()):
-            return None
-        return registered
 
     def _collect_directory_manifests(self) -> list[PluginManifest]:
         """Directory manifests in full-discovery order (see :func:`collect_directory_manifests`)."""
@@ -1113,7 +1086,6 @@ _thread_tool_whitelist = threading.local()
 class _PreToolCallDirective:
     action: Optional[str] = None
     message: Optional[str] = None
-    rule_key: Optional[str] = None
     modified_args: Optional[dict[str, Any]] = None
 
 
@@ -1135,11 +1107,9 @@ def _get_pre_tool_call_directive_details(
     middleware_trace: Optional[list[dict[str, Any]]] = None, conversation_id: str = "",
 ) -> _PreToolCallDirective:
     """Check ``pre_tool_call`` hooks for ``{"action": "block", "message"}`` (veto; message becomes
-    the tool result) or ``{"action": "approve", "message", "rule_key"?}`` (escalate ANY tool to the
-    human-approval gate; ``rule_key`` picks the ``[a]lways`` allowlist grain). Precedence is
-    ``block`` > ``approve`` > none, not registration order: any plugin's valid veto wins over an
-    earlier plugin's request for human confirmation (#87420); among approves the first valid one
-    wins. Irrelevant returns are ignored."""
+    the tool result) or ``{"action": "approve", "message"?}`` (accepted for compatibility; the tool
+    just proceeds). Precedence is ``block`` > ``approve`` > none, not registration order: any
+    plugin's valid veto wins (#87420). Irrelevant returns are ignored."""
     allowed = getattr(_thread_tool_whitelist, "allowed", None)
     if allowed is not None and tool_name not in allowed:
         fmt = getattr(_thread_tool_whitelist, "fmt", "Tool '{tool_name}' denied")
@@ -1151,7 +1121,8 @@ def _get_pre_tool_call_directive_details(
         api_request_id=api_request_id, middleware_trace=list(middleware_trace or []), conversation_id=conversation_id,
     )
     modified_args: Optional[dict[str, Any]] = None
-    first_approve: Optional[tuple[Optional[str], Optional[str]]] = None  # (message, rule_key)
+    approve_message: Optional[str] = None
+    approved = False
     for result in hook_results:
         if not isinstance(result, dict):
             continue
@@ -1175,12 +1146,10 @@ def _get_pre_tool_call_directive_details(
         if action == "block":
             return _PreToolCallDirective(action="block", message=message, modified_args=modified_args)
         # approve is held back until the whole list has been scanned for a veto.
-        if first_approve is None:
-            rule_key = result.get("rule_key")
-            first_approve = (message, (rule_key.strip() or None) if isinstance(rule_key, str) else None)
-    if first_approve is not None:
-        return _PreToolCallDirective(action="approve", message=first_approve[0], rule_key=first_approve[1],
-                                     modified_args=modified_args)
+        if not approved:
+            approved, approve_message = True, message
+    if approved:
+        return _PreToolCallDirective(action="approve", message=approve_message, modified_args=modified_args)
     return _PreToolCallDirective(modified_args=modified_args)
 
 
@@ -1204,40 +1173,17 @@ def get_pre_tool_call_block_message(
 def resolve_pre_tool_block(
     tool_name: str, args: Optional[dict[str, Any]], **hook_kwargs: Any
 ) -> Optional[str]:
-    """Resolve the pre_tool_call directive to a final block message (or ``None`` to proceed),
-    running the human-approval gate for ``approve``. See :func:`_resolve_block_from_details`."""
+    """Resolve the pre_tool_call directive to a final block message (or ``None`` to proceed)."""
     return _dispatch_pre_tool_call_hooks(tool_name, args, **hook_kwargs)[0]
 
 
-def _resolve_block_from_details(
-    details: _PreToolCallDirective, tool_name: str, *, turn_id: str = "", tool_call_id: str = "",
-    session_id: str = "",
-) -> Optional[str]:
-    """The ONE place for the fail-closed approval logic: ``block`` blocks with its message; an
-    ``approve`` whose gate errors, denies, or times out is blocked; anything else proceeds."""
+def _resolve_block_from_details(details: _PreToolCallDirective, tool_name: str) -> Optional[str]:
+    """``block`` blocks with its message; an ``approve`` directive just proceeds."""
     if details.action == "block":
         return details.message
-    if details.action != "approve":
-        return None
-    try:
-        from tools.approval import request_tool_approval
-        from tools.approval_context import reset_current_observability_context, set_current_observability_context
-        approval_tokens = None
-        with suppress(Exception):
-            approval_tokens = set_current_observability_context(
-                turn_id=turn_id, tool_call_id=tool_call_id, session_id=session_id)
-        try:
-            result = request_tool_approval(tool_name, details.message or "", rule_key=details.rule_key or tool_name)
-        finally:
-            if approval_tokens is not None:
-                with suppress(Exception):
-                    reset_current_observability_context(approval_tokens)
-    except Exception:
-        # Fail-closed: if the gate itself errors, block rather than silently execute an action a
-        # plugin flagged for approval.
-        return f"BLOCKED: plugin approval gate failed for {tool_name}"
-    if not result.get("approved"):
-        return str(result.get("message") or f"BLOCKED: plugin approval required for {tool_name}")
+    if details.action == "approve":
+        logger.debug("pre_tool_call approve directive for %s proceeds without a prompt (%s)",
+                     tool_name, details.message or "")
     return None
 
 
@@ -1247,9 +1193,8 @@ def _dispatch_pre_tool_call_hooks(
     """Invoke ``pre_tool_call`` hooks once; return ``(block_message, modified_args)`` — the resolved
     block/approve message (``None`` to proceed) and merged ``modify`` args (``None`` if none)."""
     from tools.bot_mode_drafts import review_after_hooks
-    ids = {k: hook_kwargs.get(k, "") for k in ("turn_id", "tool_call_id", "session_id")}
     return review_after_hooks(tool_name, args, lambda: _get_pre_tool_call_directive_details(tool_name, args, **hook_kwargs),
-                              lambda details: _resolve_block_from_details(details, tool_name, **ids))
+                              lambda details: _resolve_block_from_details(details, tool_name))
 
 
 def get_pre_verify_continue_message(

@@ -242,8 +242,8 @@ def test_unmanaged_child_uses_explicit_home_and_survives_launcher_exit(tmp_path,
 @pytest.mark.platforms("linux")
 @pytest.mark.spawns_gateway_lookalike  # stub interpreter records env then exits; reaped below
 def test_unmanaged_runtime_does_not_inherit_client_launch_flags(tmp_path, monkeypatch):
-    # --yolo / --ignore-rules are frozen on the launching session's policy; inherited by the
-    # daemon they would bypass approvals or skip skills.auto_load for every later session.
+    # --ignore-rules is frozen on the launching session's policy; inherited by the
+    # daemon it would skip skills.auto_load for every later session.
     from hermes_cli import gateway_runtime_start as start
 
     home = tmp_path / 'policy-home'
@@ -254,15 +254,13 @@ def test_unmanaged_runtime_does_not_inherit_client_launch_flags(tmp_path, monkey
     executable.write_text(
         '#!' + sys.executable + '\nimport json, os, sys\nfrom pathlib import Path\n'
         + f'sys.path.insert(0, {str(repo)!r})\n'
-        + 'from tools import approval\n'
         + f'Path({str(witness)!r}).write_text(json.dumps('
-        + "{'yolo': approval._YOLO_MODE_FROZEN, 'ignore_rules': os.environ.get('HERMES_IGNORE_RULES'),"
+        + "{'ignore_rules': os.environ.get('HERMES_IGNORE_RULES'),"
         + " 'sentinel': os.environ.get('RUNTIME_TEST_SENTINEL')}))\n",
         encoding='utf-8',
     )
     executable.chmod(0o700)
     monkeypatch.setattr(sys, 'executable', str(executable))
-    monkeypatch.setenv('HERMES_YOLO_MODE', '1')
     monkeypatch.setenv('HERMES_IGNORE_RULES', '1')
     monkeypatch.setenv('RUNTIME_TEST_SENTINEL', 'retained')
     child = start.spawn_unmanaged_gateway(home, deadline=time.monotonic() + 5)
@@ -272,8 +270,8 @@ def test_unmanaged_runtime_does_not_inherit_client_launch_flags(tmp_path, monkey
         if child.poll() is None:
             child.kill()
             child.wait(timeout=5)
-    assert json.loads(witness.read_text()) == {'yolo': False, 'ignore_rules': None, 'sentinel': 'retained'}
-    assert os.environ['HERMES_YOLO_MODE'] == os.environ['HERMES_IGNORE_RULES'] == '1'
+    assert json.loads(witness.read_text()) == {'ignore_rules': None, 'sentinel': 'retained'}
+    assert os.environ['HERMES_IGNORE_RULES'] == '1'
 
 
 @pytest.mark.platforms("linux")

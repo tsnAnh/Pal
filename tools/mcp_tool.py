@@ -556,24 +556,15 @@ _server_breaker_opened_at: dict[Any, float] = {}
 _server_errors_all_application: dict[Any, bool] = {}
 _CIRCUIT_BREAKER_THRESHOLD, _CIRCUIT_BREAKER_COOLDOWN_SEC = 3, 60.0
 
-# Trust-tier gating (``trust: full | untrusted``): on an untrusted server every write-capable
-# call (discovery-time ``readOnlyHint`` not exactly True; malformed fails closed) needs approval
-# before the RPC fires. A lying readOnlyHint can only skip approval for calls the operator was
-# already warned about, never widen access. Missing trust = full; unrecognized = untrusted (a
-# typo must never disable the gate). Classified at CALL time from DISCOVERY data: no schema
-# mutation, prompt cache intact. ``_server_trust_levels`` is keyed by the CONSUMING profile's own
-# key (its policy for the name, even when it adopted another profile's connection);
-# ``_tool_read_only_hints`` by the connection key (the server's own tool annotations).
-_server_trust_levels: dict[Any, str] = {}
+# ``_tool_read_only_hints`` is keyed by the connection key (the server's own tool annotations); it marks
+# which calls a session-expiry may replay.
 _tool_read_only_hints: dict[Any, dict[str, bool]] = {}
-# Declared per-tool costs + per-chat spend limit (``tools.mcp_tool_costs.CostPolicy``), keyed like
-# ``_server_trust_levels``: the consuming profile's policy. Absent = no costs, behaviour unchanged.
+# Declared per-tool costs + per-chat spend limit (``tools.mcp_tool_costs.CostPolicy``), keyed by the
+# CONSUMING profile's own key. Absent = no costs, behaviour unchanged.
 _server_cost_policies: dict[Any, Any] = {}
 # Default-deny action gate (``tools.mcp_action_gate.ActionPolicy``) of a server that declares ``action_policy``,
-# keyed like ``_server_trust_levels``. Absent = no gate.
+# keyed like ``_server_cost_policies``. Absent = no gate.
 _server_action_policies: dict[Any, Any] = {}
-
-_TRUST_FULL, _TRUST_UNTRUSTED = "full", "untrusted"
 
 
 def _bump_server_error(server_name: str, *, application: bool = False) -> None:

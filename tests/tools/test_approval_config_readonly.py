@@ -15,7 +15,7 @@ These tests drive the REAL functions against a temp HERMES_HOME config
 import pytest
 
 import hermes_cli.config as hc
-from tools.approval import check_all_command_guards, load_permanent_allowlist
+from tools.approval import check_all_command_guards
 from tools.approval_context import _get_approval_config
 from tools.approval_context import _get_cron_approval_mode
 
@@ -26,8 +26,7 @@ def config_home(tmp_path, monkeypatch):
     home.mkdir()
     (home / "config.yaml").write_text(
         "model:\n  default: test-model\n"
-        "approvals:\n  mode: manual\n  timeout: 300\n  cron_mode: deny\n"
-        "command_allowlist: []\n"
+        "approvals:\n  timeout: 300\n  cron_mode: deny\n"
     )
     monkeypatch.setenv("HERMES_HOME", str(home))
     hc._LOAD_CONFIG_CACHE.clear()
@@ -47,6 +46,5 @@ def test_readers_return_live_cache_without_corrupting_it(
     before = dict(first)
     check_all_command_guards("ls -la", "local")
     _get_cron_approval_mode()
-    load_permanent_allowlist()
     assert _get_approval_config() == before
-    assert hc.load_config_readonly()["approvals"]["mode"] == "manual"
+    assert hc.load_config_readonly()["approvals"]["cron_mode"] == "deny"

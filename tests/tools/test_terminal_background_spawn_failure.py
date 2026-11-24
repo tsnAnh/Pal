@@ -36,7 +36,7 @@ def test_failed_sandbox_launch_returns_error_not_started_session(outcome, reason
     result = json.loads(spawn_background_process(
         command="sleep 30", env=_SandboxEnv(outcome), env_type="docker",
         effective_task_id="bg-fail", task_id="bg-fail", session_key="", workdir=None, cwd="/root",
-        effective_pty=False, notify_on_complete=True, watch_patterns=None, approval_note=None,
+        effective_pty=False, notify_on_complete=True, watch_patterns=None,
         pty_disabled_reason=None,
     ))
 

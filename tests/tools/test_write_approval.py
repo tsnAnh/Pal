@@ -299,41 +299,21 @@ def approval_callback_cleanup():
     from tools.terminal_tool import set_approval_callback
     set_approval_callback(None)
 
-def test_memory_inline_approve_writes(hermes_home, approval_callback_cleanup):
+def test_review_queue_stages_a_write_without_asking_the_registered_callback(hermes_home, approval_callback_cleanup):
     from tools.memory_tool import memory_tool, MemoryStore
     from tools.terminal_tool import set_approval_callback
     from tools import write_approval as wa
     _set_approval("memory", True)
 
-    calls = []
-    def approve_cb(command, description, **kw):
-        calls.append((command, description))
-        return "once"
-    set_approval_callback(approve_cb)
+    asked = []
+    set_approval_callback(lambda command, description, **kw: asked.append(command) or "once")
 
     store = MemoryStore(); store.load_from_disk()
-    r = json.loads(memory_tool("add", "memory", "approved fact", store=store))
-    assert r["success"] is True
-    assert r.get("staged") is None  # real write, not staged
-    assert store.memory_entries == ["approved fact"]
-    assert wa.pending_count("memory") == 0
-    # The registered callback must actually be invoked (not the input() path).
-    assert len(calls) == 1
-    assert "approved fact" in calls[0][0]
-
-def test_memory_inline_deny_blocks(hermes_home, approval_callback_cleanup):
-    from tools.memory_tool import memory_tool, MemoryStore
-    from tools.terminal_tool import set_approval_callback
-    from tools import write_approval as wa
-    _set_approval("memory", True)
-    set_approval_callback(lambda command, description, **kw: "deny")
-
-    store = MemoryStore(); store.load_from_disk()
-    r = json.loads(memory_tool("add", "memory", "denied fact", store=store))
-    assert r["success"] is False
-    assert "denied" in r["error"].lower()
+    r = json.loads(memory_tool("add", "memory", "queued fact", store=store))
+    assert r["success"] is True and r.get("staged") is True
     assert store.memory_entries == []
-    assert wa.pending_count("memory") == 0  # denied, not staged
+    assert wa.pending_count("memory") == 1
+    assert asked == []
 
 
 @pytest.mark.parametrize("context", ["single_query", "cron", "webhook"])

@@ -83,11 +83,11 @@ _lark_import_lock = threading.Lock()
 FEISHU_WEBSOCKET_AVAILABLE = websockets is not None
 FEISHU_WEBHOOK_AVAILABLE = aiohttp is not None
 
-from gateway.approval_actor import approval_refusal, refusal_text, update_prompt_refusal
+from gateway.approval_actor import refusal_text, update_prompt_refusal
 from gateway.config import Platform, PlatformConfig
 from agent.i18n import t
 from gateway.platforms.base import (
-    BasePlatformAdapter, ExecApprovalPrompt, SendResult, describe_proxy_error, env_proxy_for_redaction,
+    BasePlatformAdapter, SendResult, describe_proxy_error, env_proxy_for_redaction,
     SUPPORTED_DOCUMENT_TYPES, cache_document_from_bytes_async, cache_image_from_url,
     cache_audio_from_bytes_async, cache_image_from_bytes_async,
 )
@@ -168,15 +168,6 @@ _FEISHU_WEBHOOK_BODY_TIMEOUT_SECONDS = 30          # max seconds to read request
 _FEISHU_WEBHOOK_ANOMALY_THRESHOLD = 25             # consecutive error responses before WARNING log
 _FEISHU_WEBHOOK_ANOMALY_TTL_SECONDS = 6 * 60 * 60  # anomaly tracker TTL (6 hours) — matches openclaw
 _FEISHU_CARD_ACTION_DEDUP_TTL_SECONDS = 15 * 60    # card action token dedup window (15 min)
-
-_APPROVAL_CHOICE_MAP: dict[str, str] = {
-    "approve_once": "once", "approve_session": "session", "approve_always": "always", "deny": "deny",
-}
-# choice → catalog key of the resolved-card title; looked up through ``t()`` at resolve time.
-_APPROVAL_LABEL_KEYS: dict[str, str] = {
-    "once": "platform.feishu.approval.resolved_once", "session": "platform.feishu.approval.resolved_session",
-    "always": "platform.feishu.approval.resolved_always", "deny": "platform.feishu.approval.resolved_deny",
-}
 
 
 async def _read_limited_feishu_webhook_body(request: Any, max_bytes: int) -> bytes:
@@ -1343,8 +1334,6 @@ class FeishuAdapter(FeishuChoiceCardsMixin, FeishuSyntheticEventsMixin, BasePlat
         self._pending_media_batches = self._media_batch_state.events
         self._pending_media_batch_tasks = self._media_batch_state.tasks
         # Button-card state: id → {session_key, message_id, chat_id}
-        self._approval_state: dict[int, dict[str, str]] = {}
-        self._approval_counter = prompt_id_counter()
         self._update_prompt_state: dict[int, dict[str, str]] = {}
         self._update_prompt_counter = prompt_id_counter()
         self._init_choice_card_state()
@@ -1752,52 +1741,6 @@ class FeishuAdapter(FeishuChoiceCardsMixin, FeishuSyntheticEventsMixin, BasePlat
             logger.debug("[Feishu] Failed to delete message %s", message_id, exc_info=True)
             return False
 
-    # Template attrs for the shared _format_exec_approval core. The card
-    # header carries the title, so the text core starts at the code fence.
-    _EA_HEADER = ""
-    _EA_CMD_BUDGET = 3000
-
-    # Resolved per call (not at class-body time) so the active language applies.
-    @property
-    def _EA_REASON_LABEL(self) -> str:
-        return f"**{t('gateway.exec_approval.reason_label')}:** "
-
-    @property
-    def _EA_SMART_DENY_LINE(self) -> str:
-        line = t("gateway.exec_approval.smart_deny_line")
-        label, sep, rest = line.partition(":")
-        return "\n\n" + (f"**{label}{sep}**{rest}" if sep else line)
-
-    @property
-    def _EA_ACTION_LABELS(self) -> dict[str, str]:
-        return {"once": "✅ " + t("gateway.exec_approval.action_once"),
-                "session": "✅ " + t("platform.feishu.approval.action_session"),
-                "always": "✅ " + t("platform.feishu.approval.action_always"),
-                "deny": "❌ " + t("gateway.exec_approval.action_deny")}
-    _EA_CARD_ACTIONS = {"once": "approve_once", "session": "approve_session", "always": "approve_always", "deny": "deny"}
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Approval-button card; ``hermes_action`` in each button value lets the click callback
-        route to ``resolve_gateway_approval()`` and unblock the waiting agent thread."""
-        if not self._client:
-            return SendResult(success=False, error="Not connected")
-        try:
-            approval_id = next(self._approval_counter)
-            actions = [
-                _card_button(label, style or "default",
-                             {"hermes_action": self._EA_CARD_ACTIONS[choice], "approval_id": approval_id})
-                for label, choice, style in prompt.actions]
-            card = _card(f"⚠️ {t('gateway.exec_approval.header')}", "orange", prompt.text, actions=actions)
-            return await self._send_interactive_card(
-                prompt.chat_id, card, prompt.metadata, "send_exec_approval failed",
-                state_map=self._approval_state, state_id=approval_id, session_key=prompt.session_key,
-                extra_state={"body": prompt.text.replace(self._ea_deadline_line(), ""),  # deadline is moot once resolved
-                             "request_id": prompt.request_id or ""},
-            )
-        except Exception as exc:
-            logger.warning("[Feishu] send_exec_approval failed: %s", shown := describe_proxy_error(exc, env_proxy_for_redaction(_onboard_open_base_url(self._domain_name))) or str(exc))
-            return SendResult(success=False, error=shown)
-
     async def _send_interactive_card(
         self, chat_id: str, card: dict[str, Any], metadata: Optional[dict[str, Any]], failure_message: str, *,
         state_map: dict[int, dict[str, str]], state_id: int, session_key: str, extra_state: Optional[dict[str, str]] = None,
@@ -1845,14 +1788,6 @@ class FeishuAdapter(FeishuChoiceCardsMixin, FeishuSyntheticEventsMixin, BasePlat
         except Exception as exc:
             logger.warning("[Feishu] send_update_prompt failed: %s", shown := describe_proxy_error(exc, env_proxy_for_redaction(_onboard_open_base_url(self._domain_name))) or str(exc))
             return SendResult(success=False, error=shown)
-
-    @staticmethod
-    def _build_resolved_approval_card(*, choice: str, user_name: str, body: str | None = None) -> dict[str, Any]:
-        """Raw card JSON shown in place of the buttons once an approval is resolved; the request (*body*) stays."""
-        icon = "❌" if choice == "deny" else "✅"
-        label = t(_APPROVAL_LABEL_KEYS.get(choice, "platform.feishu.approval.resolved_fallback"))
-        decided = t("platform.feishu.approval.resolved_by_user", icon=icon, label=label, user=user_name)
-        return _card(f"{icon} {label}", "red" if choice == "deny" else "green", f"{body}\n\n{decided}" if body else decided)
 
     @staticmethod
     def _build_resolved_update_prompt_card(*, answer: str, user_name: str) -> dict[str, Any]:
@@ -2285,7 +2220,7 @@ class FeishuAdapter(FeishuChoiceCardsMixin, FeishuSyntheticEventsMixin, BasePlat
     def _validate_card_action(
         self, *, event: Any, state: dict[str, str], label: str, ident: Any,
     ) -> Optional[tuple[str, str, str, str, str]]:
-        """Shared operator/chat checks for approval + update-prompt clicks: ``(open_id, callback_chat_id,
+        """Shared operator/chat checks for button-card clicks: ``(open_id, callback_chat_id,
         user_name, user_id, union_id)`` or None (already logged)."""
         operator = getattr(event, "operator", None)
         open_id = str(getattr(operator, "open_id", "") or "")
@@ -2302,31 +2237,6 @@ class FeishuAdapter(FeishuChoiceCardsMixin, FeishuSyntheticEventsMixin, BasePlat
                            label.capitalize(), ident, expected_chat_id, callback_chat_id)
             return None
         return open_id, callback_chat_id, self._get_cached_sender_name(open_id) or open_id, user_id, union_id
-
-    def _handle_approval_card_action(self, *, event: Any, action_value: dict[str, Any], loop: Any) -> Any:
-        """Schedule approval resolution and build the synchronous callback response."""
-        approval_id = action_value.get("approval_id")
-        if approval_id is None:
-            logger.debug("[Feishu] Card action missing approval_id, ignoring")
-            return self._card_response()
-        state = self._approval_state.get(approval_id)
-        if not state:
-            logger.debug("[Feishu] Approval %s already resolved or unknown", approval_id)
-            return self._card_response()
-        choice = _APPROVAL_CHOICE_MAP.get(action_value.get("hermes_action"), "deny")
-        checked = self._validate_card_action(event=event, state=state, label="approval", ident=approval_id)
-        if checked is None:
-            return self._card_response()
-        open_id, chat_id, user_name, user_id, union_id = checked
-        # SessionSource.user_id is the tenant user_id when the app can see it, else the open_id.
-        if requester := approval_refusal(state["session_key"], user_id or open_id, extra=self.config.extra,
-                                         request_id=state.get("request_id"), choice=choice):
-            return self._card_toast(refusal_text(requester))  # only the clicker sees it; card unchanged
-        if not self._submit_on_loop(loop, self._resolve_approval(
-                approval_id=approval_id, choice=choice, user_name=user_name, open_id=open_id, chat_id=chat_id,
-                user_id=user_id, union_id=union_id)):
-            return self._card_response()
-        return self._card_response(self._build_resolved_approval_card(choice=choice, user_name=user_name, body=state.get("body")))
 
     def _handle_update_prompt_card_action(self, *, event: Any, action_value: dict[str, Any], loop: Any) -> Any:
         """Schedule update prompt resolution and build the synchronous callback response."""
@@ -2375,39 +2285,6 @@ class FeishuAdapter(FeishuChoiceCardsMixin, FeishuSyntheticEventsMixin, BasePlat
         if not state:
             logger.debug("[Feishu] %s %s already resolved while validating callback", label, ident)
         return state
-
-    async def _resolve_approval(
-        self, approval_id: Any, choice: str, user_name: str, *, open_id: str = "", chat_id: str = "",
-        user_id: str = "", union_id: str = "",
-    ) -> None:
-        """Pop approval state and unblock the waiting agent thread."""
-        state = self._pop_validated_prompt_state(
-            states=self._approval_state, ident=approval_id, label="Approval", open_id=open_id, chat_id=chat_id,
-            unauthorized_fmt="[Feishu] Unauthorized approval click by %s for approval %s",
-            operator_repr=open_id or "<unknown>", user_id=user_id, union_id=union_id,
-        )
-        if not state:
-            return
-        try:
-            from tools.approval import resolve_gateway_approval_card
-            count = resolve_gateway_approval_card(state["session_key"], choice, state.get("request_id"),
-                                                  actor_id=user_id or open_id, extra=self.config.extra)
-            logger.info(
-                "Feishu button resolved %d approval(s) for session %s (choice=%s, user=%s)",
-                count, state["session_key"], choice, user_id or open_id,
-            )
-            if not count and choice != "deny":
-                # The card already reads "Approved" (synchronous callback), but nothing was
-                # waiting — the wait timed out (fail-closed deny) or was resolved via /approve.
-                # Correct the record so the user doesn't believe the command ran.
-                _chat = str(state.get("chat_id", "") or chat_id or "")
-                if _chat:
-                    try:
-                        await self.send(_chat, t("platform.shared.approval_expired"))
-                    except Exception:
-                        logger.debug("[Feishu] expired-approval notice failed", exc_info=True)
-        except Exception as exc:
-            logger.error("Failed to resolve gateway approval from Feishu button: %s", exc)
 
     async def _resolve_update_prompt(
         self, prompt_id: Any, answer: str, user_name: str, *, open_id: str = "", chat_id: str = "",

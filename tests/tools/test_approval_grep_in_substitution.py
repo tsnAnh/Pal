@@ -54,13 +54,11 @@ class TestExecutableSubstitutionBodiesStayExecutable:
         blocked, reason = detect_hardline_command(cmd)
         assert blocked and reason == "system shutdown/reboot"
 
-    def test_public_guard_blocks_without_offering_approval(self, tmp_path, monkeypatch):
+    def test_public_guard_blocks(self, tmp_path, monkeypatch):
         monkeypatch.setenv("HERMES_HOME", str(tmp_path / "hh"))
         from tools.approval import check_dangerous_command
-        calls = []
-        result = check_dangerous_command('echo "$(grep -P \'safe\' /dev/null\nreboot)"', "local",
-                                         approval_callback=lambda *a, **k: calls.append(a) or False)
-        assert result["approved"] is False and "hardline" in result["message"].lower() and calls == []
+        result = check_dangerous_command('echo "$(grep -P \'safe\' /dev/null\nreboot)"', "local")
+        assert result["approved"] is False and "hardline" in result["message"].lower()
 
     @pytest.mark.parametrize("cmd", [
         "grep -e `echo needle` file",            # backtick OPERAND (opened after the grep) is not a closer

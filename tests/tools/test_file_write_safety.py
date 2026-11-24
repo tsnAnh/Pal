@@ -23,63 +23,31 @@ class TestStaticDenyList:
         assert _is_write_denied("/etc/shadow") is True
 
 
-class TestSshConfigApprovalGate:
-    """~/.ssh/config is approval-gated, not hard-denied (private keys stay denied)."""
+class TestSshConfigAndShellRcWrites:
+    """~/.ssh/config and login shell rc files are plain writes; private keys stay hard-denied."""
 
-    def test_ssh_config_not_hard_denied(self):
-        from agent.file_safety import is_write_denied
+    def test_ssh_config_is_not_denied(self):
+        from agent.file_safety import get_write_denied_error, is_write_denied
 
-        # The client config carries no key material — it must NOT be in the
-        # flat credential deny (it is routed through approval instead).
         assert is_write_denied(os.path.expanduser("~/.ssh/config")) is False
-
-    def test_ssh_config_get_write_denied_error_is_none(self):
-        from agent.file_safety import get_write_denied_error
-
         assert get_write_denied_error(os.path.expanduser("~/.ssh/config")) is None
 
-    def test_ssh_config_is_approval_required(self):
-        from agent.file_safety import is_write_approval_required
-
-        assert is_write_approval_required(os.path.expanduser("~/.ssh/config")) is True
-
     def test_private_keys_still_hard_denied(self):
-        from agent.file_safety import is_write_approval_required, is_write_denied
+        from agent.file_safety import is_write_denied
 
         for name in ("id_rsa", "id_ed25519", "authorized_keys"):
-            p = os.path.expanduser(f"~/.ssh/{name}")
-            assert is_write_denied(p) is True, name
-            # A hard-denied credential is not merely approval-gated.
-            assert is_write_approval_required(p) is False, name
+            assert is_write_denied(os.path.expanduser(f"~/.ssh/{name}")) is True, name
 
     def test_other_ssh_dir_files_still_hard_denied(self):
         from agent.file_safety import is_write_denied
 
-        # The ~/.ssh/ directory prefix deny still covers everything else,
-        # e.g. a known_hosts or an arbitrary key file.
         assert is_write_denied(os.path.expanduser("~/.ssh/id_rsa.pub")) is True
         assert is_write_denied(os.path.expanduser("~/.ssh/secret_key")) is True
 
-    def test_regular_file_not_approval_required(self, tmp_path: Path):
-        from agent.file_safety import is_write_approval_required
-
-        assert is_write_approval_required(str(tmp_path / "notes.txt")) is False
-
-
-class TestShellRcApprovalGate:
-    """Login shell rc files pair with the terminal gate (#85321)."""
-
-    def test_shell_rc_not_hard_denied(self):
+    def test_shell_rc_not_denied(self):
         from agent.file_safety import is_write_denied
 
         assert is_write_denied(os.path.expanduser("~/.bashrc")) is False
-
-    def test_shell_rc_is_approval_required(self):
-        from agent.file_safety import is_write_approval_required
-
-        for name in (".bashrc", ".zshrc", ".profile", ".bash_profile", ".zprofile"):
-            assert is_write_approval_required(os.path.expanduser(f"~/{name}")) is True, name
-
 
 
 class TestSafeWriteRoot:
@@ -626,463 +594,89 @@ class TestBomHandling:
         assert raw.error is None and raw.content.encode("utf-8", "surrogateescape") == original
 
 
-class TestProtectedInstructionFiles:
-    """Writes to agent-instruction files ALWAYS require approval.
+class TestInstructionFileWrites:
+    """Agent-instruction files are ordinary writes: nobody is asked; hard-denied paths still refuse."""
 
-    AGENTS.md / CLAUDE.md / SOUL.md / .cursorrules / project-local .hermes
-    config steer future agent behavior, so a prompt-injected agent writing
-    them is a persistence vector. The gate must ask the human every time —
-    even under yolo/auto-approve — and fail closed when no human channel
-    exists. Ported from: RooCodeInc/Roo-Code RooProtectedController
-    (Apache-2.0); symlink lesson from #41351.
-    """
-
-    @pytest.fixture(autouse=True)
-    def _gate_on(self, monkeypatch):
-        import tools.file_tools_write_guards as ft
-        monkeypatch.setattr(
-            ft, "_protected_instruction_config", lambda: (True, [])
-        )
-        yield
-
-    @pytest.fixture
-    def approvals(self, monkeypatch):
-        """Install a CLI approval callback; record calls; scripted answers."""
-        from tools.terminal_tool import set_approval_callback
-        state = {"calls": [], "answer": "deny"}
-
-        def cb(command, description, **kwargs):
-            state["calls"].append(
-                {"command": command, "description": description, **kwargs}
-            )
-            return state["answer"]
-
-        set_approval_callback(cb)
-        yield state
-        set_approval_callback(None)
-
-    def _write(self, path, content="injected"):
+    @staticmethod
+    def _write(path, content="written"):
         import json
         from tools.file_tools import write_file_tool
         return json.loads(write_file_tool(str(path), content))
 
-    # ---- core behavior -------------------------------------------------
+    @pytest.mark.parametrize("name", ["AGENTS.md", "CLAUDE.md", "SOUL.md", ".cursorrules"])
+    def test_instruction_file_write_goes_through_without_any_consent(self, tmp_path, name):
+        from tools.terminal_tool import set_approval_callback
 
-    @pytest.mark.parametrize(
-        "name", ["AGENTS.md", "CLAUDE.md", "SOUL.md", ".cursorrules"]
-    )
-    def test_deny_blocks_write(self, tmp_path, approvals, name):
-        target = tmp_path / name
-        approvals["answer"] = "deny"
-        res = self._write(target)
-        assert res.get("error"), res
-        assert "BLOCKED" in res["error"]
-        assert not target.exists()
-        assert len(approvals["calls"]) == 1
+        asked = []
+        set_approval_callback(lambda *a, **k: asked.append(a) or "deny")
+        try:
+            result = self._write(tmp_path / name)
+        finally:
+            set_approval_callback(None)
+        assert not result.get("error"), result
+        assert (tmp_path / name).read_text(encoding="utf-8") == "written"
+        assert asked == []
 
-    def test_approve_once_allows_write(self, tmp_path, approvals):
-        target = tmp_path / "AGENTS.md"
-        approvals["answer"] = "once"
-        res = self._write(target, "approved content")
-        assert not res.get("error"), res
-        assert target.read_text(encoding="utf-8") == "approved content"
-        assert len(approvals["calls"]) == 1
+    def test_project_local_hermes_config_write_goes_through(self, tmp_path):
+        target = tmp_path / ".hermes" / "config.yaml"
+        target.parent.mkdir()
+        result = self._write(target, "gate: off\n")
+        assert not result.get("error"), result
+        assert target.read_text(encoding="utf-8") == "gate: off\n"
 
-    def test_prompts_even_under_yolo(self, tmp_path, approvals, monkeypatch):
-        """The whole point: auto-approve/yolo must NOT bypass this gate."""
-        import tools.approval as A
-        monkeypatch.setattr(A, "_YOLO_MODE_FROZEN", True)
-        target = tmp_path / "AGENTS.md"
-        approvals["answer"] = "deny"
-        res = self._write(target)
-        assert res.get("error") and "BLOCKED" in res["error"]
-        assert not target.exists()
-        assert len(approvals["calls"]) == 1, "yolo bypassed the protected gate"
-
-    def test_second_write_prompts_again(self, tmp_path, approvals):
-        """One-operation approval: no session stickiness."""
-        target = tmp_path / "AGENTS.md"
-        approvals["answer"] = "once"
-        self._write(target)
-        self._write(target, "second")
-        assert len(approvals["calls"]) == 2
-
-    def test_cli_prompt_is_told_no_scope_persists(self, tmp_path, approvals):
-        """The prompt must not advertise a scope this gate discards.
-
-        Since nothing is persisted, a rendered "session"/"always" option
-        re-prompts on the very next write and reads as a broken gate
-        (#81887).
-        """
-        approvals["answer"] = "once"
-        self._write(tmp_path / "SOUL.md")
-        call = approvals["calls"][0]
-        assert call["allow_session"] is False
-        assert call["allow_permanent"] is False
-
-    def test_regular_file_never_prompts(self, tmp_path, approvals):
-        res = self._write(tmp_path / "notes.md", "hello")
-        assert not res.get("error"), res
-        assert approvals["calls"] == []
-
-    def test_no_human_fails_closed(self, tmp_path):
-        # No approval callback registered, not gateway → block, don't hang.
-        target = tmp_path / "AGENTS.md"
-        res = self._write(target)
-        assert res.get("error") and "BLOCKED" in res["error"]
-        assert not target.exists()
-
-    def test_config_disabled_skips_gate(self, tmp_path, approvals, monkeypatch):
+    @pytest.mark.parametrize("name", ["AGENTS.md", "agents.MD", "CLAUDE.md", "SOUL.md", ".cursorrules",
+                                      "AGENT\u017f.md", "\u017foul.md", ".cur\u017forrule\u017f"])
+    def test_instruction_file_names_are_recognised_in_any_directory_and_case(self, tmp_path, name):
         import tools.file_tools_write_guards as ft
-        monkeypatch.setattr(
-            ft, "_protected_instruction_config", lambda: (False, [])
-        )
-        res = self._write(tmp_path / "AGENTS.md", "ok")
-        assert not res.get("error"), res
-        assert approvals["calls"] == []
+        deep = tmp_path / "a" / "b"
+        assert ft._protected_instruction_reason(str(deep / name), enabled=True, extra_patterns=[]) == name
 
-    def test_extra_patterns_from_config(self, tmp_path, approvals, monkeypatch):
+    def test_extra_patterns_and_the_off_switch(self, tmp_path):
         import tools.file_tools_write_guards as ft
-        monkeypatch.setattr(
-            ft, "_protected_instruction_config", lambda: (True, ["*.mdc"])
-        )
-        approvals["answer"] = "deny"
-        res = self._write(tmp_path / "rules.mdc")
-        assert res.get("error") and "BLOCKED" in res["error"]
-
-    @pytest.mark.parametrize("name", ["AGENT\u017f.md", "\u017foul.md", ".cur\u017forrule\u017f"])
-    def test_case_fold_spellings_are_gated(self, name):
-        """APFS folds long s to s, so these open the protected file (CERT/CC VU#604762)."""
-        import tools.file_tools_write_guards as ft
-        assert ft._protected_instruction_reason(f"/repo/{name}", enabled=True, extra_patterns=[]) == name
-
-    def test_extra_patterns_match_folded_and_nfd_names(self):
-        import tools.file_tools_write_guards as ft
-        reason = ft._protected_instruction_reason
-        assert reason("/repo/Gro\u00dfe.md", enabled=True, extra_patterns=["grosse.md"])
-        assert reason("/repo/fu\u0308r.md", enabled=True, extra_patterns=["f\u00fcr.md"])
-        assert reason("/repo/notes.md", enabled=True, extra_patterns=["grosse.md"]) is None
-
-    @pytest.mark.parametrize("pattern", ["?.md", "[\u00df].md"])
-    def test_folding_keeps_existing_pattern_matches(self, pattern):
-        """Folding only adds matches: ``?.md`` still gates ``ß.md`` although its folded key is ``ss.md``."""
-        import tools.file_tools_write_guards as ft
-        assert ft._protected_instruction_reason("/repo/\u00df.md", enabled=True, extra_patterns=[pattern])
-
-    # ---- adversarial path shapes ----------------------------------------
+        assert ft._protected_instruction_reason(str(tmp_path / "rules.mdc"), enabled=True, extra_patterns=["*.mdc"])
+        assert ft._protected_instruction_reason(str(tmp_path / "notes.md"), enabled=True, extra_patterns=["*.mdc"]) is None
+        assert ft._protected_instruction_reason(str(tmp_path / "AGENTS.md"), enabled=False, extra_patterns=[]) is None
 
     @pytest.mark.require_symlinks
-    def test_symlink_to_protected_file_is_gated(self, tmp_path, approvals):
-        """#41351 lesson: realpath first — innocent name, protected target."""
+    def test_symlink_onto_an_instruction_file_is_recognised(self, tmp_path):
+        import tools.file_tools_write_guards as ft
         real = tmp_path / "AGENTS.md"
         real.write_text("original", encoding="utf-8")
         link = tmp_path / "innocent.txt"
         link.symlink_to(real)
-        approvals["answer"] = "deny"
-        res = self._write(link, "injected")
-        assert res.get("error") and "BLOCKED" in res["error"]
-        assert real.read_text(encoding="utf-8") == "original"
+        assert ft._protected_instruction_reason(str(link), enabled=True, extra_patterns=[]) == "AGENTS.md"
 
-    def test_case_variant_is_gated(self, tmp_path, approvals):
-        approvals["answer"] = "deny"
-        res = self._write(tmp_path / "agents.MD")
-        assert res.get("error") and "BLOCKED" in res["error"]
+    def test_project_hermes_dir_counts_but_a_checkout_nested_under_it_does_not(self, tmp_path):
+        import tools.file_tools_write_guards as ft
+        reason = ft._protected_instruction_reason
+        assert reason(str(tmp_path / "proj" / ".hermes" / "config.yaml"), enabled=True, extra_patterns=[])
+        nested = tmp_path / ".hermes" / "some-repo" / "src" / "module.py"
+        assert reason(str(nested), enabled=True, extra_patterns=[]) is None
 
-    def test_relative_traversal_is_gated(self, tmp_path, approvals, monkeypatch):
-        (tmp_path / "x").mkdir()
-        monkeypatch.chdir(tmp_path)
-        approvals["answer"] = "deny"
-        res = self._write("./x/../AGENTS.md")
-        assert res.get("error") and "BLOCKED" in res["error"]
-        assert not (tmp_path / "AGENTS.md").exists()
-
-    def test_arbitrary_directory_basename_is_gated(self, tmp_path, approvals):
-        """Any-directory scope: project-context files load from cwd trees."""
-        deep = tmp_path / "a" / "b" / "c"
-        deep.mkdir(parents=True)
-        approvals["answer"] = "deny"
-        res = self._write(deep / "CLAUDE.md")
-        assert res.get("error") and "BLOCKED" in res["error"]
-
-    def test_project_local_hermes_dir_is_gated(self, tmp_path, approvals):
-        proj = tmp_path / "proj" / ".hermes"
-        proj.mkdir(parents=True)
-        approvals["answer"] = "deny"
-        res = self._write(proj / "config.yaml")
-        assert res.get("error") and "BLOCKED" in res["error"]
-
-    def test_checkout_nested_under_hermes_dir_not_gated(self, tmp_path, approvals):
-        """A repo living UNDER a .hermes dir (e.g. ~/.hermes/hermes-agent)
-        must not have every write gated — only files directly inside a
-        .hermes dir count as project config."""
-        repo = tmp_path / ".hermes" / "some-repo" / "src"
-        repo.mkdir(parents=True)
-        res = self._write(repo / "module.py", "x = 1\n")
-        assert not res.get("error"), res
-        assert approvals["calls"] == []
-
-    def test_real_hermes_home_not_gated_by_this_check(
-        self, tmp_path, approvals, monkeypatch
-    ):
-        """~/.hermes itself is governed by existing guards, not this gate."""
+    def test_hermes_home_state_is_exempt_but_its_instruction_files_are_not(self, tmp_path, monkeypatch):
         import tools.file_tools_write_guards as ft
         fake_home = tmp_path / ".hermes"
         (fake_home / "notes").mkdir(parents=True)
-        monkeypatch.setattr(
-            ft, "_get_real_hermes_home", lambda: str(fake_home.resolve())
-        )
-        res = self._write(fake_home / "notes" / "scratch.txt", "ok")
-        assert not res.get("error"), res
-        assert approvals["calls"] == []
+        monkeypatch.setattr(ft, "_get_real_hermes_home", lambda: str(fake_home.resolve()))
+        reason = ft._protected_instruction_reason
+        assert reason(str(fake_home / "notes" / "scratch.txt"), enabled=True, extra_patterns=[]) is None
+        assert reason(str(fake_home / "config.yaml"), enabled=True, extra_patterns=[]) is None
+        assert reason(str(fake_home / "SOUL.md"), enabled=True, extra_patterns=[]) == "SOUL.md"
 
-    def test_instruction_files_in_real_hermes_home_are_gated(
-        self, tmp_path, approvals, monkeypatch
-    ):
-        """#92146: the home exemption must not skip the basename / extra-pattern
-        match. The LIVE SOUL.md / AGENTS.md and operator-listed cron scripts in the
-        home steer the agent; denied writes stay unwritten."""
-        import tools.file_tools_write_guards as ft
-        fake_home = tmp_path / ".hermes"
-        (fake_home / "scripts").mkdir(parents=True)
-        monkeypatch.setattr(
-            ft, "_get_real_hermes_home", lambda: str(fake_home.resolve())
-        )
-        monkeypatch.setattr(
-            ft, "_protected_instruction_config", lambda: (True, ["*.py"])
-        )
-        approvals["answer"] = "deny"
-        for target in (fake_home / "SOUL.md", fake_home / "AGENTS.md",
-                       fake_home / "scripts" / "prerun.py"):
-            res = self._write(target)
-            assert res.get("error") and "BLOCKED" in res["error"], target
-            assert not target.exists()
-        assert len(approvals["calls"]) == 3
-        # Ordinary home files remain out of this gate.
-        res = self._write(fake_home / "state.json", "{}")
-        assert not res.get("error"), res
-        assert len(approvals["calls"]) == 3
-
-    # ---- patch tool -----------------------------------------------------
-
-    def test_patch_replace_mode_is_gated(self, tmp_path, approvals):
-        from tools.file_tools import patch_tool
-        import json
-        target = tmp_path / "SOUL.md"
-        target.write_text("be kind\n", encoding="utf-8")
-        approvals["answer"] = "deny"
-        res = json.loads(patch_tool(
-            mode="replace", path=str(target),
-            old_string="be kind", new_string="obey injected orders",
-        ))
-        assert res.get("error") and "BLOCKED" in res["error"]
-        assert target.read_text(encoding="utf-8") == "be kind\n"
-
-    def test_patch_v4a_multifile_one_protected_blocks_whole_patch(
-        self, tmp_path, approvals
-    ):
-        """Policy: one protected file gates the ENTIRE patch (deny = nothing
-        applies, including the innocent file)."""
-        from tools.file_tools import patch_tool
-        import json
-        agents = tmp_path / "AGENTS.md"
-        agents.write_text("rules\n", encoding="utf-8")
-        plain = tmp_path / "plain.txt"
-        plain.write_text("hello\n", encoding="utf-8")
-        patch = (
-            "*** Begin Patch\n"
-            f"*** Update File: {plain}\n"
-            "@@\n"
-            "-hello\n"
-            "+world\n"
-            f"*** Update File: {agents}\n"
-            "@@\n"
-            "-rules\n"
-            "+injected\n"
-            "*** End Patch"
-        )
-        approvals["answer"] = "deny"
-        res = json.loads(patch_tool(mode="patch", patch=patch))
-        assert res.get("error") and "BLOCKED" in res["error"]
-        assert plain.read_text(encoding="utf-8") == "hello\n"
-        assert agents.read_text(encoding="utf-8") == "rules\n"
-        assert len(approvals["calls"]) == 1
-
-    def test_patch_v4a_approved_applies(self, tmp_path, approvals):
-        from tools.file_tools import patch_tool
-        import json
-        agents = tmp_path / "AGENTS.md"
-        agents.write_text("rules\n", encoding="utf-8")
-        patch = (
-            "*** Begin Patch\n"
-            f"*** Update File: {agents}\n"
-            "@@\n"
-            "-rules\n"
-            "+updated rules\n"
-            "*** End Patch"
-        )
-        approvals["answer"] = "once"
-        res = json.loads(patch_tool(mode="patch", patch=patch))
-        assert not res.get("error"), res
-        assert agents.read_text(encoding="utf-8") == "updated rules\n"
-
-    # ---- gateway round-trip ----------------------------------------------
-
-    def test_gateway_notify_resolve_once_allows(self, tmp_path):
-        import tools.approval as A
-        from tools import approval_context
-        session_key = "protected-files-test-session"
-        token = approval_context.set_current_session_key(session_key)
-        try:
-            def notify(approval_data):
-                # Buttons must not offer persistent scopes for this gate.
-                assert approval_data.get("allow_permanent") is False
-                assert approval_data.get("allow_session") is False
-                A.resolve_gateway_approval(session_key, "once")
-
-            A.register_gateway_notify(session_key, notify)
-            try:
-                res = self._write(tmp_path / "AGENTS.md", "gateway approved")
-                assert not res.get("error"), res
-                assert (tmp_path / "AGENTS.md").read_text(encoding="utf-8") == "gateway approved"
-            finally:
-                A.unregister_gateway_notify(session_key)
-        finally:
-            approval_context.reset_current_session_key(token)
-
-    def test_gateway_payload_renders_only_once_and_deny(self, tmp_path):
-        """End-to-end: what this gate emits, a TUI/desktop client can render.
-
-        The transport used to derive its button set from ``allow_permanent``
-        alone, so it re-added a "session" scope the gate refuses to persist —
-        users tapped it and got re-prompted on every write (#81887). Asserting
-        the two layers together is what catches that drift.
-        """
-        import tools.approval as A
-        from tools import approval_context
-        from tui_gateway.server import _approval_request_payload
-
-        session_key = "protected-files-payload-session"
-        token = approval_context.set_current_session_key(session_key)
-        rendered = {}
-        try:
-            def notify(approval_data):
-                rendered.update(_approval_request_payload(approval_data))
-                A.resolve_gateway_approval(session_key, "once")
-
-            A.register_gateway_notify(session_key, notify)
-            try:
-                self._write(tmp_path / "SOUL.md", "gateway approved")
-            finally:
-                A.unregister_gateway_notify(session_key)
-        finally:
-            approval_context.reset_current_session_key(token)
-
-        assert rendered["choices"] == ["once", "deny"]
-
-
-class TestProfileHomeExemptsHermesRoot:
-    """issue #60: under ``hermes -p <name>`` (``HERMES_HOME=<root>/profiles/<name>``)
-    the exemption used to cover ONLY the profile dir, so the ROOT's direct files
-    (LEDGER.md / MEMORY.md / SOUL.md ...) fell through to the ``.hermes`` component
-    rule, were read as project-local ``.hermes`` config, and — having no approval
-    channel headless — failed closed. That blocked #54 (LEDGER.md edit). The gate
-    must exempt the whole Hermes tree, exactly like the default profile does.
-    """
-
-    @pytest.fixture(autouse=True)
-    def _gate_on(self, monkeypatch):
-        import tools.file_tools_write_guards as ft
-        monkeypatch.setattr(
-            ft, "_protected_instruction_config", lambda: (True, [])
-        )
-        yield
-
-    @pytest.fixture
-    def approvals(self, monkeypatch):
-        from tools.terminal_tool import set_approval_callback
-        state = {"calls": [], "answer": "deny"}
-
-        def cb(command, description, **kwargs):
-            state["calls"].append({"command": command, "description": description})
-            return state["answer"]
-
-        set_approval_callback(cb)
-        yield state
-        set_approval_callback(None)
-
-    def _write(self, path, content="injected"):
-        import json
-        from tools.file_tools import write_file_tool
-        return json.loads(write_file_tool(str(path), content))
-
-    def _profile_layout(self, tmp_path: Path):
-        """A real-shaped Hermes root: ``<tmp>/home/profiles/worker`` + root markers."""
-        root = tmp_path / "home"
-        profile = root / "profiles" / "worker"
-        (profile / "workspace").mkdir(parents=True)
-        (root / "config.yaml").write_text("model:\n  default: x\n", encoding="utf-8")
-        return root, profile
-
-    def test_named_profile_scope_exempts_root_direct_files(self, tmp_path, monkeypatch, approvals):
-        """Under a named profile bound by the per-turn scope (multiplex path), the ROOT's own store is
-        not project-local ``.hermes`` config: the write lands with no approval prompt."""
-        import tools.file_tools_write_guards as ft
-        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
-
-        root, profile = self._profile_layout(tmp_path)
-        monkeypatch.delenv("HERMES_HOME", raising=False)
-        token = set_hermes_home_override(str(profile))
-        try:
-            assert os.path.realpath(str(root)) in ft._hermes_exempt_homes()
-            for name in ("LEDGER.md", "MEMORY.md", "USER.md"):
-                assert ft._protected_instruction_reason(str(root / name)) is None, name
-            # The root's own instruction files stay gated (#92146).
-            for name in ("SOUL.md", "AGENTS.md"):
-                assert ft._protected_instruction_reason(str(root / name)) == name
-            res = self._write(root / "LEDGER.md", "caliber fixed")
-        finally:
-            reset_hermes_home_override(token)
-        assert not res.get("error"), res
-        assert (root / "LEDGER.md").read_text(encoding="utf-8") == "caliber fixed"
-        assert approvals["calls"] == []
-
-    def test_only_a_real_hermes_root_is_exempt(self, tmp_path, monkeypatch, approvals):
-        """Negatives hold with a named profile active: a checkout's ``.hermes/config.yaml`` and
-        protected basenames stay gated (fail-closed, unwritten), and a coincidental
-        ``.../profiles/<name>`` tree that is NOT a Hermes root never exempts its parent."""
-        import tools.file_tools_write_guards as ft
-        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
-
-        _root, profile = self._profile_layout(tmp_path)
-        repo = tmp_path / "repo"
-        (repo / ".hermes").mkdir(parents=True)
-        monkeypatch.delenv("HERMES_HOME", raising=False)
-        token = set_hermes_home_override(str(profile))
-        try:
-            assert ft._protected_instruction_reason(str(repo / ".hermes" / "config.yaml"))
-            assert ft._protected_instruction_reason(str(repo / "AGENTS.md")) == "AGENTS.md"
-            target = repo / ".hermes" / "config.yaml"
-            res = self._write(target, "gate: off\n")
-        finally:
-            reset_hermes_home_override(token)
-        assert res.get("error") and "BLOCKED" in res["error"]
+    def test_hard_denied_credential_path_still_errors(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        target = tmp_path / ".ssh" / "authorized_keys"
+        target.parent.mkdir()
+        result = self._write(target, "ssh-rsa AAA")
+        assert result.get("error"), result
         assert not target.exists()
-        assert len(approvals["calls"]) == 1
-
-        fake_profile = tmp_path / "not-a-hermes-root" / "profiles" / "worker"
-        fake_profile.mkdir(parents=True)
-        token = set_hermes_home_override(str(fake_profile))
-        try:
-            assert ft._hermes_exempt_homes() == (os.path.realpath(str(fake_profile)),)
-        finally:
-            reset_hermes_home_override(token)
 
 
 class TestMultiplexProfileWriteGuardsAreProfileScoped:
     """#107327: a multiplexed gateway scopes ``HERMES_HOME`` per turn via a
-    contextvar. The home/config path getters must resolve per call, or whichever
-    profile ran first in the process freezes both the protected-instruction gate
-    and the ``config.yaml`` hard-block for every later profile — up to letting a
+    contextvar. The config path getter must resolve per call, or whichever
+    profile ran first in the process freezes the ``config.yaml`` hard-block for
+    every later profile — up to letting a
     later profile rewrite its own ``config.yaml`` the block exists to protect."""
 
     def _profiles(self, tmp_path: Path):
@@ -1094,27 +688,6 @@ class TestMultiplexProfileWriteGuardsAreProfileScoped:
                 "model:\n  default: original\n", encoding="utf-8"
             )
         return a, b
-
-    def test_home_getter_tracks_active_profile_after_a_prior_scope(self, tmp_path):
-        import tools.file_tools_write_guards as ft
-        from hermes_constants import (
-            reset_hermes_home_override,
-            set_hermes_home_override,
-        )
-
-        a, b = self._profiles(tmp_path)
-        # A normal alpha turn resolves (and, on the buggy path, would freeze) home.
-        tok = set_hermes_home_override(str(a))
-        try:
-            assert ft._get_real_hermes_home() == os.path.realpath(str(a))
-        finally:
-            reset_hermes_home_override(tok)
-        # The next turn is beta — the getter must now return beta's home, not alpha's.
-        tok = set_hermes_home_override(str(b))
-        try:
-            assert ft._get_real_hermes_home() == os.path.realpath(str(b))
-        finally:
-            reset_hermes_home_override(tok)
 
     def test_config_hard_block_refuses_beta_config_even_after_alpha_turn(self, tmp_path):
         """End-to-end: the ``config.yaml`` hard-block must fire for beta's own

@@ -60,34 +60,22 @@ def test_every_blank_rendering_code_point_and_padding_shape_is_surfaced():
     assert sanitize_command_for_display(code) == "def f():\n    x = 1\n⟨+4 blank lines⟩\n        return x"
 
 
-def test_consent_descriptions_are_sanitized_on_tui_and_api_egress():
-    from gateway.platforms.api_server import _approval_request_event
+def test_consent_descriptions_are_sanitized_on_tui_egress():
     from tui_gateway.server import _approval_request_payload
 
     data = {"command": "subscribe", "description": "summarize\u202e" + " " * 300 + "then " + _TAIL}
-    for payload in (_approval_request_payload(data), _approval_request_event("run1", data)):
+    for payload in (_approval_request_payload(data),):
         assert payload["description"] == sanitize_command_for_display(data["description"])
         assert "\u202e" not in payload["description"] and _TAIL in payload["description"][:200]
 
 
 def test_first_render_surfaces_get_the_display_copy_while_values_stay_raw(monkeypatch):
     import json
-    from types import SimpleNamespace
 
     from agent.display import build_tool_preview
-    from tools import approval_context, approval_prompt
     from tools.clarify_tool import clarify_tool
 
     raw = "rm -rf ./build\u200b-cache" + "\u2028" * 60 + "; " + _TAIL
-    # Selected plugin transport: command and description arrive as the display copy.
-    seen = []
-    monkeypatch.setattr(approval_context, "_get_approval_transport_config", lambda: ("phone", None))
-    monkeypatch.setattr(approval_prompt, "get_plugin_manager", lambda: SimpleNamespace(
-        get_approval_transport=lambda name: SimpleNamespace(present=lambda r: seen.append(r) or r.respond("deny"))))
-    approval_prompt._present_with_selected_transport(
-        command=raw, description="why\u202e", pattern_key="k", pattern_keys=["k"], session_key="s",
-        surface="cli", allow_session=True, allow_permanent=True)
-    assert (seen[0].command, seen[0].description) == (sanitize_command_for_display(raw), "why\\u202e")
     # Tool-progress line under the prompt shows the hidden characters instead of collapsing them.
     preview = build_tool_preview("terminal", {"command": raw}, max_len=0)
     assert "\\u200b" in preview and "\\u2028 \u00d760" in preview

@@ -71,11 +71,9 @@ def _bootstrap(authority, ref, row, policy, scope, text=None):
                 terminal[path[1]] = value
     live = authority.sessions[ref.session_id]
     # This turn's facts ride the per-turn hydrated request (the bootstrap field set is closed):
-    # the admission's one-shot flags, the route's YOLO as of now (never the frozen launch flag) and
-    # the committed surface (HUD / live voice / voice turn) when admission recorded one.
+    # the admission's one-shot flags and the committed surface (HUD / live voice / voice turn) when admission recorded one.
     request = dict(json.loads(policy.request_json), turn_v1={
         'finite': row['payload'].get('finite', False), 'unattended': row['payload'].get('unattended') is True,
-        'yolo': _session_yolo(authority, live.route, policy),
         **({'surface_v1': row['payload']['surface_v1']} if row['payload'].get('surface_v1') else {}),
         **({'display_v1': row['payload']['display_v1']} if row['payload'].get('display_v1') else {})})
     from gateway.session_worker_construct import construct_inputs
@@ -97,19 +95,14 @@ def _bootstrap(authority, ref, row, policy, scope, text=None):
 
 def _worker_config(authority, policy):
     """The frozen session config the child binds as its only config (``bind_worker_policy``).
-    ``command_allowlist`` is approval state rather than launch policy: an ``always`` grant an
-    earlier worker of an ordinary session persisted, or one the operator removed by hand, comes
-    from the live profile file, as it did before the child's config was frozen. The same goes for
-    ``gateway.bot_loop_guard``, so a limit edit reaches the next turn. Bypass sessions never read the profile."""
+    ``gateway.bot_loop_guard`` comes from the live profile file, so a limit edit reaches the next turn.
+    Bypass sessions never read the profile."""
     config = policy.config(authority)
     home = Path(str(authority.profile_id))
     if policy.ignore_user_config or not home.is_absolute():
         return config
     from gateway.run import _load_gateway_config
     live = _load_gateway_config(home / 'config.yaml')
-    config.pop('command_allowlist', None)
-    if live.get('command_allowlist') is not None:
-        config['command_allowlist'] = live['command_allowlist']
     guard = (live.get('gateway') or {}).get('bot_loop_guard') if isinstance(live.get('gateway'), dict) else None
     if isinstance(guard, dict):
         gateway = config['gateway'] = dict(config['gateway']) if isinstance(config.get('gateway'), dict) else {}
@@ -117,23 +110,11 @@ def _worker_config(authority, policy):
     return config
 
 
-def _session_yolo(authority, route, policy):
-    """The route's bypass as the in-process turn arms it on the owner, the one place a revocation
-    is recorded: a ``--yolo`` launch seeded once per boundary, then the persisted ``/yolo`` copy."""
-    from tools.approval import is_session_yolo_enabled
-    from tools.approval_yolo import restore_gateway_yolo
-    store = getattr(authority.runner, 'session_store', None)
-    entry = store.lookup_by_session_key(route) if store is not None else None
-    restore_gateway_yolo(route, getattr(entry, 'yolo', None), launch=bool(policy.yolo))
-    return is_session_yolo_enabled(route)
-
-
 @contextmanager
 def worker_turn_scope(frame):
     """Child side of ``turn_v1``: bind what the in-process turn binds on the owner
-    (execute_finite_admission, the route's YOLO, the committed surface), so ``chat -q``/``-z``
-    never park a prompt, the session's current YOLO governs this child and a HUD / live-voice /
-    voice turn reaches the model as it does in process. Frames without it bind nothing."""
+    (execute_finite_admission, the committed surface), so ``chat -q``/``-z``
+    never park a prompt and a HUD / live-voice / voice turn reaches the model as it does in process. Frames without it bind nothing."""
     from gateway.session_finite import finite_turn_scope
     from gateway.session_display import display_turn_scope, restore_display
     from gateway.session_surface import restore_surface, surface_turn_scope
@@ -142,7 +123,7 @@ def worker_turn_scope(frame):
         yield
         return
     flags = {k: v for k, v in turn.items() if k not in ('surface_v1', 'display_v1')} if isinstance(turn, dict) else None
-    if (flags is None or set(flags) != {'finite', 'unattended', 'yolo'}
+    if (flags is None or set(flags) != {'finite', 'unattended'}
             or any(type(v) is not bool for v in flags.values()) or (turn['unattended'] and not turn['finite'])):
         raise ValueError('invalid_managed_worker_bootstrap')
     try:
@@ -150,9 +131,6 @@ def worker_turn_scope(frame):
         display = restore_display(turn['display_v1']) if 'display_v1' in turn else None
     except AuthorityRefusal as exc:
         raise ValueError('invalid_managed_worker_bootstrap') from exc
-    if turn['yolo']:
-        from tools.approval import enable_session_yolo
-        enable_session_yolo(frame['route'])
     with finite_turn_scope(turn['finite'], turn['unattended']), surface_turn_scope(surface), \
             display_turn_scope(frame['scope']['execution_id'], display):
         yield
@@ -396,7 +374,7 @@ def _prompt_frame(authority, ref, row, worker, frame):
     if len(controls.remote_responders) >= 16:
         raise AuthorityRefusal('worker_control_backpressure')
     if kind == 'approval':
-        fields = {'request_id', 'command', 'description', 'allow_session', 'allow_permanent', 'smart_denied', 'edit'}
+        fields = {'request_id', 'command', 'description', 'question', 'edit'}
         data = frame.get('data')
         if set(frame) != {'type', 'data'} or not isinstance(data, dict) or set(data) - fields:
             raise AuthorityRefusal('invalid_worker_frame')

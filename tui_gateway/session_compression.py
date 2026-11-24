@@ -316,7 +316,7 @@ def _sync_session_key_after_compress(
     sid: str, session: dict, *, clear_pending_title: bool = True, restart_slash_worker: bool = True
 ) -> None:
     """Re-anchor the gateway-side ``session_key`` when _compress_context rotates ``agent.session_id``;
-    otherwise approval routing, slash worker, DB lookups and yolo state keep targeting the ended parent.
+    otherwise approval routing, slash worker and DB lookups keep targeting the ended parent.
     ``clear_pending_title``: True for manual /compress (title belongs to the old session), False for
     post-turn auto-compression. ``restart_slash_worker``: False only when the caller manages the worker."""
     agent = session.get("agent")
@@ -335,8 +335,6 @@ def _sync_session_key_after_compress(
         from tools import approval
         with contextlib.suppress(Exception):
             approval.unregister_gateway_notify(old_key)
-        from tools.approval_yolo import transfer_session_yolo
-        transfer_session_yolo(old_key, new_session_id)
         with contextlib.suppress(Exception):
             approval.register_gateway_notify(new_session_id, lambda data: _emit_approval_request(sid, data))
     # Invalidate any in-flight ``_drain_queued_prompt`` claim taken under the pre-rotation key: a raced

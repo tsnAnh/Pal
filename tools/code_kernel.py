@@ -106,12 +106,6 @@ def run_cell(request, execution_count):
     """Exec one cell; returns (response payload, FULL stdout text)."""
     out, err = io.StringIO(), io.StringIO()
     status, trace = "ok", ""
-    grant = request.get("grant")
-    if grant:
-        os.environ["HERMES_PROFILE_ADMIN_GRANT"] = grant
-    os.environ.pop("HERMES_TURN_ID", None)
-    if request.get("turn_id"):
-        os.environ["HERMES_TURN_ID"] = request["turn_id"]
     # An imported module keeps the code it was loaded with: name the ones edited on disk since
     # the last cell, so a fix that "still fails" is not mistaken for a wrong fix.
     stale_modules = _scan_edited_modules(True)
@@ -122,9 +116,6 @@ def run_cell(request, execution_count):
         status, trace = "exit", "SystemExit: " + repr(exc.code)
     except BaseException:
         status, trace = "error", traceback.format_exc()
-    finally:
-        os.environ.pop("HERMES_PROFILE_ADMIN_GRANT", None)
-        os.environ.pop("HERMES_TURN_ID", None)
     _scan_edited_modules(False)  # modules this cell imported are watched from now on
     stdout_text, stdout_clipped = _clip(out.getvalue())
     stderr_text, stderr_clipped = _clip(err.getvalue())
@@ -1028,7 +1019,6 @@ def _cell_result(kernel: SessionKernel, key: tuple, status: str, payload: dict[s
 def execute_in_session_kernel(
     code: str, *, task_id: str, mode: str, child_python: str, child_cwd: str,
     sandbox_tools: frozenset, timeout: int, max_tool_calls: int, reset: bool, is_interrupted,
-    grant: str = "", grant_turn_id: str = "",
     session_id: str | None = None, turn_id: str | None = None, conversation_id: str | None = None,
 ) -> str:
     """Run one cell in the (owner, mode, python, cwd, tools) session kernel. The owner is the
@@ -1041,7 +1031,6 @@ def execute_in_session_kernel(
         return _run_cell(kernel, key, code, task_id=task_id, child_python=child_python, child_cwd=child_cwd,
                          sandbox_tools=sandbox_tools, timeout=timeout, max_tool_calls=max_tool_calls,
                          is_interrupted=is_interrupted, exec_start=exec_start, state_reset=state_reset,
-                         grant=grant, grant_turn_id=grant_turn_id,
                          session_id=session_id, turn_id=turn_id, conversation_id=conversation_id)
     finally:
         with _REGISTRY.lock:
@@ -1056,7 +1045,7 @@ def execute_in_session_kernel(
 
 def _run_cell(kernel: SessionKernel, key: tuple, code: str, *, task_id: str, child_python: str,
               child_cwd: str, sandbox_tools: frozenset, timeout: int, max_tool_calls: int,
-              is_interrupted, exec_start: float, state_reset: bool, grant: str = "", grant_turn_id: str = "",
+              is_interrupted, exec_start: float, state_reset: bool,
               session_id: str | None = None, turn_id: str | None = None,
               conversation_id: str | None = None) -> str:
     reused = kernel.proc is not None
@@ -1074,8 +1063,7 @@ def _run_cell(kernel: SessionKernel, key: tuple, code: str, *, task_id: str, chi
             kernel.cell_log_start = len(kernel.tool_call_log)
             kernel.raw.drain(), kernel.stderr.drain()  # raw output leaked between cells belongs to no cell
             kernel.cell_authority = authority
-            request = {"id": uuid.uuid4().hex, "code": code, **({"grant": grant} if grant else {}),
-                       **({"turn_id": grant_turn_id} if grant_turn_id else {})}
+            request = {"id": uuid.uuid4().hex, "code": code}
             kernel.proc.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
             kernel.proc.stdin.flush()
             status, payload = _await_cell(kernel, timeout, is_interrupted)

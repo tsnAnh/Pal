@@ -56,15 +56,9 @@ def server(monkeypatch):
     result = SimpleNamespace(content=[SimpleNamespace(type="text", text="ok")], isError=False, structuredContent=None)
     session = MagicMock()
     session.call_tool = AsyncMock(return_value=result)
-    monkeypatch.setattr(approval, "_session_approved", {})
-    monkeypatch.setattr(approval, "_session_yolo", set())
-    monkeypatch.setattr(approval, "_permanent_approved", set())
-    monkeypatch.setattr(approval, "_permanent_approved_by_home", {})
-    monkeypatch.setattr(approval, "_permanent_baseline_by_home", {})
     with patch.dict(mcp_tool._servers, {n: SimpleNamespace(session=session, _rpc_lock=None) for n in ("upwork", "other")}), \
          patch("tools.mcp_tool_loop._run_on_mcp_loop", side_effect=_run_on_loop), \
          patch.dict(mcp_tool._server_error_counts, {}, clear=True), \
-         patch.dict(mcp_tool._server_trust_levels, {}, clear=True), \
          patch.dict(mcp_tool._tool_read_only_hints, {}, clear=True), \
          patch.dict(mcp_tool._server_cost_policies, {}, clear=True), \
          patch.dict(mcp_tool._server_action_policies, {}, clear=True), \
@@ -189,16 +183,14 @@ def test_a_chat_without_the_owners_app_gets_the_typed_refusal_at_once(server, la
     assert chat.cards == [] and server.call_tool.await_count == 0
 
 
-def test_yolo_mode_off_and_remembered_answers_never_stand_in_for_the_owner(server):
+def test_stale_approvals_mode_and_earlier_answers_never_stand_in_for_the_owner(server):
     from hermes_constants import get_hermes_home
     _register()
-    approval.enable_session_yolo("chat-a")
     (get_hermes_home() / "config.yaml").write_text(json.dumps({"approvals": {"mode": "off"}}))
-    with Owner(choice="always") as chat:
+    with Owner(choice="once") as chat:
         assert _call("submit_proposal", {"job_id": "1"}) == {"result": "ok"}
         assert _call("submit_proposal", {"job_id": "1"}) == {"result": "ok"}
-        assert not approval.is_approved("chat-a", "mcp_action:upwork/submit_proposal")
-    assert len(chat.cards) == 2, "a chosen 'always' must not become a remembered answer"
+    assert len(chat.cards) == 2, "an answered card must not become a remembered answer"
     assert "command_allowlist" not in (get_hermes_home() / "config.yaml").read_text()
 
 
@@ -259,7 +251,7 @@ def test_auto_approve_never_applies_to_money_steps_other_servers_or_other_tools(
     with Owner() as chat:
         assert _call("fund_escrow", {"contract_id": "1"})["code"] == mcp_action_gate.ACTION_REFUSED
         assert _call("write_something", server_name="other") == {"result": "ok"}
-    assert len(chat.cards) == 1 and "draft" not in chat.cards[0], "the other server's own trust gate still asks"
+    assert chat.cards == [], "money steps are refused and a server without an action policy is not gated"
     mcp_action_gate.set_auto_approve("chat-a", "upwork", False)
     with Owner() as chat:
         _call("submit_proposal", {"job_id": "1"})

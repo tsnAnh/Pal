@@ -69,7 +69,7 @@ method("config.get", params=ConfigGetParams, result=ConfigGetResult,
 class ConfigSetParams(ProfileParams):
     """``key`` picks the setter (``_CONFIG_SETTERS``, ``details_mode.<section>``, display toggles);
     ``value`` is the raw word/string the setter normalises (falsy non-strings are reported back in
-    the error). ``scope`` applies to ``yolo`` / ``reasoning``; ``confirm_expensive_model`` to ``model``."""
+    the error). ``scope`` applies to ``reasoning``; ``confirm_expensive_model`` to ``model``."""
 
     key: str
     value: JsonValue = ""
@@ -82,7 +82,7 @@ class ConfigSetResult(Result):
     """``{key, value}`` plus the setter's extras: model switches add ``warning`` /
     ``confirm_required`` / ``confirm_message`` / ``scope`` / ``deferred``; ``focus`` adds
     ``tool_progress``; ``cwd`` adds ``cwd`` / ``branch``; ``personality`` adds ``history_reset`` /
-    ``info``; ``yolo`` reports its ``scope``. ``value`` is a bool only for the display toggles."""
+    ``info``. ``value`` is a bool only for the display toggles."""
 
     key: str
     value: str | bool | None = None

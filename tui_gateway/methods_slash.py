@@ -459,11 +459,6 @@ def _compress_live_with_feedback(sid: str, session: dict, agent, arg: str, *, sn
         return "\n".join(filter(None, [fb["headline"], fb["token_line"], fb.get("note")]))
 
 
-def _mirror_approvals(sid, session, agent, arg) -> None:
-    if arg:  # the worker already persisted approvals.mode; the bare read-only form needs no repaint
-        broadcast_session_info()
-
-
 def _mirror_personality(sid, session, agent, arg) -> None:
     if arg and agent:
         pname, new_prompt = _validate_personality(arg, _load_cfg())
@@ -510,7 +505,7 @@ def _mirror_autoprune(sid, session, agent, arg) -> str:
 _SLASH_MIRRORS = {
     "model": lambda sid, session, agent, arg: (
         _apply_model_switch(sid, session, arg).get("warning", "") if arg and agent else ""),
-    "approvals": _mirror_approvals, "personality": _mirror_personality,
+    "personality": _mirror_personality,
     "compress": lambda sid, session, agent, arg: (
         _compress_live_with_feedback(sid, session, agent, arg, snapshot_kwargs=False) if agent else ""),
     "fast": _mirror_fast,

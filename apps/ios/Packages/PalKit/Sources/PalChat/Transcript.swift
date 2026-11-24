@@ -48,8 +48,6 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         case tool(ToolCall)
         case clarifyAnswered(ClarifyRecord)
         case clarify(PromptCard)
-        case approval(PromptCard)
-        case approvalAnswered(ApprovalRecord)
         case botThread(BotThreadLink)
         case connection(ConnectionCard), noProvider
     }
@@ -119,13 +117,13 @@ public struct Transcript: Sendable, Equatable {
     public private(set) var executionGeneration = 0
     public private(set) var resyncRequested = false
     public private(set) var lastError: String?
+    public private(set) var ignoredPromptIDs: Set<String> = []
 
     private var segmentLengths: [Int: Int] = [:]
     private var currentSegment: Int?
     private var streamingID: String?
     private var openTurnID: String?
     private var turnOpenings: [String: String] = [:]
-    private var approvalChoices: [String: String] = [:]
     private var admissionInputs: [String: String] = [:]
     private var absorbedAdmissions: Set<String> = []
     private(set) var absorbedItemIDs: Set<String> = []
@@ -167,10 +165,6 @@ public struct Transcript: Sendable, Equatable {
         if let generation = frame.executionGeneration { executionGeneration = generation }
         reduce(frame.event)
         return .applied
-    }
-
-    public mutating func noteApprovalChoice(_ choice: String?, promptID: String) {
-        approvalChoices[promptID] = choice
     }
 
     public mutating func markFailed(submissionID: String, reason: String) {
@@ -236,8 +230,6 @@ public struct Transcript: Sendable, Equatable {
             case .tool(let call): Summary.Entry(kind: "tool", text: call.name)
             case .clarifyAnswered(let record): Summary.Entry(kind: "clarify-answered", text: record.summaryText)
             case .clarify(let card): Summary.Entry(kind: "clarify", text: card.prompt.question ?? "")
-            case .approval(let card): Summary.Entry(kind: "approval", text: card.prompt.command ?? "")
-            case .approvalAnswered(let record): Summary.Entry(kind: "approval-answered", text: record.request)
             case .botThread, .noProvider: nil
             case .connection(let card): Summary.Entry(kind: "connection", text: card.operation.targets.map(\.name).joined(separator: ", "))
             }
@@ -260,7 +252,7 @@ public struct Transcript: Sendable, Equatable {
     public var pendingPrompts: [PendingPrompt] {
         items.compactMap { item in
             switch item.content {
-            case .clarify(let card), .approval(let card): card.prompt
+            case .clarify(let card): card.prompt
             default: nil
             }
         }
@@ -463,12 +455,10 @@ public struct Transcript: Sendable, Equatable {
             upsertConnection(operation)
         case .clarifyRequest(let prompt), .approvalRequest(let prompt):
             addCard(prompt)
-        case .clarifySettled(let settled):
+        case .clarifySettled(let settled), .approvalSettled(let settled):
             items.removeAll { item in
                 if case .clarify(let card) = item.content { card.prompt.promptID == settled.promptID } else { false }
             }
-        case .approvalSettled(let settled):
-            settleApproval(settled.promptID)
         case .sessionInfo(let info):
             if let running = info.running { isRunning = running }
             for admission in info.pending ?? [] { materialize(admission) }
@@ -757,14 +747,6 @@ public struct Transcript: Sendable, Equatable {
         }
     }
 
-    private mutating func settleApproval(_ promptID: String) {
-        let choice = approvalChoices.removeValue(forKey: promptID)
-        guard let index = items.firstIndex(where: { item in
-            if case .approval(let card) = item.content { card.prompt.promptID == promptID } else { false }
-        }), case .approval(let card) = items[index].content else { return }
-        items[index].content = .approvalAnswered(ApprovalRecord(prompt: card.prompt, choice: choice))
-    }
-
     private static func connectionOperation(of complete: ToolComplete) -> ConnectionOperation? {
         if let operation = ConnectionOperation(toolResult: complete.result ?? complete.resultText) { return operation }
         return complete.resultValue.flatMap { ConnectionOperation(value: $0) }
@@ -785,7 +767,15 @@ public struct Transcript: Sendable, Equatable {
     mutating func addCard(_ prompt: PendingPrompt) {
         let id = "prompt:\(prompt.promptID)"
         guard !items.contains(where: { $0.id == id }) else { return }
-        let card = PromptCard(prompt: prompt)
-        items.append(TranscriptItem(id: id, content: prompt.kind == .clarify ? .clarify(card) : .approval(card)))
+        switch prompt.kind {
+        case .clarify:
+            items.append(TranscriptItem(id: id, content: .clarify(PromptCard(prompt: prompt))))
+        case .approval:
+            guard let form = prompt.ownerForm() else {
+                ignoredPromptIDs.insert(prompt.promptID)
+                return
+            }
+            items.append(TranscriptItem(id: id, content: .clarify(PromptCard(prompt: form))))
+        }
     }
 }

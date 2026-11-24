@@ -541,20 +541,17 @@ def parse_ops(action: Any, heading: Any, content: Any, operations: Any) -> list[
     return ops
 
 
-def _gate_message(ops: list[IdentityOp], preview: str) -> Optional[str]:
+def _gate_message() -> Optional[str]:
     try:
         from tools import write_approval as wa
     except ImportError:
         return None
-    detail = "\n".join(f"- {op.action} {op.heading}: {op.content}".rstrip(": ") for op in ops)
-    decision = wa.evaluate_gate(wa.MEMORY, inline_summary=f"change my identity: {preview}", inline_detail=detail)
+    decision = wa.evaluate_gate(wa.MEMORY)
     if decision.allow:
         return None
     FAILURE_CLASS.set("gate_refused")
-    if decision.blocked:
-        return decision.message
-    return ("Identity changes cannot wait in the approval queue. Ask the user to confirm in this chat, "
-            "then retry. Nothing was changed.")
+    return ("Identity changes cannot wait in the review queue (memory.write_approval is on). "
+            "Nothing was changed.")
 
 
 def _error_result(error: IdentityError) -> tuple[str, str]:
@@ -577,11 +574,9 @@ def identity_tool(*, action: Any, heading: Any, content: Any, operations: Any, h
         if is_undo:
             if _newest_snapshot(target_home) is None:
                 raise IdentityError("There is no earlier identity version to restore.", "no_match")
-            preview = "undo my last identity change"
         else:
-            _, changes = reduce_ops(read_identity(target_home), ops)
-            preview = _summary_of(changes)
-        if (blocked := _gate_message(ops, preview)) is not None:
+            reduce_ops(read_identity(target_home), ops)
+        if (blocked := _gate_message()) is not None:
             return "rejected", tool_error(blocked, success=False, target=IDENTITY_TARGET)
         result = undo_identity(target_home) if is_undo else apply_identity_ops(target_home, ops)
     except IdentityError as error:

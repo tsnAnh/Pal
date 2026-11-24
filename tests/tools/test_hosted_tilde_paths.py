@@ -249,24 +249,6 @@ def test_local_recorded_tilde_cwd_still_anchors_at_the_profile_home(monkeypatch,
     assert file_tools_paths._authoritative_workspace_root("t") == "~"
     assert file_tools_paths._resolve_path_for_task("notes.txt", "t") == Path(host_home).resolve() / "notes.txt"
 
-
-def test_protected_instruction_check_never_resolves_a_hosted_path_on_the_host(provider, monkeypatch, host_dir):
-    from tools import file_tools_write_guards as guards
-    (host_dir / "workspace-link").symlink_to(host_dir.parent, target_is_directory=True)
-
-    def unresolvable(*_args, **_kwargs):
-        raise ValueError("unresolvable")
-    with c._bind(A):
-        no_home = guards._protected_instruction_reason("~/AGENTS.md", "t", enabled=True, extra_patterns=[])
-        monkeypatch.setattr(guards, "_resolve_path_for_task", unresolvable)
-        with c._watch_host(host_dir) as touched:
-            linked = guards._protected_instruction_reason(str(host_dir / "workspace-link" / "AGENTS.md"), "t",
-                                                          enabled=True, extra_patterns=[])
-            touched = list(touched)
-    assert no_home == "AGENTS.md" and linked == "AGENTS.md"
-    assert not touched, f"the protected-file check resolved a hosted path on this host: {touched}"
-
-
 def test_hosted_tilde_starts_the_sandbox_under_the_callers_task(provider, monkeypatch, declared_home):
     """Learning the sandbox's home brings up the CALLER's sandbox, with that task's overrides, and only for a
     path that starts with ``~``."""

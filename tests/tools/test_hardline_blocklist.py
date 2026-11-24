@@ -1,15 +1,15 @@
 """Tests for the unconditional hardline command blocklist.
 
-The hardline list is a floor below yolo: a small set of commands so
-catastrophic they should never run via the agent, regardless of --yolo,
-gateway /yolo, approvals.mode=off, or cron approve mode.
+The hardline list is an unconditional floor: a small set of commands so
+catastrophic they should never run via the agent, whatever the config or
+cron approve mode says.
 
 Inspired by Mercury Agent's permission-hardened blocklist.
 """
 
 import pytest
 
-from tools.approval import check_all_command_guards, check_dangerous_command, detect_dangerous_command, detect_hardline_command, disable_session_yolo, enable_session_yolo
+from tools.approval import check_all_command_guards, check_dangerous_command, detect_dangerous_command, detect_hardline_command
 from tools.approval_context import reset_current_session_key, set_current_session_key
 from tools import approval_context
 
@@ -275,8 +275,7 @@ def test_real_newline_separated_threats_still_blocked(command):
 
 def test_quoted_newline_data_not_blocked_by_full_guard_chain(clean_session):
     """End-to-end: the guard chain must not hardline-block a multi-line
-    quoted message (yolo on, so only the unconditional floor can block)."""
-    enable_session_yolo("hardline_test")
+    quoted message."""
     command = 'hermes send -t telegram "status:\nsudo reboot happened at 3am"'
     result = check_all_command_guards(command, "local")
     assert result["approved"], (
@@ -481,8 +480,7 @@ def test_eval_payload_data_is_not_hardline(command):
     assert detect_hardline_command(command) == (False, None)
 
 
-def test_eval_payload_hardline_survives_yolo(clean_session, monkeypatch):
-    monkeypatch.setenv("HERMES_YOLO_MODE", "1")
+def test_eval_payload_hardline_is_refused(clean_session):
     result = check_all_command_guards('eval "rm -rf /"', "local")
     assert result["approved"] is False
     assert result.get("hardline") is True
@@ -568,17 +566,14 @@ def test_hardline_blocks_line_continuation(command, desc_substr):
 @pytest.fixture
 def clean_session(monkeypatch):
     """Reset session-scoped approval state around each test."""
-    monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
     monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
     monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
     monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
     monkeypatch.delenv("HERMES_EXEC_ASK", raising=False)
     token = set_current_session_key("hardline_test")
     try:
-        disable_session_yolo("hardline_test")
         yield
     finally:
-        disable_session_yolo("hardline_test")
         reset_current_session_key(token)
 
 
@@ -588,19 +583,15 @@ def test_check_all_command_guards_blocks_hardline(clean_session):
     assert result.get("hardline") is True
 
 
-def test_yolo_env_var_cannot_bypass_hardline(clean_session, monkeypatch):
-    """HERMES_YOLO_MODE=1 must not bypass the hardline floor."""
-    monkeypatch.setenv("HERMES_YOLO_MODE", "1")
-
-    for cmd in ['rm -rf /', 'rm -rf "/"', 'rm -rf "$HOME"', "rm -rf ${HOME}",
-                "shutdown -h now", "mkfs.ext4 /dev/sda", "reboot"]:
-        r1 = check_dangerous_command(cmd, "local")
-        assert r1["approved"] is False, f"yolo leaked hardline on {cmd!r} (check_dangerous_command)"
-        assert r1.get("hardline") is True
-
-        r2 = check_all_command_guards(cmd, "local")
-        assert r2["approved"] is False, f"yolo leaked hardline on {cmd!r} (check_all_command_guards)"
-        assert r2.get("hardline") is True
+@pytest.mark.parametrize("command", [
+    'rm -rf /', 'rm -rf "/"', 'rm -rf "$HOME"', "rm -rf ${HOME}",
+    "shutdown -h now", "mkfs.ext4 /dev/sda", "reboot",
+])
+def test_hardline_commands_are_refused_by_both_guards(command, clean_session):
+    for guard in (check_dangerous_command, check_all_command_guards):
+        result = guard(command, "local")
+        assert result["approved"] is False, f"{guard.__name__} let {command!r} through"
+        assert result.get("hardline") is True
 
 
 def test_root_collapse_pattern_leaves_real_paths_alone(clean_session):
@@ -617,7 +608,7 @@ def test_root_collapse_pattern_leaves_real_paths_alone(clean_session):
         assert not is_hl, f"{cmd!r} must not be hardline-blocked (over-match)"
 
 
-def test_quoted_paren_brace_prose_not_blocked_under_yolo(clean_session, monkeypatch):
+def test_quoted_paren_brace_prose_not_blocked(clean_session):
     """A `(` / `{` inside a quoted argument is prose, not a command opener.
 
     Regression guard: naively adding `(` / `{` to the flat command-position
@@ -625,8 +616,6 @@ def test_quoted_paren_brace_prose_not_blocked_under_yolo(clean_session, monkeypa
     `gh pr create --title "…(reboot)…"` workflow. The quote-aware tokenizer
     must leave quoted text untouched, so these stay runnable.
     """
-    monkeypatch.setenv("HERMES_YOLO_MODE", "1")
-
     for cmd in ['gh pr create --title "block (reboot) spellings"',
                 'git commit -m "(rm -rf /) note"',
                 'echo "(reboot)"', 'echo "{ reboot; }"',
@@ -634,30 +623,6 @@ def test_quoted_paren_brace_prose_not_blocked_under_yolo(clean_session, monkeypa
         assert detect_hardline_command(cmd)[0] is False, (
             f"quoted prose false-positived on the hardline floor: {cmd!r}"
         )
-
-
-def test_session_yolo_cannot_bypass_hardline(clean_session):
-    """Gateway /yolo (session-scoped) must not bypass the hardline floor."""
-    enable_session_yolo("hardline_test")
-
-    result = check_dangerous_command("rm -rf /", "local")
-    assert result["approved"] is False
-    assert result.get("hardline") is True
-
-    result = check_all_command_guards("rm -rf /", "local")
-    assert result["approved"] is False
-    assert result.get("hardline") is True
-
-
-def test_approvals_mode_off_cannot_bypass_hardline(clean_session, monkeypatch, tmp_path):
-    """config approvals.mode=off (yolo-equivalent) must not bypass hardline."""
-    # _get_approval_mode() reads from hermes config; simplest path: monkeypatch the helper.
-    from tools import approval_context
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "off")
-
-    result = check_all_command_guards("rm -rf /", "local")
-    assert result["approved"] is False
-    assert result.get("hardline") is True
 
 
 def test_cron_approve_mode_cannot_bypass_hardline(clean_session, monkeypatch):
@@ -692,24 +657,14 @@ def test_hardline_runs_before_dangerous_detection(clean_session):
     assert result.get("hardline") is True
 
 
-def test_recoverable_dangerous_commands_still_pass_yolo(clean_session, monkeypatch):
-    """Yolo still bypasses the regular DANGEROUS_PATTERNS list.
-
-    This confirms we haven't broken the yolo escape hatch — only narrowed it.
-    """
-    monkeypatch.setenv("HERMES_YOLO_MODE", "1")
-
-    # These are dangerous but NOT hardline — yolo should still pass them.
+def test_recoverable_dangerous_commands_run(clean_session):
+    """Dangerous but recoverable commands are not on the floor, so nothing stops them."""
     for cmd in ["rm -rf /tmp/x", "chmod -R 777 .", "git reset --hard", "git push --force"]:
-        # Sanity: still flagged as dangerous
         is_dangerous, _, _ = detect_dangerous_command(cmd)
         assert is_dangerous, f"precondition: {cmd!r} should be in DANGEROUS_PATTERNS"
-        # But NOT hardline
         is_hl, _ = detect_hardline_command(cmd)
         assert not is_hl, f"{cmd!r} should not be hardline"
-        # And yolo bypasses the dangerous check
-        result = check_dangerous_command(cmd, "local")
-        assert result["approved"] is True, f"yolo should have bypassed {cmd!r}"
+        assert check_dangerous_command(cmd, "local")["approved"] is True, cmd
 
 
 # =========================================================================
@@ -751,6 +706,15 @@ def test_sudo_stdin_guard_detects_without_password():
         is_blocked, desc = approval_mod._check_sudo_stdin_guard(cmd)
         assert is_blocked, f"expected sudo stdin guard to block {cmd!r}"
         assert "sudo" in desc.lower()
+
+
+@pytest.mark.parametrize("command", _SUDO_STDIN_BLOCK_YOLO)
+def test_sudo_stdin_is_refused_by_the_full_guard_without_a_configured_password(command, clean_session, monkeypatch):
+    monkeypatch.delenv("SUDO_PASSWORD", raising=False)
+    result = check_all_command_guards(command, "local")
+    assert result["approved"] is False and "sudo -S" in result["message"]
+    monkeypatch.setenv("SUDO_PASSWORD", "configured")
+    assert check_all_command_guards(command, "local")["approved"] is True
 
 
 def test_sudo_stdin_guard_container_bypass(clean_session):
@@ -835,12 +799,7 @@ _MULTI_CALL_NOT_HARDLINE = [
 
 
 @pytest.mark.parametrize("command", _MULTI_CALL_BYPASS)
-@pytest.mark.parametrize("yolo", [False, True])
-def test_multicall_hardline_applies_through_guards(command, yolo, clean_session, monkeypatch):
-    if yolo:
-        monkeypatch.setenv("HERMES_YOLO_MODE", "1")
-    else:
-        monkeypatch.delenv("HERMES_YOLO_MODE", raising=False)
+def test_multicall_hardline_applies_through_guards(command, clean_session):
     assert detect_hardline_command(command)[0]
     result = check_all_command_guards(command, "local")
     assert result["approved"] is False

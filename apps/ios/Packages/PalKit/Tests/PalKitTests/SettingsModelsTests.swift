@@ -212,24 +212,6 @@ struct DeviceAndPermissionMappingTests {
         #expect(entry.statusText(now: Self.now) == "Not opened yet")
     }
 
-    @Test func permissionsSummaryCountsBothListsAndPluralises() throws {
-        func summary(_ json: String) throws -> PermissionsSummary {
-            PermissionsSummary(try SettingsWire.decoder.decode(SettingsWire.PermissionsState.self, from: Data(json.utf8)))
-        }
-        let empty = try summary(#"{"auto_review":true,"approval_mode":"smart","ask":[],"allow":[]}"#)
-        #expect(empty.rowSubtitle == "Auto-review on · 0 rules")
-        let one = try summary(#"{"auto_review":false,"approval_mode":"manual","ask":[{"id":"1","text":"a","created_at":"x"}],"allow":[]}"#)
-        #expect(one.rowSubtitle == "Auto-review off · 1 rule")
-        let two = try summary("""
-        {"auto_review":true,"approval_mode":"smart","ask":[{"id":"1","text":"a","created_at":"x"}],
-         "allow":[{"id":"2","text":"b","created_at":"x"}]}
-        """)
-        #expect(two.rowSubtitle == "Auto-review on · 2 rules")
-        #expect(two.rules(in: .allow).map(\.text) == ["b"])
-        #expect(!two.approvalsAreOff)
-        #expect(try summary(#"{"auto_review":false,"approval_mode":"off","ask":[],"allow":[]}"#).approvalsAreOff)
-    }
-
     @Test func computerDiskLevelsReadInProductWords() throws {
         func summary(_ level: String?) throws -> ComputerSummary {
             let disk = level.map { #""disk":{"level":"\#($0)","free_mb":10,"total_mb":100,"used_pct":90},"# } ?? ""

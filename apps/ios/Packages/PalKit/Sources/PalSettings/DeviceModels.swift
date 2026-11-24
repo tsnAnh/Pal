@@ -54,40 +54,6 @@ public struct DeviceEntry: Identifiable, Sendable, Equatable, Codable {
     }
 }
 
-public struct PermissionRuleEntry: Identifiable, Sendable, Equatable {
-    public let id: String
-    public let text: String
-
-    public init(_ rule: SettingsWire.PermissionRule) {
-        id = rule.id
-        text = rule.text
-    }
-}
-
-public struct PermissionsSummary: Sendable, Equatable {
-    public let autoReview: Bool
-    public let approvalsAreOff: Bool
-    public let ask: [PermissionRuleEntry]
-    public let allow: [PermissionRuleEntry]
-
-    public init(_ state: SettingsWire.PermissionsState) {
-        autoReview = state.autoReview
-        approvalsAreOff = state.approvalMode == "off"
-        ask = state.ask.map(PermissionRuleEntry.init)
-        allow = state.allow.map(PermissionRuleEntry.init)
-    }
-
-    public var ruleCount: Int { ask.count + allow.count }
-
-    public var rowSubtitle: String {
-        "Auto-review \(autoReview ? "on" : "off") · \(UsageClock.count(ruleCount, "rule"))"
-    }
-
-    public func rules(in list: PermissionList) -> [PermissionRuleEntry] {
-        list == .ask ? ask : allow
-    }
-}
-
 public struct ComputerSummary: Sendable, Equatable {
     public enum Disk: Sendable, Equatable {
         case normal

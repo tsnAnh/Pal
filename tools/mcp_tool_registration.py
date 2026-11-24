@@ -38,22 +38,10 @@ _UTILITY_HANDLER_FACTORIES = {
     "unsubscribe_event": _events._make_unsubscribe_event_handler}
 
 
-def _normalize_server_trust(value: Any) -> str:
-    """Config ``trust`` -> tier. None -> ``full`` (compat default); unrecognized -> ``untrusted`` (fail closed)."""
-    if value is None:
-        return _core._TRUST_FULL
-    text = str(value).strip().lower()
-    if text in (_core._TRUST_FULL, _core._TRUST_UNTRUSTED):
-        return text
-    logger.warning("MCP trust: unrecognized trust value %r — treating as 'untrusted' (valid values: full, untrusted)",
-                   value)
-    return _core._TRUST_UNTRUSTED
-
-
 def _annotation_read_only_hint(mcp_tool: Any) -> bool:
     """True only when annotations (SDK object or cache dict) carry an exact ``True`` read-only hint;
     unknown = write-capable. mcp 2.x exposes the attribute as ``read_only_hint`` (camelCase is only a
-    serialization alias), so reading camelCase alone gated every read on an untrusted server."""
+    serialization alias), so both spellings are read."""
     annotations = getattr(mcp_tool, "annotations", None)
     if isinstance(annotations, dict):
         hint = annotations.get("readOnlyHint", annotations.get("read_only_hint"))
@@ -88,11 +76,10 @@ def _record_tool_trust_metadata(server_name: str, config: dict, tools: list[Any]
     """Capture per-server trust and per-tool readOnlyHint at discovery — the security boundary: the call-time gate
     classifies from data we control, never re-read server-supplied state. *key* is the connection (default: the
     registering profile's own); the ``trust`` policy is recorded under it for the profile that owns it — an
-    adopting profile records its own policy in ``_record_scope_trust``."""
+    adopting profile records its own policy in ``_record_scope_policies``."""
     with _core._lock:
         if key is None:
             key = _server_key(server_name)
-        _core._server_trust_levels[key] = _normalize_server_trust((config or {}).get("trust"))
         _record_cost_policy(server_name, config, key)
         _record_action_policy(config, key)
         # Reconnects retain handlers even when a tool disappears from tools/list.
@@ -112,13 +99,10 @@ def _warn_unknown_cost_keys(server_name: str, key, tool_names: list[str]) -> Non
                        "'mcp_%s_' prefix).", server_name, unknown, server_name)
 
 
-def _record_scope_trust(server_name: str, config: dict, scope: str) -> None:
-    """``trust`` (and the cost policy) is the CONSUMING profile's policy, never the connection's: an
-    ``untrusted`` profile that adopts a ``full`` profile's live connection must still be asked before every
-    write-capable call."""
+def _record_scope_policies(server_name: str, config: dict, scope: str) -> None:
+    """The cost and action policies are the CONSUMING profile's, never the connection's."""
     with _core._lock:
         key = _server_key(server_name, scope, current=False)
-        _core._server_trust_levels[key] = _normalize_server_trust((config or {}).get("trust"))
         _record_cost_policy(server_name, config, key)
         _record_action_policy(config, key)
 
@@ -223,7 +207,6 @@ def _remove_server_scope(key, scope: str) -> None:
             _core._server_tool_scopes[key] = scopes
         else:
             _core._server_tool_scopes.pop(key, None)
-        _core._server_trust_levels.pop(_server_key(server_name, scope, current=False), None)
         _core._server_cost_policies.pop(_server_key(server_name, scope, current=False), None)
         _core._server_action_policies.pop(_server_key(server_name, scope, current=False), None)
     _restore_server_toolset_alias(key)
@@ -468,7 +451,7 @@ def _write_schema_cache(name: str, server: "MCPServerTask", config: dict, should
             tools_payload.append({
                 "name": t.name, "description": t.description or "",
                 "inputSchema": schema_obj if isinstance(schema_obj, dict) else {},
-                "annotations": {"readOnlyHint": _annotation_read_only_hint(t)},  # lazy path trust-gates identically
+                "annotations": {"readOnlyHint": _annotation_read_only_hint(t)},
             })
         utility_payload = [{"schema": e["schema"], "handler_key": e["handler_key"]}
                            for e in _select_utility_schemas(name, server, config)]
@@ -667,7 +650,7 @@ def _register_connected_into_current_scope(servers: dict) -> int:
         # Visibility for this profile: the owner keeps teardown, this scope sees the connection.
         with _core._lock:
             _core._server_tool_scopes.setdefault(key, set()).add(scope)
-        _record_scope_trust(name, config, scope)
+        _record_scope_policies(name, config, scope)
         if registry.get_tool_names_for_toolset(f"mcp-{registration_name(name)}"):
             continue
         candidates = _tool_candidates(name, server._tools, _make_tool_filter(name, config), server.tool_timeout)

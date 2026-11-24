@@ -1,6 +1,7 @@
 # <path relative to apps/ios>:<substring of the flagged line>  <reason>. Two spaces before the reason; a stale entry fails the check.
 App/Profile/BotManagementDialogs.swift:TextField("Name", text: $proposedName)  iOS alert action: SwiftUI alerts only host a direct TextField, a wrapper view drops the field; the alert draws the surface
 App/Chat/ClarifyFormCard.swift:PalTextField(  chipFill card is the only surface, no glass behind the field
+App/Chat/ClarifyCards.swift:PalTextField(  chipFill card is the only surface, no glass behind the field
 App/ConnectApps/McpSignInSheet.swift:SecretField(  control fill is the only surface, no glass behind the field
 App/ConnectApps/PasteAddressEntry.swift:SecretField(  control fill is the only surface, no glass behind the field
 App/CreateBotSheet.swift:PalTextField(  elevated fill is the only surface, no glass behind the field

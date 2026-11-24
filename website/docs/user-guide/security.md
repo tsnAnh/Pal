@@ -1,19 +1,19 @@
 ---
 sidebar_position: 8
 title: "Security"
-description: "Security model, dangerous command approval, user authorization, container isolation, and production deployment best practices"
+description: "Security model, hard blocks, user authorization, container isolation, and production deployment best practices"
 ---
 
 # Security
 
-Hermes Agent is designed with a defense-in-depth security model. This page covers every security boundary — from command approval to container isolation to user authorization on messaging platforms.
+Hermes Agent is designed with a defense-in-depth security model. This page covers every security boundary — from hard command blocks to container isolation to user authorization on messaging platforms.
 
 ## Overview
 
 The security model has eight layers:
 
 1. **User authorization** — who can talk to the agent (allowlists, DM pairing)
-2. **Dangerous command approval** — human-in-the-loop for destructive operations
+2. **Hard blocks** — catastrophic commands and credential paths are refused outright; nothing asks first
 3. **File write safety** — denylist and optional write sandbox for `write_file`/`patch`
 4. **Container isolation** — Docker/Modal (and the Singularity plugin) sandboxing with hardened settings
 5. **MCP credential filtering** — environment variable isolation for MCP subprocesses
@@ -21,92 +21,61 @@ The security model has eight layers:
 7. **Cross-session isolation** — sessions cannot access each other's data or state; cron job storage paths are hardened against path traversal attacks
 8. **Input sanitization** — working directory parameters in terminal tool backends are validated against an allowlist to prevent shell injection
 
-## Dangerous Command Approval
+## Commands Run Without Prompts
 
-Before executing any command, Hermes checks it against a curated list of dangerous patterns. If a match is found, the user must explicitly approve it.
+Hermes does not ask before it runs a tool. Terminal commands, `execute_code`, file edits, computer use, browser actions, device and iPhone actions, MCP tool calls, plugin `approve` directives and profile delete all run straight away. There is no Allow/Deny card, no `/approve`, `/deny` or `/yolo`, and no `--yolo` behaviour. A stored `approvals.mode`, `approvals.timeout` for commands, `command_allowlist` or `smart_policy` from an older profile is ignored: it is not migrated and nothing needs editing.
 
-### Approval Modes
+What still protects you:
 
-The approval system supports three modes, configured via `approvals.mode` in `~/.hermes/config.yaml`:
+- the [hardline blocklist](#hardline-blocklist-always-on-floor), the runtime self-delete guard and the `sudo -S` stdin guard refuse the command;
+- [`approvals.deny`](#user-defined-deny-rules-approvalsdeny) rules refuse matching commands;
+- credential and secret paths are never writable (see [File Write Safety](#file-write-safety));
+- unattended runs apply the rules below to dangerous-command patterns;
+- owner decisions below still ask, because they send something out or spend money;
+- an agent cannot create a bot or profile: it is refused with "Bots are created from the Create Bot form in the app."
+
+### Unattended Rules
 
 ```yaml
 approvals:
-  mode: smart                     # smart | manual | off
-  timeout: 300                    # seconds to wait for user response (default: 300)
   cron_mode: deny                 # deny | approve — what cron jobs do when they hit a dangerous command
   single_query_mode: deny         # deny | approve — what single-query (-q) sessions do on a dangerous command
   unattended_mode: deny           # deny | approve — what webhook/API sessions do on a dangerous command
+  deny: []                        # glob patterns that block matching terminal commands
+  timeout: 300                    # seconds an owner decision waits for an answer
   mcp_reload_confirm: true        # /reload-mcp asks before invalidating the MCP tool cache
   destructive_slash_confirm: true # /clear, /new, /reset, /undo prompt before discarding state
 ```
 
-The full set of keys:
-
 | Key | Default | What it controls |
 |---|---|---|
-| `mode` | `smart` | Approval policy for dangerous shell commands — see the table below. |
-| `timeout` | `300` | Seconds Hermes waits for an approval reply before timing out. |
-| `discord_prompt_timeout` | `300` | Seconds Discord's interactive buttons (approvals, clarify, update and slash-command prompts) stay clickable; minimum 30. See [Discord](./messaging/discord.md). |
-| `cron_mode` | `deny` | How [cron jobs](./features/cron.md) behave headlessly when they trigger a dangerous-command prompt. `deny` blocks the command (the agent must find another path); `approve` auto-approves everything in cron context. |
-| `single_query_mode` | `deny` | How one-shot [`hermes chat -q`](./cli.md) sessions behave when they trigger a dangerous-command prompt. A `-q` session runs a single turn and exits with no user waiting to answer prompts; `deny` blocks the command (the agent must find another path), `approve` auto-approves everything in single-query context. Mirrors `cron_mode`. |
-| `unattended_mode` | `deny` | How sessions on unattended programmatic platforms (webhook, msgraph_webhook, api_server) behave when they trigger a dangerous-command prompt. These surfaces have no human who can answer `/approve`, so instead of blocking for the full approval timeout, `deny` blocks the command instantly (the agent must find another path) and `approve` auto-approves everything in unattended context. Exception: an api_server session whose client can answer the card (`/v1/runs` and streaming chat completions, via `POST /v1/runs/{id}/approval`) still gets the approval request. Mirrors `cron_mode`. |
-| `approvers` | `["*"]` | Who may answer a pending approval from a messaging chat. `["*"]`: any admitted member. `[]` or a list of user ids: the requester, those ids and the platform admins only — see [Who can answer an approval in a shared chat](#who-can-answer-an-approval-in-a-shared-chat-approvalsapprovers). |
-| `mcp_reload_confirm` | `true` | When true, `/reload-mcp` asks before rebuilding the MCP tool set. Rebuilding invalidates the provider prompt cache (tool schemas live in the system prompt), so the next message re-sends full input tokens. Users who click **Always Approve** flip this key to `false`. |
-| `destructive_slash_confirm` | `true` | When true, destructive session slash commands (`/clear`, `/new`, `/reset`, `/undo`) prompt before discarding conversation state. Three-option dialog (Approve Once / Always Approve / Cancel) routed through native yes/no buttons on Telegram, Discord, and Slack; text fallback elsewhere. Users who click **Always Approve** flip this key to `false`. The TUI also honors this setting for its `/clear`, `/new`, and `/reset` modal; `HERMES_TUI_NO_CONFIRM=1` force-skips that modal regardless of the configured value. |
+| `cron_mode` | `deny` | How [cron jobs](./features/cron.md) behave when a command matches a dangerous pattern. `deny` blocks it (the agent must find another path); `approve` runs it. Every other command in a cron job runs. |
+| `single_query_mode` | `deny` | The same choice for one-shot [`hermes chat -q`](./cli.md) sessions. |
+| `unattended_mode` | `deny` | The same choice for sessions on unattended programmatic platforms (webhook, msgraph_webhook, api_server). |
+| `deny` | `[]` | User-defined deny rules; see below. |
+| `timeout` | `300` | Seconds an [owner decision](#owner-decisions) waits for an answer before it fails closed. |
+| `discord_prompt_timeout` | `300` | Seconds Discord's interactive buttons stay clickable; minimum 30. See [Discord](./messaging/discord.md). |
+| `approvers` | `["*"]` | Who may answer an owner decision, a slash-command confirmation or a clarify question from a messaging chat. |
+| `mcp_reload_confirm` | `true` | When true, `/reload-mcp` asks before rebuilding the MCP tool set. Rebuilding invalidates the provider prompt cache, so the next message re-sends full input tokens. |
+| `destructive_slash_confirm` | `true` | When true, destructive session slash commands (`/clear`, `/new`, `/reset`, `/undo`) prompt before discarding conversation state. |
 
-| Mode | Behavior |
-|------|----------|
-| **smart** (default) | Use an auxiliary LLM to assess risk. Low-risk commands (e.g., `python -c "print('hello')"`) are auto-approved for that command only. Genuinely dangerous commands are auto-denied. Uncertain cases escalate to a manual prompt. One class never reaches the auxiliary LLM: `osascript` that can destroy work the agent did not create (closing a document with `saving no`, quitting an app, deleting files, sending keystrokes, `do shell script`), or whose script is not visible on the command line. Only the operator can consent to that, so it always prompts, and the answer covers that one command. |
-| **manual** | Always prompt the user for approval on dangerous commands. |
-| **off** | Disable all approval checks — equivalent to running with `--yolo`. All commands execute without prompts, and write calls on `trust: untrusted` MCP servers run without the trust prompt. An MCP server's declared spend limit still asks (see [YOLO mode](#yolo-mode)). |
+### Owner Decisions
 
-:::warning
-Setting `approvals.mode: off` disables all safety prompts. Use only in trusted environments (CI/CD, containers, etc.).
-:::
+A few actions are not a tool call you can wave through, because they send something out in your name or spend your money. These still ask, with a short question and the exact content, and they accept only **once** or **deny**:
 
-### YOLO Mode
+- held drafts: a message a bot is about to send, and an MCP connector action that changes things;
+- paying with a card from the [credential vault](./features/credential-vault.md#paying-and-filling-addresses);
+- an MCP server's declared [`spend_limit`](./features/mcp.md#tool-costs-and-spend-limits), once a call would take the chat past it;
+- MCP [sampling](./features/mcp.md) and [elicitation](./features/mcp.md#mcp-elicitation-support) requests from a server.
 
-YOLO mode bypasses **all** dangerous command approval prompts for the current session. It can be activated three ways:
-
-1. **CLI flag**: Start a session with `hermes --yolo` or `hermes chat --yolo`
-2. **Slash command**: Type `/yolo` during a session to toggle it on/off
-3. **Environment variable**: Set `HERMES_YOLO_MODE=1`
-
-The `/yolo` command is a **toggle** — each use flips the mode on or off:
-
-```
-> /yolo
-  ⚡ YOLO mode ON — all commands auto-approved. Use with caution.
-
-> /yolo
-  ⚠ YOLO mode OFF — dangerous commands will require approval.
-```
-
-YOLO mode is available in both CLI and gateway sessions. `/yolo` applies only to the session it was typed in. It is saved with the session, so it survives a restart: a messaging chat keeps it across gateway restarts, and the TUI and the Desktop app keep it when you reopen or resume the session. On a messaging platform, `/new` and `/resume` start the next conversation with approvals back on.
-
-When YOLO is active, Hermes shows two persistent visual reminders so it's hard to forget that approval prompts are bypassed:
-
-- A red banner line at session start when YOLO is already active: `⚠ YOLO mode — all approval prompts bypassed`. Hidden when YOLO is off so the default banner stays uncluttered.
-- A `⚠ YOLO` fragment in the status bar across all width tiers, updated live as you toggle YOLO on or off (rich-text renderer and plain-text fallback).
-
-:::danger
-YOLO mode disables **all** dangerous command safety checks for the session — **except** the hardline blocklist (see below). Use only when you fully trust the commands being generated (e.g., well-tested automation scripts in disposable environments).
-:::
-
-YOLO and `approvals.mode: off` also skip the [`trust: untrusted`](../reference/mcp-config-reference.md) MCP prompt: a write-capable tool on an untrusted server runs without asking, with each source's usual reach. `/yolo` covers only the chat it was typed in (another chat is still asked); `--yolo` and `HERMES_YOLO_MODE` cover the sessions of the Hermes process they were given to; `approvals.mode: off` covers every chat and cron job of that profile. They do **not** skip:
-
-- **An MCP server's spend limit.** A call that would take the chat past a declared [`spend_limit`](./features/mcp.md#tool-costs-and-spend-limits) still asks, and where nobody can answer (a cron job, `hermes chat -q`) it is refused. The limit is a budget you set, not a safety prompt.
-- **Questions from an MCP server** ([elicitation](./features/mcp.md#mcp-elicitation-support)), which ask you for input rather than for permission.
-- **Payment-card fill prompts** from the [credential vault](./features/credential-vault.md#paying-and-filling-addresses), which hand a card to a page, and MCP event subscriptions, which install a standing trigger.
-
-For destructive session slash commands (`/clear`, `/new` / `/reset`, `/undo`, `/quit --delete` — `/exit --delete` is an alias), the CLI also prompts for confirmation before running them. See [Slash Commands — Confirmation prompts for destructive commands](../reference/slash-commands.md#confirmation-prompts-for-destructive-commands).
+Where nobody can answer (a cron job, `hermes chat -q`, a gateway with no approver), the action is refused instead of waiting. For destructive session slash commands (`/clear`, `/new` / `/reset`, `/undo`, `/quit --delete`), the CLI also prompts for confirmation before running them. See [Slash Commands — Confirmation prompts for destructive commands](../reference/slash-commands.md#confirmation-prompts-for-destructive-commands).
 
 ### Supervised-gateway lifecycle restriction
 
 The terminal tool has a separate, non-overridable guard against stopping or
 restarting the gateway from inside its own supervised process. A self-restart can
 terminate the tool before it finishes and cause a supervisor/auto-resume loop.
-User approval, YOLO mode, and `force=True` do not bypass this guard.
+`force=True` does not bypass this guard.
 
 The guard also refuses process killers aimed at the interpreter image the gateway
 runs as — `taskkill /F /IM python.exe`, `taskkill /FI "IMAGENAME eq python.exe"`,
@@ -142,12 +111,10 @@ does not change the terminal guard's policy.
 
 Some commands are so catastrophic — irreversible filesystem wipes, fork bombs, direct block-device writes — that Hermes refuses to run them **regardless** of:
 
-- `--yolo` / `/yolo` toggled on
-- `approvals.mode: off`
 - Cron jobs running in headless `approve` mode
-- User explicitly clicking "allow always"
+- The `unattended_mode` and `single_query_mode` settings
 
-The blocklist is the floor below `--yolo`. It trips **before** the approval layer even sees the command, and there's no override flag. Patterns currently covered (not exhaustive; kept in sync with `tools/approval_detection.py::HARDLINE_PATTERNS`):
+The blocklist is the floor under every other setting. It trips **before** anything else sees the command, and there's no override flag. Patterns currently covered (not exhaustive; kept in sync with `tools/approval_detection.py::HARDLINE_PATTERNS`):
 
 | Pattern | Why it's hardline |
 |---|---|
@@ -166,7 +133,7 @@ The floor also fails closed on a command whose shell quoting cannot be parsed (`
 
 ### User-Defined Deny Rules (`approvals.deny`)
 
-The hardline blocklist is fixed and code-shipped. `approvals.deny` is its user-editable counterpart: a list of glob patterns that block matching terminal commands unconditionally — **before** `--yolo`, `/yolo`, and `approvals.mode: off` are consulted. Use it to run yolo-with-exceptions: "let the agent do everything, except these specific things, ever."
+The hardline blocklist is fixed and code-shipped. `approvals.deny` is its user-editable counterpart: a list of glob patterns that block matching terminal commands unconditionally, ahead of the unattended rules. Use it to run yolo-with-exceptions: "let the agent do everything, except these specific things, ever."
 
 ```yaml
 approvals:
@@ -187,28 +154,15 @@ Details:
 - User-defined deny rules apply to all terminal backends, including isolated containers, before any backend-specific approval shortcut.
 - A denied command returns a BLOCKED error to the agent telling it not to retry or rephrase. Nothing runs.
 
-Like the rest of the approval config, changes take effect immediately (the config cache is mtime-keyed) — no session restart needed.
+Changes take effect immediately (the config cache is mtime-keyed) — no session restart needed.
 
 :::note Threat model
 Deny rules are a shell-command policy, not a complete shell interpreter or an OS capability sandbox. Normalization does not resolve arbitrary variables (including GNU `env -S` `${NAME}` expansion), aliases, functions, renamed binaries, scripts, interpreter programs, or every shell/launcher grammar (for example, case-pattern syntax, clustered launcher options, or options embedded inside an `env -S` string). Do not use a basename deny rule as a guarantee that a capability cannot be reached by other means. For containment, use OS permissions and an isolated backend with appropriately restricted mounts, credentials, and network access. This matching behavior does not change the configured approval mode or the empty-deny-list default.
 :::
 
-### Approval Timeout
+### Dangerous-Command Patterns
 
-When a dangerous command prompt appears, the user has a configurable amount of time to respond. If no response is given within the timeout, the command is **denied** by default (fail-closed).
-
-An expired prompt cannot be reopened: the pending entry is discarded and the agent is told not to retry on its own within that turn. To run the operation after all, send a new message asking for it (for example "go ahead and run that now") — the agent issues a fresh tool call, which raises a fresh approval card, and a "once" approval applies only to that call. A timeout is not counted as a denial, so asking again is never penalized.
-
-Configure the timeout in `~/.hermes/config.yaml`:
-
-```yaml
-approvals:
-  timeout: 300  # seconds (default: 300)
-```
-
-### What Triggers Approval
-
-The following patterns trigger approval prompts (defined in `tools/approval.py`):
+The following patterns are what `cron_mode`, `single_query_mode` and `unattended_mode` act on (defined in `tools/approval.py`). In an interactive session they only matter when you add a matching `approvals.deny` rule:
 
 | Pattern | Description |
 |---------|-------------|
@@ -251,48 +205,7 @@ The following patterns trigger approval prompts (defined in `tools/approval.py`)
 **Container bypass**: When running in `docker`, `modal`, `daytona`, or `vercel_sandbox` backends (or a container plugin backend such as `singularity` or `sprites`), dangerous command checks are **skipped** because the container itself is the security boundary. Destructive commands inside a container can't harm the host.
 :::
 
-### `execute_code` Scripts {#execute-code-scripts}
-
-A script run by [`execute_code`](./features/code-execution.md) can call `subprocess`, `os` or `shutil` directly, and those calls never pass through the patterns above. Messaging, API and other gateway sessions therefore ask once for the whole script before it starts; a denied or unanswered script never runs. `cron_mode`, `single_query_mode` and `unattended_mode` decide the script at once, as they decide a command; YOLO and `mode: off` skip the prompt.
-
-Local sessions (classic CLI, TUI, Desktop, ACP editor) follow the interactive CLI's rule instead. Under `manual` (and `smart`), a turn the session's viewer typed gets **no whole-script approval**: Python-level file and process operations inside the script run without a prompt, and only the script's `terminal()` calls ask, each on the session's own prompt, as in the CLI before the one-gateway runtime. The exemption needs both a turn the viewer submitted and a viewer attached who can answer approvals when the script starts. These keep the whole-script approval in a local session:
-
-- turns nobody typed in it: plugin `inject_message` turns, delegation completions, background-process and watch-pattern notices, `/loop` ticks, heartbeats, hosted-room tasks
-- `delegate_task` children and `/bg` / `/btw` side tasks
-- a viewer's turn that runs while no viewer who can approve is attached
-
-### Approval Flow (CLI)
-
-In the interactive CLI, dangerous commands show an inline approval prompt:
-
-```
-  ⚠️  DANGEROUS COMMAND: recursive delete
-      rm -rf ~/old-project
-
-      [o]nce  |  [s]ession  |  [a]lways  |  [d]eny
-
-      Choice [o/s/a/D]:
-```
-
-The four options:
-
-- **once** — allow this single execution
-- **session** — allow this pattern for the rest of the session
-- **always** — add to permanent allowlist (saved to `config.yaml`)
-- **deny** (default) — block the command
-
-### Approval Flow (Gateway/Messaging)
-
-On messaging platforms, the agent sends the dangerous command details to the chat and waits for the user to reply:
-
-- Reply **yes**, **y**, **approve**, **ok**, or **go** to approve
-- Reply **no**, **n**, **deny**, or **cancel** to deny
-
-A messaging approval never asks you to approve a command you cannot read in full. When the command is too long for the approval card, Hermes first sends the whole command as its own message (split across several messages if needed), and the card says the preview was shortened. If the full command cannot be shown (the send fails, or the command itself contains a triple-backtick fence), the card offers **Deny** only. Review such a command in the CLI or the desktop app. On platforms that cut long messages instead of splitting them (ntfy, DingTalk, Photon, LINE), the plain-text prompt puts the answer instructions before the command. When the command would still be cut, the prompt offers only `/deny` and shows the same "preview shortened" notice.
-
-The `HERMES_EXEC_ASK=1` environment variable is automatically set when running the gateway.
-
-#### Who can answer an approval in a shared chat (`approvals.approvers`)
+### Who can answer an owner decision in a shared chat (`approvals.approvers`)
 
 By default any member admitted to the chat can answer a pending approval, whoever's message raised it. In a group, channel or shared thread you can bind each approval to the person who asked instead:
 
@@ -331,87 +244,6 @@ Discord interactions through the relay are checked more tightly. The relay forwa
 Picker cards (`/model`, `/reasoning`, `/fast` and the usage-limit switch offer) and the `/update` Yes/No prompt always belong to the member who opened them, whatever `approvers` says: only that member and the chat scope's admins can tap them or, for `/update`, answer by typing. Anyone else gets the same private note and the card stays open; their typed text is an ordinary message. A member refused an admin-only command therefore cannot apply an admin's open card instead.
 
 The setting is read when the approval is raised, so with multiplexed profiles each profile's own `config.yaml` decides. Host surfaces (CLI, TUI, Desktop, the API server) answer as the host and are not affected. Matrix keeps its own stricter `MATRIX_APPROVAL_REQUIRE_SENDER` (default on). QQBot already accepts clicks only from the session's own user.
-
-### Permanent Allowlist
-
-Commands approved with "always" are saved to `~/.hermes/config.yaml`:
-
-```yaml
-# Permanently allowed dangerous command patterns
-command_allowlist:
-  - rm
-  - systemctl
-```
-
-These patterns are loaded at startup and silently approved in all future sessions.
-
-Entries can be exact command text, a shell-style glob (`podman *`), or a
-dangerous-pattern rule key such as `script execution via heredoc` (the key shown
-in the approval prompt). Rule keys are honored on every surface, including
-unattended ones: a cron job, `hermes chat -q` run or webhook session under
-`cron_mode`/`single_query_mode`/`unattended_mode: deny` still runs a command whose
-detected rule key is in `command_allowlist`.
-
-The setting must be a list of strings. Legacy installs that stored a list as a
-quoted YAML/JSON string recover that list at load time and log a warning to
-re-save it with `hermes config edit`. Other malformed values are ignored with
-a warning; they never become per-character approvals. Loading does not rewrite
-your configuration file.
-
-:::tip
-Use `hermes config edit` to review or remove patterns from your permanent allowlist.
-:::
-
-:::caution
-The list is read when Hermes starts. A pattern you remove while a session is
-already running stays approved in that session until it next writes the file
-(the next time you answer `always` to a prompt) or you restart Hermes. If you
-removed it for safety reasons, restart.
-:::
-
-### Mining Approval History (`hermes approvals suggest`)
-
-Instead of answering the same prompt session after session, you can mine your
-past approval decisions into allowlist proposals:
-
-```bash
-hermes approvals suggest            # dry run — prints a numbered proposal
-hermes approvals suggest --apply 1,3  # merge picks into command_allowlist
-hermes approvals suggest --json     # machine-readable output
-```
-
-The command scans the session database (`~/.hermes/state.db`) for
-dangerous-classified commands that actually executed — i.e. commands you
-approved — aggregates them into patterns (`git push *`, or the dangerous-class
-key for compound commands), and ranks them by approval frequency:
-
-```
-Proposed command_allowlist additions (from approval history, last 90 days):
-
-  1. git push *    — approved 14x
-  2. docker restart/stop/kill (container lifecycle)    — approved 9x (class key)
-```
-
-Safety rules:
-
-- **Nothing is ever applied automatically** — the default run is read-only;
-  only an explicit `--apply N[,M...]` writes to `config.yaml`.
-- **Destructive classes are never proposed**, no matter how often they were
-  approved: recursive deletes, `sudo`, disk/device writes, credential and
-  system-config edits, pipe-to-shell, SQL DROP/TRUNCATE, process kills, and
-  every hardline class are excluded outright. `rm -rf build/` approved 100
-  times still never yields an `rm` entry.
-- Proposals already covered by your existing `command_allowlist` are skipped.
-- **Credentials inside mined commands are masked** (`ghp_…`, `bot<id>:<token>`
-  URLs, `KEY=value` assignments, bearer tokens) in both the printed `e.g.`
-  examples and the `--json` payload, using the same redactor as terminal
-  output. Masked text is never used as an allowlist pattern: a command whose
-  glob would embed a credential (`TOKEN=… git …`) is proposed under its
-  dangerous-class key instead. The session database itself still holds the
-  command as it was executed.
-
-Useful flags: `--days N` (history window, default 90), `--min-count N`
-(minimum approvals to qualify, default 2), `--limit N`, and `--db PATH`.
 
 ## File Write Safety {#file-write-safety}
 
@@ -956,9 +788,8 @@ a scan or an approval prompt, so when `distribution.yaml` owns the file a scanne
 3. **Restrict resource limits** — set appropriate CPU, memory, and disk limits
 4. **Store secrets securely** — keep API keys in `~/.hermes/.env` with proper file permissions
 5. **Enable DM pairing** — use pairing codes instead of hardcoding user IDs when possible
-6. **Review command allowlist** — periodically audit `command_allowlist` in config.yaml
-7. **Set `terminal.cwd`** — don't let the agent operate from sensitive directories
-8. **Run as non-root** — never run the gateway as root
+6. **Set `terminal.cwd`** — don't let the agent operate from sensitive directories
+7. **Run as non-root** — never run the gateway as root
 9. **Monitor logs** — check `~/.hermes/logs/` for unauthorized access attempts
 10. **Keep updated** — run `hermes update` regularly for security patches
 

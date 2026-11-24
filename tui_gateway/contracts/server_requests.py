@@ -166,8 +166,6 @@ server_request("setup_beat", params=SetupBeatRequestParams, result=SetupBeatResu
 
 class ApprovalChoice(WireEnum):
     once = "once"
-    session = "session"
-    always = "always"
     deny = "deny"
 
 
@@ -178,10 +176,6 @@ class ApprovalRequestParams(ServerRequestParams):
     command: str = ""
     description: str = ""
     choices: list[ApprovalChoice] = Field(default_factory=list)
-    allow_permanent: bool | None = None
-    allow_session: bool | None = None
-    smart_denied: bool | None = None
-    scope: Literal["bot_chat"] | None = None
     draft: ApprovalDraft | None = None
     tool_name: str | None = None
     session_id_hint: str | None = Field(default=None, alias="gateway_session_id")
@@ -197,7 +191,7 @@ class ApprovalResult(Result):
 
 
 server_request("approval", params=ApprovalRequestParams, result=ApprovalResult,
-               doc="A dangerous command awaits the user's decision.")
+               doc="A held draft or a spend or payment consent awaits the user's decision.")
 
 
 # ── one-string prompts ────────────────────────────────────────────────────────────────────────

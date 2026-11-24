@@ -148,26 +148,18 @@ def test_large_process_output_is_bounded_before_sudo_and_plugin_hooks(
     assert len(result["output"]) <= limit
 
 
-def test_terminal_output_transform_does_not_change_approval_or_exit_code_meaning(monkeypatch, tmp_path):
-    approval = {
-        "approved": True,
-        "user_approved": True,
-        "description": "dangerous command",
-    }
+def test_terminal_output_transform_does_not_change_exit_code_meaning(monkeypatch, tmp_path):
     result, _mock_env = _run_terminal(
         monkeypatch,
         tmp_path,
         output="original output",
         returncode=1,
-        approval=approval,
         command="grep foo bar",
         invoke_hook=lambda hook_name, **kwargs: ["replaced output"],
     )
 
     assert result["output"] == "replaced output"
-    assert result["approval"] == (
-        "Command required approval (dangerous command) and was approved by the user."
-    )
+    assert "approval" not in result
     assert result["exit_code_meaning"] == "No matches found (not an error)"
 
 

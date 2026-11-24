@@ -12,7 +12,7 @@ import pytest
 
 from gateway.session_policy import build_policy, rebind_launch_key
 from persistence.core.errors import AuthorityRefusal
-from tests.gateway.fixtures.storage_handles import close_storage_handles, storage_handle
+from tests.gateway.fixtures.storage_handles import storage_handle
 
 _CFG = {'platform_toolsets': {'cli': ['terminal']}}
 
@@ -39,7 +39,6 @@ def _refusal(params, cfg=None, **kwargs):
     ({'source': 'cli', 'row_cwd': 'relative/place'}, 'row_cwd'),
     ({'source': 'cli', 'provider': ''}, 'provider'),
     ({'source': 'cli', 'base_url': 'ftp://example.invalid'}, 'base_url'),
-    ({'source': 'cli', 'yolo': 'yes'}, 'yolo'),
     ({'source': 'cli', 'verbose': 'yes'}, 'verbose'),
     ({'source': 'cli', 'service_tier': 'instant'}, 'service_tier'),
     ({'source': 'cli', 'run_budget': -1}, 'run_budget'),

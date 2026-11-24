@@ -13,9 +13,6 @@ from tests.computer_use_fakes import NoopBackend, reset_backend
 def backend(monkeypatch):
     reset_backend()
     monkeypatch.setattr(tool, "_new_backend", lambda mode: NoopBackend())
-    # Input actions are approval-gated; a CI runner has no approver, so the gate would block
-    # before the dispatch this test is about. Same seam the capture-fence tests use.
-    monkeypatch.setattr(tool, "_request_approval", lambda *a, **k: None)
     value = tool._get_backend()
     yield value
     reset_backend()

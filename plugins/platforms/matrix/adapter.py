@@ -70,10 +70,10 @@ except ImportError:
         "PRIVATE": "private_chat", "PUBLIC": "public_chat", "TRUSTED_PRIVATE": "trusted_private_chat"})
     TrustState = type("_TrustStateStub", (), {"UNVERIFIED": 0, "VERIFIED": 1})  # type: ignore[misc,assignment]
 
-from gateway.approval_actor import approval_refusal, picker_refusal, refusal_text
+from gateway.approval_actor import picker_refusal, refusal_text
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import (
-    gateway_trust_env, BasePlatformAdapter, ExecApprovalPrompt, transcode_to_ogg_opus,
+    gateway_trust_env, BasePlatformAdapter, transcode_to_ogg_opus,
     SendResult, resolve_proxy_url, proxy_kwargs_for_aiohttp, safe_proxy_url_for_log, ssrf_redirect_guard, describe_proxy_error,
 )
 from gateway.platforms.event import MessageEvent, MessageType, ProcessingOutcome
@@ -275,20 +275,6 @@ class MatrixRoomIdentity:
     has_explicit_name: bool
     chat_type: str
     conflict: bool = False
-
-
-@dataclass
-class _MatrixApprovalPrompt:
-    """Pending reaction-based exec approval prompt."""
-    session_key: str
-    chat_id: str
-    message_id: str
-    resolved: bool = False
-    requester_user_id: str | None = None
-    expires_at: float | None = None
-    request_id: str | None = None  # the tools.approval request this prompt answers
-    offered: tuple[str, ...] = ()  # choices the card seeded; a Deny-only card offers only "deny"
-    bot_reaction_events: dict[str, str] = field(default_factory=dict, init=False)  # emoji -> event_id
 
 
 @dataclass
@@ -748,11 +734,6 @@ class MatrixAdapter(BasePlatformAdapter):
         # Text batching merges client-side splits (~4000 chars) of one long message.
         self._text_batch_delay_seconds = float(os.getenv("HERMES_MATRIX_TEXT_BATCH_DELAY_SECONDS", "0.6"))
         self._text_batch_split_delay_seconds = float(os.getenv("HERMES_MATRIX_TEXT_BATCH_SPLIT_DELAY_SECONDS", "2.0"))
-        self._approval_reaction_map = {
-            "✅": "once", "🌀": "session", "♾️": "always", "♾": "always", "\u267e\ufe0f": "always",
-            "\u267e": "always", "❌": "deny", "❎": "deny"}
-        self._approval_prompts_by_event: dict[str, _MatrixApprovalPrompt] = {}
-        self._approval_prompt_by_session: dict[str, str] = {}
         self._approval_require_sender: bool = _env_truthy("MATRIX_APPROVAL_REQUIRE_SENDER", "true")
         self._approval_timeout_seconds = _env_number("MATRIX_APPROVAL_TIMEOUT_SECONDS", 300, int)
         self._model_picker_prompts_by_event: dict[str, _MatrixPickerPrompt] = {}
@@ -1491,14 +1472,6 @@ class MatrixAdapter(BasePlatformAdapter):
         metadata: Optional[dict[str, Any]] = None) -> SendResult:
         return await self._send_local_file(chat_id, video_path, "m.video", caption, reply_to, metadata=metadata)
 
-    # Template attrs for the shared _format_exec_approval core (header + fence + reason only;
-    # the smart-deny/scope wording lives in the reaction legend below).
-    _EA_CMD_BUDGET = 2000
-
-    @property
-    def _EA_HEADER(self) -> str:
-        return f"⚠️ **{t('gateway.exec_approval.header')}**\n"
-
     async def _send_reaction_prompt(
         self, chat_id: str, text: str, metadata: Optional[dict], make_prompt, registry: dict, emojis,
         label: str) -> SendResult:
@@ -1519,41 +1492,6 @@ class MatrixAdapter(BasePlatformAdapter):
             except Exception as exc:
                 logger.debug("Matrix: failed to add %s reaction %s: %s", label, emoji, exc)
         return result
-
-    _EA_REACTIONS = {"once": "✅", "session": "🌀", "always": "♾️", "deny": "❌"}
-    _EA_LEGEND_KEYS = {"once": "platform.matrix.approval.legend_once", "session": "platform.matrix.approval.legend_session",
-                       "always": "platform.matrix.approval.legend_always", "deny": "platform.matrix.approval.legend_deny"}
-    # Whole sentences per offered tier (the highest tier wins) so translations never splice fragments.
-    _EA_TYPED_HINT_KEYS = {"once": "platform.matrix.approval.typed_hint_once",
-                           "session": "platform.matrix.approval.typed_hint_session",
-                           "always": "platform.matrix.approval.typed_hint_always"}
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Reaction-driven approval: the bot seeds one reaction per offered choice."""
-        if not self._client:
-            return SendResult(success=False, error="Not connected")
-        choices = prompt.choices
-        tier = "once"
-        if not prompt.smart_denied:
-            tier = "always" if "always" in choices else ("session" if "session" in choices else "once")
-        # A Deny-only card (command not shown in full) must not tell the user how to approve it.
-        hint = f"{t(self._EA_TYPED_HINT_KEYS[tier])}\n\n" if "once" in choices else ""
-        text = (
-            f"{prompt.text}\n\n{hint}"
-            f"{t('platform.matrix.approval.legend_intro')}\n" + "\n".join(t(self._EA_LEGEND_KEYS[c]) for c in choices))
-        reactions = tuple(self._EA_REACTIONS[c] for c in choices)
-        session_key, chat_id = prompt.session_key, prompt.chat_id
-
-        def _make(message_id, requester, expires_at):
-            old_event = self._approval_prompt_by_session.get(session_key)
-            if old_event:
-                self._approval_prompts_by_event.pop(old_event, None)
-            self._approval_prompt_by_session[session_key] = message_id
-            return _MatrixApprovalPrompt(
-                session_key=session_key, chat_id=chat_id, message_id=message_id, requester_user_id=requester,
-                expires_at=expires_at, request_id=prompt.request_id, offered=tuple(choices))
-        return await self._send_reaction_prompt(
-            chat_id, text, prompt.metadata, _make, self._approval_prompts_by_event, reactions, "approval")
 
     async def send_model_picker(
         self, chat_id: str, providers: list, current_model: str, current_provider: str, session_key: str,
@@ -2370,8 +2308,7 @@ class MatrixAdapter(BasePlatformAdapter):
             reacts_to = str(getattr(relates_to, "event_id", ""))
             key = str(getattr(relates_to, "key", ""))
         logger.info("Matrix: reaction %s from %s on %s in %s", key, sender, reacts_to, hash_for_log(room_id))
-        for handler in (self._handle_approval_reaction, self._handle_model_picker_reaction,
-                        self._handle_choice_picker_reaction):
+        for handler in (self._handle_model_picker_reaction, self._handle_choice_picker_reaction):
             if await handler(room_id, reacts_to, key, sender):
                 return
 
@@ -2395,38 +2332,6 @@ class MatrixAdapter(BasePlatformAdapter):
         if selection is None:
             await self._send_invalid_reaction_feedback(room_id, reacts_to, invalid_text)
         return True, prompt, selection
-
-    async def _handle_approval_reaction(self, room_id: str, reacts_to: str, key: str, sender: str) -> bool:
-        """Resolve a pending exec-approval prompt from a reaction. True if it was the target."""
-        handled, prompt, choice = await self._claim_reaction_prompt(
-            self._approval_prompts_by_event, room_id, reacts_to, key, sender, "approval",
-            t("platform.matrix.approval.invalid_reaction"), self._expire_matrix_approval_prompt,
-            choices=self._approval_reaction_map)
-        if choice is None:
-            return handled
-        if prompt.offered and choice not in prompt.offered:  # a hand-added ✅ on a Deny-only card: keep it live
-            await self._send_invalid_reaction_feedback(room_id, reacts_to, t("platform.matrix.approval.invalid_reaction"))
-            return True
-        if requester := approval_refusal(prompt.session_key, sender, extra=self.config.extra, request_id=prompt.request_id,
-                                         choice=choice):
-            await self._send_invalid_reaction_feedback(room_id, reacts_to, refusal_text(requester))
-            return True
-        try:
-            from tools.approval import resolve_gateway_approval_card
-            count = resolve_gateway_approval_card(prompt.session_key, choice, prompt.request_id,
-                                                  actor_id=sender, extra=self.config.extra)
-            if count:
-                prompt.resolved = True
-                self._approval_prompts_by_event.pop(reacts_to, None)
-                self._approval_prompt_by_session.pop(prompt.session_key, None)
-                logger.info("Matrix reaction resolved %d approval(s) for session %s (choice=%s, user=%s)",
-                            count, prompt.session_key, choice, sender)
-                await self._redact_bot_approval_reactions(room_id, prompt)
-            else:  # this card's request already timed out or was answered elsewhere
-                await self._expire_matrix_approval_prompt(room_id, reacts_to, prompt)
-        except Exception as exc:
-            logger.error("Failed to resolve gateway approval from Matrix reaction: %s", exc)
-        return True
 
     async def _handle_model_picker_reaction(self, room_id: str, reacts_to: str, key: str, sender: str) -> bool:
         """Apply a model-picker reaction. True if the reaction targeted a pending picker."""
@@ -2500,27 +2405,12 @@ class MatrixAdapter(BasePlatformAdapter):
         except Exception as exc:
             logger.debug("Matrix: failed to send invalid reaction feedback: %s", exc)
 
-    async def _expire_matrix_approval_prompt(self, room_id: str, target_event_id: str, prompt: Any) -> None:
-        prompt.resolved = True
-        self._approval_prompts_by_event.pop(target_event_id, None)
-        self._approval_prompt_by_session.pop(prompt.session_key, None)
-        await self._redact_bot_approval_reactions(room_id, prompt)
-        await self._send_invalid_reaction_feedback(
-            room_id, target_event_id,
-            t("platform.matrix.approval.expired"))
-
     async def _expire_matrix_model_picker_prompt(self, room_id: str, target_event_id: str, prompt: Any) -> None:
         prompt.resolved = True
         self._model_picker_prompts_by_event.pop(target_event_id, None)
         await self._redact_bot_model_picker_reactions(room_id, prompt)
         await self._send_invalid_reaction_feedback(
             room_id, target_event_id, t("platform.shared.model_picker_expired"))
-
-    async def _redact_bot_approval_reactions(self, room_id: str, prompt: Any) -> None:
-        """Redact the bot's seeded approval reactions (delayed), leaving only the user's reaction."""
-        for emoji, evt_id in prompt.bot_reaction_events.items():
-            self._schedule_reaction_redaction(room_id, evt_id, "approval resolved")
-            logger.debug("Matrix: scheduled bot reaction redaction %s (%s)", emoji, evt_id)
 
     async def _redact_bot_model_picker_reactions(self, room_id: str, prompt: Any) -> None:
         for emoji, evt_id in prompt.bot_reaction_events.items():

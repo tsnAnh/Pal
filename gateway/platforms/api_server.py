@@ -47,7 +47,7 @@ _api_request_profile: ContextVar[Optional[str]] = ContextVar(
 # /v1/capabilities static feature flags (order is part of the JSON shape).
 _STATIC_FEATURE_FLAGS = {
     "run_status": True, "run_events_sse": True, "run_stop": True, "run_steer": True,
-    "run_approval_response": True, "tool_progress_events": True, "approval_events": True,
+    "tool_progress_events": True,
     "session_resources": True, "model_options": True, "session_chat": True,
     "session_chat_streaming": True, "session_fork": True, "session_model_lock": True,
     "reasoning_streaming": True,
@@ -64,7 +64,6 @@ _CAPABILITY_ENDPOINTS = (
     ("responses", ("POST", "/v1/responses")), ("runs", ("POST", "/v1/runs")),
     ("run_status", ("GET", "/v1/runs/{run_id}")),
     ("run_events", ("GET", "/v1/runs/{run_id}/events")),
-    ("run_approval", ("POST", "/v1/runs/{run_id}/approval")),
     ("run_steer", ("POST", "/v1/runs/{run_id}/steer")),
     ("run_unknown_resolution", ("POST", "/v1/runs/{run_id}/resolve-unknown", "run_unknown_resolution")),
     ("run_stop", ("POST", "/v1/runs/{run_id}/stop")), ("skills", ("GET", "/v1/skills")),
@@ -78,27 +77,6 @@ _CAPABILITY_ENDPOINTS = (
     ("session_chat", ("POST", "/api/sessions/{session_id}/chat")),
     ("session_chat_stream", ("POST", "/api/sessions/{session_id}/chat/stream")),
     ("session_model_lock", ("POST", "/api/sessions/{session_id}/model")))
-
-
-def _approval_event_choices(*, smart_denied: bool, allow_session: bool, allow_permanent: bool) -> list[str]:
-    if smart_denied or not allow_session:
-        return ["once", "deny"]
-    return ["once", "session", "always", "deny"] if allow_permanent else ["once", "session", "deny"]
-
-
-def _approval_request_event(run_id: str, approval_data: Optional[dict[str, Any]], **fields: Any) -> dict[str, Any]:
-    """The ``approval.request`` payload every approval surface emits (runs bridge, session stream,
-    chat completions): the flagged command redacted before egress (#48456), the ``_run_event``
-    envelope, and the ``choices`` the client may send back to ``POST /v1/runs/{id}/approval``."""
-    from gateway.platforms.api_server_runs import _run_event
-    from gateway.run import _redact_approval_command
-    event = dict(approval_data or {})  # consent prompts (MCP, vault) carry server/model text in the description
-    event.update({k: _redact_approval_command(event[k]) for k in ("command", "description") if k in event})
-    event.update(_run_event(run_id, "approval.request", **fields, choices=_approval_event_choices(
-        smart_denied=bool(event.get("smart_denied")),
-        allow_session=event.get("allow_session") is not False,
-        allow_permanent=event.get("allow_permanent") is not False)))
-    return event
 
 
 try:
@@ -3116,8 +3094,6 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                 events.enqueue("assistant.commentary", {
                     "message_id": message_id, "text": text, "already_streamed": bool(already_streamed)})
 
-        approval_notify = self._register_session_stream_approval(run_id, events, message_id)
-
         async def _run_and_signal() -> None:
             try:
                 await queue.put(_event_payload("run.started", {
@@ -3129,8 +3105,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                 result, usage = await self._run_agent(
                     conversation_history=history, stream_delta_callback=_delta,
                     tool_progress_callback=_tool_progress, interim_assistant_callback=_commentary,
-                    active_run_id=run_id, approval_notify_callback=approval_notify,
-                    approval_session_key=run_id, **ctx["run_kwargs"])
+                    active_run_id=run_id, run_alias=run_id, **ctx["run_kwargs"])
                 await events.flush()
                 is_dict = isinstance(result, dict)
                 final_response = _resolve_media_to_data_urls(result.get("final_response", "") if is_dict else "")
@@ -3162,7 +3137,6 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                 await queue.put(_event_payload("error", {"message": _redact_api_error_text(exc)}))
             finally:
                 self._active_run_agents.pop(run_id, None)
-                self._run_approval_sessions.pop(run_id, None)
                 self._release_run_owner_if_forgotten(run_id)
                 await events.flush()
                 await queue.put(_event_payload("done", {}))
@@ -3195,18 +3169,6 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         except Exception as exc:
             logger.debug("[api_server] session SSE stream error: %s", exc)
         return response
-
-    def _register_session_stream_approval(self, run_id: str, events: _SessionEventQueue, message_id: str):
-        """Route a session-stream turn's dangerous-command approvals to its SSE queue and to
-        ``POST /v1/runs/{run_id}/approval`` (#58856). Keyed by the run id (never the shared
-        session key) so concurrent turns on one session can't cross-resolve."""
-        self._run_approval_sessions[run_id] = run_id
-
-        def _approval_notify(approval_data: dict[str, Any]) -> None:
-            event = _approval_request_event(run_id, approval_data, message_id=message_id)
-            self._set_run_status(run_id, "waiting_for_approval", last_event="approval.request", approval=event)
-            events.enqueue("approval.request", event)  # executor thread -> loop hop inside
-        return _approval_notify
 
     async def _drain_session_stream_task_on_disconnect(
         self, run_id: str, task: asyncio.Task, *, interrupt_message: str, shield_wait: bool
@@ -3626,11 +3588,8 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         request_id: Optional[str] = None, history_from_session: bool = False, run_owner_scope=None,
         session_history_delivery: str = "", turn_author: Optional[dict[str, Any]] = None,
         relay_metadata: Optional[dict[str, Any]] = None, notification_category: str = "result",
-        resume_unanswered_turn: bool = False, approval_notify_callback=None,
-        approval_session_key: Optional[str] = None, walked_from: Optional[str] = None) -> tuple:
+        resume_unanswered_turn: bool = False, run_alias: Optional[str] = None, walked_from: Optional[str] = None) -> tuple:
         """Create an agent and run one turn in a thread executor -> ``(result, usage)``.
-        ``approval_notify_callback`` (with ``approval_session_key``) routes dangerous-command
-        approval requests to the caller's stream, keyed like ``/v1/runs`` approvals (#51871).
         ``agent_ref[0]`` receives the agent so SSE writers can interrupt it; ``active_run_id``
         registers it in ``_active_run_agents``. Under a confirmed model lock the actual
         provider/model must match or the turn fails; ``runtime`` metadata is attached.
@@ -3656,8 +3615,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                 route_source=route_source, confirmed_runtime_lock=confirmed_runtime_lock,
                 bind_declared_conversation=bind_declared_conversation, request_id=request_id, run_owner_scope=run_owner_scope,
                 history_from_session=history_from_session, session_history_delivery=session_history_delivery,
-                turn_author=turn_author, resume_unanswered_turn=resume_unanswered_turn, relay_metadata=relay_metadata,
-                approval_notify_callback=approval_notify_callback, approval_session_key=approval_session_key)
+                turn_author=turn_author, resume_unanswered_turn=resume_unanswered_turn, relay_metadata=relay_metadata, run_alias=run_alias)
         loop = asyncio.get_running_loop()
         # ContextVars do not follow run_in_executor threads: capture here, re-enter in _run().
         request_profile = _api_request_profile.get()
@@ -3719,23 +3677,8 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                     )
                     if relay_metadata:
                         conversation_kwargs["relay_metadata"] = relay_metadata
-                    approval_token = None
-                    if approval_notify_callback is not None and approval_session_key:
-                        # Same machinery as /v1/runs (_run_agent_sync): the contextvar scopes
-                        # this turn's approvals to the key the resolve endpoint looks up.
-                        from tools.approval import register_gateway_notify
-                        from tools.approval_context import set_current_session_key
-                        approval_token = set_current_session_key(approval_session_key)
-                        register_gateway_notify(approval_session_key, approval_notify_callback)
-                    try:
-                        with notification_turn(agent, muted=muted, session_id=session_id or ""):
-                            result = agent.run_conversation(**conversation_kwargs)
-                    finally:
-                        if approval_token is not None:
-                            from tools.approval_context import reset_current_session_key
-                            _api_runs._unregister_approval_notify(approval_session_key)
-                            with suppress(Exception):
-                                reset_current_session_key(approval_token)
+                    with notification_turn(agent, muted=muted, session_id=session_id or ""):
+                        result = agent.run_conversation(**conversation_kwargs)
                     result, usage = self._finish_turn_result(
                         agent, result, session_id, route=route, requested_runtime=requested_runtime,
                         route_source=route_source, confirmed_runtime_lock=confirmed_runtime_lock)
@@ -3848,7 +3791,6 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
 
     _handle_get_run = _run_route_delegate("_handle_get_run")
     _handle_run_events = _run_route_delegate("_handle_run_events")
-    _handle_run_approval = _run_route_delegate("_handle_run_approval")
     _handle_run_clarify = _run_route_delegate("_handle_run_clarify")
     _handle_steer_run = _run_route_delegate("_handle_steer_run")
     _handle_resolve_unknown_run = _run_route_delegate("_handle_resolve_unknown_run")

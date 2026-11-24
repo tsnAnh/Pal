@@ -68,7 +68,7 @@ async def config_get(connection, ref, params):
     key = params.get('key')
     if not isinstance(key, str):
         raise AuthorityRefusal('invalid_params')
-    if key in ('busy', 'verbose', 'yolo', 'show_reasoning'):
+    if key in ('busy', 'verbose', 'show_reasoning'):
         from gateway.session_busy_controls import busy_config
         return await busy_config(connection, ref, params)
     policy = _authorize(connection, ref, params)
@@ -85,7 +85,6 @@ async def config_get(connection, ref, params):
         from hermes_cli.config_backend import config_version_or_none, version_token
         from hermes_cli.config_effective import load_user_config_effective
         from hermes_constants import DEFAULT_INDICATOR_STYLE
-        from tools.approval_context import _get_approval_mode
         home = Path(connection.authority.profile_id)
         with _profile_runtime_scope(home):
             cfg = load_config()
@@ -106,8 +105,6 @@ async def config_get(connection, ref, params):
                 'indicator': lambda: {'value': display.get('tui_status_indicator', DEFAULT_INDICATOR_STYLE)},
                 'details_mode': lambda: {'value': display.get('details_mode', 'collapsed')},
                 'bot_mode.notifications': lambda: {'value': 'on' if notifications_flag(cfg) else 'off'},
-                'approvals.mode': lambda: {'value': _get_approval_mode()},
-                'approval_mode': lambda: {'value': _get_approval_mode()},
                 'project': lambda: _project(params, policy, cfg),
                 'profile': lambda: {'home': str(home), 'display': str(home)},
             }

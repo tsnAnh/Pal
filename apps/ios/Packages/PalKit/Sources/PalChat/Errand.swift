@@ -70,7 +70,7 @@ extension TranscriptItem {
 
     var prompt: PendingPrompt? {
         switch content {
-        case .clarify(let card), .approval(let card): card.prompt
+        case .clarify(let card): card.prompt
         default: nil
         }
     }

@@ -86,74 +86,6 @@ def _close_submitted_coro(coro, _loop):
 # send_exec_approval — interactive card with buttons
 # ===========================================================================
 
-class TestFeishuExecApproval:
-    """Test send_exec_approval sends an interactive card."""
-
-    @pytest.mark.asyncio
-    async def test_sends_interactive_card(self):
-        adapter = _make_adapter()
-
-        mock_response = SimpleNamespace(
-            success=lambda: True,
-            data=SimpleNamespace(message_id="msg_001"),
-        )
-        with patch.object(
-            adapter, "_feishu_send_with_retry", new_callable=AsyncMock,
-            return_value=mock_response,
-        ) as mock_send:
-            result = await adapter.send_exec_approval(
-                chat_id="oc_12345",
-                command="rm -rf /important",
-                session_key="agent:main:feishu:group:oc_12345",
-                description="dangerous deletion",
-            )
-
-        assert result.success is True
-        assert result.message_id == "msg_001"
-
-        mock_send.assert_called_once()
-        kwargs = mock_send.call_args[1]
-        assert kwargs["chat_id"] == "oc_12345"
-        assert kwargs["msg_type"] == "interactive"
-
-        # Verify card payload contains the command and buttons
-        card = json.loads(kwargs["payload"])
-        assert "rm -rf /important" in card["elements"][0]["content"]
-        assert "dangerous deletion" in card["elements"][0]["content"]
-
-        # Check buttons
-        actions = card["elements"][1]["actions"]
-        assert len(actions) == 4
-        action_names = [a["value"]["hermes_action"] for a in actions]
-        assert action_names == [
-            "approve_once", "approve_session", "approve_always", "deny"
-        ]
-
-    @pytest.mark.asyncio
-    async def test_stores_approval_state(self):
-        adapter = _make_adapter()
-
-        mock_response = SimpleNamespace(
-            success=lambda: True,
-            data=SimpleNamespace(message_id="msg_002"),
-        )
-        with patch.object(
-            adapter, "_feishu_send_with_retry", new_callable=AsyncMock,
-            return_value=mock_response,
-        ):
-            await adapter.send_exec_approval(
-                chat_id="oc_12345",
-                command="echo test",
-                session_key="my-session-key",
-            )
-
-        assert len(adapter._approval_state) == 1
-        approval_id = next(iter(adapter._approval_state.keys()))
-        state = adapter._approval_state[approval_id]
-        assert state["session_key"] == "my-session-key"
-        assert state["message_id"] == "msg_002"
-        assert state["chat_id"] == "oc_12345"
-
 
 # ===========================================================================
 # send_update_prompt — interactive card with buttons
@@ -199,44 +131,6 @@ class TestFeishuUpdatePrompt:
 # ===========================================================================
 # _resolve_approval — approval state pop + gateway resolution
 # ===========================================================================
-
-class TestResolveApproval:
-    """Test _resolve_approval pops state and calls resolve_gateway_approval."""
-
-    @pytest.mark.asyncio
-    async def test_resolves_once(self):
-        adapter = _make_adapter()
-        # No Feishu allowlist: the gateway authorization decides (here: this user is allowed).
-        adapter.set_authorization_check(lambda *_a, **_kw: True)
-        adapter._approval_state[1] = {
-            "session_key": "agent:main:feishu:group:oc_12345",
-            "message_id": "msg_001",
-            "chat_id": "oc_12345",
-            "request_id": "req-1",
-        }
-
-        with patch("tools.approval.resolve_gateway_approval", return_value=1) as mock_resolve:
-            await adapter._resolve_approval(1, "once", "Norbert", open_id="ou_user1", chat_id="oc_12345")
-
-        mock_resolve.assert_called_once_with("agent:main:feishu:group:oc_12345", "once", request_id="req-1")
-        assert 1 not in adapter._approval_state
-
-
-    @pytest.mark.asyncio
-    async def test_unauthorized_click_does_not_resolve(self):
-        adapter = _make_adapter()
-        adapter._admins = {"ou_admin"}
-        adapter._approval_state[5] = {
-            "session_key": "sess-5",
-            "message_id": "msg_005",
-            "chat_id": "oc_12345",
-        }
-
-        with patch("tools.approval.resolve_gateway_approval") as mock_resolve:
-            await adapter._resolve_approval(5, "once", "Mallory", open_id="ou_intruder", chat_id="oc_12345")
-
-        mock_resolve.assert_not_called()
-        assert 5 in adapter._approval_state
 
 
 # ===========================================================================
@@ -308,101 +202,6 @@ class TestCardActionCallbackResponse:
         assert response.card is None
         mock_submit.assert_not_called()
 
-    def test_returns_card_for_approve_action(self, _patch_callback_card_types):
-        adapter = _make_adapter()
-        adapter._loop = MagicMock()
-        adapter._loop.is_closed = MagicMock(return_value=False)
-        adapter._allowed_group_users = {"ou_bob"}
-        adapter._approval_state[1] = {
-            "session_key": "sess-1",
-            "message_id": "msg-1",
-            "chat_id": "oc_12345",
-        }
-        data = _make_card_action_data(
-            {"hermes_action": "approve_once", "approval_id": 1},
-            open_id="ou_bob",
-        )
-        adapter._sender_name_cache["ou_bob"] = ("Bob", 9999999999)
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro):
-            response = adapter._on_card_action_trigger(data)
-
-        assert response is not None
-        assert response.card is not None
-        assert response.card.type == "raw"
-        card = response.card.data
-        assert t("platform.feishu.approval.resolved_once") in card["header"]["title"]["content"]
-        assert "Bob" in card["elements"][0]["content"]
-
-
-    def test_ignores_expired_cached_name(self, _patch_callback_card_types):
-        adapter = _make_adapter()
-        adapter._loop = MagicMock()
-        adapter._loop.is_closed = MagicMock(return_value=False)
-        adapter._allowed_group_users = {"ou_expired"}
-        adapter._approval_state[4] = {
-            "session_key": "sess-4",
-            "message_id": "msg-4",
-            "chat_id": "oc_12345",
-        }
-        data = _make_card_action_data(
-            {"hermes_action": "approve_once", "approval_id": 4},
-            open_id="ou_expired",
-        )
-        adapter._sender_name_cache["ou_expired"] = ("Old Name", 1)
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro):
-            response = adapter._on_card_action_trigger(data)
-
-        card = response.card.data
-        assert "Old Name" not in card["elements"][0]["content"]
-        assert "ou_expired" in card["elements"][0]["content"]
-
-    def test_rejects_approval_click_from_unauthorized_user(self, _patch_callback_card_types):
-        adapter = _make_adapter()
-        adapter._loop = MagicMock()
-        adapter._loop.is_closed = MagicMock(return_value=False)
-        adapter._allowed_group_users = {"ou_allowed"}
-        adapter._approval_state[5] = {
-            "session_key": "sess-5",
-            "message_id": "msg-5",
-            "chat_id": "oc_12345",
-        }
-        data = _make_card_action_data(
-            {"hermes_action": "approve_once", "approval_id": 5},
-            open_id="ou_attacker",
-        )
-
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            response = adapter._on_card_action_trigger(data)
-
-        assert response is not None
-        assert response.card is None
-        mock_submit.assert_not_called()
-
-    def test_rejects_approval_click_when_group_policy_open(self, _patch_callback_card_types):
-        adapter = _make_adapter()
-        adapter._loop = MagicMock()
-        adapter._loop.is_closed = MagicMock(return_value=False)
-        adapter._allowed_group_users = {"ou_allowed"}
-        adapter._group_policy = "open"
-        adapter._default_group_policy = "open"
-        adapter._approval_state[6] = {
-            "session_key": "sess-6",
-            "message_id": "msg-6",
-            "chat_id": "oc_12345",
-        }
-        data = _make_card_action_data(
-            {"hermes_action": "approve_once", "approval_id": 6},
-            open_id="ou_attacker",
-        )
-
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            response = adapter._on_card_action_trigger(data)
-
-        assert response is not None
-        assert response.card is None
-        mock_submit.assert_not_called()
 
 
     def test_update_prompt_unauthorized_operator_returns_no_card(self, _patch_callback_card_types):
@@ -480,33 +279,6 @@ class TestCardActionCallbackResponse:
     # #99021: DM paired-mode (empty allowlist) positive paths, fail-closed
     # rejection of missing operator identity, and forwarded-card rejection.
 
-    def test_paired_mode_participant_can_approve(self, _patch_callback_card_types):
-        """Empty allowlist (DM paired mode): the card recipient can still approve."""
-        adapter = _make_adapter()
-        adapter._loop = MagicMock()
-        adapter._loop.is_closed = MagicMock(return_value=False)
-        adapter._admins = set()
-        adapter._allowed_group_users = set()
-        # The paired DM user passes the gateway authorization (pairing store).
-        adapter.set_authorization_check(lambda *_a, **_kw: True)
-        adapter._approval_state[15] = {
-            "session_key": "sess-15",
-            "message_id": "msg-15",
-            "chat_id": "oc_dm_chat",
-        }
-        data = _make_card_action_data(
-            {"hermes_action": "approve_once", "approval_id": 15},
-            chat_id="oc_dm_chat",
-            open_id="ou_dm_user",
-        )
-        adapter._sender_name_cache["ou_dm_user"] = ("DM User", 9999999999)
-
-        with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro):
-            response = adapter._on_card_action_trigger(data)
-
-        assert response is not None
-        assert response.card is not None
-        assert t("platform.feishu.approval.resolved_once") in response.card.data["header"]["title"]["content"]
 
     def test_paired_mode_participant_can_confirm_update_prompt(self, _patch_callback_card_types):
         """Empty allowlist (DM paired mode): the prompt recipient can still confirm."""
@@ -535,31 +307,6 @@ class TestCardActionCallbackResponse:
         assert response is not None
         assert response.card is not None
 
-    def test_empty_open_id_rejected_on_approval(self, _patch_callback_card_types):
-        """Approval click without an operator identity is rejected (fail-closed)."""
-        adapter = _make_adapter()
-        adapter._loop = MagicMock()
-        adapter._loop.is_closed = MagicMock(return_value=False)
-        adapter._admins = set()
-        adapter._allowed_group_users = set()
-        adapter._approval_state[24] = {
-            "session_key": "sess-24",
-            "message_id": "msg-24",
-            "chat_id": "oc_dm_chat",
-        }
-        data = _make_card_action_data(
-            {"hermes_action": "approve_once", "approval_id": 24},
-            chat_id="oc_dm_chat",
-            open_id="",
-        )
-
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            response = adapter._on_card_action_trigger(data)
-
-        assert response is not None
-        assert response.card is None
-        mock_submit.assert_not_called()
-        assert 24 in adapter._approval_state
 
     def test_empty_open_id_rejected_on_update_prompt(self, _patch_callback_card_types):
         """Update prompt click without an operator identity is rejected (fail-closed)."""
@@ -586,32 +333,6 @@ class TestCardActionCallbackResponse:
         assert response.card is None
         mock_submit.assert_not_called()
         assert 25 in adapter._update_prompt_state
-
-    def test_approval_card_forwarded_to_different_chat_rejected(self, _patch_callback_card_types):
-        """Approval card forwarded out of its DM: chat mismatch rejects the click."""
-        adapter = _make_adapter()
-        adapter._loop = MagicMock()
-        adapter._loop.is_closed = MagicMock(return_value=False)
-        adapter._admins = set()
-        adapter._allowed_group_users = set()
-        adapter._approval_state[26] = {
-            "session_key": "sess-26",
-            "message_id": "msg-26",
-            "chat_id": "oc_dm_chat",
-        }
-        data = _make_card_action_data(
-            {"hermes_action": "approve_once", "approval_id": 26},
-            chat_id="oc_forwarded_group",
-            open_id="ou_dm_user",
-        )
-
-        with patch("asyncio.run_coroutine_threadsafe") as mock_submit:
-            response = adapter._on_card_action_trigger(data)
-
-        assert response is not None
-        assert response.card is None
-        mock_submit.assert_not_called()
-        assert 26 in adapter._approval_state
 
 
 class TestResolveUpdatePrompt:
@@ -673,21 +394,3 @@ class TestResolveUpdatePrompt:
 
 
 
-def test_resolved_card_keeps_the_request(_patch_callback_card_types):
-    """Clicking a button replaces the card; the replacement still shows the command and reason."""
-    import asyncio
-    adapter = _make_adapter()
-    response = SimpleNamespace(success=lambda: True, data=SimpleNamespace(message_id="msg_9"))
-    with patch.object(adapter, "_feishu_send_with_retry", new_callable=AsyncMock, return_value=response):
-        asyncio.run(adapter.send_exec_approval(chat_id="oc_12345", command="rm -rf ./build",
-                                               session_key="sess-9", description="dangerous deletion"))
-    approval_id = next(iter(adapter._approval_state))
-    adapter._loop = MagicMock()
-    adapter._loop.is_closed = MagicMock(return_value=False)
-    adapter._allowed_group_users = {"ou_bob"}
-    adapter._sender_name_cache["ou_bob"] = ("Bob", 9999999999)
-    data = _make_card_action_data({"hermes_action": "approve_once", "approval_id": approval_id}, open_id="ou_bob")
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_close_submitted_coro):
-        card = adapter._on_card_action_trigger(data).card.data
-    content = card["elements"][0]["content"]
-    assert "rm -rf ./build" in content and "dangerous deletion" in content and "Bob" in content

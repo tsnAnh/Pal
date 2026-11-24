@@ -28,7 +28,6 @@ _approval_tool_call_id: contextvars.ContextVar[str] = _ctx("approval_tool_call_i
 # hooks so observer plugins attach marks to the REAL session scope — otherwise they fall back to a synthetic "default"
 # session whose scope never closes, so close-time exporters never ship them.
 _approval_session_id: contextvars.ContextVar[str] = _ctx("approval_session_id")
-_approval_bot_chat: contextvars.ContextVar[bool] = contextvars.ContextVar("approval_bot_chat", default=False)
 _approval_client_probe: contextvars.ContextVar = contextvars.ContextVar("approval_client_probe", default=None)
 # Interactive-CLI flag. Concurrent ACP sessions share a ThreadPoolExecutor, so mutating
 # os.environ["HERMES_INTERACTIVE"] races: one session's `finally` restore can clobber another's set mid-run, dropping
@@ -142,19 +141,6 @@ def reset_current_observability_context(tokens: _Tokens) -> None:
     _approval_turn_id.reset(turn_token)
 
 
-def set_current_bot_chat(active: bool) -> contextvars.Token[bool]:
-    """Mark the current turn as a Bot-Mode-managed bot's canonical Bot Chat."""
-    return _approval_bot_chat.set(bool(active))
-
-
-def reset_current_bot_chat(token: contextvars.Token[bool]) -> None:
-    _approval_bot_chat.reset(token)
-
-
-def is_bot_chat_turn() -> bool:
-    return _approval_bot_chat.get()
-
-
 def set_approval_client_probe(probe) -> contextvars.Token:
     """Bind a zero-argument callable that says whether a client able to show and answer an approval card is attached
     to the current turn's session right now; evaluated when the question is asked, not when the turn starts."""
@@ -209,7 +195,7 @@ def _session_env(name: str) -> str:
 
 def prompt_authority(requester_id: str | None = None, requester_name: str | None = None,
                      chat_type: str | None = None) -> dict:
-    """Who may answer a chat prompt raised now (``gateway.approval_actor.may_answer``): its requester,
+    """Who may answer a chat prompt raised now (``gateway.approval_actor._refusal``): its requester,
     ``approvals.approvers`` read here in the caller's profile scope (click callbacks run off-turn), and
     the chat type picking the admin scope. Omitted fields are the current turn's ACTOR (who asked):
     empty once another sender's input joined the turn, which leaves only approvers and admins."""
@@ -321,26 +307,6 @@ def _should_fall_through_to_cli_approval(*, is_cli: bool, approval_callback, not
     return bool(is_cli and approval_callback is not None and notify_cb is None)
 
 
-_VALID_MODES = ("manual", "smart", "off")
-
-
-def _normalize_approval_mode(mode) -> str:
-    """Normalize approval mode values loaded from YAML/config. YAML 1.1 parses a
-    bare ``off`` as False, so ``mode: off`` arrives as a bool; treat it as the
-    intended string mode. Unknown strings (e.g. 'auto') warn and fall back to
-    'manual' instead of silently failing every mode check."""
-    if isinstance(mode, bool):
-        return "off" if mode is False else "manual"
-    if isinstance(mode, str):
-        normalized = mode.strip().lower()
-        if normalized in _VALID_MODES:
-            return normalized
-        if normalized:
-            logger.warning("Unknown approvals.mode %r — defaulting to 'manual'. "
-                           "Valid values: %s", mode, ", ".join(_VALID_MODES))
-    return "manual"
-
-
 def _get_approval_config() -> dict:
     """Read the approvals config block: the LIVE config-cache sub-dict
     (load_config_readonly contract) — callers must not mutate it or any nested structure."""
@@ -350,26 +316,6 @@ def _get_approval_config() -> dict:
     except Exception as e:
         logger.warning("Failed to load approval config: %s", e)
         return {}
-
-
-def _get_approval_mode() -> str:
-    """Return 'manual', 'smart', or 'off' (a hosted-room policy overrides config).
-
-    A subagent routed to another profile runs as that profile, but the room policy was signed for the
-    room MEMBER's profile: under the profile route's own mark the stricter of the two modes governs.
-    The routed profile's own mode is never loosened by the member's, and a turn another installation
-    dispatched never runs at ``off`` (the catalog refuses an ``off`` room policy for that reason)."""
-    mode = None
-    try:
-        from gateway.hosted_room_execution_policy import current_room_execution_policy, profile_routed
-        if (room_policy := current_room_execution_policy()) is not None:
-            if not profile_routed():
-                return room_policy.approval_mode
-            mode = room_policy.approval_mode
-    except Exception:
-        pass
-    own = _normalize_approval_mode(_get_approval_config().get("mode", "manual"))
-    return own if mode is None else min(mode, own, key=_VALID_MODES.index)
 
 
 def _get_approval_timeout() -> int:
@@ -439,17 +385,3 @@ def _get_unattended_approval_mode() -> str:
     deny — an unattended session never silently runs a flagged action unless the
     operator explicitly trusts it."""
     return _binary_approval_mode("unattended_mode")
-
-
-def _get_approval_transport_config() -> tuple[str, str | None]:
-    """Return explicitly selected transport and fail-closed fallback mode."""
-    try:
-        from hermes_cli.config import load_config_readonly
-        cfg = ((load_config_readonly() or {}).get("security") or {}).get("approval") or {}
-        selected = str(cfg.get("transport") or "builtin").strip().lower()
-        fallback = str(cfg.get("transport_fallback") or "").strip().lower()
-    except Exception:
-        # An unreadable/malformed selection must not silently materialize a
-        # prompt on a built-in surface the operator may not be watching.
-        return "config-error", None
-    return selected or "builtin", "builtin" if fallback == "builtin" else None

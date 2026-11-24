@@ -67,9 +67,6 @@ class FakePeer(BaseHTTPRequestHandler):
         if self.path == "/v1/runs/run-1/stop":
             type(self).runs["run-1"]["status"] = "cancelled"
             return self._json({"run_id": "run-1", "status": "stopping"})
-        if self.path == "/v1/runs/run-1/approval":
-            type(self).approvals.append(body)
-            return self._json({"run_id": "run-1", "resolved": 1})
         return self._json({"error": "not found"}, 404)
 
     def log_message(self, *args):
@@ -665,27 +662,6 @@ def test_real_http_drip_cannot_extend_the_whole_response_deadline():
     assert elapsed < 6.0
     assert caught.value.retryable is True
 
-
-def test_peer_approval_sends_the_exact_request_id(peer_server, tmp_path):
-    client = PeerRunsHTTPClient(
-        base_url=peer_server,
-        api_key="",
-        receipt_store=storage_handle(tmp_path), receipt_placement="profile",
-    )
-    client.dispatch(dispatch=_dispatch(), grant="signed.room.grant")
-
-    result = client.approve_receipt(
-        task_id="task-1",
-        execution_generation=1,
-        request_id="approval-exact-1",
-        choice="once",
-        grant="signed.room.grant",
-    )
-
-    assert result["resolved"] == 1
-    assert FakePeer.approvals == [
-        {"choice": "once", "request_id": "approval-exact-1"}
-    ]
 
 
 def test_exact_receipt_polling_is_constant_with_large_room_history():

@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent.i18n import t
 from gateway.platforms.event import MessageEvent
 from gateway.run import _AGENT_PENDING_SENTINEL
 from tests.gateway.restart_test_helpers import make_restart_runner, make_restart_source
@@ -14,33 +13,6 @@ from tests.gateway.restart_test_helpers import make_restart_runner, make_restart
 
 def _event(text: str) -> MessageEvent:
     return MessageEvent(text=text, source=make_restart_source(), message_id="1")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("approvals", [{"command": "rm -rf /tmp/x"}, {}], ids=["prompt", "empty-prompt"])
-@pytest.mark.parametrize(("command", "stale_key"), [
-    ("/approve", "gateway.approval_expired"),
-    ("/deny", "gateway.deny.stale"),
-])
-async def test_stale_approval_prompt_is_reported_once_and_dropped(command, stale_key, approvals):
-    runner, _adapter = make_restart_runner()
-    event = _event(command)
-    key = runner._session_key_for_source(event.source)
-    runner._session_state(key).persistent.approvals = approvals
-    handler = runner._handle_approve_command if command == "/approve" else runner._handle_deny_command
-
-    assert await handler(event) == t(stale_key)
-    assert runner._session_state(key).persistent.approvals is None
-    assert await handler(event) != t(stale_key)
-
-
-@pytest.mark.asyncio
-async def test_approve_without_session_state_creates_no_row():
-    runner, _adapter = make_restart_runner()
-    event = _event("/approve")
-
-    assert await runner._handle_approve_command(event) == t("gateway.approve.no_pending")
-    assert runner._session_key_for_source(event.source) not in (runner.__dict__.get("_sessions") or {})
 
 
 @pytest.mark.asyncio

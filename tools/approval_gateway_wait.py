@@ -2,10 +2,10 @@
 
 Mirrors the CLI's synchronous ``input()`` flow: the agent thread enqueues a
 pending approval, the gateway notifies the user, and the thread blocks until
-``/approve`` / ``/deny`` resolves it or the approval timeout elapses. Multiple
+the owner's answer resolves it or the approval timeout elapses. Multiple
 threads (parallel subagents, execute_code RPC handlers) can block concurrently
-— each gets its own ``threading.Event``; ``/approve`` resolves the oldest,
-``/approve all`` every pending entry. Queue state (``_gateway_queues``,
+— each gets its own ``threading.Event``; an answer resolves the oldest,
+a resolve-all answer resolves every pending entry. Queue state (``_gateway_queues``,
 ``_lock``) is owned by ``tools.approval`` and reached through that module at
 call time.
 """
@@ -24,9 +24,9 @@ logger = logging.getLogger("tools.approval")
 
 
 class _ApprovalEntry:
-    """One pending dangerous-command approval inside a gateway session."""
-    __slots__ = ("authority", "cancelled", "card_deny_only", "data", "edited_text", "event", "expired", "identity",
-                 "observers", "owner", "reason", "result", "settle")
+    """One pending owner decision inside a gateway session."""
+    __slots__ = ("authority", "cancelled", "data", "edited_text", "event", "expired", "identity",
+                 "owner", "reason", "result", "settle")
 
     def __init__(self, data: dict):
         self.owner = None
@@ -36,18 +36,14 @@ class _ApprovalEntry:
         self.event = threading.Event()
         self.data = dict(data)
         self.data.setdefault("request_id", uuid.uuid4().hex)
-        # Born Deny-only: a card tap may only deny until a renderer proves its card shows the whole
-        # command (#62359), so no tap can approve an entry in the window before its card is drawn.
-        self.card_deny_only = True
         # Who may answer (gateway.approval_actor): the turn's actor, approvers and admins. Kept off
         # ``data`` so the prompt and replay payloads sent to clients stay exactly what was raised.
         self.authority = _ctx.prompt_authority()
-        # Surface hook run once when the wait ends by ANY path (answer, timeout, interrupt, /approve from
+        # Surface hook run once when the wait ends by ANY path (answer, timeout, interrupt, answer from
         # another client): the tui_gateway withdraws its open server→client request through it.
         self.settle = None
-        self.observers = []
-        self.result: str | None = None  # "once"|"session"|"always"|"deny"
-        # Free-text reason from ``/deny <reason>`` so the agent can adapt, not just hear "denied".
+        self.result: str | None = None  # "once"|"deny"
+        # Free-text reason with a deny so the agent can adapt, not just hear "denied".
         self.reason: str | None = None
         # The owner's rewrite of an outbound draft, set with a ``once`` answer by the surface that edited it.
         self.edited_text: str | None = None
@@ -60,6 +56,32 @@ class _ApprovalEntry:
 
 def _identity_digest(text) -> str:
     return hashlib.sha256(str(text).encode("utf-8", "surrogatepass")).hexdigest()
+
+
+_MAX_HELD_SESSIONS = 256
+_held_lock = threading.Lock()
+_held_denials: dict[str, tuple[str, frozenset[str]]] = {}  # session_key -> (turn_id, identity digests the owner denied)
+
+
+def _hold_denial(session_key: str, turn_id: str, digest: str) -> None:
+    if not session_key or not turn_id:
+        return
+    with _held_lock:
+        held_turn, held = _held_denials.pop(session_key, ("", frozenset()))
+        _held_denials[session_key] = (turn_id, (held if held_turn == turn_id else frozenset()) | {digest})
+        while len(_held_denials) > _MAX_HELD_SESSIONS:
+            _held_denials.pop(next(iter(_held_denials)))
+
+
+def _denial_held(session_key: str, turn_id: str, digest: str) -> bool:
+    with _held_lock:
+        held_turn, held = _held_denials.get(session_key, ("", frozenset()))
+    return bool(turn_id) and held_turn == turn_id and digest in held
+
+
+def clear_held_denials(session_key: str) -> None:
+    with _held_lock:
+        _held_denials.pop(session_key, None)
 
 
 def _same_answerers(leader: dict, follower: dict) -> bool:
@@ -133,13 +155,11 @@ def _hook_choice(resolved: bool, choice: str | None, extra: dict) -> str:
 
 def _await_coalesced_leader(session_key: str, leader, payload: dict):
     """Wait on an already-pending identical approval instead of re-prompting.
-    Adopts the leader's decision: ``session``/``always`` → approval (same dict
-    shape as a direct resolution; persistence stays the caller's and is
-    idempotent across leader and followers); ``deny`` → denial carrying the
-    leader's reason; leader timeout / our own deadline → unresolved. ``once``
-    returns ``None``: single-use consent covers only the leader's execution,
-    so the caller must issue a fresh prompt. Hooks fire with ``coalesced=True``
-    so observers see the follower's lifecycle without a duplicate prompt."""
+    Adopts the leader's decision: ``deny`` → denial carrying the leader's reason;
+    leader timeout / our own deadline → unresolved. ``once`` returns ``None``:
+    single-use consent covers only the leader's operation, so the caller must
+    issue a fresh prompt. Hooks fire with ``coalesced=True`` so observers see
+    the follower's lifecycle without a duplicate prompt."""
     _ctx._fire_approval_hook("pre_approval_request", **payload, coalesced=True)
     # The leader's captured timeout (when stamped), so a config edit mid-wait can't end the follower first.
     state = _poll_event(leader.event, session_key, timeout_s=leader.data.get("timeout_s"),
@@ -166,20 +186,22 @@ def _await_coalesced_leader(session_key: str, leader, payload: dict):
 def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *, surface: str = "gateway",
                             identity: str | None = None) -> dict:
     """Enqueue *approval_data*, notify the user, and block until resolved or timed
-    out. Shared by the terminal command guard, the execute_code guard, the plugin
-    escalation gate, and MCP elicitation. Returns ``{"resolved", "choice",
+    out. Shared by held drafts and elicitation consent. Returns ``{"resolved", "choice",
     "reason"}`` or ``{"resolved": False, "choice": None, "notify_failed": True}``
     when the notify callback raised. Persisting the choice and building the
     tool-facing result stay with the caller.
 
     Identical concurrent approvals (same *identity* — the executed command, defaulting to the
     displayed ``command`` — and pattern-key set) are coalesced: parallel tool calls would
-    otherwise fire N identical prompts the user must /approve N times while the agent sits wedged. Followers adopt
-    the leader's ``session``/``always``/``deny``/timeout; a ``once`` covers only
-    the leader, so the followers fall through to ONE fresh prompt they coalesce on."""
+    otherwise fire N identical prompts the user must answer N times while the agent sits wedged. Followers adopt
+    the leader's ``deny``/timeout; a ``once`` covers only the leader, so the followers fall
+    through to ONE fresh prompt they coalesce on."""
     from tools import approval as _approval
-    from agent.terminal_approval_batch import approval_published, preparing_terminal_approval, register_prepared_approval
 
+    turn_id = _ctx.get_current_turn_id()
+    digest = _identity_digest(identity if identity is not None else approval_data.get("command", ""))
+    if _denial_held(session_key, turn_id, digest):
+        return {"resolved": True, "choice": "deny", "reason": None, "held": True}
     primary_key = approval_data.get("pattern_key", "")
     if surface == "gateway":
         surface = _ctx.gateway_approval_surface()
@@ -195,7 +217,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     keys = list(approval_data.get("pattern_keys") or [])
     entry = _ApprovalEntry(approval_data)
     if identity is not None:
-        # Two commands that render alike after redaction must not share one session/always answer.
+        # Two items that render alike after redaction must not share one answer.
         entry.identity = _identity_digest(identity)
     entry.owner = owner
     # Captured before the entry is published: a coalesced follower can find it while the pre-request
@@ -203,7 +225,6 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     timeout_s = entry.data["timeout_s"] = _ctx._get_approval_timeout()
 
     def _enqueue() -> None:
-        register_prepared_approval(session_key, entry)
         _approval._gateway_queues.setdefault(session_key, []).append(entry)
 
     # The leader lookup and our enqueue are ONE critical section: split, two identical requests both
@@ -212,12 +233,10 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     # user still sees one prompt at a time (the answered leader is already off the queue).
     while True:
         with _approval._lock:
-            leader = None
-            if not preparing_terminal_approval():
-                leader = next((e for e in _approval._gateway_queues.get(session_key, [])
-                               if e.owner is owner and e.identity == entry.identity
-                               and list(e.data.get("pattern_keys") or []) == keys
-                               and _same_answerers(e.authority, entry.authority)), None)
+            leader = next((e for e in _approval._gateway_queues.get(session_key, [])
+                           if e.owner is owner and e.identity == entry.identity
+                           and list(e.data.get("pattern_keys") or []) == keys
+                           and _same_answerers(e.authority, entry.authority)), None)
             if leader is None:
                 _enqueue()
                 break
@@ -239,7 +258,6 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
             if not queue:
                 _approval._gateway_queues.pop(session_key, None)
             settle, entry.settle = entry.settle, None
-            observers, entry.observers = entry.observers, []
             if choice is None and state in ("timeout", "notify_failed"):
                 # Coalesced followers block on this event: wake them with the leader's outcome rather than
                 # leaving them waiting their own full timeout on a prompt that no longer exists.
@@ -247,7 +265,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
                 if state == "notify_failed":
                     entry.cancelled = "the approval prompt could not be delivered"
                 entry.event.set()
-        if settle is not None or observers:
+        if settle is not None:
             # ``request.cancel`` carries a RequestCancelReason: a choice committed from another surface is
             # ``resolved``; a withdrawn entry (woken with no choice — session torn down, turn ended, client
             # cannot answer) is ``session_closed``; never the raw poll-state token "set".
@@ -257,11 +275,10 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
                 reason = "resolved" if choice is not None else "session_closed"
             else:
                 reason = state
-            for callback in ([settle] if settle is not None else []) + observers:
-                try:
-                    callback(reason)
-                except Exception:
-                    logger.debug("approval settle hook failed", exc_info=True)
+            try:
+                settle(reason)
+            except Exception:
+                logger.debug("approval settle hook failed", exc_info=True)
         return choice
 
     from tools.human_input_hooks import human_input_request
@@ -271,7 +288,6 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         # Bridges sync agent thread → async gateway.
         try:
             notify_cb(dict(entry.data))
-            approval_published()
             # Bounded delivery trace (#138133): the notifier completed without raising, which is
             # the last record the wait side has of the prompt until it settles. Correlation only —
             # never the command text or chat identifiers.
@@ -296,6 +312,8 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         if state == "interrupted":
             # Our own decision stays a fail-closed deny.
             choice = "deny"
+        elif choice == "deny":
+            _hold_denial(session_key, turn_id, digest)
         # A choice that landed in the gap between the deadline check and leaving the queue is an answer,
         # not a timeout (#112548) — the same first-settlement rule as server_requests.send().
         resolved = state != "timeout" or choice is not None

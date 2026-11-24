@@ -1,4 +1,4 @@
-"""Relay prompt-response resolvers: one per prompt kind (exec approval, slash confirm, clarify).
+"""Relay prompt-response resolvers: one per prompt kind (slash confirm, clarify).
 
 Each runs on the transport read loop with the adapter, the popped prompt state, the chosen option,
 the chat id and the ack metadata; acks go through ``adapter._send_lifecycle_ack`` (fire-and-forget).
@@ -31,11 +31,7 @@ def prompt_refusal(state: dict, actor: dict, option_id: Optional[str] = None) ->
     admitted = actor.get("admitted", True)
     session_key = str(state.get("session_key") or "")
     kind = state.get("kind")
-    if kind == "exec_approval":
-        requester = approval_actor.approval_refusal(session_key, actor["actor_id"], admin_ids=actor["admin_ids"],
-                                                    request_id=state.get("request_id"), choice=option_id,
-                                                    admitted=admitted)
-    elif kind == "slash_confirm":
+    if kind == "slash_confirm":
         requester = approval_actor.slash_confirm_refusal(session_key, str(state.get("confirm_id") or ""),
                                                          actor["actor_id"], admin_ids=actor["admin_ids"],
                                                          admitted=admitted)
@@ -43,22 +39,6 @@ def prompt_refusal(state: dict, actor: dict, option_id: Optional[str] = None) ->
         requester = approval_actor.clarify_refusal(str(state.get("clarify_id") or ""), actor["actor_id"],
                                                    admin_ids=actor["admin_ids"], admitted=admitted)
     return approval_actor.refusal_text(requester) if requester else None
-
-
-async def resolve_exec_approval(adapter, state, option_id, chat_id, ack_meta) -> None:
-    from gateway.relay import adapter as _relay
-    from tools.approval import resolve_gateway_approval_card
-
-    choice = option_id if option_id in _relay._EXEC_APPROVAL_LABELS else "deny"
-    # The answerer's authority is rechecked against the entry this settles, in the same critical section.
-    count = resolve_gateway_approval_card(str(state.get("session_key") or ""), choice, state.get("request_id"),
-                                          **(state.get("actor") or {}))
-    label = _relay._EXEC_APPROVAL_LABELS[choice] if count else "⌛ Approval expired — no command was waiting."
-    # In-channel ack preserves the audit trail the native edit gives (the
-    # connector's prompt message can't be edited cross-platform yet).
-    adapter._send_lifecycle_ack(chat_id, label, ack_meta)
-    if count:
-        adapter.resume_typing_for_chat(chat_id)
 
 
 async def resolve_slash_confirm(adapter, state, option_id, chat_id, ack_meta) -> None:
@@ -97,7 +77,6 @@ async def resolve_clarify(adapter, state, option_id, chat_id, ack_meta) -> None:
 
 # prompt kind -> resolver (order-independent: kinds are distinct keys).
 PROMPT_RESOLVERS = {
-    "exec_approval": resolve_exec_approval,
     "slash_confirm": resolve_slash_confirm,
     "clarify": resolve_clarify,
 }

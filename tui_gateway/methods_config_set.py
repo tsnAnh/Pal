@@ -339,43 +339,6 @@ def _set_focus(rid, params, key, value, session):
     return _kv(rid, key, "on" if target else "off", tool_progress=effective)
 
 
-def _set_approval_mode(rid, params, key, value, session):
-    return _set_word(rid, params, "approvals.mode", value, session)  # legacy alias reports the real key
-
-
-@_cfgset_guarded
-def _set_yolo(rid, params, key, value, session):
-    # scope="session" (default; Shift+Tab) toggles ONLY this session's flag; scope="global"
-    # (Shift+click the zap) flips persistent approvals.mode between "off" and "manual".
-    scope = _word(params.get("scope") or "session")
-    raw = _word(value)
-    if scope == "global":
-        from tools.approval_context import _normalize_approval_mode
-        appr = _load_cfg().get("approvals")
-        appr = appr if isinstance(appr, dict) else {}
-        enable = _BOOL_WORDS.get(raw, _normalize_approval_mode(appr.get("mode", "manual")) != "off")
-        _write_config_key("approvals.mode", "off" if enable else "manual")  # binary: no "smart" restore
-        _emit_all_session_info()  # reflect the flip in every live indicator
-    elif session:
-        from tools.approval_yolo import toggle_session_yolo
-        # Row id prefers the agent's session_id: after compression the key can still name the ended parent (#20001).
-        row_id = getattr(session.get("agent"), "session_id", None) or session["session_key"]
-
-        def persist(on):
-            with _session_db(session) as db, _persistence_for(db) as persistence:
-                if persistence is not None:
-                    persistence.sessions.set_yolo(row_id, on)
-        enable = toggle_session_yolo(session["session_key"], _BOOL_WORDS.get(raw), persist=persist)
-        _emit_session_info(params.get("session_id", ""), session)
-    else:
-        enable = _BOOL_WORDS.get(raw, not is_truthy_value(os.environ.get("HERMES_YOLO_MODE")))
-        if enable:
-            os.environ["HERMES_YOLO_MODE"] = "1"
-        else:
-            os.environ.pop("HERMES_YOLO_MODE", None)
-    return _kv(rid, key, "1" if enable else "0", scope=scope if scope == "global" else "session")
-
-
 # /reasoning display words: (accepted inputs, reported value, display field, sections.thinking,
 # session show_reasoning or None). full/clamp mirror the CLI's reasoning_full toggle.
 _REASONING_DISPLAY_WORDS = (
@@ -423,8 +386,6 @@ def _word_setters() -> dict:
     return {
         "busy": (_word, {"queue", "steer", "interrupt"}, "unknown busy mode: {value}",
                  lambda w: _write_config_key("display.busy_input_mode", w)),
-        "approvals.mode": (_word, _APPROVAL_MODES, "unknown approval mode: {value}; pick one of manual|smart|off",
-                           lambda w: (_write_config_key("approvals.mode", w), _emit_all_session_info())),
         "details_mode": (_word, _DETAIL_MODES, "unknown details_mode: {value}", lambda w: _write_display_sections(
             sections={section: w for section in _DETAIL_SECTION_NAMES}, details_mode=w)),
         # thinking_mode also keeps details_mode aligned (compat bridge).
@@ -572,7 +533,6 @@ def _set_daybreak(rid, params, key, value, session):
 
 _CONFIG_SETTERS = {
     "model": _set_model, "fast": _set_fast, "busy": _set_busy, "verbose": _set_verbose, "focus": _set_focus,
-    "approval_mode": _set_approval_mode, "approvals.mode": _set_word, "yolo": _set_yolo,
     "reasoning": _set_reasoning, "details_mode": _set_word, "thinking_mode": _set_word,
     "density": _set_toggle, "battery": _set_toggle, "timestamps": _set_toggle, "theme": _set_word,
     "statusbar": _set_toggle, "mouse": _set_toggle, "indicator": _set_word, "voice.voice_chat_mode": _set_word,
@@ -583,7 +543,7 @@ _CONFIG_SETTERS = {
 # agent.* for every surface, the process env every later child inherits). A non-empty session_id this
 # backend no longer holds (reaped / re-minted) is a stale session, not "no session": it answers 4001 so
 # the client resumes, never the global write. An explicit scope="global" is still honoured.
-_SESSION_SCOPED_KEYS = frozenset({"model", "fast", "yolo", "reasoning"})
+_SESSION_SCOPED_KEYS = frozenset({"model", "fast", "reasoning"})
 
 
 @method("config.set")

@@ -1,28 +1,18 @@
-"""Who may answer a pending exec approval from a messaging chat.
+"""Who may answer a prompt raised in a messaging chat.
 
-An approval belongs to the user whose message started the turn that raised it.
-``tools.approval_gateway_wait`` records ``requester_id`` / ``requester_name`` and the
-profile's ``approvals.approvers`` on the pending entry (in the turn's profile scope).
-In a shared chat any admitted member sees the Allow/Deny buttons, so every surface
-that resolves an approval from a chat event (button callbacks, reactions, relay prompt
-responses) asks :func:`approval_refusal` first; ``/approve`` and ``/deny`` use
-:func:`answerable_request_ids` and resolve exactly the ids it checked.
+A prompt belongs to the user whose message started the turn that raised it. Each pending prompt
+records the requester and the profile's ``approvals.approvers`` as its authority, and every surface that
+resolves one from a chat event asks :func:`_refusal` through its own refusal helper first.
 
-``approvals.approvers`` defaults to ``["*"]``: any admitted member answers, as before.
-Narrowing it (``[]``, or a list of chat user ids) is the opt-in: then only the requester,
-the listed ids and the platform's admins of the approval's chat scope (``allow_admin_from`` in a
-DM, ``group_allow_admin_from`` in a group, as for slash commands) answer.
+``approvals.approvers`` defaults to ``["*"]``: any admitted member answers. Narrowing it (``[]``, or a list
+of chat user ids) is the opt-in: then only the requester, the listed ids and the platform's admins of the
+prompt's chat scope (``allow_admin_from`` in a DM, ``group_allow_admin_from`` in a group, as for slash
+commands) answer. Under the default the chat's slash policy fills in: answering a slash-command
+confirmation runs that command, so where the scope sets an admin list only someone allowed to run it there
+answers. Clarify answers run no command. Host surfaces (CLI, TUI, Desktop, the API server and the session
+authority's ``session:approve`` principals) answer as the host and never come through here.
 
-Under the default the chat's slash policy fills in: answering an approval IS ``/approve`` /
-``/deny`` and answering a slash-command confirmation runs that command, so where the scope sets an
-admin list (``allow_admin_from``) only someone allowed to run that command there (an admin, or
-``user_allowed_commands``) answers, whichever way they answer. A narrowed ``approvers`` is the
-explicit approval setting and takes precedence. Clarify answers run no command. Host surfaces (CLI,
-TUI, Desktop, the API server and the session authority's ``session:approve`` principals) answer as
-the host and never come through here.
-
-The other prompts a chat member can answer for someone else follow the same rule through the same
-:func:`may_answer`: a slash-command confirmation (:func:`slash_confirm_refusal`) and the agent's
+The prompts a chat member can answer for someone else follow the same rule: a slash-command confirmation (:func:`slash_confirm_refusal`) and the agent's
 clarify question (:func:`clarify_refusal`), each recording its authority when raised.
 """
 
@@ -37,9 +27,10 @@ _NO_REQUESTER = "\0no-requester"
 _ADMIN_ONLY = "\0admin-only:"
 
 
-def may_answer(authority: dict, actor_id: Any, admin_ids: Any = (), extra: Any = None,
-               commands: tuple[str, ...] = (), *, admitted: bool = True) -> bool:
-    """Whether *actor_id* may answer the prompt whose recorded ``authority`` this is.
+def _refusal(authority: dict, actor_id: Any, admin_ids: Any, extra: Any, commands: tuple[str, ...],
+             admitted: bool) -> Optional[str]:
+    """``None`` when *actor_id* may answer the prompt whose recorded ``authority`` this is, else what the refusal
+    names (the answer's admin-only command when the slash policy refused it, else the requester).
 
     ``approvers`` narrowed (``[]`` or ids): the requester, a listed approver or an admin; that explicit
     approval setting decides. ``approvers: ["*"]`` (the default): anyone the chat's slash policy lets
@@ -57,14 +48,6 @@ def may_answer(authority: dict, actor_id: Any, admin_ids: Any = (), extra: Any =
     ``admitted=False`` marks an answer whose sender no allowlist admitted (a relayed Discord sender the
     connector never delivered a message from, ``gateway.relay.admitted_authors``): under ``"*"`` the
     sender must then pass the slash floor AND be the requester or an admin, as with ``approvers`` narrowed."""
-    return _refusal(authority, actor_id, admin_ids, extra, commands, admitted) is None
-
-
-def _refusal(authority: dict, actor_id: Any, admin_ids: Any, extra: Any, commands: tuple[str, ...],
-             admitted: bool) -> Optional[str]:
-    """:func:`may_answer`'s decision: ``None`` when allowed, else what the refusal names, taken from
-    the check that failed: the answer's admin-only command when the slash policy refused it, else the
-    requester."""
     from gateway.slash_access import SlashAccessPolicy, _coerce_id_list, policy_for_chat_type
 
     actor = str(actor_id or "").strip()
@@ -86,15 +69,6 @@ def _refusal(authority: dict, actor_id: Any, admin_ids: Any, extra: Any, command
     return str(authority.get("requester_name") or requester or _NO_REQUESTER)
 
 
-def approval_commands(choice: Optional[str] = None) -> tuple[str, ...]:
-    """The slash command an exec-approval answer is: ``deny`` for a deny, else ``approve``; either
-    when the choice is not known yet (a pre-check before the settle rechecks the exact one).
-    ``SlashAccessPolicy.can_run`` lets an ``approve`` holder run ``deny`` too."""
-    if choice is None:
-        return ("approve", "deny")
-    return ("deny",) if choice == "deny" else ("approve",)
-
-
 def runner_answer_policy(source: Any):
     """Slash policy of the profile whose bot received *source*: the one the text ``/approve`` uses."""
     from gateway.run import _gateway_runner_ref
@@ -103,47 +77,10 @@ def runner_answer_policy(source: Any):
     return policy_for_runner_source(_gateway_runner_ref(), source)
 
 
-def answerable_request_ids(session_key: str, actor_id: Any, *, admin_ids: Any = (),
-                           request_id: Optional[str] = None, resolve_all: bool = False,
-                           extra: Any = None, choice: Optional[str] = None,
-                           admitted: bool = True) -> tuple[list[str], Optional[str]]:
-    """The pending approvals ``resolve_gateway_approval`` would select (the one matching
-    *request_id*, every one with *resolve_all*, else the oldest) and whether *actor_id* may
-    answer them: ``(request_ids, None)``, or ``([], requester_name)`` for the first selected one
-    they may not. Only the selected entries are checked, so another requester's queued approval
-    never blocks this one. Resolving the returned ids (not "the oldest" again) keeps a refused
-    entry that became the oldest in between from being answered unchecked."""
-    from tools.approval import list_gateway_approval_authority
-
-    pending = list_gateway_approval_authority(session_key)
-    if request_id:
-        pending = [p for p in pending if p.get("request_id") == request_id]
-    elif not resolve_all:
-        pending = pending[:1]
-    commands = approval_commands(choice)
-    for entry in pending:
-        refused = _refusal(entry, actor_id, admin_ids, extra, commands, admitted)
-        if refused is not None:
-            return [], refused
-    return [str(p.get("request_id")) for p in pending], None
-
-
-def approval_refusal(session_key: str, actor_id: Any, *, admin_ids: Any = (),
-                     request_id: Optional[str] = None, extra: Any = None,
-                     choice: Optional[str] = None, admitted: bool = True) -> Optional[str]:
-    """``None`` when *actor_id* may answer the approval a click resolves (the one matching
-    *request_id*, else the oldest); otherwise the requester's display name for an "only X can
-    answer this" reply. Nothing pending is never refused: the resolver then reports "nothing
-    pending" exactly as before. Adapters pass their platform ``extra`` block instead of *admin_ids*,
-    and the clicked *choice* so the slash floor checks that answer's own command."""
-    return answerable_request_ids(session_key, actor_id, admin_ids=admin_ids,
-                                  request_id=request_id, extra=extra, choice=choice, admitted=admitted)[1]
-
-
 def _authority_refusal(authority: Any, actor_id: Any, admin_ids: Any, extra: Any,
                        commands: tuple[str, ...] = (), admitted: bool = True) -> Optional[str]:
     # An empty authority ({}) records no restriction: anyone admitted answers, as on main. An
-    # unadmitted sender (``may_answer``'s ``admitted``) needs a recorded requester to match.
+    # unadmitted sender (``_refusal``'s ``admitted``) needs a recorded requester to match.
     if not authority or not isinstance(authority, dict):
         return None if admitted else _NO_REQUESTER
     return _refusal(authority, actor_id, admin_ids, extra, commands, admitted)
@@ -151,7 +88,7 @@ def _authority_refusal(authority: Any, actor_id: Any, admin_ids: Any, extra: Any
 
 def slash_confirm_refusal(session_key: str, confirm_id: str, actor_id: Any, *, admin_ids: Any = (),
                           extra: Any = None, admitted: bool = True) -> Optional[str]:
-    """:func:`approval_refusal` for the slash-command confirmation (``/reload-mcp``) a click or typed
+    """:func:`_refusal` as a refusal for the slash-command confirmation (``/reload-mcp``) a click or typed
     reply would resolve: the same rule, read from the pending confirm, with the confirmed command as
     the slash floor (answering runs it). Nothing pending (or another confirm id) is never refused: the
     resolver reports it as before."""
@@ -169,7 +106,7 @@ def slash_confirm_refusal(session_key: str, confirm_id: str, actor_id: Any, *, a
 
 def clarify_refusal(clarify_id: str, actor_id: Any, *, admin_ids: Any = (),
                     extra: Any = None, admitted: bool = True) -> Optional[str]:
-    """:func:`approval_refusal` for the agent's clarify question a tap (choice or "Other") answers."""
+    """:func:`_refusal` as a refusal for the agent's clarify question a tap (choice or "Other") answers."""
     from tools.clarify_gateway import get_pending
 
     pending = get_pending(clarify_id)

@@ -243,31 +243,6 @@ class PluginContext(PluginCapabilityCtxMixin, PluginIdleTaskCtxMixin):
         _facade().logger.debug("Plugin %s spawned supervised task: %s", self.manifest.name, task_name)
         return task
 
-    def register_approval_transport(self, name: str, present_fn: Callable) -> None:
-        """Register a human approval transport, inactive until ``security.approval.transport:
-        <name>`` selects it. It receives a redacted ``ApprovalRequest`` and returns only a
-        correlated decision; policy and persistence stay host-owned. ``present_fn`` may be async."""
-        from hermes_cli.approval_transport import RegisteredApprovalTransport
-        transports = self._manager._approval_transports
-        clean = str(name).strip().lower()
-        if clean == "builtin":
-            raise ValueError("approval transport name 'builtin' is reserved")
-        if not _facade().re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", clean):
-            raise ValueError("approval transport name must match [a-z0-9][a-z0-9_-]{0,63}")
-        if not callable(present_fn):
-            raise TypeError("approval transport present_fn must be callable")
-        if clean in transports:
-            owner = transports[clean].plugin_id
-            raise ValueError(f"approval transport {clean!r} is already registered by {owner!r}")
-        entry = RegisteredApprovalTransport(
-            name=clean, present=present_fn, plugin_id=self.plugin_id,
-            profile_home=str(_facade().get_hermes_home().resolve()),
-        )
-        _facade().logger.info("Plugin %s registered approval transport: %s", self.plugin_id, clean)
-        # Duplicate names are rejected above, so there is never a displaced previous entry to restore;
-        # tracking makes unload/force-reload remove this transport.
-        self._track_mapping_entry("approval_transport", clean, transports, entry, None)
-
     @_serialized_replacement
     def register_tool(
         self, name: str, toolset: str, schema: dict, handler: Callable,

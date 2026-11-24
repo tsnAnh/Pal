@@ -2028,7 +2028,7 @@ def _last_known_good_fallback(config_path: Path, path_key: str, cache_sig, exc: 
     EVERY user override, including security-critical ``approvals.deny`` rules, when a gateway
     user mid-edits config.yaml into broken YAML. Keep serving the last good config until fixed."""
     # Falling through to DEFAULT_CONFIG here drops EVERY user override — including security-critical
-    # ``approvals.deny`` rules, which are supposed to block commands even under yolo. Within a running
+    # ``approvals.deny`` rules, which are supposed to block commands. Within a running
     # process we still have the last successfully loaded config — keep serving it until the file is fixed.
     # See #31188.
     lkg = _LAST_EXPANDED_CONFIG_BY_PATH.get(path_key)
@@ -2779,7 +2779,7 @@ def _default_value_for_key(dotted_key: str):
 # user populates it): any path below is accepted without deep checking.
 _OPEN_DICT_TOP_LEVEL_KEYS = frozenset({
     "providers", "credential_pool_strategies", "mcp_servers", "hooks", "quick_commands",
-    "personalities", "command_allowlist", "model_catalog", "channel_prompts", "server_actions",
+    "personalities", "model_catalog", "channel_prompts", "server_actions",
     "secrets", "goals", "loops"})
 
 # Top-level keys whose sub-keys are partially schema-defined (e.g. a PlatformConfig dataclass) but

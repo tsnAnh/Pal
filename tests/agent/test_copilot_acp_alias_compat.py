@@ -188,7 +188,7 @@ _FORMER_SURFACE = (
     "_jsonrpc_result", "_legacy_session_model_ids", "_model_config_option", "_model_selection_request",
     "_render_message_content", "_render_tool_bridge_sections", "_resolve_args", "_resolve_command",
     "_resolve_home_dir", "_session_model_ids", "contextlib", "get_nt_namespace_error", "get_read_block_error",
-    "get_write_denied_error", "hermes_subprocess_env", "is_write_approval_required", "json", "logger", "logging",
+    "get_write_denied_error", "hermes_subprocess_env", "json", "logger", "logging",
     "os", "queue", "re", "redact_sensitive_text", "resolve_agent_cwd", "shlex", "subprocess", "tempfile",
     "threading", "time", "deque",
 )

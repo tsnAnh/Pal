@@ -40,7 +40,7 @@ except ImportError:
 
 from gateway.config import Platform, PlatformConfig
 from gateway.platforms.base import (
-    gateway_trust_env, BasePlatformAdapter, ExecApprovalPrompt, SendResult,
+    gateway_trust_env, BasePlatformAdapter, SendResult,
     cache_document_from_bytes_async, cache_image_from_bytes_async,
 )
 from gateway.platforms.event import MessageEvent, MessageType
@@ -71,8 +71,7 @@ from .utils import coerce_list as _coerce_list, build_user_agent, describe_conne
 from .chunked_upload import (
     ChunkedUploader, UploadDailyLimitExceededError, UploadFileTooLargeError)
 from .keyboards import (
-    ApprovalRequest, InlineKeyboard, InteractionEvent, approval_button_request_id, build_approval_keyboard,
-    build_update_prompt_keyboard, parse_approval_button_data, parse_interaction_event,
+    InlineKeyboard, InteractionEvent, build_update_prompt_keyboard, parse_interaction_event,
     parse_update_prompt_button_data)
 from gateway.platforms._shared import get_scoped_secret as _resolve_qq_secret
 
@@ -632,10 +631,6 @@ class QQAdapter(OwnAccessPolicyMixin, BasePlatformAdapter):
         if resp.status_code >= 400:
             raise RuntimeError(f"Interaction ACK failed [{resp.status_code}]: {resp.text[:200]}")
 
-    # Button decision → ``choice`` for tools.approval.resolve_gateway_approval. The
-    # 3-button layout folds "session" into "always"; ``/approve session`` still works.
-    _APPROVAL_BUTTON_TO_CHOICE = {"allow-once": "once", "allow-always": "always", "deny": "deny"}
-
     @staticmethod
     def _parse_gateway_session_key(session_key: str) -> Optional[dict[str, str]]:
         """Parse ``agent:<namespace>:<platform>:<chat_type>:<chat_id>[:<user_id>]``.
@@ -654,7 +649,7 @@ class QQAdapter(OwnAccessPolicyMixin, BasePlatformAdapter):
         return parsed
 
     def _is_authorized_interaction_for_session(self, event: InteractionEvent, session_key: str) -> bool:
-        """Authorize approval/update interactions against session + operator."""
+        """Authorize update-prompt interactions against session + operator."""
         parsed = self._parse_gateway_session_key(session_key)
         operator = str(event.operator_openid or "").strip()
         if not parsed or parsed.get("platform") != "qqbot" or not operator:
@@ -680,35 +675,10 @@ class QQAdapter(OwnAccessPolicyMixin, BasePlatformAdapter):
         return self._source_session_key(self.build_source(chat_id=chat, chat_type=event.scene))
 
     async def _default_interaction_dispatch(self, event: InteractionEvent) -> None:
-        """Default interaction callback: ``approve:<session_key>:<decision>`` →
-        tools.approval.resolve_gateway_approval; ``update_prompt:<answer>`` →
-        ``~/.hermes/.update_response``; anything else is ignored at DEBUG."""
+        """Default interaction callback: ``update_prompt:<answer>`` → ``~/.hermes/.update_response``;
+        anything else is ignored at DEBUG."""
         button_data = event.button_data
         if not button_data:
-            return
-
-        approval = parse_approval_button_data(button_data)
-        if approval is not None:
-            session_key, decision = approval
-            choice = self._APPROVAL_BUTTON_TO_CHOICE.get(decision)
-            if choice is None:
-                logger.warning("[%s] Unknown approval decision %r (session=%s)", self._log_tag, decision, session_key)
-                return
-            if not self._is_authorized_interaction_for_session(event, session_key):
-                logger.warning(
-                    "[%s] Rejected unauthorized approval click for session %s (operator=%s)",
-                    self._log_tag, session_key, event.operator_openid)
-                return
-            try:
-                from tools.approval import resolve_gateway_approval_card  # lazy: keep adapter light
-                count = resolve_gateway_approval_card(  # refuses approve on Deny-only and a refused clicker
-                    session_key, choice, approval_button_request_id(button_data),
-                    actor_id=event.operator_openid, extra=self.config.extra)
-                logger.info(
-                    "[%s] Button resolved %d approval(s) for session %s (choice=%s, operator=%s)",
-                    self._log_tag, count, session_key, choice, event.operator_openid)
-            except Exception as exc:
-                logger.error("[%s] resolve_gateway_approval failed for session %s: %s", self._log_tag, session_key, exc)
             return
 
         update_answer = parse_update_prompt_button_data(button_data)
@@ -1454,7 +1424,7 @@ class QQAdapter(OwnAccessPolicyMixin, BasePlatformAdapter):
             body["msg_id"] = reply_to
         return await self._post_message(f"/channels/{channel_id}/messages", body)
 
-    # ── Inline-keyboard outbound helpers (approval / update-prompt flows) ──
+    # ── Inline-keyboard outbound helpers (update-prompt flow) ──
 
     async def send_with_keyboard(
         self, chat_id: str, content: str, keyboard: InlineKeyboard, reply_to: Optional[str] = None,
@@ -1474,30 +1444,6 @@ class QQAdapter(OwnAccessPolicyMixin, BasePlatformAdapter):
         except Exception as exc:
             logger.error("[%s] send_with_keyboard failed: %s", self._log_tag, exc)
             return SendResult(success=False, error=str(exc) or type(exc).__name__)
-
-    async def send_approval_request(
-        self, chat_id: str, req: ApprovalRequest, reply_to: Optional[str] = None) -> SendResult:
-        """Send a 3-button approval request (allow-once / allow-always / deny);
-        clicks come back as INTERACTION_CREATE decoded by parse_approval_button_data."""
-        from .keyboards import build_approval_text
-        keyboard = build_approval_keyboard(
-            req.session_key, allow_permanent=getattr(req, "allow_permanent", True), request_id=req.request_id)
-        return await self.send_with_keyboard(chat_id, build_approval_text(req), keyboard, reply_to=reply_to)
-
-    # Cross-adapter gateway contract: gateway/run.py detects send_exec_approval /
-    # send_update_prompt on the adapter class for button-based approval/update UX.
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Keyboard-card approval (called while the agent blocks on approval); clicks resolve via
-        _default_interaction_dispatch. The body is the shared prompt text, so the preview QQ shows is the
-        one the shortened-preview check measured; the keyboard offers only ``prompt.choices`` (QQ's three
-        buttons fold the session tier into ``always``)."""
-        choices = prompt.choices
-        keyboard = build_approval_keyboard(prompt.session_key, allow_permanent="always" in choices,
-                                           allow_once="once" in choices, request_id=prompt.request_id)
-        # QQ requires a msg_id for passive replies; the last inbound id is the natural one.
-        return await self.send_with_keyboard(
-            prompt.chat_id, prompt.text, keyboard, reply_to=self._last_msg_id.get(prompt.chat_id))
 
     async def send_update_prompt(
         self, chat_id: str, prompt: str, default: str = "", session_key: str = "",

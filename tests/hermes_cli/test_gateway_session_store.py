@@ -497,19 +497,6 @@ def test_start_and_quit_closes_the_gateway_session_with_no_agent():
     host.agent = types.SimpleNamespace(session_id="local-agent")
     assert CLITuiRuntimeMixin._closing_session_id(host) == "local-agent"
 
-
-def test_yolo_toggle_persists_as_the_gateway_session_yolo(store):
-    """Main's ``/yolo`` persist hook (``db.set_session_yolo``) is the gateway's ``config.set yolo`` with an
-    explicit value: approvals run in the gateway, so its bypass is the one that matters."""
-    db, client = store
-    db.open_session(cli("local-old", resumed=True))
-    db.set_session_yolo("local-old", True)
-    db.set_session_yolo("local-old", False)
-    sets = [p for m, p in client.calls if m == "config.set"]
-    assert sets == [{"session_id": "local-old", "key": "yolo", "value": "1"},
-                    {"session_id": "local-old", "key": "yolo", "value": "0"}]
-
-
 def test_new_session_before_the_gateway_session_opened_is_mains_placeholder(store):
     from hermes_cli.cli_init_mixin import CLIInitMixin
     from datetime import datetime
@@ -793,65 +780,6 @@ def test_new_session_keeps_the_runs_launch_policy(store, monkeypatch):
     assert (params["max_turns"], params["checkpoints"], params["run_budget"], params["verbose"],
             params["skills"], params["toolsets"]) == (3, True, 60.0, True, ["arxiv"], ["file"]), params
     assert "model" not in params and "provider" not in params
-
-
-def test_branch_carries_a_live_yolo_onto_the_gateway_child(store):
-    """CLI-20: the gateway's branch child starts without the parent's `/yolo` toggle while the CLI moves
-    its own flag over (status bar YOLO); the CLI sets the child's bypass on the gateway too."""
-    from hermes_cli.cli_init_mixin import CLIInitMixin
-    from tools import approval
-    db, client = store
-    base = client.rpc
-
-    async def rpc(method, *, _timeout=None, **params):
-        if method == "session.mutate" and params["operation"] == "branch":
-            client.calls.append((method, params))
-            child = f"local-child-{len(client.calls)}"
-            client.known.add(child)
-            return {"branched_session_id": child, "copied_messages": 0}
-        return await base(method, _timeout=_timeout, **params)
-    client.rpc = rpc
-    db.open_session(cli("local-old", resumed=True))
-    host = types.SimpleNamespace(session_id="local-old", _session_db=db, _gateway_session_open=True)
-    plain = CLIInitMixin._new_session_id(host, None, branch_of="local-old")
-    assert not [p for m, p in client.calls if m == "config.set"]
-    approval.enable_session_yolo("local-old")
-    try:
-        child = CLIInitMixin._new_session_id(host, None, branch_of="local-old")
-    finally:
-        for key in ("local-old", plain, "local-child"):
-            approval.disable_session_yolo(key)
-    assert [p for m, p in client.calls if m == "config.set"] == [{"session_id": child, "key": "yolo", "value": "1"}]
-
-
-def test_branch_never_shows_yolo_the_gateway_refused(store):
-    """CLI-20: approvals run on the gateway, so a failed ``config.set yolo`` on the child surfaces instead of
-    being logged as a best-effort persist, and the child's local flag stays off (no YOLO display while the
-    gateway still asks)."""
-    from hermes_cli.cli_init_mixin import CLIInitMixin
-    from tools import approval
-    db, client = store
-    base = client.rpc
-
-    async def rpc(method, *, _timeout=None, **params):
-        if method == "session.mutate" and params["operation"] == "branch":
-            client.known.add("local-child")
-            return {"branched_session_id": "local-child", "copied_messages": 0}
-        if method == "config.set":
-            raise GatewayClientError("Gateway did not answer config.set")
-        return await base(method, _timeout=_timeout, **params)
-    client.rpc = rpc
-    db.open_session(cli("local-old", resumed=True))
-    host = types.SimpleNamespace(session_id="local-old", _session_db=db, _gateway_session_open=True)
-    approval.enable_session_yolo("local-old")
-    try:
-        with pytest.raises(GatewayClientError, match="config.set"):
-            CLIInitMixin._new_session_id(host, None, branch_of="local-old")
-        assert not approval.is_session_yolo_enabled("local-child")
-    finally:
-        for key in ("local-old", "local-child"):
-            approval.disable_session_yolo(key)
-
 
 def test_exported_ignore_rules_never_refuses_a_bare_resume(store, monkeypatch):
     """CLI-2: an exported HERMES_IGNORE_RULES is creation policy only, so a bare `hermes -c` continues a

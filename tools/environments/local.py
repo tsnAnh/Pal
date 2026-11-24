@@ -869,8 +869,7 @@ def _make_run_env(env: dict) -> dict:
         # config locations (gh, git, ...).
         run_env.update({k: v for k, v in published.items() if not k.startswith("XDG_")})
         run_env.pop("WAYLAND_DISPLAY", None)  # X11 desktop; a leaked Wayland socket flips GTK/Chromium backends
-    from hermes_cli.profile_admin_guard import agent_tool_env
-    return agent_tool_env(run_env)
+    return run_env
 
 
 # --- Hermes venv / repo-root detection (module-level, computed once) ---

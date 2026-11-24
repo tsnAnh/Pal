@@ -110,8 +110,6 @@
       "entries": [
         "gateway.platforms.access_policy_mixin:OwnAccessPolicyMixin",
         "tools.approval:resolve_gateway_approval",
-        "tools.approval:resolve_gateway_approval_card",
-        "gateway.approval_actor:approval_refusal",
         "gateway.approval_actor:refusal_text",
         "gateway.approval_actor:slash_confirm_refusal",
         "gateway.approval_actor:clarify_refusal",

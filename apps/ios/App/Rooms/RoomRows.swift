@@ -134,7 +134,6 @@ struct RoomActionCard: View {
     let action: RoomPendingAction
     let room: Room
     let isBusy: Bool
-    let approve: (Bool) -> Void
     let retry: () -> Void
     let discard: () -> Void
 
@@ -148,34 +147,13 @@ struct RoomActionCard: View {
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textSecondary)
                 .padding(.leading, 6)
-            if action.isApproval {
-                if action.canAllowOnce || action.canDeny {
-                    ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: nil), inkText: BubblePalette.inkText(accent: nil)) { choice in
-                        guard !isBusy else { return }
-                        approve(choice == "once")
-                    }
-                    .disabled(isBusy)
-                }
-            } else {
-                HStack(spacing: 10) {
-                    Button("Retry", action: retry).glassButtonStyle().accessibilityIdentifier("roomRetry")
-                    Button("Discard", role: .destructive, action: discard).glassButtonStyle().accessibilityIdentifier("roomDiscard")
-                }
-                .disabled(isBusy)
+            HStack(spacing: 10) {
+                Button("Retry", action: retry).glassButtonStyle().accessibilityIdentifier("roomRetry")
+                Button("Discard", role: .destructive, action: discard).glassButtonStyle().accessibilityIdentifier("roomDiscard")
             }
+            .disabled(isBusy)
         }
         .accessibilityIdentifier("roomAction-\(action.kind)")
-    }
-
-    private var prompt: PendingPrompt {
-        PendingPrompt(
-            kind: .approval,
-            promptID: action.requestID ?? "",
-            executionGeneration: action.executionGeneration,
-            choices: ["once", "deny"].filter { $0 == "once" ? action.canAllowOnce : action.canDeny },
-            command: action.shownCommand.isEmpty ? nil : action.shownCommand,
-            description: action.description.isEmpty ? nil : action.description
-        )
     }
 }
 

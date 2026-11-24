@@ -43,11 +43,9 @@ class SlashAccessPolicy:
 
     @property
     def user_runnable_commands(self) -> frozenset[str]:
-        """What a non-admin may run: ``user_allowed_commands``, plus ``deny`` for an ``approve``
-        holder (whoever may approve a pending approval may also refuse it). Excludes the
+        """What a non-admin may run: ``user_allowed_commands``. Excludes the
         ``_ALWAYS_ALLOWED_FOR_USERS`` floor."""
-        allowed = self.user_allowed_commands
-        return allowed | {"deny"} if "approve" in allowed else allowed
+        return self.user_allowed_commands
 
     def can_run(self, user_id: Optional[str], canonical_cmd: str) -> bool:
         if self.is_admin(user_id):

@@ -20,7 +20,7 @@ class CanonicalConfigGetResult(ConfigGetResult):
 
 
 class CanonicalConfigSetParams(ProfileParams):
-    """Session controls (``busy`` / ``verbose`` / ``yolo`` / ``show_reasoning`` / ``service_tier``, which
+    """Session controls (``busy`` / ``verbose`` / ``show_reasoning`` / ``service_tier``, which
     need ``session_id``) and the TUI's profile preferences (``gateway/session_tui_config.py``;
     ``session_id`` optional). ``model`` is recognised only to be refused with
     ``use_session_mutation_model``: a model pick is the revision-fenced ``session.mutate`` operation,
@@ -30,7 +30,7 @@ class CanonicalConfigSetParams(ProfileParams):
     key: str
     value: JsonValue = None
     confirm_expensive_model: bool | None = None
-    # ``reasoning`` (``global`` = ``/reasoning --global``) and ``yolo`` (``global`` = approvals.mode).
+    # ``reasoning`` (``global`` = ``/reasoning --global``).
     scope: Literal['session', 'global'] | None = None
 
 

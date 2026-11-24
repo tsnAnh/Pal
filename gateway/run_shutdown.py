@@ -1918,7 +1918,6 @@ class GatewayShutdownMixin(GatewaySessionEndMixin, GatewayHomeShutdownNoticeMixi
         for _state in list((self.__dict__.get("_sessions") or {}).values()):
             _state.turn.lease = None
             _state.turn.started_ts = _state.turn.busy_ack_ts = 0.0
-            _state.persistent.approvals = None
         self._shutdown_event.set()
         # Global catch-all subprocess kill (safe to repeat) for the graceful path and late respawns.
         # Off-loop: same blocking sweep as the post-interrupt kill (#116327).

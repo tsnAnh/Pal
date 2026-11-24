@@ -21,7 +21,6 @@ import mimetypes
 import os
 import re
 import shutil
-import uuid
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -43,8 +42,7 @@ from gateway.config import Platform, PlatformConfig
 from gateway.platforms._shared import config_connected_extra
 from gateway.platforms._shared import secrets_match
 from agent.i18n import t
-from gateway.platforms.base import BasePlatformAdapter, ExecApprovalPrompt, SendResult, transcode_to_ogg_opus
-from gateway.platforms.base_exec_approval import ea_header_text
+from gateway.platforms.base import BasePlatformAdapter, SendResult, transcode_to_ogg_opus
 from gateway.platforms.helpers import bounded_put, caption_is_command
 from gateway.platforms.event import MessageEvent, MessageType
 from gateway.platforms.whatsapp_common import WhatsAppBehaviorMixin, _get_wsecret
@@ -220,7 +218,6 @@ class WhatsAppCloudAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
         # the gateway resolver. Popped on tap; FIFO-capped via bounded_put so ignored
         # prompts don't accumulate (an evicted tap degrades to text fallback).
         self._clarify_state: OrderedDict[str, str] = OrderedDict()
-        self._exec_approval_state: OrderedDict[str, str] = OrderedDict()
         self._slash_confirm_state: OrderedDict[str, str] = OrderedDict()
         self._runner = self._http_client = None
 
@@ -508,31 +505,6 @@ class WhatsAppCloudAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
                            "sections": [{"title": t("platform.whatsapp.clarify_list_section"), "rows": rows}]},
             }
         return await self._send_interactive(chat_id, interactive, metadata, self._clarify_state, clarify_id, session_key)
-
-    @property
-    def _EA_HEADER(self) -> str:
-        return f"⚠️ *{ea_header_text()}*\n\n"
-
-    _EA_CODE_CLOSE = "\n```\n\n"
-    _EA_CARD_CAP = 1024  # interactive.body.text cap; past it _truncate_body would cut the deadline line
-
-    def _approval_request_ids(self) -> OrderedDict[str, str]:
-        """approval_id → ``tools.approval`` request id; created on first use, like Telegram's
-        ``_approval_counter``, so adapters assembled without ``__init__`` still resolve."""
-        return self.__dict__.setdefault("_exec_approval_request_ids", OrderedDict())
-
-    async def _send_exec_approval_prompt(self, prompt: ExecApprovalPrompt) -> SendResult:
-        """Approve / Deny buttons only (a 3-button cap leaves no room for the session/always
-        tiers); a tap resolves via ``tools.approval.resolve_gateway_approval``."""
-        approval_id = uuid.uuid4().hex[:12]
-        buttons = [(f"appr:{approval_id}:{c}", self._truncate_button_label(t(f"platform.whatsapp.{c}_button")))
-                   for c in ("approve", "deny") if c == "deny" or "once" in prompt.choices]  # Deny-only: cut command
-        interactive = self._button_interactive(self._truncate_body(prompt.text), *buttons)
-        result = await self._send_interactive(
-            prompt.chat_id, interactive, prompt.metadata, self._exec_approval_state, approval_id, prompt.session_key)
-        if result.success and prompt.request_id:
-            bounded_put(self._approval_request_ids(), approval_id, prompt.request_id, INTERACTIVE_STATE_CACHE_SIZE)
-        return result
 
     async def send_slash_confirm(
         self, chat_id: str, title: str, message: str, session_key: str, confirm_id: str, metadata: Optional[dict[str, Any]] = None,
@@ -949,35 +921,6 @@ class WhatsAppCloudAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
             return False
         return True
 
-    async def _handle_approval_tap(self, to: str, inner: dict[str, Any], parts: list) -> bool:
-        _, approval_id, choice = parts
-        from gateway.approval_actor import approval_refusal
-        if await self._refused_tap(to, approval_refusal(self._exec_approval_state.get(approval_id) or "", to, extra=self.config.extra,
-                                                        request_id=self._approval_request_ids().get(approval_id), choice=choice)):
-            return True
-        session_key = self._pop_tap_state(
-            self._exec_approval_state, approval_id,
-            "[whatsapp_cloud] approval tap with no matching state (approval_id=%s) — likely stale; falling back to text",
-            choice, ("approve", "deny"),
-        )
-        if not session_key:
-            return False
-        request_id = self._approval_request_ids().pop(approval_id, None)
-        approval = _optional_module("tools.approval", "[whatsapp_cloud] approval resolver unavailable")
-        if approval is None:
-            return False
-        count = approval.resolve_gateway_approval_card(session_key, choice, request_id, actor_id=to,
-                                                       extra=self.config.extra)
-        # A tap after the wait timed out (count == 0) must not claim approval:
-        # the command was already denied fail-closed.
-        if count:
-            confirm_text = t("platform.whatsapp.approved" if choice == "approve" else "platform.whatsapp.denied")
-        else:
-            logger.info("[whatsapp_cloud] approval resolver reported no waiter (session_key=%s) — likely already resolved", session_key)
-            confirm_text = t("platform.whatsapp.approval_expired")
-        await self._reply_best_effort(to, confirm_text, "[whatsapp_cloud] approval confirm failed")
-        return True
-
     async def _handle_slash_confirm_tap(self, to: str, inner: dict[str, Any], parts: list) -> bool:
         _, choice, confirm_id = parts
         from gateway.approval_actor import slash_confirm_refusal
@@ -1003,7 +946,7 @@ class WhatsAppCloudAdapter(WhatsAppBehaviorMixin, BasePlatformAdapter):
             await self._reply_best_effort(to, result_text, "[whatsapp_cloud] slash_confirm reply failed")
         return True
 
-    _INTERACTIVE_HANDLERS = {"cl:": _handle_clarify_tap, "appr:": _handle_approval_tap, "sc:": _handle_slash_confirm_tap}
+    _INTERACTIVE_HANDLERS = {"cl:": _handle_clarify_tap, "sc:": _handle_slash_confirm_tap}
 
     async def _collect_inbound_media(self, msg_type_str: str, raw_message: dict[str, Any], body: str) -> tuple[list[str], list[str], str]:
         """Download inbound media by ``media_id``; returns ``(media_urls, media_types, body)``."""

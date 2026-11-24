@@ -1,6 +1,6 @@
 """Generation-bound projection/control of the existing blocking approval queue.
 
-Ordinary approvals and clarify prompts share the existing native waiters.
+Held-draft and consent approvals and clarify prompts share the existing native waiters.
 Secret/sudo prompts remain native; no response is published or journaled here.
 """
 from copy import deepcopy
@@ -19,19 +19,16 @@ class PendingControls:
         from gateway.run import _redact_approval_command
         with self.events.lock:
             prompt_id = data['request_id']
-            choices = ['once', 'deny']
-            if data.get('allow_session', True) and not data.get('smart_denied', False):
-                choices.append('session')
-            if data.get('allow_permanent', True) and not data.get('smart_denied', False):
-                choices.append('always')
             prompt = {'kind': 'approval', 'prompt_id': prompt_id,
                       'execution_generation': generation,
                       'command': _redact_approval_command(data.get('command', '')),
                       'description': _redact_approval_command(data.get('description', '')),
-                      'choices': choices}
-            if 'edit' in data:
-                prompt['edit'] = deepcopy(data['edit'])
-                prompt['choices'] = ['once', 'deny']
+                      'choices': ['once', 'deny']}
+            if isinstance(data.get('question'), str):
+                prompt['question'] = _redact_approval_command(data['question'])
+            for key in ('edit', 'draft', 'details'):
+                if key in data:
+                    prompt[key] = deepcopy(data[key])
             if timeout_s is not None:
                 prompt['timeout_s'] = timeout_s
             self.pending[prompt_id] = (route, prompt)

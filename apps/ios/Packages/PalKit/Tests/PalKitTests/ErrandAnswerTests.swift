@@ -207,26 +207,4 @@ struct ErrandAnswerTests {
         #expect(prompt.canonicalAnswer(for: "  VANILLA ") == "vanilla")
         #expect(prompt.canonicalAnswer(for: "strawberry, please") == "strawberry, please")
     }
-
-    @Test func approvalDecisionsMapToTheGatewaysChoices() {
-        let full = PendingPrompt(kind: .approval, promptID: "a", executionGeneration: 1, choices: ["once", "session", "always", "deny"])
-        let withoutOnce = PendingPrompt(kind: .approval, promptID: "a", executionGeneration: 1, choices: ["deny"])
-        let bare = PendingPrompt(kind: .approval, promptID: "a", executionGeneration: 1)
-        #expect(ApprovalDecision.approve.choice(in: full) == "once")
-        #expect(ApprovalDecision.deny.choice(in: full) == "deny")
-        #expect(ApprovalDecision.approve.choice(in: withoutOnce) == nil)
-        #expect(ApprovalDecision.approve.choice(in: bare) == "once")
-        #expect(ApprovalDecision.deny.choice(in: bare) == "deny")
-    }
-
-    @Test func longCommandsAreShortenedAndFlattenedForSpeech() {
-        let long = "rm -rf\n   " + String(repeating: "/very/long/path ", count: 30)
-        let prompt = PendingPrompt(kind: .approval, promptID: "a", executionGeneration: 1, command: long)
-        let spoken = prompt.shortCommand
-        #expect(spoken?.hasPrefix("rm -rf /very/long/path") == true)
-        #expect(spoken?.hasSuffix("…") == true)
-        #expect((spoken?.count ?? 0) <= PendingPrompt.spokenCommandLimit + 1)
-        #expect(PendingPrompt(kind: .approval, promptID: "a", executionGeneration: 1, command: "  ").shortCommand == nil)
-        #expect(PendingPrompt(kind: .approval, promptID: "a", executionGeneration: 1, command: "ls -la").shortCommand == "ls -la")
-    }
 }

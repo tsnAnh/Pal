@@ -44,7 +44,7 @@ def homes(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize(
     ("key", "value", "section", "field"),
-    [("busy", "steer", "display", "busy_input_mode"), ("approval_mode", "off", "approvals", "mode")],
+    [("busy", "steer", "display", "busy_input_mode")],
 )
 def test_session_bound_config_set_writes_the_session_profile(homes, key, value, section, field):
     launch, worker = homes

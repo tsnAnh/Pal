@@ -109,7 +109,7 @@ class TestPromptAckDoesNotSealDraft:
 
         a._transport.send_outbound = gated_send
         prompt_id = a._mint_prompt(
-            "exec_approval", {"session_key": "sess-dl", "chat_id": "D01"}
+            "slash_confirm", {"session_key": "sess-dl", "chat_id": "D01", "confirm_id": "cf-dl"}
         )
         # Pre-fix this hangs until the gate opens (deadlock shape) and the
         # wait_for trips. Post-fix it returns promptly.
@@ -123,44 +123,6 @@ class TestPromptAckDoesNotSealDraft:
         await asyncio.sleep(0.05)
         ack_frames = [f for f, _ in a._transport.frames if f["op"] == "send"]
         assert ack_frames, "background ack was never sent"
-
-    @pytest.mark.asyncio
-    async def test_approval_ack_leaves_open_draft_untouched(self):
-        """The exact live failure: exec-approval tap resolves while the
-        turn's draft stream is open; the ack must go out as its own plain
-        send and the draft must STILL be armed afterwards."""
-        a = _adapter()
-        draft_key = await _open_turn_draft(a)
-
-        prompt_id = a._mint_prompt(
-            "exec_approval", {"session_key": "sess-1", "chat_id": "D01"}
-        )
-        # resolve_gateway_approval is imported inside the handler; a session
-        # with no waiting entry returns 0 -> "expired" label. Either label
-        # shape exercises the same send path.
-        consumed = await a._consume_prompt_response(
-            FakeEvent(prompt_id, "once")
-        )
-        assert consumed is True
-        # The ack rides a background task now (deadlock fix): yield so it runs.
-        await asyncio.sleep(0.05)
-
-        # The draft interception must still be armed for the real turn-final.
-        assert draft_key in a._open_draft_by_chat, (
-            "prompt ack sealed the open draft — the live stuck-stream/"
-            "duplicate-final bug"
-        )
-        # The ack egressed as a plain send op, not a draft seal.
-        ack_frames = [
-            f for f, _ in a._transport.frames if f["op"] == "send"
-        ]
-        assert ack_frames, "ack was not sent at all"
-        seal_frames = [
-            f
-            for f, _ in a._transport.frames
-            if f["op"] == "draft" and f.get("final") is True
-        ]
-        assert not seal_frames, "ack egressed as a draft seal"
 
     @pytest.mark.asyncio
     async def test_expired_prompt_notice_leaves_open_draft_untouched(self):

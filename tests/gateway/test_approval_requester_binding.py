@@ -50,8 +50,7 @@ def write_approvers(approvers):
 
 
 def pending_from(user_id, user_name, session_key, platform="telegram"):
-    """Enqueue an approval the way the agent thread does, inside the requester's turn, with its card
-    shown whole (the Deny-only mark lifted)."""
+    """Enqueue an approval the way the agent thread does, inside the requester's turn."""
     from gateway.session_context import clear_session_vars, set_session_vars
     from tools import approval as approval_mod
     from tools.approval_gateway_wait import _ApprovalEntry
@@ -62,7 +61,6 @@ def pending_from(user_id, user_name, session_key, platform="telegram"):
     finally:
         clear_session_vars(tokens)
     approval_mod._gateway_queues.setdefault(session_key, []).append(entry)
-    approval_mod.restrict_gateway_approval_card_to_deny(session_key, entry.data["request_id"], restricted=False)
     return entry
 
 
@@ -75,55 +73,3 @@ def _clean_queues():
     approval_mod._gateway_queues.clear()
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(("clicker", "extra", "approvers", "allowed"), [
-    ("bob", None, DEFAULT, True),                                 # default: anyone admitted, as before
-    ("bob", None, ["*"], True),                                   # the default, spelled out
-    ("bob", None, [], False),                                     # opt-in: another member is refused
-    ("alice", None, [], True),                                    # opt-in: the requester
-    ("bob", None, ["bob"], True),                                 # opt-in: a listed approver
-    ("bob", {"group_allow_admin_from": ["bob"]}, [], True),       # opt-in: a platform admin
-])
-async def test_who_answers_a_shared_chat_approval(clicker, extra, approvers, allowed):
-    write_approvers(approvers)
-    runner = _runner(extra)
-    event = _event("/approve", clicker, clicker.title())
-    session_key = runner._session_key_for_source(event.source)
-    assert session_key == runner._session_key_for_source(_event("x", "alice", "Alice").source)
-    entry = pending_from("alice", "Alice", session_key)
-
-    reply = await runner._handle_approve_command(event)
-
-    assert entry.event.is_set() is allowed
-    if not allowed:
-        assert reply == "Only Alice can answer this approval."
-        assert entry.result is None
-        # Left pending: the requester can still answer it.
-        await runner._handle_approve_command(_event("/approve", "alice", "Alice"))
-        assert entry.event.is_set() and entry.result == "once"
-
-
-@pytest.mark.asyncio
-async def test_queued_approvals_of_two_requesters_do_not_block_each_other():
-    """Plain /approve and /deny answer the oldest entry, so only that entry decides who may send them."""
-    write_approvers([])
-    runner = _runner()
-    bob_event = _event("/approve", "bob", "Bob")
-    session_key = runner._session_key_for_source(bob_event.source)
-    bobs = pending_from("bob", "Bob", session_key)
-    alices = pending_from("alice", "Alice", session_key)
-
-    # Alice's entry is behind Bob's: plain /approve targets Bob's, so Alice is refused and nothing moves.
-    assert await runner._handle_approve_command(_event("/approve", "alice", "Alice")) == "Only Bob can answer this approval."
-    assert not bobs.event.is_set() and not alices.event.is_set()
-    # /approve all covers Alice's entry too, so Bob is refused and neither resolves.
-    assert await runner._handle_approve_command(_event("/approve all", "bob", "Bob")) == "Only Alice can answer this approval."
-    assert not bobs.event.is_set() and not alices.event.is_set()
-
-    await runner._handle_approve_command(bob_event)
-    assert bobs.result == "once" and not alices.event.is_set()
-    # Bob's entry is gone, Alice's is now the oldest: Bob can no longer answer it, Alice can.
-    assert await runner._handle_deny_command(_event("/deny", "bob", "Bob")) == "Only Alice can answer this approval."
-    assert not alices.event.is_set()
-    await runner._handle_deny_command(_event("/deny", "alice", "Alice"))
-    assert alices.result == "deny"

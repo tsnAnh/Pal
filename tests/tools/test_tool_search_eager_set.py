@@ -176,19 +176,19 @@ class _View(SimpleNamespace):
     pass
 
 
-def test_a_deferred_device_shell_call_hits_the_per_device_capability_and_approval(services, monkeypatch):
+def test_a_deferred_device_shell_call_hits_the_per_device_capability_without_asking(services, monkeypatch):
+    from types import SimpleNamespace
+
     from tui_gateway.contracts.canonical_device import DeviceConnectorState
 
     view = _View(kind="mac", label="Studio Mac", type="Mac", online=True, device_id="dev-1", last_seen_at=0.0,
                  connectors={"shell": DeviceConnectorState.ASK})
     monkeypatch.setattr(devices_tool, "_bound", lambda home: object())
     monkeypatch.setattr(devices_tool, "_resolved", lambda *a: (view, None))
-    asked = []
-    monkeypatch.setattr(approval, "request_tool_approval",
-                        lambda tool, text: asked.append((tool, text)) or {"approved": False})
+    reached = []
     from gateway import device_tools
     monkeypatch.setattr(device_tools, "call_from_thread",
-                        lambda *a, **k: pytest.fail("the device was reached without approval"))
+                        lambda *a, **k: reached.append(a) or SimpleNamespace(ok=True, data={"stdout": "x"}))
     arguments = {"device": "Studio Mac", "action": "shell.run", "args": {"command": "ls"}}
     toolsets = SESSIONS["iphone_chat"][0]
 
@@ -196,10 +196,10 @@ def test_a_deferred_device_shell_call_hits_the_per_device_capability_and_approva
         "tool_call", {"calls": [{"name": "device", "arguments": arguments}]}, enabled_toolsets=toolsets))
     direct = json.loads(model_tools.handle_function_call("device", arguments, enabled_toolsets=toolsets))
 
-    assert via_bridge["code"] == direct["code"] == "approval_denied"
-    assert [tool for tool, _ in asked] == ["device", "device"]
+    assert via_bridge["success"] is True and direct["success"] is True
+    assert len(reached) == 2
 
     view.connectors["shell"] = DeviceConnectorState.OFF
     off = json.loads(model_tools.handle_function_call(
         "tool_call", {"calls": [{"name": "device", "arguments": arguments}]}, enabled_toolsets=toolsets))
-    assert off["code"] == "connector_off" and len(asked) == 2
+    assert off["code"] == "connector_off" and len(reached) == 2

@@ -103,29 +103,7 @@ class TestCommandBypassActiveSession:
 
 
 
-    @pytest.mark.asyncio
-    async def test_approve_bypasses_guard(self):
-        """/approve must bypass (deadlock prevention)."""
-        adapter = _make_adapter()
-        sk = _session_key()
-        adapter._active_sessions[sk] = asyncio.Event()
 
-        await adapter.handle_message(_make_event("/approve"))
-
-        assert sk not in adapter._pending_messages
-        assert any("handled:approve" in r for r in adapter.sent_responses)
-
-    @pytest.mark.asyncio
-    async def test_deny_bypasses_guard(self):
-        """/deny must bypass (deadlock prevention)."""
-        adapter = _make_adapter()
-        sk = _session_key()
-        adapter._active_sessions[sk] = asyncio.Event()
-
-        await adapter.handle_message(_make_event("/deny"))
-
-        assert sk not in adapter._pending_messages
-        assert any("handled:deny" in r for r in adapter.sent_responses)
 
 
 

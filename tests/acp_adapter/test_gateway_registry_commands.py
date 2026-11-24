@@ -26,7 +26,7 @@ async def test_registered_commands_answer_or_refuse_by_name_never_internal_error
             await acp.rpc("initialize", protocolVersion=1, clientCapabilities={})
             assert "result" in await acp.rpc("session/load", cwd=str(tmp_path), sessionId=sid, mcpServers=[])
             replies = {}
-            for text in ("/title Registry probe", "/title", "/yolo", "/skills", "/undo", "/retry", "/bg x",
+            for text in ("/title Registry probe", "/title", "/skills", "/undo", "/retry", "/bg x",
                          "/rollback", "/branch"):
                 start = len(acp.frames)
                 reply = await acp.rpc("session/prompt", sessionId=sid, prompt=[{"type": "text", "text": text}])
@@ -36,7 +36,6 @@ async def test_registered_commands_answer_or_refuse_by_name_never_internal_error
                 assert replies[text].strip(), (text, acp.frames[start:])
             assert "Registry probe" in replies["/title Registry probe"], replies
             assert "Registry probe" in replies["/title"], replies
-            assert "yolo" in replies["/yolo"].lower() or "YOLO" in replies["/yolo"], replies
             for refused in ("/bg x", "/rollback"):
                 name = refused.split()[0]
                 assert f"{name} is not available" in replies[refused], replies

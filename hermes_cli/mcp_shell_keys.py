@@ -29,9 +29,8 @@ def import_shell_keys(name: str) -> list[str]:
     from agent.runtime_scope import bind_profile_scope
     from agent.secret_scope import load_env_file
     from hermes_cli.config import save_env_value, validate_env_var_name_for_write
-    from hermes_cli.profile_admin_guard import in_agent_context
 
-    if hosted_scope() or in_agent_context() or not is_root_owned(name):
+    if hosted_scope() or not is_root_owned(name):
         return []
     entry = _shared_entry(name)
     if entry is None:

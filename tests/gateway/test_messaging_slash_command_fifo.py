@@ -336,22 +336,6 @@ async def test_queued_ack_follows_the_commit(monkeypatch, command, agent, ack):
     rig.finish.set()
 
 
-@pytest.mark.asyncio
-async def test_queued_approval_word_is_a_turn_never_an_approval(monkeypatch):
-    """Keep working: ``/queue yes`` queues a user turn; it never answers a blocking dangerous-command
-    approval the way a typed "yes" does."""
-    from tools import approval
-
-    approved = []
-    monkeypatch.setattr(approval, 'has_blocking_approval', lambda key: True)
-
-    async def approve(self, event):
-        approved.append(event.text)
-        return 'approved'
-    from gateway.run import GatewayRunner
-    monkeypatch.setattr(GatewayRunner, '_handle_approve_command', approve)
-    order = await _run_a_then(monkeypatch, 'queue', '/queue yes')
-    assert approved == [] and 'C' in [m for m, _ in order], (approved, order)
 
 
 @pytest.mark.asyncio

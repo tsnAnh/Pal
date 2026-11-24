@@ -94,7 +94,6 @@ def _configure_mcp_tools_interactive(config: dict):
     from hermes_cli.curses_ui import curses_checklist
     from hermes_cli.tools_config import save_config
 
-    from hermes_cli.profile_admin_guard import ProfileAdminDenied
     from hermes_cli.shared_catalog import with_root_connectors
 
     own_servers = config.get("mcp_servers") or {}
@@ -165,11 +164,7 @@ def _configure_mcp_tools_interactive(config: dict):
             _apply_mcp_checklist(
                 server_name, entry.setdefault("tools", {}), tool_names, chosen, include_set, exclude_set, match)
 
-        try:
-            in_root = _edit_root_owned(server_name, apply_checklist)
-        except ProfileAdminDenied as exc:
-            _print_error(f"  {server_name}: {exc}")
-            continue
+        in_root = _edit_root_owned(server_name, apply_checklist)
         if not in_root:
             apply_checklist(own_servers.setdefault(server_name, {}))
         saved_in_root = saved_in_root or in_root
@@ -323,12 +318,7 @@ def tools_disable_enable_command(args):
 
     failed_servers: set[str] = set()
     if mcp_targets:
-        from hermes_cli.profile_admin_guard import ProfileAdminDenied
-        try:
-            failed_servers = _apply_mcp_change(config, mcp_targets, action)
-        except ProfileAdminDenied as exc:
-            _print_error(str(exc))
-            return
+        failed_servers = _apply_mcp_change(config, mcp_targets, action)
         for srv in failed_servers:
             _print_error(f"MCP server '{srv}' not found in config")
     save_config(config)

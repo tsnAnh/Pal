@@ -1,5 +1,4 @@
 """Session-scoped busy preferences and controls of the existing execution only."""
-import asyncio
 from functools import partial
 from pathlib import Path
 
@@ -57,8 +56,6 @@ async def busy_config(connection, ref, params, *, write=False):
         return show_reasoning_config(connection, ref, params, write)
     if params.get('key') == 'service_tier' and write and not set(params) - allowed and ref.session_id:
         return service_tier_config(connection, ref, params)
-    if params.get('key') == 'yolo' and not set(params) - allowed and ref.session_id:
-        return await yolo_config(connection, ref, params, write)
     if (set(params) - allowed or not ref.session_id or params.get('key') != 'busy'
             or (write and params.get('value') not in ('interrupt', 'steer', 'queue'))):
         raise AuthorityRefusal('invalid_params')
@@ -110,12 +107,12 @@ def show_reasoning_config(connection, ref, params, write):
     reports the launch default the turn uses. Never a settings write."""
     value = params.get('value')
     word = str(value).strip().lower()
-    if write and word not in _YOLO_WORDS:
+    if write and word not in _BOOL_WORDS:
         raise AuthorityRefusal('invalid_params')
     authorize(connection, ref, params, 'session:control' if write else 'session:read')
     live = connection.authority.sessions[ref.session_id]
     if write:
-        live.show_reasoning = _YOLO_WORDS[word]
+        live.show_reasoning = _BOOL_WORDS[word]
     shown = getattr(live, 'show_reasoning', None)
     if shown is None:
         from gateway.local_viewer_events import launch_shows_reasoning
@@ -143,39 +140,7 @@ def service_tier_config(connection, ref, params):
     return {'key': 'service_tier', 'value': tier or 'normal', 'scope': 'session'}
 
 
-_YOLO_WORDS = {'1': True, 'on': True, 'true': True, '0': False, 'off': False, 'false': False}
-
-
-async def yolo_config(connection, ref, params, write):
-    """Session-scoped /yolo (TUI slash + Shift+Tab, Desktop toggle): this session's approval bypass,
-    never HERMES_YOLO_MODE or approvals.mode. A ``--yolo`` launch is seeded first, so revoking it
-    here is not re-enabled by the next turn's launch seeding. The write goes through the shared
-    ``tools.approval_yolo.toggle_session_yolo`` contract on the route's persisted copy
-    (``SessionEntry.yolo``, restored by ``restore_gateway_yolo``), like the messaging
-    ``/yolo``: persisted before the live flip, so an OFF here is not revived by the next turn."""
-    value = params.get('value')
-    if write and value is not None and str(value).strip().lower() not in _YOLO_WORDS:
-        raise AuthorityRefusal('invalid_params')
-    authorize(connection, ref, params, 'session:control' if write else 'session:read')
-    from gateway.session_policy import policy_for_source
-    from tools.approval import is_session_yolo_enabled
-    from tools.approval_yolo import restore_gateway_yolo, toggle_session_yolo
-    live = connection.authority.sessions[ref.session_id]
-    runner = connection.authority.runner
-    policy = policy_for_source(runner, live.source)
-    store = getattr(runner, 'session_store', None)
-    entry = await runner.async_session_store.lookup_by_session_key(live.route) if store is not None else None
-    restore_gateway_yolo(live.route, getattr(entry, 'yolo', None), launch=bool(policy is not None and policy.yolo))
-    # After a restart only the persisted copy is set until the next turn re-arms it: still ON.
-    persisted = getattr(entry, 'yolo', False) is True
-    enabled = is_session_yolo_enabled(live.route) or persisted
-    if write:
-        persist = (lambda on: store.set_session_yolo(live.route, on)) if store is not None else None
-        # Off the loop: the persist is a routing-store write (thread-safe), as in the messaging /yolo.
-        enabled = await asyncio.to_thread(
-            toggle_session_yolo, live.route, None if value is None else _YOLO_WORDS[str(value).strip().lower()],
-            persisted=persisted, persist=persist)
-    return {'key': 'yolo', 'value': '1' if enabled else '0', 'scope': 'session'}
+_BOOL_WORDS = {'1': True, 'on': True, 'true': True, '0': False, 'off': False, 'false': False}
 
 
 def adopts_owner_agent(authority, ref):

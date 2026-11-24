@@ -38,7 +38,6 @@ def room_link(authority):
     try:
         _, catalog = _local_room_catalog(adapter, profile, hosted_rooms.local_authority_gateway_id())
     except (OSError, RuntimeError, sqlite3.Error, TypeError, ValueError):
-        # For example approvals off: a remote turn must never run without approval prompts.
         return {'enabled': False, 'reason': 'execution_policy_unsupported'}
     if not catalog['endpoint'].get('available'):
         return {'enabled': False, 'reason': 'endpoint_required'}

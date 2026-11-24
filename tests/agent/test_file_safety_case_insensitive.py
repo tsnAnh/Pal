@@ -91,13 +91,3 @@ def test_case_variant_of_home_credential_is_not_attachable_as_context_reference(
         with pytest.raises(ValueError):
             _ensure_reference_path_allowed(variant.resolve())
     _ensure_reference_path_allowed((user_home / "docs").resolve())
-
-
-@pytest.mark.platforms("macos", "windows")
-def test_case_variant_of_project_hermes_config_still_needs_approval(tmp_path, hermes_layout, monkeypatch):
-    _root, profile, _home = hermes_layout
-    monkeypatch.setenv("HERMES_HOME", str(profile))
-    repo = tmp_path.resolve() / "repo"
-    (repo / ".hermes").mkdir(parents=True)
-    target = str(repo / ".HERMES" / "config.yaml")
-    assert write_guards._protected_instruction_reason(target, enabled=True, extra_patterns=[])

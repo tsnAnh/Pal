@@ -252,14 +252,17 @@ public struct SessionAPI: Sendable {
         sessionID: String,
         executionGeneration: Int,
         promptID: String,
-        choice: String
+        choice: String,
+        editedText: String? = nil
     ) async throws -> PromptResponseResult {
-        let result = try await call("approval.respond", [
+        var params: [String: JSONValue] = [
             "session_id": .string(sessionID),
             "execution_generation": .int(executionGeneration),
             "prompt_id": .string(promptID),
             "choice": .string(choice),
-        ])
+        ]
+        if choice == "once", let editedText { params["edited_text"] = .string(editedText) }
+        let result = try await call("approval.respond", params)
         return try decode(PromptResponseResult.self, result, "approval.respond")
     }
 

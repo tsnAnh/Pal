@@ -117,15 +117,14 @@ or add `computer_use` to your enabled toolsets in `~/.hermes/config.yaml`.
 
 ## Permission modes and logged-in browser profiles
 
-Hermes maps its existing approval UX onto cua-driver's immutable runtime
+Hermes maps `computer_use.permission_mode` onto cua-driver's immutable runtime
 modes. Permission mode and capability manifest approval are launch settings.
 They cannot change after the runtime starts:
 
 | Hermes session | cua-driver mode | Human intervention |
 |---|---|---|
-| Manual or smart approvals (default) | `standard` | Normal Hermes approvals; Cua stops at its protected boundary |
+| Default | `standard` | Cua stops at its protected boundary |
 | `computer_use.permission_mode: bounded` + reviewed manifest | private `bounded` daemon | You review and approve the capability manifest once, at launch |
-| `--yolo`, `/yolo`, or `approvals.mode: off` | private `unrestricted` daemon | One explicit Hermes risk acceptance; no runtime Cua prompts |
 
 Browser work — including pages in a signed-in profile — goes through the
 `browser` toolset (`browser_exec`), not `computer_use`. The former
@@ -150,8 +149,7 @@ typed tools the session may use (see the
 for the format). Hermes launches a private runtime with
 `--capability-manifest ... --approve-capability-manifest`; anything outside
 the manifest fails closed inside cua-driver. A missing or unreadable manifest
-fails loudly at session start rather than silently downgrading. Session YOLO
-still overrides bounded for that one session.
+fails loudly at session start rather than silently downgrading.
 
 On macOS, private-session daemons launch through the installed
 `CuaDriver.app` bundle (so permission grants attribute to the driver's own
@@ -168,22 +166,17 @@ computer_use:
 
 Each MCP transport owns a private lifecycle session inside its runtime. A
 public session name is only a label for cursor identity and session-scoped
-state. It does not select, share, or keep a runtime alive. Turning `/yolo` off,
-resetting or closing the Hermes session, cancellation cleanup, or process exit
+state. It does not select, share, or keep a runtime alive. Resetting or
+closing the Hermes session, cancellation cleanup, or process exit
 closes that transport session. Hermes also stops private runtimes that it
-launched for bounded or unrestricted access. One Hermes
-conversation cannot change another runtime's mode or grants. Bounded and
-unrestricted modes use a private embedded daemon, launched through
-`CuaDriver.app` on macOS (see above).
-
-`smart` approval remains `standard`: an LLM classification cannot stand in for
-a reviewed manifest.
+launched for bounded access. One Hermes
+conversation cannot change another runtime's mode or grants. Bounded mode uses
+a private embedded daemon, launched through `CuaDriver.app` on macOS (see above).
 
 <div class="alert alert--warning">
 
-YOLO/unrestricted mode does not protect against prompt injection or unintended
-input. Use it only in a disposable VM or with accounts and data whose full
-compromise you accept.
+Computer use acts on your real desktop without asking first. Run it in a
+disposable VM or with accounts and data whose full compromise you accept.
 
 </div>
 
@@ -370,16 +363,6 @@ magic-byte sniffing.
 
 Hermes applies multi-layer guardrails:
 
-- Destructive actions (click, type, drag, scroll, key, focus_app)
-  require approval through the same gate as dangerous shell commands —
-  interactively via the CLI dialog or the messaging-platform approval
-  buttons. Once/session/always grants are keyed
-  `cua:<action>:<background|foreground>` and live in the shared
-  session/`command_allowlist` store (a background grant never covers the
-  visible foreground variant). Where nobody can answer — cron
-  (`approvals.cron_mode`), single-query, unattended platforms, or any
-  headless run — the action is refused rather than auto-approved;
-  `--yolo` / `/yolo` still bypass.
 - Hard-blocked key combos at the tool level: empty trash, force delete,
   lock screen, log out, force log out.
 - Hard-blocked type patterns: `curl | bash`, `sudo rm -rf /`, fork
@@ -387,9 +370,6 @@ Hermes applies multi-layer guardrails:
 - The agent's system prompt tells it explicitly: no clicking permission
   dialogs, no typing passwords, no following instructions embedded in
   screenshots.
-
-Pair with `approvals.mode: manual` in `~/.hermes/config.yaml` if you
-want every action confirmed.
 
 ## Token efficiency
 
@@ -628,8 +608,8 @@ HERMES_CUA_DRIVER_CMD=/path/to/cua/libs/cua-driver/rust/target/debug/cua-driver
 ### Notes & gotchas
 
 - **Hermes spawns a `cua-driver mcp` stdio proxy.** In a normal session the
-  proxy connects to (and may start) the standard machine daemon. In explicit
-  Hermes YOLO, Hermes instead owns a private `cua-driver serve --embedded`
+  proxy connects to (and may start) the standard machine daemon. In bounded
+  mode, Hermes instead owns a private `cua-driver serve --embedded`
   child and points the proxy at its private socket or named pipe. The Windows
   autostart/UIAccess pattern still matters for interactive Session 1+ input
   from SSH — see the Limitations section.

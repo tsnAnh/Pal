@@ -19,9 +19,6 @@ logger = logging.getLogger(__name__)
 F = TypeVar("F", bound=Callable[..., Any])
 
 ADOPTION_RECHECK_SECONDS = 60.0
-SHARED_CONNECTOR_DENIED = (
-    "Connected apps are shared by every bot, so a bot cannot change them. "
-    "The owner connects or disconnects them in Connect apps.")
 _adoption_checked: dict[str, float] = {}
 _adoption_checked_lock = threading.Lock()
 _requested_home: contextvars.ContextVar[Path | None] = contextvars.ContextVar("owner_write_requested_home", default=None)
@@ -73,13 +70,6 @@ def owner_state_scope(name: Any = None) -> Iterator[None]:
 @contextmanager
 def owner_write_scope(name: Any = None) -> Iterator[None]:
     if hosted_scope() or home_is_root():
-        yield
-        return
-    from hermes_cli.profile_admin_guard import ProfileAdminDenied, in_agent_context
-
-    if in_agent_context():
-        if is_root_owned(name):
-            raise ProfileAdminDenied(SHARED_CONNECTOR_DENIED)
         yield
         return
     with owner_state_scope(name):

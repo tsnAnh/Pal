@@ -126,7 +126,7 @@ _FORWARDED = frozenset({
     "contextlib", "json", "logging", "queue", "re", "tempfile", "threading", "time", "deque", "Callable", "Iterator",
     "Path", "SimpleNamespace", "_completion_to_stream_chunks", "_extract_tool_calls_from_text",
     "_render_tool_bridge_sections", "get_nt_namespace_error", "get_read_block_error", "get_write_denied_error",
-    "is_write_approval_required", "redact_sensitive_text", "resolve_agent_cwd",
+    "redact_sensitive_text", "resolve_agent_cwd",
 })
 
 

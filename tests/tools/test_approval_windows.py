@@ -345,13 +345,6 @@ class TestDriveLetterRoots:
     def test_rm_alias_with_wildcard_or_non_include_stays_hardline(self, cmd):
         assert detect_hardline_command(cmd) == (True, "recursive delete of drive root"), cmd
 
-    def test_pre_drive_letter_root_approval_key_still_matches(self, monkeypatch):
-        """An "always" saved under the old regex-derived key keeps approving `rm /tmp/file`."""
-        monkeypatch.setattr(approval, "_permanent_approved", set())
-        approval.load_permanent({"rm" + r"\s+(-[^\s]*\s+)*/"})
-        _, key, _ = detect_dangerous_command("rm /tmp/file")
-        assert approval.is_approved("drive-root-legacy", key)
-
     @pytest.mark.parametrize("cmd", ["rm build/C:/x", "rm foo:/bar", "rm a:b"])
     def test_relative_paths_with_colons_stay_quiet(self, cmd):
         assert not _is_dangerous(cmd), cmd

@@ -72,44 +72,6 @@ final class SiriVoiceControlE2ETests: SiriE2ETestCase {
         XCTAssertFalse(app.descendants(matching: .any)["clarifyCard"].exists, "the card is settled")
     }
 
-    func test4ReviewApprovalWithNothingPendingSaysSo() async throws {
-        let app = launch()
-        signInIfNeeded(app)
-        let alpha = try await bot("bot-alpha")
-        let result = try await definitions.intents["ReviewApprovalIntent"].makeIntent(bot: alpha).run()
-        let verdict: AnyAppEnum = try result.value
-        XCTAssertEqual(verdict.rawValue, "nothingWaiting")
-    }
-
-    func test5ApprovalIsRelayedWithTheCommandAndReviewApprovalDecides() async throws {
-        let app = launch()
-        signInIfNeeded(app)
-        let alpha = try await bot("bot-alpha")
-        try await resetBot(alpha, app: app)
-        let seen = try stubRequests().count
-        let spoken = try await ask(alpha, unique("APPROVE this"))
-        addTeardownBlock { @MainActor in self.denyAnyOpenApproval(in: app) }
-        XCTAssertTrue(spoken.contains("wants to run a command: cd \"$(mktemp -d)\" && git reset --hard"), spoken)
-        XCTAssertTrue(spoken.contains("Review"), "voice path is named: \(spoken)")
-        let definitions = definitions
-        let decided = try await run(within: 60) {
-            let result = try await definitions.intents["ReviewApprovalIntent"].makeIntent(bot: alpha).run()
-            let verdict: AnyAppEnum = try result.value
-            return verdict.rawValue
-        }
-        guard let verdict = decided else {
-            XCTFail("ReviewApprovalIntent did not return within 60s (requestConfirmation under AppIntentsTesting)")
-            return
-        }
-        XCTAssertEqual(verdict, "approved", "AppIntentsTesting confirms the prompt, so the approve branch runs")
-        _ = try await waitForStubRequest(after: seen, timeout: 60, "the model sees the command ran because the user approved it") { request in
-            let last = (request["messages"] as? [[String: Any]])?.last
-            return last?["role"] as? String == "tool" && (last?["content"] as? String)?.contains("approved by the user") == true
-        }
-        showChat(app, "bot-alpha")
-        shot(app, "siri-approval-\(verdict)")
-    }
-
     func test6SteerReachesTheModelThroughTheNextToolResult() async throws {
         let app = launch()
         signInIfNeeded(app)
@@ -188,25 +150,5 @@ final class SiriVoiceControlE2ETests: SiriE2ETestCase {
         let before = try stubRequests().count
         try await Task.sleep(for: .seconds(2))
         XCTAssertEqual(try stubRequests().count, before, "nothing was sent")
-    }
-
-    func test10DenyRequestBlocksTheCommandWithoutAConfirmationPrompt() async throws {
-        let app = launch()
-        signInIfNeeded(app)
-        let alpha = try await bot("bot-alpha")
-        try await resetBot(alpha, app: app)
-        let seen = try stubRequests().count
-        _ = try await ask(alpha, unique("APPROVE this"))
-        addTeardownBlock { @MainActor in self.denyAnyOpenApproval(in: app) }
-        let deny = definitions.enums["ApprovalChoice"].makeCase("deny")
-        let result = try await definitions.intents["ReviewApprovalIntent"].makeIntent(bot: alpha, choice: deny).run()
-        let verdict: AnyAppEnum = try result.value
-        XCTAssertEqual(verdict.rawValue, "denied")
-        _ = try await waitForStubRequest(after: seen, timeout: 60, "the model sees the command was blocked because the user denied it") { request in
-            let last = (request["messages"] as? [[String: Any]])?.last
-            return last?["role"] as? String == "tool" && (last?["content"] as? String)?.contains("denied by user") == true
-        }
-        showChat(app, "bot-alpha")
-        shot(app, "siri-approval-denied")
     }
 }

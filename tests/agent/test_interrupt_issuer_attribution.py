@@ -100,9 +100,8 @@ def test_gateway_lifecycle_producers_name_a_system_issuer():
 
 def test_soft_interrupt_with_tool_reason_is_attributed_to_the_system():
     """A system producer that must stop the turn SOFTLY labels itself via ``tool_reason``. The
-    message-carrying soft path used to hardcode ``user sent a new message``, so a batch-guard abort
+    message-carrying soft path used to hardcode ``user sent a new message``, so a system abort
     was booked as a human stop and rendered as the user-stop placeholder (#130207)."""
-    import concurrent.futures
     from types import SimpleNamespace
     from unittest.mock import patch
 
@@ -110,90 +109,7 @@ def test_soft_interrupt_with_tool_reason_is_attributed_to_the_system():
 
     agent = _bare_agent()
     agent._touch_activity = lambda *_: None
-    batch = SimpleNamespace(authorization_gate=te._ConcurrentToolAuthorizationGate(), executor=None, close=lambda: None)
-    prepared = SimpleNamespace(batch=batch, tids=[], future=concurrent.futures.Future())
     try:
-        # Drive the REAL batch-timeout guard: a prepared terminal call whose worker never settles.
-        with (
-            patch("agent.terminal_approval_batch.take_prepared_call", return_value=prepared),
-            patch.object(te, "_resolve_sequential_tool_timeout", return_value=0.05),
-            patch.object(te, "_emit_terminal_post_tool_call"),
-        ):
-            te._run_sequential_tool_execution_middleware(
-                agent, function_name="terminal", function_args={}, effective_task_id="t",
-                tool_call_id="c1", execute=lambda *_a, **_k: None)
-        assert agent._interrupt_requested is True
-        assert interrupt_issuer(agent) == "terminal_batch_timeout"
-        # No message: gateway/CLI re-queue ``_interrupt_message`` as the user's next turn.
-        assert agent._interrupt_message is None
-
-        # A USER stop that abandons the same wedged batch (grace elapsed) keeps its own attribution:
-        # the guard must not rebook it as a batch timeout nor drop the queued message / redirect.
-        set_interrupt(False)
-        agent.clear_interrupt()
-        agent.interrupt("fix the login bug")
-        agent._pending_redirect = "use the staging db"
-        prepared.future = concurrent.futures.Future()
-        with (
-            patch("agent.terminal_approval_batch.take_prepared_call", return_value=prepared),
-            patch.object(te, "_resolve_sequential_tool_timeout", return_value=60.0),
-            patch.object(te, "_emit_terminal_post_tool_call"),
-            patch.object(te.concurrent.futures, "wait", lambda fs, timeout=None: None),
-        ):
-            te._run_sequential_tool_execution_middleware(
-                agent, function_name="terminal", function_args={}, effective_task_id="t",
-                tool_call_id="c2", execute=lambda *_a, **_k: None)
-        assert interrupt_issuer(agent) is None
-        assert agent._interrupt_message == "fix the login bug"
-        assert agent._pending_redirect == "use the staging db"
-
-        # Desktop batch PREPARATION has the same two exits: a user stop that cancels it keeps the
-        # user's message/redirect, and a preparation timeout is a system stop with no message.
-        import agent.terminal_approval_batch as tab
-
-        def _prepare(exc, during=lambda: None):
-            class _Batch:
-                def __init__(self, *_a):
-                    pass
-
-                def start(self):
-                    during()
-                    raise exc
-
-                def close(self):
-                    pass
-
-            ids = iter(["p1", "p2"])
-
-            def _parse(*_a, **_k):
-                call_id = next(ids)
-                return SimpleNamespace(name="terminal", parse_error=None, ref=lambda _t: SimpleNamespace(call_id=call_id))
-
-            with (
-                patch.object(tab, "_TerminalBatch", _Batch),
-                patch("gateway.session_context.get_session_env", return_value="desktop"),
-                patch("tools.approval._gateway_notify_cb", lambda _k: object()),
-                patch.object(te, "_parse_tool_call", _parse),
-                tab.terminal_approval_batch(agent, [1, 2], [], "t"),
-            ):
-                pass
-
-        def _user_stop():
-            agent.interrupt("fix the login bug")
-            agent._pending_redirect = "use the staging db"
-
-        set_interrupt(False)
-        agent.clear_interrupt()
-        _prepare(tab._CancelledPreparation("Terminal approval preparation cancelled; command was not started"), _user_stop)
-        assert interrupt_issuer(agent) is None
-        assert agent._interrupt_message == "fix the login bug"
-        assert agent._pending_redirect == "use the staging db"
-        set_interrupt(False)
-        agent.clear_interrupt()
-        _prepare(TimeoutError("Terminal approval preparation timed out; commands were not started"))
-        assert interrupt_issuer(agent) == "terminal_batch_preparation_timeout"
-        assert agent._interrupt_message is None
-
         # Sequential skip notices (stop before a call / after one) render the recorded system reason.
         def _calls():
             return [SimpleNamespace(id=f"s{i}", function=SimpleNamespace(name=f"t{i}", arguments="{}")) for i in (1, 2)]

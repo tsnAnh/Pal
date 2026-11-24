@@ -340,22 +340,6 @@ async def test_room_grant_answers_the_clarify_prompt_its_run_raised(api, owner, 
         assert (await denied.json())['error']['code'] == 'room_reauthorization_required'
 
 
-def test_run_status_reports_waiting_for_approval_while_a_prompt_is_pending(api, owner):
-    """GET /v1/runs/{id} said `running` while an approval was pending; the documented run state
-    (and main's in-memory run store) is `waiting_for_approval`, which UIs key their prompt on."""
-    from gateway.platforms.api_server_authority_runs import run_projection
-    _, ref, _ = admit_api_turn(api, session_id='approval-status', request_id='run_wait', user_message='hello',
-                               conversation_history=[])
-    row = owner.persistence.admissions.claim(epoch=owner.epoch, session_id=ref.session_id)
-    assert run_projection(api, 'run_wait')['status'] == 'running'
-    live = owner.sessions[ref.session_id]
-    owner.register_approval(ref.session_id, row.generation, live.route, {'request_id': 'approve-me', 'command': 'x'})
-    live.controls.remote_responders['approve-me'] = lambda *answer: None
-    projected = run_projection(api, 'run_wait')
-    assert [p['prompt_id'] for p in projected['pending_controls']] == ['approve-me']
-    assert projected['status'] == 'waiting_for_approval'
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize('path,body,marker', [
     ('/v1/chat/completions', {'messages': [{'role': 'user', 'content': 'hi'}], 'stream': True},

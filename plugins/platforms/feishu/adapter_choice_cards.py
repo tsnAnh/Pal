@@ -3,7 +3,7 @@
 Mixed into ``FeishuAdapter``: the ``send_clarify`` / ``retire_clarify_card`` / ``send_choice_picker``
 capabilities from ``BasePlatformAdapter`` plus their card-action handlers. The card builders,
 ``_send_interactive_card``, ``_validate_card_action`` and ``_card_response`` live on the facade, so
-every click passes the same operator authorization and chat check as an exec-approval click before
+every click passes the same operator authorization and chat check as an update-prompt click before
 it answers anything.
 """
 
@@ -26,7 +26,6 @@ class FeishuChoiceCardsMixin:
 
     # Card-action value key -> handler; the first key a click's value carries routes it.
     _CARD_ACTION_ROUTES = (
-        ("hermes_action", "_handle_approval_card_action"),
         ("hermes_update_prompt_action", "_handle_update_prompt_card_action"),
         ("hermes_clarify_action", "_handle_clarify_card_action"),
         ("hermes_choice_picker_action", "_handle_choice_picker_card_action"),

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 CREATE_FIELDS = frozenset({'request_id', 'source', 'cwd', 'model', 'toolsets',
                            'provider', 'base_url', 'reasoning', 'max_turns', 'ignore_rules', 'api_key', 'editor',
-                           'yolo', 'safe_mode', 'ignore_user_config',
+                           'safe_mode', 'ignore_user_config',
                            'skills', 'checkpoints', 'accept_hooks', 'pass_session_id', 'follow_profile_config',
                            'service_tier', 'cwd_explicit', 'run_budget', 'verbose', 'row_cwd', 'client_env',
                            'client'})
@@ -319,12 +319,6 @@ class LocalSessionPolicy:
         return self.safe_mode or json.loads(self.request_json).get('ignore_rules', False)
 
     @property
-    def yolo(self):
-        """`hermes chat --yolo`: this session's dangerous-command approvals are bypassed, exactly the
-        scope `/yolo` gives a messaging chat; never the process-wide HERMES_YOLO_MODE."""
-        return json.loads(self.request_json).get('yolo', False)
-
-    @property
     def pass_session_id(self):
         """`--pass-session-id`: the session id rides the agent's system prompt."""
         return json.loads(self.request_json).get('pass_session_id', False)
@@ -627,7 +621,7 @@ def _apply_launch_overrides(params, config):
                         or url.username or url.password or url.query or url.fragment):
                     _refuse('base_url', 'must be an http(s) URL without credentials, query or fragment')
             config.setdefault('model', {})[key] = value
-    bad_flag = next((flag for flag in ('ignore_rules', 'yolo', 'checkpoints', 'accept_hooks', 'pass_session_id',
+    bad_flag = next((flag for flag in ('ignore_rules', 'checkpoints', 'accept_hooks', 'pass_session_id',
                                       'follow_profile_config', 'cwd_explicit', 'verbose')
                      if flag in params and type(params[flag]) is not bool), None)
     if bad_flag:
@@ -1202,7 +1196,6 @@ def policy_scope(policy, *, authority=None, home=None):
     owner = home if home is not None else getattr(authority, 'profile_id', None)
     terminal_token = bind_terminal_policy(terminal, profile_home=owner)
     policy_token = _ACTIVE_POLICY.set(active)
-    from gateway.session_local_editor import editor_scope
     try:
         from agent.auxiliary_task_config import session_auxiliary_scope
         from gateway.session_local_mcp import editor_mcp_scope
@@ -1210,7 +1203,7 @@ def policy_scope(policy, *, authority=None, home=None):
         # session never reads the profile: its side tasks use its own saved section (code defaults only).
         aux_scope = (session_auxiliary_scope(policy.config(authority, secrets=False).get('auxiliary'))
                      if policy.ignore_user_config else contextlib.nullcontext())
-        with (editor_scope(policy), editor_mcp_scope(authority, policy), aux_scope,
+        with (editor_mcp_scope(authority, policy), aux_scope,
               policy.client_env_scope()):
             yield
     finally:

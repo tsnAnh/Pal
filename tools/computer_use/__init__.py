@@ -6,7 +6,7 @@ OpenAI function-calling schema; vision models get SOM captures (numbered overlay
 tree) and click by index, non-vision models use the AX tree alone. Model-facing guidance
 lives in the schema description and each action result's `verdict`.
 
-Modules: `tool.py` (handler, approval gate, response shaping), `backend.py` (abstract
+Modules: `tool.py` (handler, response shaping), `backend.py` (abstract
 `ComputerUseBackend` + result dataclasses), `cua_backend.py` (default MCP-over-stdio
 backend + `cua_backend_parse`/`_session`/`_daemon` siblings), `schema.py` (byte-frozen).
 """

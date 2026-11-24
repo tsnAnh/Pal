@@ -81,7 +81,6 @@ REQUIRED_NAMES: dict[str, str] = {
     "gateway.status_pid_records": "module",  # v0.22.7..v0.23.0: gateway/status.py:2044@v0.23.0
     "hermes_cli.active_sessions": "module",  # v0.22.7..v0.23.0: hermes_cli/process_identity.py:478@v0.23.0
     "hermes_cli.agent_plugins": "module",  # v0.21.6..v0.22.6: hermes_cli/plugins_manifest.py:515@v0.22.6
-    "hermes_cli.approval_transport": "module",  # v0.21.6..v0.22.6: hermes_cli/plugins.py:1382@v0.22.6
     "hermes_cli.auth": "module",  # v0.21.6..v0.23.0: gateway/config.py:864@v0.23.0
     "hermes_cli.config_backups": "module",  # v0.22.7..v0.23.0: hermes_cli/config_effective.py:102@v0.23.0
     "hermes_cli.config_home": "module",  # v0.22.7..v0.23.0: hermes_cli/config.py:582@v0.23.0

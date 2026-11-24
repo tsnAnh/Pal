@@ -20,15 +20,12 @@ SESSION_KEY = "test-cancelled-attribution"
 def gateway_session(monkeypatch):
     mod._gateway_queues.clear()
     mod._gateway_notify_cbs.clear()
-    mod._session_approved.clear()
-    for k in ("HERMES_CRON_SESSION", "HERMES_YOLO_MODE", "HERMES_INTERACTIVE"):
+    for k in ("HERMES_CRON_SESSION", "HERMES_INTERACTIVE"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("HERMES_GATEWAY_SESSION", "1")
     monkeypatch.setenv("HERMES_SESSION_KEY", SESSION_KEY)
-    # ``--yolo`` is frozen at import from HERMES_YOLO_MODE; a host shell running yolo must not
-    # auto-approve the gate under test.
-    monkeypatch.setattr(mod, "_YOLO_MODE_FROZEN", False)
-    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"mode": "manual", "timeout": 60})
+    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"timeout": 60})
+    monkeypatch.setattr("tools.details_bubble.post_details", lambda *a, **k: None)
     hooks = []
     original = approval_context._fire_approval_hook
     monkeypatch.setattr(approval_context, "_fire_approval_hook",
@@ -38,8 +35,13 @@ def gateway_session(monkeypatch):
     mod._gateway_notify_cbs.clear()
 
 
+def _ask(approval_callback=None):
+    return mod.request_draft_approval(text="Dinner at 7?", description="Send a message", pattern_key="draft:cancel",
+                                      draft={"kind": "message"}, approval_callback=approval_callback)
+
+
 def _run_gate_until_pending():
-    """Start the real command gate on a worker thread and return (thread, tid, result_holder)
+    """Start the real draft gate on a worker thread and return (thread, result_holder)
     once the prompt has been handed to the gateway notifier."""
     notified = threading.Event()
     mod.register_gateway_notify(SESSION_KEY, lambda _data: notified.set())
@@ -47,7 +49,7 @@ def _run_gate_until_pending():
 
     def worker():
         holder["tid"] = threading.get_ident()
-        holder["result"] = mod.check_all_command_guards("rm -rf .git", "local")
+        holder["result"] = _ask()
 
     thread = threading.Thread(target=worker)
     thread.start()
@@ -61,7 +63,7 @@ def _assert_withdrawn(result, cause):
     assert result["outcome"] == "cancelled"
     assert "denied by user" not in result["message"].lower()
     assert cause in result["message"]
-    assert "NOT consented" in result["message"]  # still fail-closed for the model
+    assert "NOT sent" in result["message"]  # still fail-closed for the model
 
 
 def test_teardown_interrupt_reports_cause_not_user_deny(gateway_session):
@@ -112,7 +114,7 @@ def test_coalesced_follower_inherits_the_leaders_cancellation(gateway_session):
     leader_thread, leader = _run_gate_until_pending()
     follower = {}
     follower_thread = threading.Thread(
-        target=lambda: follower.__setitem__("result", mod.check_all_command_guards("rm -rf .git", "local")))
+        target=lambda: follower.__setitem__("result", _ask()))
     follower_thread.start()  # identical command → coalesces onto the leader, no second prompt
     deadline = time.monotonic() + 10
     while not any(n == "pre_approval_request" and kw.get("coalesced") for n, kw in gateway_session):
@@ -131,12 +133,11 @@ def test_coalesced_follower_inherits_the_leaders_cancellation(gateway_session):
 
 @pytest.fixture
 def cli_session(monkeypatch):
-    mod._session_approved.clear()
-    for k in ("HERMES_CRON_SESSION", "HERMES_YOLO_MODE", "HERMES_GATEWAY_SESSION", "HERMES_EXEC_ASK"):
+    for k in ("HERMES_CRON_SESSION", "HERMES_GATEWAY_SESSION", "HERMES_EXEC_ASK"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("HERMES_INTERACTIVE", "1")
-    monkeypatch.setattr(mod, "_YOLO_MODE_FROZEN", False)
-    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"mode": "manual", "timeout": 60})
+    monkeypatch.setattr(approval_context, "_get_approval_config", lambda: {"timeout": 60})
+    monkeypatch.setattr("tools.details_bubble.post_details", lambda *a, **k: None)
     hooks = []
     monkeypatch.setattr(approval_context, "_fire_approval_hook", lambda name, **kw: hooks.append((name, kw)))
     return hooks
@@ -144,12 +145,12 @@ def cli_session(monkeypatch):
 
 def test_cli_callback_failure_reports_undelivered_prompt_not_user_deny(cli_session):
     """The CLI residual of #22992: a prompt that never reached a human (the approval callback
-    raised) is 'cancelled' with its cause, not 'User denied this command'."""
+    raised) is 'cancelled' with its cause, not 'The owner discarded this draft'."""
     def broken_callback(command, description, **kwargs):
         raise TypeError("callback signature mismatch")
 
-    result = mod.check_all_command_guards("rm -rf .git", "local", approval_callback=broken_callback)
+    result = _ask(approval_callback=broken_callback)
     _assert_withdrawn(result, "the approval callback failed: TypeError")
-    assert "user denied" not in result["message"].lower()
+    assert "discarded" not in result["message"].lower()
     posts = [kw for name, kw in cli_session if name == "post_approval_response"]
     assert posts[-1]["choice"] == "cancelled"

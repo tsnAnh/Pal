@@ -18,11 +18,10 @@ def _body_adds_no_prompt(command: str) -> bool:
 @pytest.fixture
 def floors_off(monkeypatch):
     """Exercise the unconditional floors through the production gate."""
-    monkeypatch.setattr(approval_context, "_get_approval_mode", lambda: "off")
     monkeypatch.setattr(
         approval_context,
         "_get_approval_config",
-        lambda: {"mode": "off", "deny": ["rm", "rm *", "git push*"]},
+        lambda: {"deny": ["rm", "rm *", "git push*"]},
     )
 
 

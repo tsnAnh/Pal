@@ -6,9 +6,9 @@ import pytest
 
 from acp_adapter.gateway_server import GatewayACPAgent
 
-_ENV = ('HERMES_YOLO_MODE', 'HERMES_SAFE_MODE', 'HERMES_IGNORE_USER_CONFIG', 'HERMES_IGNORE_RULES',
+_ENV = ('HERMES_SAFE_MODE', 'HERMES_IGNORE_USER_CONFIG', 'HERMES_IGNORE_RULES',
         'HERMES_ACCEPT_HOOKS', 'HERMES_MODEL', 'HERMES_INFERENCE_MODEL', 'HERMES_INFERENCE_PROVIDER')
-_FLAGS = ('yolo', 'safe_mode', 'ignore_user_config', 'ignore_rules', 'accept_hooks')
+_FLAGS = ('safe_mode', 'ignore_user_config', 'ignore_rules', 'accept_hooks')
 
 
 def _agent(created):
@@ -30,7 +30,7 @@ def _agent(created):
 
 @pytest.mark.asyncio
 async def test_launch_env_rides_session_create(monkeypatch, tmp_path):
-    for name in _ENV[:5]:
+    for name in _ENV[:4]:
         monkeypatch.setenv(name, '1')
     monkeypatch.setenv('HERMES_MODEL', 'explicit-model')  # a bypass session needs a route (below)
     monkeypatch.setenv('HERMES_INFERENCE_PROVIDER', 'openrouter')
@@ -101,4 +101,4 @@ async def test_cli_only_acp_flags_reach_the_session(monkeypatch, tmp_path):
     created = []
     await _agent(created).new_session(cwd=str(tmp_path))
     assert created[0].get('accept_hooks') is True and created[0].get('ignore_rules') is True
-    assert 'yolo' not in created[0] and 'safe_mode' not in created[0]
+    assert 'safe_mode' not in created[0]

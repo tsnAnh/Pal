@@ -73,12 +73,6 @@ struct ChatRowView: View {
                 .rowHoverWiring(actions)
         case .clarifyAnswered, .clarify:
             ClarifyRowContent(kind: row.kind, accent: context.accent, model: model)
-        case .approval(let prompt):
-            ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: context.accent), inkText: BubblePalette.inkText(accent: context.accent)) { choice in
-                model.answerApproval(prompt, choice: choice)
-            }
-        case .approvalAnswered(let record):
-            ApprovalAnsweredCard(record: record)
         case .connection(let card):
             ConnectionRequestCard(card: card, answering: context.answeringConnections) { target, decision in
                 model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)

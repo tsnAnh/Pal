@@ -28,37 +28,6 @@ final class BotChatPresentationE2ETests: E2ETestCase {
         shot(app, "chat-tool-finished")
     }
 
-    func test2ApprovalCardUsesProductLanguage() throws {
-        let app = launch()
-        signInIfNeeded(app)
-        openBot(app, "bot-alpha")
-        send(app, "APPROVE this")
-        let allow = app.buttons["approvalChoice-0"]
-        waitFor(allow, timeout: 60, "approval card")
-        XCTAssertEqual(allow.label, "Allow")
-        let decline = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label == %@", "approvalChoice-", "Don't allow")).firstMatch
-        XCTAssertTrue(decline.exists, "Don't allow button\n" + app.debugDescription)
-        for raw in ["once", "session", "always", "deny"] {
-            XCTAssertFalse(app.buttons[raw].exists, "raw choice \(raw) is not a button title")
-        }
-        XCTAssertEqual(commandTexts(app).count, 0, "command hidden until Details is opened")
-        XCTAssertTrue(app.staticTexts["Needs your OK"].exists, "plain heading\n" + app.debugDescription)
-        XCTAssertTrue(app.staticTexts["This could change or delete something. Allow it?"].exists, "plain ask")
-        XCTAssertEqual(riskLabels(app).count, 0, "gateway risk label hidden until Details is opened")
-        shot(app, "chat-approval-collapsed")
-
-        let details = app.descendants(matching: .any)["approvalDetails"].firstMatch
-        XCTAssertTrue(details.exists, app.debugDescription)
-        details.tap()
-        waitFor(commandTexts(app).firstMatch, timeout: 10, "command shown under Details")
-        XCTAssertGreaterThan(riskLabels(app).count, 0, "gateway risk label shown under Details")
-        shot(app, "chat-approval-details")
-
-        decline.tap()
-        waitGone(allow, timeout: 30, "card removed after answering")
-        waitFor(bubbles(app, "assistantBubble", containing: "stub-tool-final").firstMatch, timeout: 60, "turn completes after deny")
-    }
-
     func test3AnsweredClarifyStaysOnScreenWithoutRawJSON() throws {
         let app = launch()
         signInIfNeeded(app)
@@ -134,13 +103,5 @@ final class BotChatPresentationE2ETests: E2ETestCase {
         app.descendants(matching: .any).matching(NSPredicate(
             format: "identifier != %@ AND (label BEGINSWITH %@ OR label BEGINSWITH %@ OR label CONTAINS[c] %@)", "workingStatus", "Running ", "Used ", "terminal"
         ))
-    }
-
-    private func riskLabels(_ app: XCUIApplication) -> XCUIElementQuery {
-        app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "destroys uncommitted"))
-    }
-
-    private func commandTexts(_ app: XCUIApplication) -> XCUIElementQuery {
-        app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "mktemp"))
     }
 }

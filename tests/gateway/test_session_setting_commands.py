@@ -107,10 +107,8 @@ def test_local_session_settings_run_the_messaging_handlers_and_read_back_through
         _exec('busy queue', 'busy queue'), _get('get busy', 'busy'), _exec('busy', 'busy'),
         _get('verbose before', 'verbose'), _exec('verbose', 'verbose'), _get('get verbose', 'verbose'),
         _exec('verbose 2', 'verbose'), _get('get verbose 2', 'verbose'),
-        _exec('yolo', 'yolo'), _get('get yolo', 'yolo'), _exec('yolo off', 'yolo'), _get('get yolo off', 'yolo'),
         _exec('footer status', 'footer status'), _exec('footer on', 'footer on'), _exec('footer status 2', 'footer status'),
         _exec('voice on', 'voice on'), _exec('voice status', 'voice status'), _exec('voice off', 'voice off'),
-        _exec('approvals smart', 'approvals smart'), _get('get approvals', 'approvals.mode'),
         _exec('personality', 'personality'), _exec('personality concise', 'personality concise'),
         _exec('codex-runtime', 'codex-runtime'), _exec('fast', 'fast'),
     ]
@@ -136,18 +134,14 @@ def test_local_session_settings_run_the_messaging_handlers_and_read_back_through
     assert out['verbose before']['value'] == 'all'
     assert 'VERBOSE' in out['verbose'] and out['get verbose']['value'] == 'verbose', out
     assert out['get verbose 2']['value'] == 'off', out
-    # /yolo: this session's bypass, read back by config.get.
-    assert 'ON' in out['yolo'] and out['get yolo']['value'] == '1', out
-    assert 'OFF' in out['yolo off'] and out['get yolo off']['value'] == '0', out
     # /footer: `status` reports without toggling (the handler parsed its argument from a missing field).
     assert 'OFF' in out['footer status'] and 'ON' in out['footer on'] and 'ON' in out['footer status 2'], out
     # The per-platform key (T7): every local surface reads display.platforms.cli.
     assert saved['display']['platforms']['cli']['runtime_footer']['enabled'] is True
     # /voice: the LOCAL chat's voice state (playback stays in the client).
     assert 'On' in out['voice status'] and out['voice off'], out
-    # /approvals and /personality: profile settings, saved to config.yaml as on every surface.
-    assert 'smart' in out['approvals smart'] and out['get approvals']['value'] == 'smart', out
-    assert saved['approvals']['mode'] == 'smart' and saved['display']['personality'] == 'concise'
+    # /personality: profile settings, saved to config.yaml as on every surface.
+    assert saved['display']['personality'] == 'concise'
     assert 'concise' in out['personality'] and 'concise' in out['personality concise'], out
     assert 'openai_runtime' in out['codex-runtime'], out['codex-runtime']
     # /fast on a custom endpoint: the handler's own refusal, not unsupported_command.
@@ -165,10 +159,6 @@ def test_config_set_serves_the_settings_desktop_and_ink_write_through_the_same_h
         _set('global high', 'reasoning', 'high', scope='global'), _get('get global', 'reasoning'),
         _turn('turn global', 'TURN_GLOBAL'),
         _set('hide', 'reasoning', 'hide'), _get('get hide', 'show_reasoning'),
-        _set('approvals', 'approvals.mode', 'smart'), _get('get approvals', 'approvals.mode'),
-        _set('bad approvals', 'approvals.mode', 'nope'),
-        _set('zap on', 'yolo', '1', scope='global'), _get('get approvals zap', 'approvals.mode'),
-        _set('zap off', 'yolo', '0', scope='global'),
         _set('tips', 'display.in_app_tips', 'false'), _set('engine', 'voice.voice_chat_mode', 'gpt-live'),
         _set('bad engine', 'voice.voice_chat_mode', 'loud'),
     ]
@@ -178,9 +168,5 @@ def test_config_set_serves_the_settings_desktop_and_ink_write_through_the_same_h
     assert out['get global']['value'] == 'high' and saved['agent']['reasoning_effort'] == 'high', out
     assert out['turn global'].get('reasoning_effort') == 'high', out['turn global']
     assert out['hide']['value'] == 'hide' and out['get hide']['value'] == '0', out
-    assert out['get approvals']['value'] == 'smart' and out['bad approvals'] == 'ERR:invalid_params', out
-    assert isinstance(out['zap on'], dict) and out['zap on']['value'] == '1', out['zap on']
-    assert out['get approvals zap']['value'] == 'off', out['get approvals zap']
-    assert out['zap off']['value'] == '0' and saved['approvals']['mode'] == 'manual', out
     assert saved['display']['in_app_tips'] is False and saved['voice']['voice_chat_mode'] == 'gpt-live'
     assert out['bad engine'] == 'ERR:invalid_params', out['bad engine']

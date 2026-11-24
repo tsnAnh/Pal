@@ -1,10 +1,10 @@
-import functools
+"""Does this shell command or Python code create, import or install a bot or profile?"""
+
 import itertools
 import os
 import re
 import shlex
 
-from hermes_cli.shared_catalog_guard_patterns import flagged_verb_description
 from tools.approval_detection import (
     _SHELL_NAMES,
     _command_parser_limit_exceeded,
@@ -17,16 +17,9 @@ from tools.approval_detection import (
     _shell_command_segment,
     _shell_segment_tokens,
 )
-from tools.approval_detection_grant import GRANT_BINDINGS, bound_name
 
 
-_HUMAN_REQUIRED_DESCRIPTIONS = {
-    ("bot", "create"): "create a bot or profile",
-    ("profile", "create"): "create a bot or profile",
-    ("profile", "import"): "create a bot or profile",
-    ("profile", "install"): "create a bot or profile",
-    ("profile", "delete"): "delete a profile",
-}
+_CREATING_VERBS = frozenset({("bot", "create"), ("profile", "create"), ("profile", "import"), ("profile", "install")})
 _HELP_FLAGS = frozenset({"-h", "--help"})
 _TEXT_ONLY_COMMANDS = frozenset({
     "grep", "egrep", "fgrep", "rg", "ag", "ack", "echo", "printf", "cat", "head", "tail", "less", "more",
@@ -48,17 +41,12 @@ _LAUNCHER_OPTIONS_WITH_VALUE = frozenset({
 _RUNNER_PROGRAMS = frozenset({
     "xargs", "find", "watch", "parallel", "flock", "doas", "su", "runuser", "caffeinate", "arch", "script",
 })
-_ALIAS_VERB_WORDS = frozenset(word for pair in (*_HUMAN_REQUIRED_DESCRIPTIONS, ("mcp", "catalog")) for word in pair)
-_HUMAN_REQUIRED_PYTHON_API = re.compile(
-    r'(?:\.|\b)(?:create_profile|delete_profile|import_profile|install_profile|install_distribution|'
-    r'save_server|remove_server|replace_servers|_save_mcp_server|_remove_mcp_server|_replace_mcp_servers)\s*\('
-    r'|\.(?:create_profile|delete_profile|import_profile|install_profile|install_distribution|'
-    r'replace_servers|_save_mcp_server|_remove_mcp_server|_replace_mcp_servers)\b')
+_ALIAS_VERB_WORDS = frozenset(word for pair in _CREATING_VERBS for word in pair)
+_CREATING_PYTHON_API = re.compile(
+    r'(?:\.|\b)(?:create_profile|import_profile|install_profile|install_distribution)\s*\('
+    r'|\.(?:create_profile|import_profile|install_profile|install_distribution)\b')
 _PYTHON_LAUNCHER_RE = re.compile(
     r'^(?:python[\d.]*|pypy[\d.]*|ipython[\d.]*|py|uv|uvx|pipx|poetry|pdm|hatch|rye|conda|mamba|micromamba)(?:\.exe)?$')
-_QUOTE_SPLICE_RE = re.compile(r'''["']\s*\+\s*["']|["'\\]''')
-_AGENT_MARKER_DESCRIPTION = "run a command with the agent restrictions removed"
-_PYTHON_API_DESCRIPTION = "create or delete a profile through the hermes_cli API"
 _PY_STRING_LITERAL_RE = re.compile(r'''(["'])((?:\\.|(?!\1).)*)\1''', re.DOTALL)
 _PY_LITERAL_SEQUENCE_RE = re.compile(
     r'''[\[(]\s*(?:(?:"[^"\n]*"|'[^'\n]*')\s*,\s*)*(?:"[^"\n]*"|'[^'\n]*')\s*,?\s*[\])]''')
@@ -66,16 +54,6 @@ _PY_LOGGING_CALL_RE = re.compile(r'(?:\bprint|\blog\w*|\b(?:logger|logging|log|w
 _MAX_CODE_LITERALS = 2000
 _HEREDOC_OPERATOR_RE = re.compile(r'''<<(-?)[ \t]*(?:'([^'\n]*)'|"([^"\n]*)"|(\\?)([A-Za-z0-9_.-]+))''')
 _HEREDOC_LINE_SPLIT_RE = re.compile(r'[\s|;&()<>"\'`$]+')
-_MARKER_SHELL_PATTERNS = (
-    r'(?<![\w$])NAME\s*=(?!=)',
-    r'\b(?:unset|env|declare|typeset|export)\b[^;&|\n]*?(?<![\w$])NAME\b',
-)
-_MARKER_PYTHON_PATTERNS = (
-    r'\bdel\s+[\w.]*environ\b[^\n]*(?<![\w$])NAME\b',
-    r'\benviron\s*\[\s*NAME\s*\]\s*=(?!=)',
-    r'\benviron\s*\.\s*(?:pop|update|setdefault|popitem)\s*\([^\n]*(?<![\w$])NAME\b',
-    r'\b(?:unsetenv|putenv)\s*\([^\n)]*(?<![\w$])NAME\b',
-)
 
 
 def _eval_payloads(source: str):
@@ -161,7 +139,7 @@ def _hermes_entries(argv: list[str]) -> list[int]:
     return [] if entry is None else [entry]
 
 
-def _human_required_hit(argv: list[str]) -> tuple[str, str | None, str | None] | None:
+def _argv_creates(argv: list[str]) -> bool:
     pending, seen = [entry + 1 for entry in _hermes_entries(argv)], set()
     while pending:
         position = pending.pop()
@@ -169,43 +147,16 @@ def _human_required_hit(argv: list[str]) -> tuple[str, str | None, str | None] |
             continue
         seen.add(position)
         verb = tuple(token.lower() for token in argv[position:position + 2])
-        later_args = argv[position + 2:]
-        description = _HUMAN_REQUIRED_DESCRIPTIONS.get(verb) or flagged_verb_description(verb, later_args)
-        if verb in _HUMAN_REQUIRED_DESCRIPTIONS and _only_prints_help(later_args):
-            return None
-        if description:
-            binding = GRANT_BINDINGS.get(verb)
-            if binding is None:
-                return description, None, None
-            return description, binding.action, bound_name(binding, later_args)
+        if verb in _CREATING_VERBS:
+            return not _only_prints_help(argv[position + 2:])
         if argv[position].startswith("-"):
             pending.extend((position + 1, position + 2))
-    return None
+    return False
 
 
 def _only_prints_help(later_args: list[str]) -> bool:
     options = itertools.takewhile(lambda token: token != "--", later_args)
     return any(token in _HELP_FLAGS for token in options)
-
-
-def _human_required_description(argv: list[str]) -> str | None:
-    hit = _human_required_hit(argv)
-    return hit[0] if hit else None
-
-
-@functools.lru_cache(maxsize=1)
-def _agent_marker_patterns() -> tuple[tuple[re.Pattern, ...], tuple[re.Pattern, ...]]:
-    from hermes_cli.profile_admin_guard import AGENT_TOOL_MARKER_ENV
-    name = re.escape(AGENT_TOOL_MARKER_ENV)
-    compile_all = lambda patterns: tuple(re.compile(p.replace("NAME", name)) for p in patterns)
-    return compile_all(_MARKER_SHELL_PATTERNS), compile_all(_MARKER_PYTHON_PATTERNS)
-
-
-def _changes_agent_marker(text: str, *, python: bool) -> bool:
-    shell_patterns, python_patterns = _agent_marker_patterns()
-    stripped = _QUOTE_SPLICE_RE.sub("", text)
-    patterns = shell_patterns + python_patterns if python else shell_patterns
-    return any(pattern.search(stripped) for pattern in patterns)
 
 
 def _launches_python(argv: list[str]) -> bool:
@@ -312,34 +263,6 @@ def _split_heredocs(command: str) -> tuple[str, list[str]]:
     return "".join(parts), python_bodies
 
 
-def _human_required_text_description(command: str, runnable: list[list[str]]) -> str | None:
-    launches_python = any(_launches_python(argv) for argv in runnable)
-    if _changes_agent_marker(command, python=launches_python):
-        return _AGENT_MARKER_DESCRIPTION
-    if launches_python and "hermes_cli" in command and _HUMAN_REQUIRED_PYTHON_API.search(command):
-        return _PYTHON_API_DESCRIPTION
-    return None
-
-
-def detect_human_required_command(command: str) -> tuple:
-    if _command_parser_limit_exceeded(command):
-        return (False, None)
-    command, python_bodies = _split_heredocs(command)
-    for body in python_bodies:
-        found, description = detect_human_required_code(body)
-        if found:
-            return (True, description)
-    runnable = []
-    for argv in _iter_command_argvs(command):
-        description = _human_required_description(argv)
-        if description:
-            return (True, description)
-        if os.path.basename(argv[0]).lower() not in _TEXT_ONLY_COMMANDS:
-            runnable.append(argv)
-    description = _human_required_text_description(command, runnable) if runnable else None
-    return (True, description) if description else (False, None)
-
-
 def _code_command_candidates(code: str):
     for match in _PY_STRING_LITERAL_RE.finditer(code):
         if not _PY_LOGGING_CALL_RE.search(code[max(0, match.start() - 40):match.start()]):
@@ -349,15 +272,29 @@ def _code_command_candidates(code: str):
         yield shlex.join(items)
 
 
-def detect_human_required_code(code: str) -> tuple:
+def _command_creates(command: str) -> bool:
+    if _command_parser_limit_exceeded(command):
+        return False
+    command, python_bodies = _split_heredocs(command)
+    if any(_code_creates(body) for body in python_bodies):
+        return True
+    launches_python = False
+    for argv in _iter_command_argvs(command):
+        if _argv_creates(argv):
+            return True
+        launches_python = launches_python or (
+            os.path.basename(argv[0]).lower() not in _TEXT_ONLY_COMMANDS and _launches_python(argv))
+    return launches_python and "hermes_cli" in command and bool(_CREATING_PYTHON_API.search(command))
+
+
+def _code_creates(code: str) -> bool:
     if _command_parser_limit_exceeded(code):
-        return (False, None)
-    if "hermes_cli" in code and _HUMAN_REQUIRED_PYTHON_API.search(code):
-        return (True, _PYTHON_API_DESCRIPTION)
-    if _changes_agent_marker(code, python=True):
-        return (True, _AGENT_MARKER_DESCRIPTION)
-    for candidate in itertools.islice(_code_command_candidates(code), _MAX_CODE_LITERALS):
-        found, description = detect_human_required_command(candidate)
-        if found:
-            return (True, description)
-    return (False, None)
+        return False
+    if "hermes_cli" in code and _CREATING_PYTHON_API.search(code):
+        return True
+    return any(_command_creates(candidate)
+               for candidate in itertools.islice(_code_command_candidates(code), _MAX_CODE_LITERALS))
+
+
+def creates_bot_or_profile(text: str, *, code: bool = False) -> bool:
+    return _code_creates(text) if code else _command_creates(text)

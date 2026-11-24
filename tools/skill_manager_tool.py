@@ -689,8 +689,6 @@ def _run_write_gate(build_staging):
     decision = wa.evaluate_gate(wa.SKILLS)
     if decision.allow:
         return None
-    if decision.blocked:
-        return tool_error(decision.message, success=False)
     payload, gist = build_staging(wa)
     record = wa.stage_write(wa.SKILLS, payload, summary=gist, origin=wa.current_origin())
     return json.dumps({"success": True, "staged": True, "pending_id": record["id"],

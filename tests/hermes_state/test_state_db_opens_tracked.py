@@ -130,12 +130,6 @@ def test_backup_integrity_query_is_tracked(state_db, tracked):
     assert _key(state_db) in tracked
 
 
-def test_approvals_suggest_scan_is_tracked(state_db, tracked):
-    from hermes_cli.approvals_suggest import scan_approval_history
-    scan_approval_history(state_db)
-    assert _key(state_db) in tracked
-
-
 def test_restore_destination_connection_is_tracked(state_db, tracked, tmp_path):
     from hermes_cli.backup_restore import _restore_db_pages
     snapshot = tmp_path / "snapshot.db"

@@ -44,7 +44,6 @@ __all__ = [
     "RUNTIME_LOCK_KEY",
     "SESSION_ROW_COLUMNS",
     "SKILL_SCAFFOLD_PREFIX",
-    "YOLO_KEY",
     "ArchiveChange",
     "CanonicalTitleLocked",
     "CronRunEntry",
@@ -94,7 +93,6 @@ __all__ = [
     "normalize_activity_provenance",
     "parse_model_config",
     "sanitize_title",
-    "session_yolo_enabled",
     "workspace_key",
 ]
 
@@ -165,9 +163,6 @@ SESSION_ROW_COLUMNS: tuple[str, ...] = (
 
 #: The columns a ``compact_rows`` listing does not read.
 COMPACT_EXCLUDED_COLUMNS: frozenset[str] = frozenset({"system_prompt", "system_prompt_hash", "git_metadata_generation"})
-
-#: The ``model_config`` key of the YOLO flag.
-YOLO_KEY = "yolo_mode"
 
 #: The ``model_config`` key holding a chat's first-run onboarding run (``session_rules.onboarding_flow``'s record).
 ONBOARDING_RUN_KEY = "onboarding_run"
@@ -245,11 +240,6 @@ def is_corrupt_model_config(raw: Any) -> bool:
     except (ValueError, RecursionError):
         return True
     return False
-
-
-def session_yolo_enabled(model_config: Any) -> bool:
-    """The persisted YOLO flag of a session's ``model_config``; ``False`` on any parse failure."""
-    return bool(parse_model_config(model_config).get(YOLO_KEY))
 
 
 _TITLE_SURROGATE_RE = re.compile(r"[\ud800-\udfff]")
@@ -966,10 +956,6 @@ class SessionRepository(Protocol):
 
     def set_runtime_lock(self, session_id: SessionId, lock: RuntimeLock) -> None:
         """Store the lock under :data:`RUNTIME_LOCK_KEY` with ``updated_at`` now; a lock model that is not ``None`` overwrites the model."""
-        ...
-
-    def set_yolo(self, session_id: SessionId, enabled: bool) -> None:
-        """Store the YOLO flag in ``model_config``."""
         ...
 
     def update_system_prompt(self, session_id: SessionId, system_prompt: Optional[str]) -> None:

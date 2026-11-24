@@ -19,7 +19,6 @@ from unittest.mock import patch
 import gateway.run as gateway_run
 from gateway.config import Platform
 from gateway.platforms.base import SendResult
-from gateway.run_turn_runner import TurnRunner
 from gateway.session import SessionSource
 from gateway.turn_context import TurnContext
 
@@ -60,31 +59,6 @@ def _bare_runner(adapter) -> gateway_run.GatewayRunner:
     return runner
 
 
-def test_turn_approval_card_goes_through_the_replacement_adapter(tmp_path, monkeypatch):
-    """Wire the turn the way ``_run_agent_inner`` does, rebuild the adapter, then raise an approval."""
-    (tmp_path / "config.yaml").write_text("display: {}")
-    monkeypatch.setattr(gateway_run, "_hermes_home", tmp_path)
-    monkeypatch.setattr("gateway.platforms.base_exec_approval.approval_timeout_seconds", lambda: 300)
-    retired, live = _Adapter("old"), _Adapter("new")
-    runner = _bare_runner(retired)
-    source = SessionSource(platform=Platform.TELEGRAM, chat_id="111", chat_type="dm", user_id="111")
-    ctx = TurnContext(source=source, session_key=SESSION, user_config={}, _run_still_current=lambda: True)
-    turn = object.__new__(TurnRunner)
-    turn._runner, turn._ctx = runner, ctx
-
-    async def wire_then_rebuild():
-        runner._run_agent_bind_turn_wiring(ctx, turn, source, None, False)
-        retired.connected = False  # the reconnect watcher retires it and publishes a new instance
-        runner.adapters[Platform.TELEGRAM] = live
-
-    asyncio.run(wire_then_rebuild())
-    turn._schedule = lambda coro, _label: SimpleNamespace(result=lambda timeout=None, _r=asyncio.run(coro): _r)
-    turn._close_native_stream_boundary = lambda _why: None
-
-    turn._approval_notify_sync({"command": "rm -rf /x", "description": "delete", "request_id": "req-1"})
-
-    assert live.calls == ["card"], "the approval card must reach the live adapter"
-    assert retired.calls == [], "nothing may go through the retired, bot-less adapter"
 
 
 def test_update_prompt_after_reconnect_reaches_the_replacement(tmp_path):

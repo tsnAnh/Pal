@@ -57,31 +57,6 @@ final class ChatPolishShotsE2ETests: E2ETestCase {
         }
     }
 
-    func test2ApprovalAndAnsweredCard() throws {
-        for mode in [AppearanceMode.light, .dark] {
-            let app = open(mode, bot: "bot-alpha")
-            send(app, "APPROVE \(mode.rawValue) " + UUID().uuidString.prefix(4))
-            let allow = app.buttons["approvalChoice-0"]
-            waitFor(allow, timeout: 60, "approval card")
-            settle()
-            shot(app, "approval-card-\(mode.rawValue)")
-            let more = element(app, "approvalMoreOptions")
-            if more.exists {
-                more.tap()
-                settle()
-                shot(app, "approval-more-options-\(mode.rawValue)")
-            }
-            allow.tap()
-            let answered = element(app, "approvalAnswered")
-            waitFor(answered, timeout: 30, "answered record card")
-            XCTAssertTrue(answered.staticTexts["Allow"].exists, "the record names the decision\n" + answered.debugDescription)
-            waitFor(bubbles(app, "assistantBubble", containing: "stub-tool-final").firstMatch, timeout: 60, "turn completes after allow")
-            settle()
-            shot(app, "approval-answered-\(mode.rawValue)")
-            app.terminate()
-        }
-    }
-
     func test3FindAndPill() throws {
         for mode in [AppearanceMode.light, .dark] {
             let app = open(mode)
