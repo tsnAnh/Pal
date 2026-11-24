@@ -113,6 +113,8 @@ public struct ChatScrollMachine: Sendable, Equatable {
     }
 
     public static let atBottomTolerance = 1.0
+    public static let showDistance = 80.0
+    public static let hideDistance = 24.0
     public static let maxRepairs = 3
     public static let revealAttempts = 12
 
@@ -130,6 +132,8 @@ public struct ChatScrollMachine: Sendable, Equatable {
     private var visibleIDs: Set<String> = []
 
     public init() {}
+
+    public var isUserScrolling: Bool { userScrolling }
 
     public var showsJumpButton: Bool {
         switch state {
