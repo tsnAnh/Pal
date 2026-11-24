@@ -32,6 +32,7 @@ public final class MediaPosterCache: @unchecked Sendable {
         var size: Int?
         var width: Int?
         var height: Int?
+        var pageCount: Int?
         var hasPoster: Bool
         var storedAt: Date?
     }
@@ -94,7 +95,10 @@ public final class MediaPosterCache: @unchecked Sendable {
             else { return nil }
             poster = data
         }
-        return MediaPreview(poster: poster, duration: sidecar.duration, size: sidecar.size, width: sidecar.width, height: sidecar.height)
+        return MediaPreview(
+            poster: poster, duration: sidecar.duration, size: sidecar.size, width: sidecar.width, height: sidecar.height,
+            pageCount: sidecar.pageCount
+        )
     }
 
     private static func write(_ preview: MediaPreview, stem: String, in directory: URL) {
@@ -102,7 +106,7 @@ public final class MediaPosterCache: @unchecked Sendable {
         guard (try? manager.createDirectory(at: directory, withIntermediateDirectories: true)) != nil else { return }
         let sidecar = Sidecar(
             duration: preview.duration, size: preview.size, width: preview.width, height: preview.height,
-            hasPoster: preview.poster != nil, storedAt: Date()
+            pageCount: preview.pageCount, hasPoster: preview.poster != nil, storedAt: Date()
         )
         if let poster = preview.poster {
             guard (try? poster.write(to: directory.appending(path: "\(stem).jpg", directoryHint: .notDirectory), options: .atomic)) != nil

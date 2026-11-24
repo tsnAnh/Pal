@@ -42,13 +42,18 @@ public struct MediaPreview: Sendable, Equatable {
     public let size: Int?
     public let width: Int?
     public let height: Int?
+    public let pageCount: Int?
 
-    public init(poster: Data?, duration: TimeInterval? = nil, size: Int? = nil, width: Int? = nil, height: Int? = nil) {
+    public init(
+        poster: Data?, duration: TimeInterval? = nil, size: Int? = nil, width: Int? = nil, height: Int? = nil,
+        pageCount: Int? = nil
+    ) {
         self.poster = poster
         self.duration = duration
         self.size = size
         self.width = width
         self.height = height
+        self.pageCount = pageCount
     }
 
     public init(poster: Data?, metadata: MediaMetadata) {
