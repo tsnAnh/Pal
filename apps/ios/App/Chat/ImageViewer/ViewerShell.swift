@@ -8,6 +8,7 @@ struct ViewerShell<Content: View, Composer: View>: View {
     let actions: [ViewerAction]
     let disabled: Set<ViewerAction>
     let perform: (ViewerAction) -> Void
+    let drag: (() -> NSItemProvider)?
     private let content: Content
     private let composer: Composer
 
@@ -16,6 +17,7 @@ struct ViewerShell<Content: View, Composer: View>: View {
         actions: [ViewerAction],
         disabled: Set<ViewerAction>,
         perform: @escaping (ViewerAction) -> Void,
+        drag: (() -> NSItemProvider)? = nil,
         @ViewBuilder content: () -> Content,
         @ViewBuilder composer: () -> Composer
     ) {
@@ -23,6 +25,7 @@ struct ViewerShell<Content: View, Composer: View>: View {
         self.actions = actions
         self.disabled = disabled
         self.perform = perform
+        self.drag = drag
         self.content = content()
         self.composer = composer()
     }
@@ -52,6 +55,7 @@ struct ViewerShell<Content: View, Composer: View>: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 6)
                 .palClearGlass(Capsule(), interactive: false)
+                .modifier(OptionalDrag(provider: drag))
                 .padding(.horizontal, Self.titleClearance)
                 .accessibilityIdentifier("imageViewerTitle")
             HStack {
@@ -78,8 +82,21 @@ struct ViewerShell<Content: View, Composer: View>: View {
             PalClearGlassIconButton(systemName: "pencil", label: action.label, identifier: action.identifier) { perform(action) }
         case .download:
             PalClearGlassIconButton(systemName: "arrow.down.to.line", label: action.label, identifier: action.identifier) { perform(action) }
+                .keyboardShortcut("s", modifiers: .command)
         case .close:
             SheetGlassButton(clear: true, escapes: false, accessibilityIdentifier: action.identifier) { perform(action) }
+        }
+    }
+}
+
+private struct OptionalDrag: ViewModifier {
+    let provider: (() -> NSItemProvider)?
+
+    func body(content: Content) -> some View {
+        if let provider {
+            content.onDrag(provider)
+        } else {
+            content
         }
     }
 }
