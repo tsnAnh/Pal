@@ -25,6 +25,7 @@ struct ChatTranscriptList: View {
 
     var body: some View {
         let _ = PalPerf.event("chat.scroll.body") // swiftlint:disable:this redundant_discardable_let
+        let _ = ChatOpenMetrics.listBody() // swiftlint:disable:this redundant_discardable_let
         ScrollView {
             ChatTranscriptRows(model: model, scroll: scroll, router: router, desk: desk.desk, connectionIsSlow: connectionIsSlow)
         }
@@ -171,6 +172,7 @@ private struct ChatRowHeightFloor: ViewModifier {
     private static let settleLimit = Duration.seconds(1)
 
     func body(content: Content) -> some View {
+        let _ = ChatOpenMetrics.rowBody() // swiftlint:disable:this redundant_discardable_let
         content
             .onGeometryChange(for: CGRect.self) { // perf-lint: ok
                 $0.frame(in: .named(ChatScrollController.contentSpace))

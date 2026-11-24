@@ -1,4 +1,5 @@
 import PalChat
+import PalDiagnostics
 import SwiftUI
 
 @MainActor
@@ -27,6 +28,7 @@ final class ChatScrollController {
     @ObservationIgnored private var revealTask: Task<Void, Never>?
 
     func observe(_ geometry: ScrollGeometry) {
+        ChatOpenMetrics.geometry()
         visibleTop = Double(geometry.visibleRect.minY)
         let snapshot = ChatScrollGeometry(
             offsetY: Double(geometry.contentOffset.y),
@@ -83,6 +85,7 @@ final class ChatScrollController {
     }
 
     func rowLaidOut(_ id: String, frame: CGRect) {
+        ChatOpenMetrics.rowLaidOut(id)
         frames[id] = frame
         if let width = lastGeometry?.containerWidth {
             heights.record(id, height: Double(frame.height), width: width)
@@ -137,8 +140,10 @@ final class ChatScrollController {
             let glides = animated && distance <= height * Self.glideViewports
             var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
             transaction.disablesAnimations = !glides
+            notePositionWrite()
             withTransaction(transaction) { position.scrollTo(edge: .bottom) }
         case .scrollToRow(let id):
+            notePositionWrite()
             withAnimation(.easeInOut(duration: 0.25)) { position.scrollTo(id: id, anchor: Self.revealAnchor) }
         case .restore(let anchor):
             guard let frame else {
@@ -148,8 +153,14 @@ final class ChatScrollController {
             pendingRestore = nil
             let target = Double(frame.minY) + anchor.offsetInRow
             guard abs(visibleTop - target) > Self.restoreTolerance else { return }
+            notePositionWrite()
             position.scrollTo(y: CGFloat(target)) // perf-lint: ok
         }
+    }
+
+    private func notePositionWrite() {
+        ChatOpenMetrics.positionWrite()
+        PalPerf.event("chat.scroll.write")
     }
 
     private func send(_ event: ChatScrollMachine.Event) {
