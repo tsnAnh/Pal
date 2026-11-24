@@ -5,6 +5,15 @@ public enum PalMotion {
     public static let popIn: Animation = .spring(duration: 0.25, bounce: 0)
     public static let popOutDuration: TimeInterval = 0.17
 
+    public enum Settle {
+        public static let collapse: Animation = .easeOut(duration: popOutDuration)
+        public static let fade: AnyTransition = .opacity.animation(Pop.fade.animation)
+
+        public static func height(reduceMotion: Bool) -> Animation? {
+            reduceMotion ? nil : collapse
+        }
+    }
+
     public enum Pop: Equatable, Sendable {
         case scaleFade
         case fade

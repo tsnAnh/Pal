@@ -6,11 +6,14 @@ import SwiftUI
 struct ClarifyCard: View {
     let prompt: PendingPrompt
     var accent: BotAccent?
-    let answer: (String) -> Void
+    let answer: (String, ClarifySettled) async -> Bool
 
     @State private var selection: Set<Int> = []
     @State private var otherText = ""
+    @State private var sending = false
+    @State private var settled: ClarifySettled?
     @FocusState private var otherFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isMulti: Bool { prompt.multiSelect == true }
     private var question: String { prompt.question ?? String(localized: "Question") }
@@ -26,6 +29,17 @@ struct ClarifyCard: View {
     }
 
     var body: some View {
+        ZStack(alignment: .top) {
+            if let settled {
+                ClarifySettledCard(settled: settled).transition(PalMotion.Settle.fade)
+            } else {
+                live.transition(PalMotion.Settle.fade)
+            }
+        }
+        .animation(PalMotion.Settle.height(reduceMotion: reduceMotion), value: settled)
+    }
+
+    private var live: some View {
         VStack(alignment: .leading, spacing: 4) {
             ClarifyHeadline(text: question)
             ForEach(Array(prompt.choices.enumerated()), id: \.offset) { index, choice in
@@ -54,16 +68,18 @@ struct ClarifyCard: View {
         }
         .clarifySurface()
         .contextMenu {
-            Button { answer("") } label: { Label("Skip question", palIcon: "xmark") }
+            Button { send("", chosen: []) } label: { Label("Skip question", palIcon: "xmark") }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityAction(named: Text("Skip question")) { answer("") }
+        .accessibilityAction(named: Text("Skip question")) { send("", chosen: []) }
         .accessibilityIdentifier("clarifyCard")
     }
 
     private func submitTyped() {
         guard let composed = composedAnswer else { return }
-        answer(composed)
+        let typed = otherText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let picked = selection.sorted().compactMap { prompt.choices.indices.contains($0) ? prompt.choices[$0] : nil }
+        send(composed, chosen: isMulti ? picked + (typed.isEmpty ? [] : [typed]) : [typed])
     }
 
     private func tap(_ index: Int, _ choice: String) {
@@ -71,41 +87,19 @@ struct ClarifyCard: View {
             if selection.contains(index) { selection.remove(index) } else { selection.insert(index) }
         } else {
             selection = [index]
-            answer(choice)
+            send(choice, chosen: [choice])
         }
     }
-}
 
-struct ClarifyAnsweredCard: View {
-    let question: String
-    let answer: ClarifyRecord.Answer
-    var accent: BotAccent?
-
-    @Environment(\.hermesTheme) private var theme
-
-    private var picks: [String] {
-        if case .answered(let picks) = answer { picks } else { [] }
-    }
-
-    private var spokenAnswer: String {
-        picks.isEmpty ? String(localized: "Skipped") : picks.joined(separator: ", ")
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ClarifyHeadline(text: question)
-            if picks.isEmpty {
-                ClarifyRow(letter: nil, text: String(localized: "Skipped"), style: .choice)
-            } else {
-                ForEach(Array(picks.enumerated()), id: \.offset) { _, pick in
-                    ClarifyRow(letter: nil, text: pick, style: .chosen, accent: accent)
-                }
-            }
+    private func send(_ text: String, chosen: [String]) {
+        guard !sending else { return }
+        sending = true
+        let record = ClarifySettled(entries: [.init(question: question, chosen: chosen)])
+        Task {
+            let sent = await answer(text, record)
+            sending = false
+            if sent { settled = record }
         }
-        .clarifySurface()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(question), \(spokenAnswer)"))
-        .accessibilityIdentifier("clarifyAnswered")
     }
 }
 
@@ -135,49 +129,6 @@ struct ClarifyEditField: View {
         .padding(.vertical, 2)
         .accessibilityLabel(Text(verbatim: placeholder))
         .accessibilityIdentifier("clarifyEditField")
-    }
-}
-
-struct ClarifyAnsweredFormCard: View {
-    let records: [ClarifyRecord]
-    var accent: BotAccent?
-
-    @Environment(\.hermesTheme) private var theme
-
-    private func spoken(_ record: ClarifyRecord) -> String {
-        if case .answered(let picks) = record.answer, !picks.isEmpty { return picks.joined(separator: ", ") }
-        return String(localized: "Skipped")
-    }
-
-    private var spokenSummary: String {
-        records.map { "\($0.question), \(spoken($0))" }.joined(separator: ". ")
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Answers sent")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color(theme.palette.textPrimary))
-                .padding(.bottom, 2)
-            ForEach(Array(records.enumerated()), id: \.offset) { _, record in
-                let skipped = spoken(record) == String(localized: "Skipped")
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    ClarifyBadge(letter: skipped ? "–" : nil, style: skipped ? .choice : .chosen, accent: accent)
-                    Text(record.question)
-                        .font(.footnote)
-                        .foregroundStyle(Color(theme.palette.textSecondary))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(spoken(record))
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color(skipped ? theme.palette.textTertiary : theme.palette.textPrimary))
-                        .multilineTextAlignment(.trailing)
-                }
-            }
-        }
-        .clarifySurface()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(spokenSummary))
-        .accessibilityIdentifier("clarifyAnsweredForm")
     }
 }
 

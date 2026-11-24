@@ -119,6 +119,8 @@ final class ChatModel {
     private(set) var workingStatus: String?
     private(set) var hasPendingClarify = false
     private(set) var hasPendingPrompt = false
+    private(set) var newestRowIsQuestion = false
+    @ObservationIgnored var settledPrompts: [String: ClarifySettled] = [:]
     private(set) var olderHistory = OlderHistory.idle
     var isOpening = true
     var sendError: String?
@@ -264,7 +266,7 @@ final class ChatModel {
         let staged = pending.readyToSend
         guard !trimmed.isEmpty || !staged.isEmpty, canSendAttachments else { return }
         if let prompt = pendingClarify, staged.isEmpty {
-            answer(prompt, with: trimmed)
+            answerFromComposer(prompt, text: trimmed)
             return
         }
         guard let outbox else { return }
@@ -342,17 +344,6 @@ final class ChatModel {
             await refreshOutbox()
             _ = await outbox.deliver(entry.submissionID)
             await refreshOutbox()
-        }
-    }
-
-    func answer(_ prompt: PendingPrompt, with text: String) {
-        guard let session else { return }
-        Task {
-            do {
-                try await session.answerClarify(prompt, answer: text)
-            } catch {
-                sendError = String(localized: "Your answer could not be sent. Try again.")
-            }
         }
     }
 
@@ -821,6 +812,7 @@ final class ChatModel {
         if assignIfChanged(\.rows, next) {
             assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
             assignIfChanged(\.rowIDs, next.map(\.id))
+            assignIfChanged(\.newestRowIsQuestion, next.last?.kind.isQuestionCard ?? false)
         }
         publishWindow()
     }
@@ -844,7 +836,7 @@ final class ChatModel {
     }
 
     func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
-        if let reuse, reuse.item == item, !Self.dependsOnConnection(item) {
+        if let reuse, reuse.item == item, !Self.dependsOnConnection(item), !hasStaleClarify(item, reuse) {
             if case .assistant = item.content, !generated.isEmpty {
                 return BuiltRow(item: item, kind: reuse.kind, images: reuse.images.filter { !generated.contains($0.id) }, files: reuse.files)
             }
@@ -893,7 +885,7 @@ final class ChatModel {
         case .clarifyAnswered(let record):
             return (.clarifyAnswered([record]), [], [])
         case .clarify(let card):
-            return (.clarify(card.prompt), [], [])
+            return (settledKind(for: card) ?? .clarify(card.prompt), [], [])
         case .connection(let card):
             return (.connection(card), [], [])
         case .noProvider: return (.noProvider, [], [])
