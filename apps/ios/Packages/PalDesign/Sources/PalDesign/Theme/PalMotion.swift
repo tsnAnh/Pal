@@ -7,7 +7,7 @@ public enum PalMotion {
 
     public enum Settle {
         public static let collapse: Animation = .easeOut(duration: popOutDuration)
-        public static let fade: AnyTransition = .opacity.animation(Pop.fade.animation)
+        public static var fade: AnyTransition { .opacity.animation(Pop.fade.animation) }
 
         public static func height(reduceMotion: Bool) -> Animation? {
             reduceMotion ? nil : collapse
