@@ -4,6 +4,7 @@ import Foundation
 public enum ViewerAction: Sendable, Equatable, CaseIterable {
     case edit
     case download
+    case openInBrowser
     case close
 }
 

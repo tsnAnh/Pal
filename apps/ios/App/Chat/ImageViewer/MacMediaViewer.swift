@@ -73,7 +73,7 @@ private struct MacMediaViewer: View {
             if let file { MediaFileActions.saveAs(file, suggestedName: state.current.reference.name) }
         case .close:
             close()
-        case .edit:
+        case .edit, .openInBrowser:
             break
         }
     }

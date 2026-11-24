@@ -3,9 +3,13 @@ import PalChat
 
 extension ChatModel {
     func openFile(_ file: FileReference) {
-        guard case .viewer = FileOpenRoute(fileName: file.name, viewerShowsDocuments: Self.viewerShowsDocuments),
-              let state = DocumentViewerState(file: file, chatFiles: rows.flatMap(\.files))
-        else {
+        let route = FileOpenRoute(fileName: file.name, viewerShowsDocuments: Self.viewerShowsDocuments)
+        if route == .html {
+            HTMLViewerCoordinator.shared.open(file, source: mediaResolver.source, owner: ObjectIdentifier(self))
+            return
+        }
+        HTMLViewerCoordinator.shared.close()
+        guard case .viewer = route, let state = DocumentViewerState(file: file, chatFiles: rows.flatMap(\.files)) else {
             filePreview = file
             return
         }

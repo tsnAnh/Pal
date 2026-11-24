@@ -34,6 +34,11 @@ private struct ViewerPresentation: ViewModifier {
                     MediaPlayerCover(state: state, source: resolver.source, close: closeMedia)
                 }
             }
+            .fullCover(isPresented: Binding(get: { htmlSession != nil }, set: { if !$0 { HTMLViewerCoordinator.shared.close() } })) {
+                if let htmlSession {
+                    HTMLViewerCover(session: htmlSession) { HTMLViewerCoordinator.shared.close() }
+                }
+            }
             .fullCover(isPresented: Binding(get: { model.imageViewer != nil }, set: { if !$0 { model.imageViewer = nil } })) {
                 ChatImageViewer(model: model).environment(\.chatImageLoader, model.imageLoader)
             }
@@ -42,8 +47,13 @@ private struct ViewerPresentation: ViewModifier {
             MacImageViewerHost(model: model, attach: attach, sent: sent)
             MacDocumentViewerHost(model: model, attach: attach, sent: sent)
             MacMediaViewerHost(viewer: $media, source: resolver.source)
+            MacHTMLViewerHost(model: model)
         }
         #endif
+    }
+
+    private var htmlSession: HTMLViewerSession? {
+        HTMLViewerCoordinator.shared.session.flatMap { $0.owner == ObjectIdentifier(model) ? $0 : nil }
     }
 
     private func open(_ reference: MediaReference, inRow rowID: String) {

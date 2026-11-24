@@ -7,7 +7,7 @@ public enum DocumentKind: Sendable, Equatable {
 
     private static let markdownExtensions: Set<String> = ["md", "markdown"]
     private static let plainTextExtensions: Set<String> = [
-        "txt", "json", "yaml", "yml", "toml", "ini", "log", "xml", "html", "htm", "css",
+        "txt", "json", "yaml", "yml", "toml", "ini", "log", "xml", "css",
         "js", "jsx", "ts", "tsx", "swift", "py", "rb", "go", "rs", "java", "kt",
         "c", "h", "cpp", "hpp", "m", "mm", "sh", "sql",
     ]
@@ -26,10 +26,13 @@ public enum DocumentKind: Sendable, Equatable {
 
 public enum FileOpenRoute: Sendable, Equatable {
     case viewer(DocumentKind)
+    case html
     case sheet
 
     public init(fileName: String, viewerShowsDocuments: Bool) {
-        if viewerShowsDocuments, let kind = DocumentKind(fileName: fileName) {
+        if ChatDocumentKind(fileName: fileName) == .html {
+            self = .html
+        } else if viewerShowsDocuments, let kind = DocumentKind(fileName: fileName) {
             self = .viewer(kind)
         } else {
             self = .sheet

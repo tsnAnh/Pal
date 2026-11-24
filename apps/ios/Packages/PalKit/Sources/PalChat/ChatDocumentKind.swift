@@ -7,6 +7,7 @@ public enum ChatDocumentKind: String, Sendable, Equatable, CaseIterable {
     case text
     case code
     case csv
+    case html
 
     private static let extensions: [ChatDocumentKind: Set<String>] = [
         .pdf: ["pdf"],
@@ -17,6 +18,7 @@ public enum ChatDocumentKind: String, Sendable, Equatable, CaseIterable {
             "rs", "java", "kt", "c", "h", "cpp", "hpp", "m", "mm", "sh", "sql",
         ],
         .csv: ["csv", "tsv"],
+        .html: ["html", "htm"],
     ]
 
     private static let byExtension: [String: ChatDocumentKind] = Self.extensions.reduce(into: [:]) { table, entry in
@@ -35,6 +37,7 @@ public enum ChatDocumentKind: String, Sendable, Equatable, CaseIterable {
         case .text: "Text file"
         case .code: "Code file"
         case .csv: "CSV spreadsheet"
+        case .html: "HTML page"
         }
     }
 
@@ -43,6 +46,7 @@ public enum ChatDocumentKind: String, Sendable, Equatable, CaseIterable {
         case .pdf, .office, .text: "doc.text"
         case .code: "chevron.left.forwardslash.chevron.right"
         case .csv: "tablecells"
+        case .html: "globe"
         }
     }
 }

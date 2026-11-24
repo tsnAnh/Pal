@@ -83,6 +83,8 @@ struct ViewerShell<Content: View, Composer: View>: View {
         case .download:
             PalClearGlassIconButton(systemName: "arrow.down.to.line", label: action.label, identifier: action.identifier) { perform(action) }
                 .keyboardShortcut("s", modifiers: .command)
+        case .openInBrowser:
+            PalClearGlassIconButton(systemName: "arrow.up.right.square", label: action.label, identifier: action.identifier) { perform(action) }
         case .close:
             SheetGlassButton(clear: true, escapes: false, accessibilityIdentifier: action.identifier) { perform(action) }
         }
@@ -106,6 +108,7 @@ extension ViewerAction {
         switch self {
         case .edit: "Edit"
         case .download: "Download"
+        case .openInBrowser: "Open in browser"
         case .close: "Close"
         }
     }
@@ -114,6 +117,7 @@ extension ViewerAction {
         switch self {
         case .edit: "imageViewerEdit"
         case .download: "imageViewerDownload"
+        case .openInBrowser: "imageViewerOpenInBrowser"
         case .close: "imageViewerClose"
         }
     }

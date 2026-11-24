@@ -98,6 +98,8 @@ private struct MacImageViewer: View {
         case .close:
             dictation.stop()
             model.closeImageViewer()
+        case .openInBrowser:
+            break
         }
     }
 

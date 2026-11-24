@@ -5,7 +5,8 @@ Text matching only (no Swift toolchain); reuses the comment- and string-blanking
 of ``check_swift_glass.py``. There is no baseline: every rule has zero findings on main. A justified
 exception carries ``media-preview-lint: ok`` on the flagged line.
 
-Scope: every .swift file under App/Chat/Media/ plus App/Chat/ImageViewer/MacMediaViewer.swift.
+Scope: every .swift file under App/Chat/Media/ and App/Chat/HTMLViewer/ plus App/Chat/ImageViewer/MacMediaViewer.swift
+and MacHTMLViewer.swift.
 Rules: media-no-stroke, media-no-bubble.
 
 Run: python scripts/ci/check_swift_media_preview.py [apps_ios_root]
@@ -23,8 +24,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_swift_glass import SKIP_DIRS, Finding, Source
 
 OPT_OUT = "media-preview-lint: ok"
-MEDIA_DIR = ("App", "Chat", "Media")
-MEDIA_FILES = (("App", "Chat", "ImageViewer", "MacMediaViewer.swift"),)
+MEDIA_DIRS = (("App", "Chat", "Media"), ("App", "Chat", "HTMLViewer"))
+MEDIA_FILES = (
+    ("App", "Chat", "ImageViewer", "MacMediaViewer.swift"),
+    ("App", "Chat", "ImageViewer", "MacHTMLViewer.swift"),
+)
 
 
 @dataclass(frozen=True)
@@ -52,7 +56,7 @@ RULES = tuple(r.rule for r in MEDIA_RULES)
 
 
 def in_scope(rel: Path) -> bool:
-    return rel.parts[:3] == MEDIA_DIR or rel.parts in MEDIA_FILES
+    return rel.parts[:3] in MEDIA_DIRS or rel.parts in MEDIA_FILES
 
 
 def violations(rel: Path, source: str) -> list[Finding]:

@@ -61,9 +61,13 @@ struct FileCardKindTests {
         for (name, kind) in expected { #expect(FileCardKind(fileName: name) == kind, "\(name) should be \(kind)") }
     }
 
-    @Test("html keeps off the icon cards' kinds until its own unit routes it")
-    func htmlIsNotAnArchiveOrModel() {
-        #expect(FileCardKind(fileName: "page.html") == .other)
+    @Test("html and htm are document cards that thumbnail like a pdf")
+    func htmlIsADocumentCard() {
+        for name in ["page.html", "PAGE.HTM"] {
+            let kind = FileCardKind(fileName: name)
+            #expect(kind == .document(.html), "\(name)")
+            #expect(kind.hasThumbnail)
+        }
     }
 
     @Test("every kind has a spoken name and an icon, and only documents and 3d models thumbnail")
