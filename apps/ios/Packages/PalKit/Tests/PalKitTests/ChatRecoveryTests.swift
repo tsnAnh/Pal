@@ -37,8 +37,8 @@ private final class GatewayProcess: Sendable {
         script.lastSequence.withLock { $0 = 1 }
     }
 
-    func appendReply(sequence: Int) {
-        script.append([TimelineEntryWire(id: "u99", role: .assistant, text: "reply", turnID: "t9", segment: 0)])
+    func appendReply(sequence: Int, id: String = "u99", text: String = "reply") {
+        script.append([TimelineEntryWire(id: id, role: .assistant, text: text, turnID: "t-\(id)", segment: 0)])
         script.lastSequence.withLock { $0 = sequence }
     }
 
@@ -56,8 +56,8 @@ private final class GatewayProcess: Sendable {
         ]
     }
 
-    func replyFrame(seq: Int) -> JSONValue {
-        frame("message.complete", seq: seq, payload: ["text": "reply", "turn_id": "t9", "message_uid": "u99"])
+    func replyFrame(seq: Int, id: String = "u99", text: String = "reply") -> JSONValue {
+        frame("message.complete", seq: seq, payload: ["text": .string(text), "turn_id": .string("t-\(id)"), "message_uid": .string(id)])
     }
 }
 
@@ -101,6 +101,42 @@ private func isLive(_ session: ChatSession, _ expected: ChatPhase) async -> Bool
 }
 
 private func hasReply(_ snapshot: TimelineSnapshot) -> Bool { rowTexts(snapshot).contains("reply") }
+
+private final class SnapshotLog: Sendable {
+    let seen = Mutex<[TimelineSnapshot]>([])
+}
+
+private final class SnapshotCollector: Sendable {
+    private let log = SnapshotLog()
+    private let task: Task<Void, Never>
+
+    init(_ stream: AsyncStream<TimelineSnapshot>) {
+        let log = log
+        task = Task { for await snapshot in stream { log.seen.withLock { $0.append(snapshot) } } }
+    }
+
+    var latest: TimelineSnapshot? { log.seen.withLock { $0.last } }
+
+    var versions: [UInt64] { log.seen.withLock { $0.map(\.version) } }
+
+    func stop() async {
+        task.cancel()
+        await task.value
+    }
+
+    func waitFor(_ predicate: @Sendable (TimelineSnapshot) -> Bool) async -> TimelineSnapshot? {
+        let end = ContinuousClock.now + deadline
+        while ContinuousClock.now < end {
+            if let latest, predicate(latest) { return latest }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return nil
+    }
+}
+
+private func ownerEntry(_ text: String) -> OutboxEntry {
+    OutboxEntry(submissionID: UUID().uuidString, botID: "bot", text: text, attachments: [], createdAt: Date(), state: .pending, attempts: 0)
+}
 
 @Suite struct ChatRecoveryTests {
     @Test func aChangedReplayEpochReconcilesAndShowsTheNextReply() async throws {
@@ -253,5 +289,68 @@ private func hasReply(_ snapshot: TimelineSnapshot) -> Bool { rowTexts(snapshot)
         #expect(ChatSession.verdict(regressed, cursor: cursor) == .behind("gateway-regressed"))
         #expect(ChatSession.verdict(restarted, cursor: cursor) == .behind("epoch-changed"))
         #expect(ChatSession.verdict(required, cursor: cursor) == .behind("snapshot-required"))
+    }
+
+    @Test func aChatOpenedAfterAnotherWasClosedStillGetsTheOwnersEchoAndTwoLiveReplies() async throws {
+        let chat = try await openChat(watchdog: quietWatchdog)
+        let first = SnapshotCollector(chat.session.timelineSnapshots)
+        _ = try #require(await first.waitFor { !$0.rows.isEmpty })
+        await first.stop()
+        let reopened = SnapshotCollector(chat.session.timelineSnapshots)
+        _ = try await chat.session.submit(ownerEntry("hello chief"), files: [])
+        chat.process.appendReply(sequence: 2, id: "u98", text: "first answer")
+        chat.gateway.push(chat.process.replyFrame(seq: 2, id: "u98", text: "first answer"))
+        chat.process.appendReply(sequence: 3, id: "u99", text: "second answer")
+        chat.gateway.push(chat.process.replyFrame(seq: 3, id: "u99", text: "second answer"))
+        _ = await reopened.waitFor { rowTexts($0).contains("second answer") }
+        let texts = reopened.latest.map { rowTexts($0) } ?? []
+        #expect(texts.contains("hello chief"))
+        #expect(texts.contains("first answer"))
+        #expect(texts.contains("second answer"))
+        #expect(!chat.notices.contains { $0.contains("resync.requested") })
+        #expect(!chat.notices.contains { $0.contains("subscribe stream-ended") })
+        await reopened.stop()
+        await chat.finish()
+    }
+
+    @Test func everyOpenChatGetsEveryUpdateNotOnlyOneOfThem() async throws {
+        let chat = try await openChat(watchdog: quietWatchdog)
+        let left = SnapshotCollector(chat.session.timelineSnapshots)
+        let right = SnapshotCollector(chat.session.timelineSnapshots)
+        chat.process.appendReply(sequence: 2)
+        chat.gateway.push(chat.process.replyFrame(seq: 2))
+        #expect(await left.waitFor(hasReply) != nil)
+        #expect(await right.waitFor(hasReply) != nil)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(left.versions == right.versions)
+        #expect(left.versions.count > 1)
+        await left.stop()
+        await right.stop()
+        await chat.finish()
+    }
+
+    @Test func aPhaseListenerStartedAfterAnotherWasCancelledStillSeesTheNextPhase() async throws {
+        let chat = try await openChat(watchdog: quietWatchdog)
+        let first = Task { for await _ in chat.session.updates {} }
+        try await Task.sleep(for: .milliseconds(50))
+        first.cancel()
+        await first.value
+        let second = Task { () -> Bool in
+            for await update in chat.session.updates {
+                if case .phase(.live(let sequence, _)) = update, sequence == 2 { return true }
+            }
+            return false
+        }
+        chat.process.appendReply(sequence: 2)
+        chat.gateway.push(chat.process.replyFrame(seq: 2))
+        let seen = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await second.value }
+            group.addTask { try? await Task.sleep(for: deadline); second.cancel(); return false }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        #expect(seen)
+        await chat.finish()
     }
 }

@@ -114,6 +114,7 @@ final class ChatModel {
     private(set) var rowIDs: [String] = []
     private(set) var windowRange: Range<Int> = 0..<0
     @ObservationIgnored var window = ChatRowWindow()
+    @ObservationIgnored let diagnostics = Diagnostics.osLog()
     private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
     private(set) var workingStatus: String?
@@ -648,10 +649,14 @@ final class ChatModel {
             guard let ready = opening.admit(next) else { return }
             apply(ready)
         })
+        diagnostics.notice("chat", "model \(openedBot.name) timeline.ended cancelled=\(Task.isCancelled)")
     }
 
     func apply(_ next: TimelineSnapshot) {
-        guard acceptsSnapshot(next) else { return }
+        guard acceptsSnapshot(next) else {
+            diagnostics.notice("chat", "model \(openedBot.name) snapshot.dropped version=\(next.version) rows=\(next.rows.count)")
+            return
+        }
         let previous = takePreviousSnapshot()
         snapshot = next
         assignIfChanged(\.olderHistory, OlderHistory(next.older))
