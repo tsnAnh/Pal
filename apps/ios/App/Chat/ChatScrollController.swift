@@ -25,10 +25,7 @@ final class ChatScrollController {
     @ObservationIgnored private var visibleIDs: [String] = []
     @ObservationIgnored private var frames: [String: CGRect] = [:]
     @ObservationIgnored private var pendingRestore: ChatRowAnchor?
-    @ObservationIgnored private var heights = ChatRowHeightCache()
-    @ObservationIgnored private var recordedIDs: Set<String> = []
-    @ObservationIgnored private var unmeasurable: Set<String> = []
-    @ObservationIgnored private var lastRows: [String: ChatRow] = [:]
+    @ObservationIgnored private let rowHeights = ChatRowHeights()
     @ObservationIgnored private var revealTask: Task<Void, Never>?
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
@@ -57,7 +54,7 @@ final class ChatScrollController {
         lastGeometry = snapshot
         if wantsOlder != snapshot.wantsOlder { wantsOlder = snapshot.wantsOlder }
         if abs((previousGeometry?.containerWidth ?? 0) - snapshot.containerWidth) > Self.restoreTolerance {
-            unmeasurable.removeAll()
+            rowHeights.widthChanged()
             measureTick &+= 1
         }
         let before = machine.state
@@ -102,10 +99,7 @@ final class ChatScrollController {
     func rowsChanged(_ ids: [String]) {
         let live = Set(ids)
         frames = frames.filter { live.contains($0.key) }
-        lastRows = lastRows.filter { live.contains($0.key) }
-        for id in recordedIDs.subtracting(live) { heights.invalidate(id) }
-        recordedIDs.formIntersection(live)
-        unmeasurable.formIntersection(live)
+        rowHeights.rowsChanged(live)
         visibleIDs.removeAll { !live.contains($0) }
         if let pending = pendingRestore, !live.contains(pending.rowID) { pendingRestore = nil }
         if isRecording { contentLedger.noteRows() }
@@ -125,10 +119,7 @@ final class ChatScrollController {
     func rowLaidOut(_ id: String, frame: CGRect) {
         ChatOpenMetrics.rowLaidOut(id)
         frames[id] = frame
-        if let width = lastGeometry?.containerWidth {
-            heights.record(id, height: Double(frame.height), width: width)
-            recordedIDs.insert(id)
-        }
+        if let width = lastGeometry?.containerWidth { rowHeights.laidOut(id, height: Double(frame.height), width: width) }
         guard let pending = pendingRestore, pending.rowID == id else { return }
         performNextTurn(.restore(pending), frame: frame)
     }
@@ -141,52 +132,22 @@ final class ChatScrollController {
     func measureBatch(of rows: [ChatRow]) -> [ChatRow] {
         _ = measureTick
         guard let width = lastGeometry?.containerWidth, width > 0 else { return [] }
-        var candidates: [String: ChatRow] = [:]
-        var order: [String] = []
-        for row in rows where !row.isStreaming {
-            if let known = lastRows[row.id], known != row { forgetHeight(row.id) }
-            candidates[row.id] = row
-            order.append(row.id)
-        }
-        let picked = heights.unmeasured(in: order, width: width, skipping: unmeasurable, limit: Self.measureBatchSize)
-        return picked.compactMap { candidates[$0] }
+        return rowHeights.batch(of: rows, width: width)
     }
 
     func measured(_ row: ChatRow, height: CGFloat) {
         guard let width = lastGeometry?.containerWidth, width > 0 else { return }
-        if height > 0 {
-            heights.record(row.id, height: Double(height), width: width)
-            recordedIDs.insert(row.id)
-            lastRows[row.id] = row
-        } else {
-            unmeasurable.insert(row.id)
-        }
+        rowHeights.measured(row, height: Double(height), width: width)
         measureTick &+= 1
     }
 
     func measureGaveUp(on ids: [String]) {
-        guard let width = lastGeometry?.containerWidth else { return }
-        let missing = ids.filter { heights.height(for: $0, width: width) == nil }
-        guard !missing.isEmpty else { return }
-        unmeasurable.formUnion(missing)
+        guard let width = lastGeometry?.containerWidth, rowHeights.giveUp(on: ids, width: width) else { return }
         measureTick &+= 1
     }
 
     func minHeight(for row: ChatRow) -> CGFloat? {
-        if lastRows[row.id] != row {
-            forgetHeight(row.id)
-            lastRows[row.id] = row
-        }
-        guard !row.isStreaming, let width = lastGeometry?.containerWidth,
-              let height = heights.height(for: row.id, width: width) else { return nil }
-        return CGFloat(height)
-    }
-
-    private func forgetHeight(_ id: String) {
-        heights.invalidate(id)
-        recordedIDs.remove(id)
-        unmeasurable.remove(id)
-        lastRows[id] = nil
+        rowHeights.minHeight(for: row, width: lastGeometry?.containerWidth)
     }
 
     func jumpToBottom(animated: Bool) {

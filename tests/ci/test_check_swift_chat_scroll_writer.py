@@ -17,7 +17,7 @@ import check_swift_chat_scroll_writer as writer
 LIST = "App/Chat/ChatTranscriptList.swift"
 CONTROLLER = "App/Chat/ChatScrollController.swift"
 PLATFORM = "App/Platform/ChatPlatform.swift"
-HEIGHT_FIX = "give the row its height through ChatScrollController (measured, minHeight(for:)) and ChatRowHeightFloor only"
+HEIGHT_FIX = "give the row its height through ChatScrollController and ChatRowHeights (measured, minHeight(for:)) and ChatRowHeightFloor only"
 FIX = "route it through ChatScrollMachine: emit a command and let ChatScrollController.perform apply it"
 
 COMPLIANT_LIST = (
@@ -269,5 +269,7 @@ def test_a_second_height_cache_outside_the_controller_fails(tmp_path):
     rival = "struct ChatRowMeasureLayer: View {\n    @State private var heights = ChatRowHeightCache()\n}\n"
     found = _scan(_tree(tmp_path, App__Chat__ChatRowMeasureLayer_swift=rival))
     assert len(found) == 1 and "second row height owner" in found[0] and found[0].endswith(HEIGHT_FIX)
-    owned = COMPLIANT_CONTROLLER.replace("    func perform(", "    private var heights = ChatRowHeightCache()\n    func perform(")
-    assert _scan(_tree(tmp_path / "ok", App__Chat__ChatScrollController_swift=owned)) == []
+    controller = COMPLIANT_CONTROLLER.replace("    func perform(", "    private var heights = ChatRowHeightCache()\n    func perform(")
+    assert len(_scan(_tree(tmp_path / "ctl", App__Chat__ChatScrollController_swift=controller))) == 1
+    owner = "final class ChatRowHeights {\n    private var cache = ChatRowHeightCache()\n}\n"
+    assert _scan(_tree(tmp_path / "ok", App__Chat__ChatRowHeights_swift=owner)) == []

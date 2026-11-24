@@ -86,7 +86,7 @@ private final class StableHeightsStage {
     private var version: UInt64 = 10
 
     init(streaming: Bool) async throws {
-        let environment = try MacChatBenchSession.environment()
+        let environment = try MacChatBenchSession.environment(streamInterval: StreamCommitGate.defaultInterval)
         world = MacChatBenchFixture.world(streamingTail: streaming, messageCount: 156, images: true)
         model = environment.model
         host = MacChatBenchHost(root: environment.surface(draft: draft, scroll: scroll), size: MacChatBench.pane)

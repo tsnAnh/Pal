@@ -34,8 +34,8 @@ final class MacChatBenchSession {
     var world: RebuildWorld
     private var version: UInt64 = 1_000
 
-    static func environment() throws -> MacChatBenchEnvironment {
-        MacChatBenchEnvironment(model: try rebuildChatModel())
+    static func environment(streamInterval: Duration = .zero) throws -> MacChatBenchEnvironment {
+        MacChatBenchEnvironment(model: try rebuildChatModel(streamInterval: streamInterval))
     }
 
     init(

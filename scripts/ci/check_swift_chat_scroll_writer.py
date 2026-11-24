@@ -17,8 +17,8 @@ else in ``App/Chat/**/*.swift``, ``App/ChatView*.swift`` and ``App/Platform/Chat
 * the transcript ``ForEach`` in ``ChatTranscriptList.swift`` iterates ``model.windowRows``, never ``model.rows``
   (the full transcript; a long chat would lay out thousands of rows);
 * reading ``contentOffset`` is allowed only in ``ChatScrollController.swift`` and ``ChatScrollTrace.swift``;
-* the chat list has ONE row height owner: ``ChatRowHeightCache`` is named only in ``ChatScrollController.swift`` (rows
-  are measured and laid out through it), and the transcript list sets a row height frame only inside
+* the chat list has ONE row height owner: ``ChatRowHeightCache`` is named only in ``ChatRowHeights.swift`` (the
+  object ``ChatScrollController`` owns; rows are measured and laid out through it), and the transcript list sets a row height frame only inside
   ``ChatRowHeightFloor`` (a second height source re-introduces rows whose height is guessed and later replaced).
 
 ``scripts/ci/chat_scroll_single_writer_allowlist.txt`` waives a needle in one file for a list that is not the
@@ -41,7 +41,8 @@ OFFSET_READERS = frozenset({CONTROLLER, "App/Chat/ChatScrollTrace.swift"})
 PLATFORM = "App/Platform/ChatPlatform.swift"
 ALLOWLIST = Path(__file__).with_name("chat_scroll_single_writer_allowlist.txt")
 FIX = "route it through ChatScrollMachine: emit a command and let ChatScrollController.perform apply it"
-HEIGHT_FIX = "give the row its height through ChatScrollController (measured, minHeight(for:)) and ChatRowHeightFloor only"
+HEIGHT_FIX = "give the row its height through ChatScrollController and ChatRowHeights (measured, minHeight(for:)) and ChatRowHeightFloor only"
+HEIGHT_OWNER = "App/Chat/ChatRowHeights.swift"
 HEIGHT_CACHE = re.compile(r"\bChatRowHeightCache\b")
 ROW_HEIGHT_FRAME = re.compile(r"\.frame\(\s*(?:minHeight|height)\s*:")
 HEIGHT_FLOOR = re.compile(r"\bstruct ChatRowHeightFloor\b")
@@ -159,8 +160,8 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
             if rel == LIST_VIEW and FULL_TRANSCRIPT_LOOP.search(code):
                 report(rel, number, raw, "the transcript ForEach over model.rows (the whole transcript); iterate model.windowRows")
                 flagged = True
-            if rel != CONTROLLER and HEIGHT_CACHE.search(code):
-                report(rel, number, raw, "a second row height owner (ChatRowHeightCache outside ChatScrollController)", HEIGHT_FIX)
+            if rel != HEIGHT_OWNER and HEIGHT_CACHE.search(code):
+                report(rel, number, raw, "a second row height owner (ChatRowHeightCache outside ChatRowHeights)", HEIGHT_FIX)
                 flagged = True
             if rel == LIST_VIEW and number not in floor and ROW_HEIGHT_FRAME.search(code):
                 report(rel, number, raw, "a row height frame outside ChatRowHeightFloor", HEIGHT_FIX)
