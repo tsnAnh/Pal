@@ -64,7 +64,8 @@ struct ClarifySettledTests {
         var form = ClarifyForm(questions: [Self.questions[0]])
         form.pick(1)
         form.setTyped("Watch")
-        #expect(try #require(ClarifySettled(form: form)).entries[0].chosen == ["Watch"])
+        let settled = try #require(ClarifySettled(form: form))
+        #expect(settled.entries[0].chosen == ["Watch"])
     }
 
     @Test func aMultiSelectKeepsEveryPickAndTheTypedRow() throws {
@@ -72,7 +73,8 @@ struct ClarifySettledTests {
         form.pick(0)
         form.pick(2)
         form.setTyped("Other")
-        #expect(try #require(ClarifySettled(form: form)).entries[0].chosen == ["Setup", "Kanban", "Other"])
+        let settled = try #require(ClarifySettled(form: form))
+        #expect(settled.entries[0].chosen == ["Setup", "Kanban", "Other"])
     }
 
     @Test func theSettledFormMatchesWhatTheSameFormSendsToTheBot() throws {
