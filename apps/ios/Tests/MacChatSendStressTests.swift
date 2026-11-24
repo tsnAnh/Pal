@@ -172,7 +172,8 @@ struct MacChatSendStressTests {
         #expect(buttonAtBottom.isEmpty, Comment(rawValue: report))
         #expect(buttonWhilePinned.isEmpty, Comment(rawValue: report))
         let displaced = stage.roundEnds.filter { $0.distance > ChatScrollMachine.atBottomTolerance || $0.button }
-        #expect(displaced.isEmpty, Comment(rawValue: "a send round ended away from the newest row: \(displaced.map { "frame \($0.index) distance \($0.distance) button \($0.button)" })"))
+        let displacedReport = displaced.map { "frame \($0.index) distance \($0.distance) button \($0.button)" }
+        #expect(displaced.isEmpty, Comment(rawValue: "a send round ended away from the newest row: \(displacedReport)"))
     }
 }
 #endif
