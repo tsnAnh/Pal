@@ -16,6 +16,21 @@ public enum OwnerOption: Sendable, Hashable {
         }
     }
 
+    var labelKey: String? {
+        switch self {
+        case .send: "send"
+        case .edit: "edit"
+        case .cancel: "cancel"
+        case .proceed: nil
+        }
+    }
+
+    public func label(using labels: [String: String]?) -> String {
+        guard let key = labelKey, let given = labels?[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !given.isEmpty
+        else { return label }
+        return given
+    }
+
     public var choice: String? {
         switch self {
         case .send, .proceed: "once"
@@ -51,7 +66,7 @@ extension PendingPrompt {
     }
 
     public func ownerChoice(forLabel label: String) -> String? {
-        ownerOptions.first { $0.label == label }?.choice
+        ownerOptions.first { $0.label(using: labels) == label }?.choice
     }
 
     func ownerForm() -> PendingPrompt? {
@@ -59,7 +74,7 @@ extension PendingPrompt {
         let options = ownerOptions
         guard !options.isEmpty else { return nil }
         var form = self
-        form.questions = [ClarifyQuestion(qid: Self.soleQuestionID, question: question, choices: options.map(\.label))]
+        form.questions = [ClarifyQuestion(qid: Self.soleQuestionID, question: question, choices: options.map { $0.label(using: labels) })]
         return form
     }
 }

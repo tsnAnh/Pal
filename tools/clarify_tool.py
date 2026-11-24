@@ -67,6 +67,29 @@ def _default_of(item: dict, index: int) -> tuple:
     return raw.strip() or None, None
 
 
+def _send_of(item: dict, index: int, choices: Optional[list], multi: bool) -> tuple:
+    """``send`` is the exact outbound call the bot will make and the option that sends it. Valid only on a
+    single-select question whose call is a message the owner can read in full (``bot_mode_drafts.send_preview``)."""
+    raw = item.get("send")
+    if raw is None:
+        return None, None
+    where = f"questions[{index}].send"
+    if not isinstance(raw, dict):
+        return None, f"{where} must be an object {{tool, arguments, choice}}."
+    if not isinstance(raw.get("arguments"), dict):
+        return None, f"{where}.arguments must be the exact arguments object of the send call."
+    if multi or not choices:
+        return None, f"{where} needs a single-select question with choices."
+    choice = strip_recommended(raw.get("choice") or "")
+    if choice not in choices:
+        return None, f"{where}.choice must be one of the question's choices, exactly."
+    from tools.bot_mode_drafts import send_preview
+    if send_preview(raw) is None:
+        return None, (f"{where} must be an outbound message tool with the exact arguments you will call it with, "
+                      "readable in full and with no credential in it.")
+    return {"tool": raw["tool"], "arguments": raw["arguments"], "choice": choice}, None
+
+
 def _with_default(question: str, default: Optional[str]) -> str:
     return f"{question} ({SUGGESTED_LABEL} {default})" if default else question
 
@@ -105,13 +128,16 @@ def _normalize_questions(questions) -> tuple:
         default, error = _default_of(item, index)
         if error:
             return None, error
+        send, error = _send_of(item, index, choices, bool(item.get("multi_select")))
+        if error:
+            return None, error
         normalized.append({
             "qid": f"q{index}", "question": text,
             "choices": display_choices(choices, recommend),
             "choices_offered": list(choices) if choices else None,
             "default": None if choices else default,
             "multi_select": bool(item.get("multi_select")) and bool(choices),
-            "recommend": recommend})
+            "recommend": recommend, "send": send})
     return normalized, None
 
 
@@ -123,11 +149,11 @@ def _response_status(qid: str, answers: dict, multi: bool) -> tuple:
     return ("skipped" if qid in answers else "unanswered"), None
 
 
-def _result(normalized: list[dict], reply: dict, shown: list[dict] | None = None) -> str:
-    """Result JSON from a callback reply ``{"answers": {qid: raw | None}, "outcome", "notice"?}``:
-    every response carries ``status`` and ``user_response`` (null unless answered); ``outcome``
-    says how the wait ended and ``notice`` (surface-supplied) says why. A picked display-copy
-    choice (from ``shown``) maps back to the raw choice by position."""
+def _responses(normalized: list[dict], reply: dict, shown: list[dict] | None = None) -> list[dict]:
+    """One response per question from a callback reply ``{"answers": {qid: raw | None}, "outcome", "notice"?}``:
+    every response carries ``status`` and ``user_response`` (null unless answered). A picked display-copy
+    choice (from ``shown``) maps back to the raw choice by position. A question that carries ``send`` also
+    says whether the owner's submitted pick was its send option (``send_approved``)."""
     answers = reply.get("answers") or {}
     responses = []
     for entry, seen in zip(normalized, shown or normalized):
@@ -141,11 +167,26 @@ def _result(normalized: list[dict], reply: dict, shown: list[dict] | None = None
             response["default"] = entry["default"]
         elif not entry["choices_offered"]:
             response["notice"] = BARE_QUESTION_NOTICE
+        if entry.get("send"):
+            response["send_approved"] = (reply.get("outcome") == "submitted" and status == "answered"
+                                         and value == entry["send"]["choice"])
         responses.append(response)
+    return responses
+
+
+def _result(responses: list[dict], reply: dict) -> str:
+    """Result JSON: the responses, ``outcome`` (how the wait ended) and the surface's ``notice`` (why)."""
     result: dict[str, object] = {"responses": responses, "outcome": reply["outcome"]}
     if reply.get("notice"):
         result["notice"] = str(reply["notice"])
     return json.dumps(result, ensure_ascii=False)
+
+
+def _issue_send_grants(normalized: list[dict], responses: list[dict]) -> None:
+    from tools import outbound_send_grant
+    for entry, response in zip(normalized, responses):
+        if response.get("send_approved"):
+            outbound_send_grant.issue(entry["send"]["tool"], entry["send"]["arguments"])
 
 
 def clarify_tool(questions, callback: Optional[Callable] = None) -> str:
@@ -178,7 +219,8 @@ def clarify_tool(questions, callback: Optional[Callable] = None) -> str:
     for q in normalized:
         offered = prose(q["choices_offered"])
         default = prose([q["default"]])[0] if q["default"] else None
-        shown.append({**q, "question": _with_default(prose([q["question"]])[0], default), "default": default,
+        shown.append({**{k: v for k, v in q.items() if k != "send"},
+                      "question": _with_default(prose([q["question"]])[0], default), "default": default,
                       "choices_offered": offered,
                       "choices": display_choices(offered, q["recommend"])})
     # Observers see the questions only; the answers stay in the tool result.
@@ -186,7 +228,9 @@ def clarify_tool(questions, callback: Optional[Callable] = None) -> str:
         try:
             reply = callback(shown)
             human.outcome = str(reply.get("outcome") or "")
-            return _result(normalized, reply, shown)
+            responses = _responses(normalized, reply, shown)
+            _issue_send_grants(normalized, responses)
+            return _result(responses, reply)
         except Exception as exc:
             human.outcome = "error"
             return tool_error(f"Failed to get user input: {exc}")
@@ -216,6 +260,9 @@ CLARIFY_SCHEMA = {
         "'Other' free-text row), multi-select (multi_select=true), or "
         "free text (omit choices and set `default` to your suggested default "
         "answer; a question with neither comes back with a notice). "
+        "Before an outbound send, pass the exact call you will make as `send` ({tool, arguments, choice}, "
+        "choice = the option that sends): only the owner submitting that option approves that call, once, with no "
+        "second card; any other pick approves nothing, so do not send and do not ask again. "
         "Options go ONLY in `choices`, never "
         "enumerated inside the question text (choices render as pickable "
         "rows; options written into the question are dead prose the user "
@@ -252,6 +299,15 @@ CLARIFY_SCHEMA = {
                         },
                         "default": {"type": "string"},
                         "multi_select": {"type": "boolean"},
+                        "send": {
+                            "type": "object",
+                            "properties": {
+                                "tool": {"type": "string"},
+                                "arguments": {"type": "object"},
+                                "choice": {"type": "string"},
+                            },
+                            "required": ["tool", "arguments", "choice"],
+                        },
                     },
                     "required": ["question"],
                 },
