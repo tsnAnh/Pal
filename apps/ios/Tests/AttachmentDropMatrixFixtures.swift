@@ -62,7 +62,7 @@ final class MatrixFixtures {
     func encoded(_ type: UTType) -> Data {
         guard let cgImage = bitmap.cgImage else { return png }
         let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else { return png }
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, type.identifier as CFString, 1, nil) else { return png }
         CGImageDestinationAddImage(destination, cgImage, nil)
         return CGImageDestinationFinalize(destination) ? data as Data : png
     }

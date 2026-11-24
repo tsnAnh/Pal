@@ -70,7 +70,7 @@ struct PasteboardItemPayload: DropPayload {
 
     func fileURL() async -> URL? {
         guard let text = item.string(forType: .fileURL), let url = URL(string: text), url.isFileURL else { return nil }
-        return url.filePathURL ?? url
+        return (url as NSURL).filePathURL ?? url
     }
 
     func data(identifier: String) async -> Data? {
