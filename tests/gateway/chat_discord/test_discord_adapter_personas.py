@@ -392,7 +392,7 @@ def test_pal_is_not_registered_when_no_bot_is_installed(world, tree):
 
 
 @pytest.mark.asyncio
-async def test_pal_autocomplete_lists_only_installed_bots_for_the_owner(world, tree):
+async def test_pal_autocomplete_lists_the_default_bot_and_the_installed_bots_for_the_owner(world, tree):
     world.adapter._register_pal_command(tree)
     autocomplete = pal_command(tree).callback.autocompletes["bot"]
 
@@ -400,7 +400,7 @@ async def test_pal_autocomplete_lists_only_installed_bots_for_the_owner(world, t
     filtered = await autocomplete(dm_interaction(), "zzz")
     refused = await autocomplete(dm_interaction(user_id=STRANGER_ID), "")
 
-    assert [(choice.name, choice.value) for choice in choices] == [("Pal Helper", BOT)]
+    assert [(choice.name, choice.value) for choice in choices] == [("Pal", "default"), ("Pal Helper", BOT)]
     assert filtered == [] and refused == []
 
 

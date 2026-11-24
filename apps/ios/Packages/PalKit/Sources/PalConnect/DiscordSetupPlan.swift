@@ -103,7 +103,11 @@ public struct DiscordSetupPlan: Sendable, Equatable {
         FlowStep(
             id: startID, title: String(localized: "Create the Pal app"),
             body: String(
-                localized: "\(name) gets its own channel in your server and speaks there with its own name and picture. One time on this Mac: you make the Pal app in Discord and paste its token. Every other bot after that takes one tap."
+                localized: """
+                \(name) gets its own channel in your server and speaks there with its own name and picture. \
+                One time on this Mac: you make the Pal app in Discord and paste its token. \
+                Every other bot after that takes one tap.
+                """
             ),
             kind: .instruction(openPage: nil), primaryTitle: String(localized: "Set up Pal in Discord"),
             heading: String(localized: "Add \(name) to Discord"), allowsBack: false
@@ -140,7 +144,10 @@ public struct DiscordSetupPlan: Sendable, Equatable {
         FlowStep(
             id: inviteID, title: String(localized: "Invite Pal"),
             body: String(
-                localized: "Open the link, choose the server and press Authorize. Pal asks to: manage channels and webhooks, send and read messages, attach files."
+                localized: """
+                Open the link, choose the server and press Authorize. \
+                Pal asks to: manage channels and webhooks, send and read messages, attach files.
+                """
             ),
             kind: .openAndCheck(SetupOpenAndCheck(
                 link: SetupLink(label: String(localized: "Open the invite link"), url: link ?? developerPortal),
@@ -153,6 +160,7 @@ public struct DiscordSetupPlan: Sendable, Equatable {
 
     private static func creating(_ name: String, _ inputs: Inputs) -> FlowStep {
         let working = String(localized: "Creating the channel and webhook for \(name)…")
+        let create = String(localized: "Create \(name)'s channel")
         let server = inputs.guilds.first { $0.id == inputs.pickedGuildID }?.name
             ?? (inputs.guilds.count == 1 ? inputs.guilds[0].name : nil)
         let body = server.map { String(localized: "Pal makes a channel and a webhook for \(name) in \($0).") }
@@ -160,7 +168,7 @@ public struct DiscordSetupPlan: Sendable, Equatable {
         return FlowStep(
             id: creatingID, title: String(localized: "Create this bot's channel"), body: body,
             kind: inputs.creatingStartsItself ? .automatic : .action(waitingTitle: working, waitingBody: ""),
-            primaryTitle: String(localized: "Create \(name)'s channel"), heading: inputs.creatingStartsItself ? working : String(localized: "Create \(name)'s channel")
+            primaryTitle: create, heading: inputs.creatingStartsItself ? working : create
         )
     }
 

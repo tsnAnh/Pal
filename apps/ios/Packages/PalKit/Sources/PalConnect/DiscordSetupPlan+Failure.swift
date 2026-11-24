@@ -41,7 +41,10 @@ extension DiscordSetupPlan {
         case "missing_intent":
             status.title = String(localized: "Message Content is switched off")
             status.reason = String(
-                localized: "Open the Pal app in the developer portal, go to Bot, switch on Message Content under Privileged Gateway Intents and save, then retry."
+                localized: """
+                Open the Pal app in the developer portal, go to Bot, switch on Message Content \
+                under Privileged Gateway Intents and save, then retry.
+                """
             )
             status.link = SetupLink(label: String(localized: "Open the developer portal"), url: portalURL)
         case "rate_limited":
@@ -49,7 +52,8 @@ extension DiscordSetupPlan {
             status.reason = error.retryAfterSeconds.map { String(localized: "Discord is limiting requests. Retry in \($0) s.") }
                 ?? String(localized: "Discord is limiting requests. Retry in a moment.")
         default:
-            status.title = error.code == .providerUnreachable ? String(localized: "Pal could not reach Discord") : String(localized: "Discord stopped the setup")
+            let unreachable = error.code == .providerUnreachable
+            status.title = unreachable ? String(localized: "Pal could not reach Discord") : String(localized: "Discord stopped the setup")
             status.reason = Self.describe(reason: reason, code: error.code, server: name)
         }
         return status
@@ -63,7 +67,7 @@ extension DiscordSetupPlan {
         case "no_record": String(localized: "Pal lost the record of this setup. Retry to create the channel again.")
         case "network": String(localized: "Pal could not reach Discord. Check your connection, then retry.")
         case let value where value.hasPrefix("http_"):
-            String(localized: "Discord answered with an error (\(value.dropFirst(5))). Retry in a moment.")
+            String(localized: "Discord answered with an error (\(String(value.dropFirst(5)))). Retry in a moment.")
         case let value where !value.isEmpty: String(localized: "Discord reported: \(value.replacingOccurrences(of: "_", with: " ")).")
         default: String(localized: "Discord reported \(code.rawValue.replacingOccurrences(of: "_", with: " ")).")
         }

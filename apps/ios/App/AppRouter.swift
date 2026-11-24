@@ -12,6 +12,7 @@ enum AppRoute: Hashable {
     case library(botName: String)
     case routines(botName: String)
     case slack(botName: String)
+    case discord(botName: String)
     case telegram(botName: String)
     case messagingSettings(botName: String)
     case botModel(botName: String)
