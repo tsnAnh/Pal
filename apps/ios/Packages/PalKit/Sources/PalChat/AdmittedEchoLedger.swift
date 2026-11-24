@@ -42,6 +42,7 @@ public struct AdmittedEchoLedger: Sendable, Equatable {
     }
 
     private mutating func echo(of entry: OutboxEntry, text: String, items: [TranscriptItem], recent: Set<String>) -> Echo {
+        if let persisted = items.first(where: { $0.submissionID == entry.submissionID }) { return .confirmed(persisted.id) }
         let own = Self.rowID(of: entry)
         if let item = items.first(where: { $0.id == own }) {
             if case .user(_, let delivery) = item.content, delivery != .sending { return .confirmed(own) }
@@ -49,12 +50,17 @@ public struct AdmittedEchoLedger: Sendable, Equatable {
         }
         if let held = claims.first(where: { $0.value.contains(entry.submissionID) })?.key { return .confirmed(held) }
         guard !text.isEmpty else { return .missing }
+        let carriesImage = !entry.attachments.isEmpty || entry.files.contains { $0.mime.hasPrefix("image/") }
         for item in items {
-            guard let itemText = Self.personText(of: item), !item.id.hasPrefix("submission:"),
+            guard let itemText = Self.personText(of: item), item.submissionID == nil, !item.id.hasPrefix(Transcript.echoPrefix),
                   Self.isWithinBounds(item, of: entry, recent: recent)
             else { continue }
-            let combined = item.id.hasPrefix(Transcript.absorbedPrefix) && itemText != text && itemText.contains(text)
-            let exact = itemText == text && claims[item.id] == nil
+            let body = MessageImages.extract(from: itemText, role: .user)
+            guard body.images.isEmpty != carriesImage else { continue }
+            let typed = carriesImage ? entry.text : text
+            let shown = carriesImage ? body.text : itemText
+            let combined = item.id.hasPrefix(Transcript.absorbedPrefix) && shown != typed && !typed.isEmpty && shown.contains(typed)
+            let exact = Transcript.sameBody(shown, typed) && claims[item.id] == nil
             guard exact || combined else { continue }
             claims[item.id, default: []].insert(entry.submissionID)
             return .confirmed(item.id)

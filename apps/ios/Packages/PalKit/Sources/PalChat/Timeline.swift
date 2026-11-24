@@ -67,6 +67,7 @@ enum TimelineRef: Sendable, Hashable {
     case segment(LiveSegment)
     case tool(String)
     case connection(String)
+    case submission(String)
 }
 
 enum NewestMerge: Sendable, Equatable {
@@ -443,6 +444,7 @@ struct Timeline: Sendable {
     private static func sameText(_ live: TranscriptItem, _ stored: TranscriptItem) -> Bool {
         switch (live.content, stored.content) {
         case (.user(let a, .sent), .user(let b, _)):
+            guard stored.submissionID == nil else { return false }
             let body = MessageImages.extract(from: b, role: .user)
             guard live.carriesImage == !body.images.isEmpty else { return false }
             return Transcript.sameBody(a, body.text) || (live.carriesImage && body.text.isEmpty)
@@ -459,6 +461,7 @@ struct Timeline: Sendable {
     private static func liveRefs(_ item: TranscriptItem) -> [TimelineRef] {
         var refs: [TimelineRef] = []
         if let uid = item.uid { refs.append(.uid(uid)) }
+        if let submission = Transcript.submissionID(ofEcho: item.id) { refs.append(.submission(submission)) }
         if let segment = item.liveSegment { refs.append(.segment(segment)) }
         switch item.content {
         case .tool(let call): refs.append(.tool(call.toolID))
@@ -490,15 +493,19 @@ struct Timeline: Sendable {
         let uid = messageUID(of: wire.id)
         var mainRefs: [TimelineRef] = [.entry(wire.id)]
         if let uid { mainRefs.append(.uid(uid)) }
+        let submission = wire.role == .user ? wire.submissionID : nil
+        if let submission { mainRefs.append(.submission(submission)) }
         if let turnID = wire.turnID, let segment = wire.segment { mainRefs.append(.segment(LiveSegment(turnID: turnID, segment: segment))) }
         var parts: [(TranscriptItem, [TimelineRef])] = []
         switch wire.role {
         case .user, .notice:
             var inbound = InboundKind.classify(text: wire.text, of: wire)
             if wire.role == .notice, inbound == .person { inbound = .internalNotice }
-            parts.append((TranscriptItem(
+            var item = TranscriptItem(
                 id: wire.id, content: .user(text: wire.text, delivery: .sent), timestamp: date, inbound: inbound, uid: uid
-            ), mainRefs))
+            )
+            item.submissionID = submission
+            parts.append((item, mainRefs))
         case .assistant:
             if !wire.text.isEmpty {
                 parts.append((TranscriptItem(
