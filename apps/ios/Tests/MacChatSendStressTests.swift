@@ -11,30 +11,42 @@ struct SendStressFrame {
     let phase: String
     let offset: Double
     let distance: Double
+    let content: Double
+    let pastTheEnd: Double
     let state: String
     let button: Bool
     let writers: [String]
     let offsetDelta: Double
     let distanceDelta: Double
+    let contentDelta: Double
 
     var isPinned: Bool { state == "pinnedToBottom" }
 
     var csv: String {
         let fields = [
-            String(index), phase, String(format: "%.2f", offset), String(format: "%.2f", distance),
+            String(index), phase, String(format: "%.2f", offset), String(format: "%.2f", distance), String(format: "%.2f", content),
             String(format: "%+.2f", offsetDelta), String(format: "%+.2f", distanceDelta), state, button ? "1" : "0",
             writers.joined(separator: "|"),
         ]
         return fields.joined(separator: ",")
     }
 
-    static let header = "frame,phase,offset_y,distance,offset_delta,distance_delta,state,button,writers"
+    static let header = "frame,phase,offset_y,distance,content_h,offset_delta,distance_delta,state,button,writers"
+}
+
+struct SendStressSample {
+    let offset: Double
+    let distance: Double
+    let content: Double
+    let pastTheEnd: Double
 }
 
 @MainActor
 private final class SendStressStage {
     static let rounds = 6
     static let streamFrames = 40
+    static let swingLimit = 20.0
+    static let sendGrowthLimit = 400.0
 
     let model: ChatModel
     let host: MacChatBenchHost
@@ -50,7 +62,7 @@ private final class SendStressStage {
     private(set) var roundEnds: [SendStressFrame] = []
     private var samples: [ChatScrollSample] = []
     private var version: UInt64 = 10
-    private var previous: (offset: Double, distance: Double)?
+    private var previous: SendStressSample?
 
     init() async throws {
         let environment = try MacChatBenchSession.environment()
@@ -70,12 +82,12 @@ private final class SendStressStage {
         model.apply(world.snapshot(version: version))
     }
 
-    private func measure() -> (offset: Double, distance: Double)? {
+    private func measure() -> SendStressSample? {
         guard let scrollView = host.transcriptScrollView, let document = scrollView.documentView else { return nil }
         let clip = scrollView.contentView
         let offset = Double(clip.bounds.origin.y)
         let newest = Double(document.frame.height - clip.bounds.height + scrollView.contentInsets.bottom)
-        return (offset, max(0, newest - offset))
+        return SendStressSample(offset: offset, distance: max(0, newest - offset), content: Double(document.frame.height), pastTheEnd: max(0, offset - newest))
     }
 
     func step(_ count: Int = 1) async throws {
@@ -86,9 +98,11 @@ private final class SendStressStage {
             samples.removeAll(keepingCapacity: true)
             frames.append(SendStressFrame(
                 index: frames.count, phase: phase, offset: now.offset, distance: now.distance,
+                content: now.content, pastTheEnd: now.pastTheEnd,
                 state: scroll.machine.state.name, button: scroll.showsJumpButton, writers: writers,
                 offsetDelta: previous.map { now.offset - $0.offset } ?? 0,
-                distanceDelta: previous.map { now.distance - $0.distance } ?? 0
+                distanceDelta: previous.map { now.distance - $0.distance } ?? 0,
+                contentDelta: previous.map { now.content - $0.content } ?? 0
             ))
             previous = now
         }
@@ -132,6 +146,16 @@ private final class SendStressStage {
         if let end = frames.last { roundEnds.append(end) }
     }
 
+    func expectNoBounce() {
+        let swings = frames.filter { $0.phase != "open" && abs($0.offsetDelta) > Self.swingLimit }
+        let growth = frames.filter { $0.phase == "send" && $0.contentDelta > Self.sendGrowthLimit }
+        let past = frames.filter { $0.pastTheEnd > ChatScrollMachine.atBottomTolerance }
+        let report = "swings=\(swings.map(\.index)) growth=\(growth.map(\.index)) pastTheEnd=\(past.map(\.index))"
+        #expect(swings.isEmpty, Comment(rawValue: "offset swing over \(Self.swingLimit) pt in one frame: \(report)"))
+        #expect(growth.isEmpty, Comment(rawValue: "content grew over \(Self.sendGrowthLimit) pt in one frame at a send: \(report)"))
+        #expect(past.isEmpty, Comment(rawValue: "the viewport sat past the end of the content: \(report)"))
+    }
+
     func writeCSV() {
         guard let directory = MacChatBench.output else { return }
         let body = ([SendStressFrame.header] + frames.map(\.csv)).joined(separator: "\n") + "\n"
@@ -155,6 +179,7 @@ struct MacChatSendStressTests {
         stage.draft.text = ""
         try await stage.step(30)
         stage.writeCSV()
+        stage.expectNoBounce()
 
         let frames = stage.frames
         let jumps = zip(frames, frames.dropFirst()).filter { before, after in

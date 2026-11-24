@@ -6,6 +6,7 @@ public enum ChatScrollWriter: String, Sendable, Equatable {
     case machineScrollToBottom = "machine:scrollToBottom"
     case machineScrollToRow = "machine:scrollToRow"
     case machineRestore = "machine:restore"
+    case machineClamp = "machine:clamp"
     case systemAnchor = "system-anchor"
     case unattributed
 }
@@ -25,6 +26,7 @@ public struct ChatScrollWriterLedger: Sendable, Equatable {
         case .scrollToBottom: pending = .machineScrollToBottom
         case .scrollToRow: pending = .machineScrollToRow
         case .restore: pending = .machineRestore
+        case .clampToContent: pending = .machineClamp
         }
         quietEvents = 0
     }

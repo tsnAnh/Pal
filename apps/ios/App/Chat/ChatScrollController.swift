@@ -204,6 +204,11 @@ final class ChatScrollController {
             transaction.disablesAnimations = !glides
             notePositionWrite(command)
             withTransaction(transaction) { position.scrollTo(edge: .bottom) }
+        case .clampToContent:
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            notePositionWrite(command)
+            withTransaction(transaction) { position.scrollTo(edge: .bottom) }
         case .scrollToRow(let id):
             notePositionWrite(command)
             withAnimation(.easeInOut(duration: 0.25)) { position.scrollTo(id: id, anchor: Self.revealAnchor) }

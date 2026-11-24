@@ -39,6 +39,7 @@ public struct ChatScrollGeometry: Sendable, Equatable {
 
     // containerHeight is ScrollGeometry.containerSize, which already excludes the insets, so the bottom inset never enters the distance.
     public var distanceFromBottom: Double { max(0, contentHeight - (offsetY + insetTop + containerHeight)) }
+    public var overshoot: Double { max(0, offsetY + insetTop + containerHeight - contentHeight) }
     public var distanceFromTop: Double { max(0, offsetY + insetTop) }
     public var wantsOlder: Bool { distanceFromTop < containerHeight * 2 || contentHeight < containerHeight * 1.5 }
 
@@ -102,6 +103,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         case scrollToBottom(animated: Bool)
         case restore(ChatRowAnchor)
         case scrollToRow(String)
+        case clampToContent
 
         public var name: String {
             switch self {
@@ -109,6 +111,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
             case .scrollToBottom: "scrollToBottom"
             case .restore: "restore"
             case .scrollToRow: "scrollToRow"
+            case .clampToContent: "clampToContent"
             }
         }
     }
@@ -123,6 +126,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
 
     private var userScrolling = false
     private var repairInFlight = false
+    private var clampPending = false
     private var attempts = 0
     private var pendingRestore: ChatRowAnchor?
     private var readingAnchor: ChatRowAnchor?
@@ -178,6 +182,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         last = geometry
         if unseen > 0, isAtBottom(geometry) { unseen = 0 }
         if userScrolling { return userScrollingGeometry(geometry) }
+        if let clamp = clampIfPastTheEnd(geometry) { return clamp }
         switch state {
         case .pinnedToBottom: return pinnedGeometry(geometry, sizeChanged: sizeChanged)
         case .readingHistory: readingGeometry(geometry)
@@ -185,6 +190,17 @@ public struct ChatScrollMachine: Sendable, Equatable {
         case .programmatic(.row): break
         }
         return .none
+    }
+
+    private mutating func clampIfPastTheEnd(_ geometry: ChatScrollGeometry) -> Command? {
+        guard geometry.overshoot > Self.atBottomTolerance else {
+            clampPending = false
+            return nil
+        }
+        let shrank = previous.map { geometry.contentHeight < $0.contentHeight - Self.atBottomTolerance } ?? false
+        guard shrank || clampPending else { return nil }
+        clampPending = true
+        return .clampToContent
     }
 
     private mutating func userScrollingGeometry(_ geometry: ChatScrollGeometry) -> Command {

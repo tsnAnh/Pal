@@ -8,10 +8,10 @@ final class ChatRowHeights {
     private var cache = ChatRowHeightCache()
     private var recorded: Set<String> = []
     private var unmeasurable: Set<String> = []
-    private var lastRows: [String: ChatRow] = [:]
+    private var lastLayouts: [String: ChatRow] = [:]
 
     func rowsChanged(_ live: Set<String>) {
-        lastRows = lastRows.filter { live.contains($0.key) }
+        lastLayouts = lastLayouts.filter { live.contains($0.key) }
         for id in recorded.subtracting(live) { cache.invalidate(id) }
         recorded.formIntersection(live)
         unmeasurable.formIntersection(live)
@@ -23,9 +23,9 @@ final class ChatRowHeights {
     }
 
     func minHeight(for row: ChatRow, width: Double?) -> CGFloat? {
-        if lastRows[row.id] != row {
+        if lastLayouts[row.id] != row.layoutKey {
             forget(row.id)
-            lastRows[row.id] = row
+            lastLayouts[row.id] = row.layoutKey
         }
         guard !row.isStreaming, let width, let height = cache.height(for: row.id, width: width) else { return nil }
         return CGFloat(height)
@@ -35,7 +35,7 @@ final class ChatRowHeights {
         var candidates: [String: ChatRow] = [:]
         var order: [String] = []
         for row in rows where !row.isStreaming {
-            if let known = lastRows[row.id], known != row { forget(row.id) }
+            if let known = lastLayouts[row.id], known != row.layoutKey { forget(row.id) }
             candidates[row.id] = row
             order.append(row.id)
         }
@@ -49,7 +49,7 @@ final class ChatRowHeights {
             return
         }
         laidOut(row.id, height: height, width: width)
-        lastRows[row.id] = row
+        lastLayouts[row.id] = row.layoutKey
     }
 
     func giveUp(on ids: [String], width: Double) -> Bool {
@@ -66,6 +66,17 @@ final class ChatRowHeights {
         cache.invalidate(id)
         recorded.remove(id)
         unmeasurable.remove(id)
-        lastRows[id] = nil
+        lastLayouts[id] = nil
+    }
+}
+
+extension ChatRow {
+    var layoutKey: ChatRow {
+        guard case .user(let text, let delivery) = kind else { return self }
+        if case .failed = delivery { return self }
+        return ChatRow(
+            id: id, kind: .user(text: text, delivery: .sent), separator: separator, showsUnreadDivider: showsUnreadDivider,
+            gap: gap, images: images, files: files, isStreaming: isStreaming, storedRowID: storedRowID
+        )
     }
 }
