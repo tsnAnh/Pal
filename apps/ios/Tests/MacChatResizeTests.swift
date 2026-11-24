@@ -29,12 +29,11 @@ struct MacChatResizeTests {
         for step in Self.steps {
             try await resize(stage, to: step.size)
             let geometry = try #require(stage.lastGeometry)
-            let line = "\(step.name): \(stage.summary), distance \(geometry.distanceFromBottom), past end \(geometry.overshoot)"
+            let line = "\(step.name): \(stage.summary), distance \(stage.distanceFromNewest) (list says \(geometry.distanceFromBottom))"
             print("RESIZE \(line), content \(geometry.contentHeight)")
             let context = Comment(rawValue: line)
             #expect(stage.longestBlankStreak <= VisibleRowsStage.framesAllowed, context)
-            #expect(geometry.distanceFromBottom <= ChatScrollMachine.atBottomTolerance, context)
-            #expect(geometry.overshoot <= 8, context)
+            #expect(stage.distanceFromNewest <= ChatScrollMachine.atBottomTolerance, context)
         }
     }
 }

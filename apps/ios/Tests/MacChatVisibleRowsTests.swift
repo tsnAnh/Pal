@@ -94,6 +94,13 @@ final class VisibleRowsStage {
         }
     }
 
+    var distanceFromNewest: Double {
+        guard let scrollView = host.transcriptScrollView, let document = scrollView.documentView else { return .infinity }
+        let clip = scrollView.contentView
+        let newest = Double(document.frame.height - clip.bounds.height + scrollView.contentInsets.bottom)
+        return abs(newest - Double(clip.bounds.origin.y))
+    }
+
     func rowTops() -> [Int: Double] {
         var tops: [Int: Double] = [:]
         func walk(_ view: NSView) {
