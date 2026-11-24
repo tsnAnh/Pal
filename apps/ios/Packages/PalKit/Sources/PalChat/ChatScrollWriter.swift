@@ -55,6 +55,8 @@ public struct ChatScrollSample: Sendable, Equatable {
     public var phase: String
     public var writer: ChatScrollWriter
     public var offsetDelta: Double
+    public var contentDelta: Double
+    public var contentSource: ChatContentSource
 
     public init(
         geometry: ChatScrollGeometry,
@@ -63,7 +65,9 @@ public struct ChatScrollSample: Sendable, Equatable {
         userScrolling: Bool,
         phase: String,
         writer: ChatScrollWriter,
-        offsetDelta: Double
+        offsetDelta: Double,
+        contentDelta: Double = 0,
+        contentSource: ChatContentSource = .none
     ) {
         self.geometry = geometry
         self.state = state
@@ -72,6 +76,8 @@ public struct ChatScrollSample: Sendable, Equatable {
         self.phase = phase
         self.writer = writer
         self.offsetDelta = offsetDelta
+        self.contentDelta = contentDelta
+        self.contentSource = contentSource
     }
 
     public var isAtBottom: Bool { geometry.distanceFromBottom <= ChatScrollMachine.atBottomTolerance }

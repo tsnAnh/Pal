@@ -6,10 +6,12 @@ struct ChatRowsSync: ViewModifier {
     let scroll: ChatScrollController
 
     func body(content: Content) -> some View {
-        content.onChange(of: model.windowRowIDs, initial: true) { _, ids in
-            scroll.rowsChanged(ids)
-            if scroll.isPinnedToBottom { model.trimWindow() }
-        }
+        content
+            .onChange(of: model.windowRowIDs, initial: true) { _, ids in
+                scroll.rowsChanged(ids)
+                if scroll.isPinnedToBottom { model.trimWindow() }
+            }
+            .onChange(of: model.isRunning, initial: true) { _, running in scroll.streamingChanged(running) }
     }
 }
 

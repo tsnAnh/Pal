@@ -29,6 +29,7 @@ final class ChatScrollController {
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
+    @ObservationIgnored private var contentLedger = ChatContentLedger()
     @ObservationIgnored private var phaseName = "idle"
     @ObservationIgnored var sampleSink: ((ChatScrollSample) -> Void)?
 
@@ -59,7 +60,9 @@ final class ChatScrollController {
                 geometry: snapshot, state: machine.state.name, showsButton: showsJumpButton,
                 userScrolling: machine.isUserScrolling, phase: phaseName,
                 writer: writers.attribute(from: previousGeometry, to: snapshot, userMoving: isMoving),
-                offsetDelta: previousGeometry.map { snapshot.offsetY - $0.offsetY } ?? 0
+                offsetDelta: previousGeometry.map { snapshot.offsetY - $0.offsetY } ?? 0,
+                contentDelta: previousGeometry.map { snapshot.contentHeight - $0.contentHeight } ?? 0,
+                contentSource: contentLedger.attribute(from: previousGeometry, to: snapshot)
             )
             sampleSink?(sample)
             ChatScrollTrace.geometry(sample)
@@ -96,8 +99,13 @@ final class ChatScrollController {
         recordedIDs.formIntersection(live)
         visibleIDs.removeAll { !live.contains($0) }
         if let pending = pendingRestore, !live.contains(pending.rowID) { pendingRestore = nil }
+        if isRecording { contentLedger.noteRows() }
         if ChatScrollTrace.isOn { ChatScrollTrace.rows(ids.count, state: machine.state.name) }
         send(.rowsChanged(ids))
+    }
+
+    func streamingChanged(_ running: Bool) {
+        contentLedger.noteStreaming(running)
     }
 
     func visibleRowsChanged(_ ids: [String]) {
