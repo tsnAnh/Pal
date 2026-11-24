@@ -223,3 +223,37 @@ def test_a_free_text_clarify_question_with_a_default_is_not_a_bare_open_question
 
     assert mined({"question": "Bot name?", "default": "Pal"})["no_options_no_default_share"] == 0.0
     assert mined({"question": "Bot name?"})["no_options_no_default_share"] == 1.0
+
+
+def commitment_call(action="promise"):
+    return {"id": "c9", "type": "function",
+            "function": {"name": "commitment", "arguments": json.dumps({"action": action, "text": "watch CI"})}}
+
+
+def test_chases_and_promises_without_a_commitment_event_in_the_same_turn_are_counted():
+    start = WEEK_2026_W10
+    session = MinedSession("alpha", start, (
+        Message("user", "draft the note", start),
+        Message("assistant", "Draft ready. I'll check back tomorrow.", start + 1),
+        Message("user", "xong chưa?", start + 2),
+        Message("assistant", "Recording it.", start + 3, records_commitment=True),
+        Message("assistant", "I'll follow up when CI is green.", start + 4),
+        Message("user", "any update?", start + 5),
+        Message("assistant", "I'll let you know.", start + 6, records_commitment=False),
+    ))
+    stats = total(mining.mine({"alpha": ListSource(session)}))
+    assert stats["owner_chases"] == 2
+    assert (stats["promise_turns"], stats["unrecorded_promises"]) == (3, 2)
+
+
+def test_the_store_source_sees_a_commitment_event_but_not_a_commitment_list(tmp_path):
+    with open_persistence(profile_scope(home=tmp_path), eager=True) as writer:
+        seed_session(writer, "s1", "telegram")
+        seed_messages(writer, "s1", {"role": "user", "content": "watch the deploy"},
+                      {"role": "assistant", "content": "On it.", "tool_calls": [commitment_call()]},
+                      {"role": "assistant", "content": "I'll let you know when it is live."},
+                      {"role": "user", "content": "any update?"},
+                      {"role": "assistant", "content": "Checking.", "tool_calls": [commitment_call("list")]},
+                      {"role": "assistant", "content": "I'll report back soon."})
+    stats = total(mining.mine({"alpha": mining.PersistenceSource(tmp_path, bot="alpha")}))
+    assert (stats["promise_turns"], stats["unrecorded_promises"], stats["owner_chases"]) == (2, 1, 1)
