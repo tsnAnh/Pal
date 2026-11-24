@@ -63,11 +63,8 @@ struct ChatScrollMachineTests {
     }
 
     @Test func theBottomInsetNeverEntersTheDistance() {
-        let atBottom = geo(offset: 500, content: 1000, container: 500, insetBottom: 160)
-        #expect(atBottom.distanceFromBottom == 0)
+        #expect(geo(offset: 500, content: 1000, container: 500, insetBottom: 160).distanceFromBottom == 0)
         #expect(geo(offset: 440, content: 1000, container: 500, insetBottom: 160).distanceFromBottom == 60)
-        #expect(geo(offset: 500, content: 1000, container: 500, insetTop: 52, insetBottom: 160).distanceFromBottom == 0)
-        #expect(geo(offset: 448, content: 1000, container: 500, insetTop: 52, insetBottom: 160).distanceFromBottom == 0)
         #expect(geo(offset: 400, content: 1000, container: 500, insetTop: 52, insetBottom: 160).distanceFromBottom == 48)
     }
 

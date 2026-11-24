@@ -202,8 +202,15 @@ private final class ImageLayoutStage {
 @MainActor
 @Suite("Mac chat image layout", .serialized, .enabled(if: MacChatBench.output != nil))
 struct MacChatImageLayoutTests {
-    private static let sources: [(name: String, width: Int, height: Int)] = [
-        ("wide", 1772, 550), ("landscape", 1300, 1000), ("portrait", 1000, 1600),
+    private struct Source {
+        let name: String
+        let width: Int
+        let height: Int
+    }
+
+    private static let sources = [
+        Source(name: "wide", width: 1772, height: 550), Source(name: "landscape", width: 1300, height: 1000),
+        Source(name: "portrait", width: 1000, height: 1600),
     ]
 
     @Test("a sent image keeps its whole picture at its ratio, the newest row clears the composer and the button stays hidden at the bottom")
