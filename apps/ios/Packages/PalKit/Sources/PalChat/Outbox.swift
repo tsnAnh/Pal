@@ -202,6 +202,7 @@ public actor Outbox {
             state: .pending,
             attempts: 0
         )
+        ChatSendTrace.begin(submission: submissionID)
         do {
             entries = try store.update { $0.append(entry) }.entries
         } catch {
@@ -250,7 +251,9 @@ public actor Outbox {
         }
         do {
             let status = try await submitter.submit(entry, files: files)
+            ChatSendTrace.receipt(submissionID, status: status.status.rawValue)
             record(submissionID, state: .admitted(admissionID: status.admissionID))
+            ChatSendTrace.mark(submissionID, "row.sent")
             fileStore.remove(submissionID: submissionID)
             return .admitted(status)
         } catch {

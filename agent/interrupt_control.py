@@ -7,6 +7,7 @@ import contextlib
 import enum
 import logging
 import threading
+import time
 from typing import Any, Optional
 
 from agent.interrupt_compat import request_hard_interrupt
@@ -382,6 +383,8 @@ class InterruptControlMixin:
         cleaned = text.strip()
         with _ic_lock(self, "_pending_steer_lock"):
             _set_steer_parts(self, _steer_parts(self) + [(ticket, cleaned)])
+            if ticket is not None:
+                vars(self).setdefault("_steer_enqueued_at", {})[ticket] = time.monotonic()
         # The turn no longer ran on its own (first-task-done detection reads this off the result).
         self._turn_user_intervened = True
         return True
@@ -449,9 +452,14 @@ class InterruptControlMixin:
             text = _ic_slot(self, "_pending_steer_lock", "_pending_steer")
             parts = _steer_parts(self)
             _set_steer_parts(self, [])
+            enqueued_at = vars(self).get("_steer_enqueued_at", {})
             for ticket, _ in parts:
                 if ticket is not None:
                     _steer_fates(self)[ticket] = True
+                    queued = enqueued_at.pop(ticket, None)
+                    if queued is not None:
+                        logging.getLogger("gateway.send_trace").info(
+                            "send_trace steer_drained admission=%s wait_ms=%d", ticket, (time.monotonic() - queued) * 1000)
             self._steer_last_drain = (text, parts)  # requeue_drained_steer restores its tickets
         return text
 
@@ -471,6 +479,7 @@ class InterruptControlMixin:
         if ticket is None:
             return False
         with _ic_lock(self, "_pending_steer_lock"):
+            vars(self).get("_steer_enqueued_at", {}).pop(ticket, None)
             parts = _steer_parts(self)
             kept = [part for part in parts if part[0] != ticket]
             consumed = _steer_fates(self).pop(ticket, True)

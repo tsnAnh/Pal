@@ -47,18 +47,19 @@ final class BotChatE2ETests: E2ETestCase {
         shot(app, "chat-reply")
     }
 
-    func test2cMessageSentWhileTheBotWorksIsAcceptedAtOnce() throws {
+    func test2cMessagesSentWhileTheBotWorksAreAcceptedAtOnce() throws {
         let app = launch()
         signInIfNeeded(app)
         openBot(app, "bot-beta")
         send(app, "HOLD long task")
         let working = app.descendants(matching: .any)["assistantBubble-streaming"]
         waitFor(working, timeout: 30, "the bot is working")
-        send(app, "second message while working")
-        waitFor(bubbles(app, "userBubble", containing: "second message while working").firstMatch, timeout: 10, "second message shown")
-        waitGone(app.descendants(matching: .any)["deliverySending"], timeout: 10, "accepted while the bot still works")
-        XCTAssertTrue(working.exists, "the turn is still running when the second message counts as sent")
-        XCTAssertEqual(bubbles(app, "userBubble", containing: "second message while working").count, 1)
+        let followUps = ["first while working", "second while working", "third while working"]
+        for text in followUps { send(app, text) }
+        for text in followUps { waitFor(bubbles(app, "userBubble", containing: text).firstMatch, timeout: 10, "\(text) shown") }
+        waitGone(app.descendants(matching: .any)["deliverySending"], timeout: 10, "all three accepted while the bot still works")
+        XCTAssertTrue(working.exists, "the turn is still running when the follow-ups count as sent")
+        for text in followUps { XCTAssertEqual(bubbles(app, "userBubble", containing: text).count, 1, text) }
     }
 
     #if os(iOS)

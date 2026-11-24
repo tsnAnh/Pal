@@ -9,6 +9,7 @@ import pytest
 from agent.interrupt_control import InterruptControlMixin, _steer_parts
 from gateway import session_finite
 from gateway.session_contract import SessionActor, Submission
+from tests.fixtures.storage_holder import raw_holder
 from tests.gateway.test_prompt_queued_controls import _call, _connection, _ledger, interactive
 from tests.gateway.test_session_authority_cancel_settlement import ACTOR, REF, _authority
 from tests.waiting import async_wait_until
@@ -54,7 +55,7 @@ def bot_chat(tmp_path, monkeypatch):
     interactive(db)
     (tmp_path / 'profiles' / 'chief').mkdir(parents=True)
     (tmp_path / 'profiles' / 'chief' / 'profile.yaml').write_text('ui_meta:\n  hermes-bots:\n    title: Chief\n')
-    db.set_session_title('s', 'Bot Chat')
+    db.sessions.set_title('s', 'Bot Chat')
     yield db, authority
     interrupt_mod.take_yield(RunningAgent.WORKER)
 
@@ -98,7 +99,25 @@ async def test_an_owner_message_during_a_bot_chat_turn_is_steered_in_and_every_t
         turn.release.set()
         await _drained(authority)
     assert turn.taken == ['also check the weather'] and turn.ran == ['running']
-    assert _ledger(db) == [('running', 'terminal', 'completed'), ('also check the weather', 'terminal', 'steered')]
+    assert _ledger(authority.persistence) == [('running', 'terminal', 'completed'), ('also check the weather', 'terminal', 'steered')]
+
+
+@pytest.mark.asyncio
+async def test_the_send_trace_times_the_steer_by_admission_id_and_never_carries_the_text(bot_chat, monkeypatch, caplog):
+    db, authority = bot_chat
+    turn = Turn(monkeypatch, drain=True)
+    caplog.set_level('INFO', logger='gateway.send_trace')
+    with db:
+        conn = _owner_connection(authority)
+        await _submit_as_owner(conn, 'running')
+        await asyncio.wait_for(turn.claimed.wait(), 30)
+        second = await _submit_as_owner(conn, 'secret weather plans')
+        turn.release.set()
+        await _drained(authority)
+    lines = [record.getMessage() for record in caplog.records if record.name == 'gateway.send_trace']
+    assert any(f"send_trace admitted admission={second['admission_id']} status=steered absorb_ms=" in line for line in lines), lines
+    assert any(f"send_trace steer_drained admission={second['admission_id']} wait_ms=" in line for line in lines), lines
+    assert not any('weather' in line for line in lines), lines
 
 
 @pytest.mark.asyncio
@@ -112,17 +131,16 @@ async def test_two_owner_messages_before_one_drain_each_hold_their_own_ticket(bo
         statuses = [(await _submit_as_owner(conn, name))['status'] for name in ('a', 'b')]
         assert statuses == ['steered', 'steered']
         assert [ticket for ticket, _ in _steer_parts(turn.agent) if ticket] == [
-            row['admission_id'] for row in db_admissions(db, ('a', 'b'))]
+            row.admission_id for row in db_admissions(db, ('a', 'b'))]
         turn.release.set()
         await _drained(authority)
     assert turn.taken == ['a\nb']
-    assert _ledger(db) == [('running', 'terminal', 'completed'), ('a', 'terminal', 'steered'),
+    assert _ledger(authority.persistence) == [('running', 'terminal', 'completed'), ('a', 'terminal', 'steered'),
                            ('b', 'terminal', 'steered')]
 
 
 def db_admissions(db, request_ids):
-    from hermes_state_runtime import list_session_admissions
-    by_request = {row['request_id']: row for row in list_session_admissions(db, session_id='s', pending_only=False)}
+    by_request = {row.request_id: row for row in db.admissions.list(session_id='s', pending_only=False)}
     return [by_request[request_id] for request_id in request_ids]
 
 
@@ -140,7 +158,7 @@ async def test_a_message_the_turn_never_drained_goes_back_to_the_queue_and_runs_
         await async_wait_until(lambda: turn.ran == ['running', 'late'], timeout=30, what='the returned prompt to run')
         await _drained(authority)
     assert turn.agent._pending_steer is None
-    assert _ledger(db) == [('running', 'terminal', 'completed'), ('late', 'terminal', 'completed')]
+    assert _ledger(authority.persistence) == [('running', 'terminal', 'completed'), ('late', 'terminal', 'completed')]
 
 
 @pytest.mark.asyncio
@@ -156,14 +174,14 @@ async def test_a_message_sent_while_the_turn_builds_its_agent_stays_queued_and_r
         turn.release.set()
         await async_wait_until(lambda: turn.ran == ['running', 'early'], timeout=30, what='the queued prompt to run')
         await _drained(authority)
-    assert _ledger(db) == [('running', 'terminal', 'completed'), ('early', 'terminal', 'completed')]
+    assert _ledger(authority.persistence) == [('running', 'terminal', 'completed'), ('early', 'terminal', 'completed')]
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('title', ['Weekend plans', None], ids=['other-chat', 'untitled'])
 async def test_a_session_that_is_not_the_bot_chat_keeps_its_queue_semantics(bot_chat, monkeypatch, title):
     db, authority = bot_chat
-    db._execute_write(lambda conn: conn.execute('UPDATE sessions SET title=? WHERE id=?', (title, 's')))
+    raw_holder(db)._execute_write(lambda conn: conn.execute('UPDATE sessions SET title=? WHERE id=?', (title, 's')))
     turn = Turn(monkeypatch, drain=True)
     with db:
         conn = _owner_connection(authority)
