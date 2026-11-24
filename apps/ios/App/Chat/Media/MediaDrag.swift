@@ -25,6 +25,11 @@ struct MediaTileDrag: ViewModifier {
 }
 
 #if os(macOS)
+private struct DragHandoff: @unchecked Sendable {
+    let progress: Progress
+    let completion: (URL?, Bool, (any Error)?) -> Void
+}
+
 nonisolated enum MediaDrag {
     static func provider(for media: MediaReference, source: any MediaAssetSource, staging: MediaDragStaging, ready: URL? = nil) -> NSItemProvider {
         if let ready, FileManager.default.fileExists(atPath: ready.path), let provider = NSItemProvider(contentsOf: ready) {
@@ -34,19 +39,19 @@ nonisolated enum MediaDrag {
         provider.suggestedName = MediaDownloads.safeFileName(media.name)
         let type = UTType(filenameExtension: (media.name as NSString).pathExtension) ?? .movie
         provider.registerFileRepresentation(for: type, visibility: .all, openInPlace: false) { completion in
-            let progress = Progress(totalUnitCount: 100)
+            let handoff = DragHandoff(progress: Progress(totalUnitCount: 100), completion: completion)
             let task = Task {
                 do {
                     let file = try await staging.stage(media, from: source, limit: MediaLimits.downloadBytes) { update in
-                        progress.completedUnitCount = Int64((update.fraction ?? 0) * 100)
+                        handoff.progress.completedUnitCount = Int64((update.fraction ?? 0) * 100)
                     }
-                    completion(file, false, nil)
+                    handoff.completion(file, false, nil)
                 } catch {
-                    completion(nil, false, error)
+                    handoff.completion(nil, false, error)
                 }
             }
-            progress.cancellationHandler = { task.cancel() }
-            return progress
+            handoff.progress.cancellationHandler = { task.cancel() }
+            return handoff.progress
         }
         return provider
     }
