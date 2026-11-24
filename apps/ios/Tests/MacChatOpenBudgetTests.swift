@@ -1,5 +1,6 @@
 #if os(macOS)
 import Foundation
+import PalChat
 import Testing
 
 @testable import Pal
@@ -7,13 +8,14 @@ import Testing
 struct MacChatOpenReport: Codable, Equatable {
     var messages: Int
     var modelRows: Int
+    var windowRows: Int
     var firstInteractiveMs: Double
     var settledFrames: Int
     var longestStall: MainStallProbe.Stall
     var metrics: ChatOpenMetrics.Snapshot
 
     var line: String {
-        "open \(messages) messages: model rows \(modelRows), first interactive \(Int(firstInteractiveMs)) ms, "
+        "open \(messages) messages: model rows \(modelRows), window rows \(windowRows), first interactive \(Int(firstInteractiveMs)) ms, "
             + "longest stall \(Int(longestStall.ms)) ms (\(longestStall.label)), rows laid out \(metrics.rowsLaidOut), "
             + "row bodies \(metrics.rowBodies), list bodies \(metrics.listBodies), geometry events \(metrics.geometryEvents), "
             + "position writes \(metrics.positionWrites), frames to settle \(settledFrames)"
@@ -53,6 +55,7 @@ enum MacChatOpenHarness {
         let report = MacChatOpenReport(
             messages: messages,
             modelRows: session.model.rows.count,
+            windowRows: session.model.windowRows.count,
             firstInteractiveMs: Double(interactive.seconds) * 1000 + Double(interactive.attoseconds) / 1e15,
             settledFrames: settled,
             longestStall: probe.longest,
@@ -72,10 +75,19 @@ enum MacChatOpenHarness {
 @MainActor
 @Suite("Mac chat open budget", .serialized)
 struct MacChatOpenBudgetTests {
-    @Test("a long chat opens at the newest message", arguments: [5_000, 15_000])
-    func opensAtTheNewestMessage(messages: Int) throws {
+    static let rowMargin = 40
+    static let stallBudgetMs = 250.0
+    static let positionWriteBudget = 6
+
+    @Test("opening a long chat lays out a bounded window, never stalls the main thread and barely writes the scroll position", arguments: [5_000, 15_000])
+    func opensWithinBudget(messages: Int) throws {
         let report = try MacChatOpenHarness.open(messages: messages)
-        #expect(report.settledFrames < MacChatBench.settleFrames, Comment(rawValue: report.line))
+        let context = Comment(rawValue: report.line)
+        #expect(report.settledFrames < MacChatBench.settleFrames, context)
+        #expect(report.windowRows <= ChatRowWindow.ceiling, context)
+        #expect(report.metrics.rowsLaidOut <= ChatRowWindow.size + Self.rowMargin, context)
+        #expect(report.longestStall.ms <= Self.stallBudgetMs, context)
+        #expect(report.metrics.positionWrites <= Self.positionWriteBudget, context)
     }
 }
 #endif
