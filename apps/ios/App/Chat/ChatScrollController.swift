@@ -193,7 +193,11 @@ final class ChatScrollController {
             break
         case .scrollToBottom(let animated):
             let distanceFromBottom = machine.distanceFromBottom ?? 0
-            guard machine.state != .pinnedToBottom || distanceFromBottom > ChatScrollMachine.atBottomTolerance else { return }
+            switch machine.state {
+            case .programmatic(.bottom): break
+            case .pinnedToBottom where distanceFromBottom > ChatScrollMachine.atBottomTolerance: break
+            default: return
+            }
             let height = lastGeometry?.containerHeight ?? 0
             let glides = animated && distanceFromBottom <= height * Self.glideViewports
             var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)

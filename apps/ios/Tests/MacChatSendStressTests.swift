@@ -47,6 +47,7 @@ private final class SendStressStage {
     }()
     var phase = "open"
     private(set) var frames: [SendStressFrame] = []
+    private(set) var roundEnds: [SendStressFrame] = []
     private var samples: [ChatScrollSample] = []
     private var version: UInt64 = 10
     private var previous: (offset: Double, distance: Double)?
@@ -128,6 +129,7 @@ private final class SendStressStage {
         world.isRunning = false
         push()
         try await step(20)
+        if let end = frames.last { roundEnds.append(end) }
     }
 
     func writeCSV() {
@@ -169,6 +171,9 @@ struct MacChatSendStressTests {
         #expect(jumps.isEmpty, Comment(rawValue: report))
         #expect(buttonAtBottom.isEmpty, Comment(rawValue: report))
         #expect(buttonWhilePinned.isEmpty, Comment(rawValue: report))
+        let displaced = stage.roundEnds.filter { $0.distance > ChatScrollMachine.atBottomTolerance || $0.button }
+        let displacedReport = displaced.map { "frame \($0.index) distance \($0.distance) button \($0.button)" }
+        #expect(displaced.isEmpty, Comment(rawValue: "a send round ended away from the newest row: \(displacedReport)"))
     }
 }
 #endif
