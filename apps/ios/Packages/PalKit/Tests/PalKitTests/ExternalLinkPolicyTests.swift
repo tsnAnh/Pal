@@ -14,6 +14,7 @@ struct ExternalLinkPolicyTests {
         "WebAuthenticationBrowser.swift": ["ASWebAuthenticationSession("],
         "Chat/Rich/MermaidRenderer.swift": ["WKWebView"],
         "Chat/Rich/EmbedWebView.swift": ["WKWebView"],
+        "Chat/HTMLViewer/HTMLWebSurface.swift": ["WKWebView"],
     ]
 
     private func swiftSources() throws -> [(path: String, text: String)] {

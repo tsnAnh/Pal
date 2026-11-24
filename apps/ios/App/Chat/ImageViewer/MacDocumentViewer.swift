@@ -87,7 +87,7 @@ private struct MacDocumentViewer: View {
         case .close:
             dictation.stop()
             model.closeDocumentViewer()
-        case .edit:
+        case .edit, .openInBrowser:
             break
         }
     }

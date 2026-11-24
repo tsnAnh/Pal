@@ -17,6 +17,8 @@ import check_swift_media_preview as csm
 TILE = "App/Chat/Media/MediaTile.swift"
 NESTED = "App/Chat/Media/Video/VideoTile.swift"
 MAC = "App/Chat/ImageViewer/MacMediaViewer.swift"
+HTML_BODY = "App/Chat/HTMLViewer/HTMLViewerBody.swift"
+HTML_MAC = "App/Chat/ImageViewer/MacHTMLViewer.swift"
 
 CLEAN_TILE = """
 struct MediaTile: View {
@@ -51,7 +53,7 @@ def test_clean_tile_passes(tmp_path: Path) -> None:
     assert _found(tmp_path, TILE, CLEAN_TILE) == []
 
 
-@pytest.mark.parametrize("rel", [TILE, NESTED, MAC])
+@pytest.mark.parametrize("rel", [TILE, NESTED, MAC, HTML_BODY, HTML_MAC])
 @pytest.mark.parametrize(
     ("body", "rule"),
     [

@@ -75,15 +75,16 @@ struct DocumentKindTests {
             .text: ["a.txt", "b.md", "c.markdown", "d.rtf", "e.log"],
             .code: ["a.swift", "b.PY", "c.json", "d.yaml", "e.ts", "f.sql", "g.sh"],
             .csv: ["a.csv", "b.TSV"],
+            .html: ["a.html", "b.HTM"],
         ]
         for (kind, names) in expected {
             for name in names { #expect(ChatDocumentKind(fileName: name) == kind, "\(name) should be \(kind)") }
         }
     }
 
-    @Test("html, archives, 3d, media and unknown files are not documents")
+    @Test("archives, 3d, media and unknown files are not documents")
     func notDocuments() {
-        for name in ["a.html", "b.htm", "c.zip", "d.usdz", "e.mp4", "f.mp3", "g.png", "h.vcf", "noextension", "i.bin"] {
+        for name in ["c.zip", "d.usdz", "e.mp4", "f.mp3", "g.png", "h.vcf", "noextension", "i.bin"] {
             #expect(ChatDocumentKind(fileName: name) == nil, "\(name) is another unit's kind")
         }
     }

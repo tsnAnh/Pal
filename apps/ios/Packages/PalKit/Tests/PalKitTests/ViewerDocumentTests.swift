@@ -18,8 +18,16 @@ struct ViewerDocumentTests {
             #expect(FileOpenRoute(fileName: name, viewerShowsDocuments: true) == .viewer(.markdown), "\(name)")
         }
         for name in ["a.txt", "a.json", "main.swift", "tool.py", "app.ts", "view.tsx", "conf.yaml", "conf.yml", "x.toml", "run.sh",
-                     "lib.rs", "main.go", "A.java", "a.kt", "a.rb", "a.c", "a.h", "a.cpp", "a.css", "a.html", "q.sql", "a.xml", "a.js"] {
+                     "lib.rs", "main.go", "A.java", "a.kt", "a.rb", "a.c", "a.h", "a.cpp", "a.css", "q.sql", "a.xml", "a.js"] {
             #expect(FileOpenRoute(fileName: name, viewerShowsDocuments: true) == .viewer(.plainText), "\(name)")
+        }
+    }
+
+    @Test("html opens the live viewer on every platform, even where documents use the sheet")
+    func htmlRoutesToTheLiveViewer() {
+        for name in ["a.html", "A.HTM", "path/to/index.html"] {
+            #expect(FileOpenRoute(fileName: name, viewerShowsDocuments: true) == .html, "\(name)")
+            #expect(FileOpenRoute(fileName: name, viewerShowsDocuments: false) == .html, "\(name)")
         }
     }
 
