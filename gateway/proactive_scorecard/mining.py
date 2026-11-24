@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from gateway.commitments_capture import promises_outliving_turn
 from gateway.proactive_scorecard.patterns import (
     correction_classes, hands_back, is_bare_yes_no, is_chase, makes_promise, matched_criteria, option_labels,
     question_count, question_text, states_default, states_recommendation,
@@ -304,8 +305,13 @@ def _clarify_asks(tool_calls) -> tuple[AskItem, ...]:
 
 
 def _records_commitment(tool_calls) -> bool:
-    return any(name == "commitment" and arguments.get("action") in COMMITMENT_EVENT_ACTIONS
+    return any((name == "commitment" and arguments.get("action") in COMMITMENT_EVENT_ACTIONS)
+               or promises_outliving_turn(name, arguments)
                for name, arguments in _calls(tool_calls))
+
+
+def _in_window(moment: float, since: float | None, until: float | None) -> bool:
+    return (since is None or moment >= since) and (until is None or moment < until)
 
 
 class PersistenceSource:
@@ -323,16 +329,17 @@ class PersistenceSource:
             entries = store.sessions.list_recent_sessions(RecentBrowseQuery(
                 limit=self._limit, exclude_sources=self._excluded, timeout_seconds=20.0))
             for entry in entries:
-                if (since is not None and entry.started_at < since) or (until is not None and entry.started_at >= until):
+                if since is not None and entry.last_active is not None and entry.last_active < since:
                     continue
                 rows = store.messages.read_transcript(entry.session_id, TranscriptRead(include_lineage=True))
                 messages = tuple(
                     Message(row.role, _text_of(row.content), float(row.timestamp), _clarify_asks(row.tool_calls),
                             records_commitment=_records_commitment(row.tool_calls))
                     for row in rows
-                    if row.role in ("user", "assistant") and not row.compressed_summary)
+                    if row.role in ("user", "assistant") and not row.compressed_summary
+                    and _in_window(float(row.timestamp), since, until))
                 if messages:
-                    yield MinedSession(self._bot, float(entry.started_at), messages)
+                    yield MinedSession(self._bot, min(m.ts for m in messages), messages)
 
 
 REACH_SCHEMA = "proactive-eval-reach/1"

@@ -618,6 +618,24 @@ def public_pre_transform(agent, pre_transform: Optional[Any]) -> Optional[Any]:
     return None if getattr(agent, "_hold_stream", False) else pre_transform
 
 
+def _capture_promises(agent, messages, logger, vetoed=False) -> None:
+    """Record the promises this turn left running (a background delegation, a scheduled job, a message awaiting
+    a reply) from its tool calls. Only the owner's own agent promises: a delegated child or a cron or webhook
+    turn is not the owner-facing party. Never raises and never waits on the ledger."""
+    from agent.delegation_context import is_delegated_child_context
+    from agent.turn_author import SYNTHETIC_PLATFORMS
+    if vetoed or is_delegated_child_context() or str(getattr(agent, "platform", "") or "").lower() in SYNTHETIC_PLATFORMS:
+        return
+    try:
+        from gateway.commitments_capture import plan, submit
+        author = getattr(agent, "_turn_author", None) or {}
+        if captured := plan(messages, owner_requested=not getattr(agent, "_synthetic_turn", False)
+                            and not author.get("is_bot")):
+            submit(captured)
+    except Exception as exc:
+        logger.warning("Promise capture skipped (%s)", type(exc).__name__, exc_info=True)
+
+
 def _mirror_turn_to_memory(
     agent, *, original_user_message, final_response, interrupted, messages, review_memory, review_skills, vetoed,
 ) -> None:
@@ -896,6 +914,8 @@ def finalize_turn(
 
     if _should_review_skills:
         agent._iters_since_skill = 0
+
+    _capture_promises(agent, messages, logger, vetoed)
 
     _mirror_turn_to_memory(
         agent, original_user_message=original_user_message, final_response=final_response,

@@ -34,7 +34,7 @@ from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional
 from hermes_cli.config import get_hermes_home
 
 from tools.process_registry_notifications import (
-    format_process_notification, is_child_process_notification, should_surface_notification)
+    is_child_process_notification, should_surface_notification, surfaced_notification)
 from tools.process_registry_checkpoint import ProcessCheckpointMixin
 from tools.process_registry_env_scope import ProcessEnvScopeMixin
 from tools.process_registry_output_log import ProcessOutputLogMixin, open_output_log, record_exit_command, worker_output_log
@@ -1832,7 +1832,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                         "type=%s session_id=%s task_id=%s",
                         evt.get("type", "completion"), _evt_sid, _evt_task_id)
                     continue
-            if text := format_process_notification(evt):
+            if text := surfaced_notification(evt):
                 results.append((evt, text))
         for evt in requeue:
             self.completion_queue.put(evt)

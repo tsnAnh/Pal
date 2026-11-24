@@ -91,3 +91,22 @@ def bot_home(root: Path, name: str = "bot") -> Path:
     reach_offers(home)
     conversation(home)
     return home
+
+
+BOT_CHAT_WINDOW = (NOW - 21 * DAY, NOW - 14 * DAY)
+
+
+def seed_bot_chat(home: Path, *, at: float = NOW - 18 * DAY, extra_calls=()) -> None:
+    with open_persistence(profile_scope(home=home), eager=True) as writer:
+        seed_session(writer, "botchat", "cli", title="Bot Chat")
+        seed_messages(
+            writer, "botchat",
+            {"role": "user", "content": "an older request from before the window", "timestamp": at - 264 * HOUR},
+            {"role": "assistant", "content": "I'll circle back on that.", "timestamp": at - 263 * HOUR},
+            {"role": "user", "content": "draft the release note", "timestamp": at},
+            {"role": "assistant", "content": "Should I go ahead and draft it?", "timestamp": at + HOUR},
+            {"role": "user", "content": "just do it", "timestamp": at + 2 * HOUR},
+            {"role": "assistant", "content": "Draft ready. I'll check back tomorrow.", "timestamp": at + 3 * HOUR,
+             "tool_calls": list(extra_calls) or None},
+            {"role": "user", "content": "xong chưa?", "timestamp": at + 4 * HOUR},
+            {"role": "assistant", "content": "Done.", "timestamp": at + 5 * HOUR})

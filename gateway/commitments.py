@@ -22,6 +22,7 @@ class State(str, Enum):
 class Actor(str, Enum):
     BOT = "bot"
     OWNER = "owner"
+    AUTO = "auto"
 
 
 class RefusalCode(str, Enum):
@@ -146,6 +147,23 @@ def _names(members) -> str:
 _TERMINAL_SQL = _names(sorted(TERMINAL_STATES, key=lambda state: state.value))
 
 
+_EVENTS_TABLE = f"""
+CREATE TABLE commitment_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_key TEXT NOT NULL UNIQUE,
+    commitment_id TEXT NOT NULL,
+    from_state TEXT,
+    to_state TEXT NOT NULL,
+    rev INTEGER NOT NULL,
+    actor TEXT NOT NULL CHECK (actor IN ({_names(Actor)})),
+    at REAL NOT NULL,
+    detail_json TEXT NOT NULL DEFAULT '{{}}',
+    UNIQUE (commitment_id, rev)
+)"""
+_EVENT_TRIGGERS = tuple(
+    f"CREATE TRIGGER IF NOT EXISTS commitment_events_no_{verb} BEFORE {verb.upper()} ON commitment_events "
+    "BEGIN SELECT RAISE(ABORT, 'commitment_events is append-only'); END" for verb in ("update", "delete"))
+
 _DDL = f"""
 CREATE TABLE IF NOT EXISTS commitments (
     id TEXT PRIMARY KEY,
@@ -168,27 +186,46 @@ CREATE TABLE IF NOT EXISTS commitments (
 );
 CREATE INDEX IF NOT EXISTS idx_commitments_active ON commitments (created_at)
     WHERE state NOT IN ({_TERMINAL_SQL});
-CREATE TABLE IF NOT EXISTS commitment_events (
-    seq INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_key TEXT NOT NULL UNIQUE,
-    commitment_id TEXT NOT NULL,
-    from_state TEXT,
-    to_state TEXT NOT NULL,
-    rev INTEGER NOT NULL,
-    actor TEXT NOT NULL CHECK (actor IN ({_names(Actor)})),
-    at REAL NOT NULL,
-    detail_json TEXT NOT NULL DEFAULT '{{}}',
-    UNIQUE (commitment_id, rev)
-);
-CREATE TRIGGER IF NOT EXISTS commitment_events_no_update BEFORE UPDATE ON commitment_events
-BEGIN SELECT RAISE(ABORT, 'commitment_events is append-only'); END;
-CREATE TRIGGER IF NOT EXISTS commitment_events_no_delete BEFORE DELETE ON commitment_events
-BEGIN SELECT RAISE(ABORT, 'commitment_events is append-only'); END;
+{_EVENTS_TABLE.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS", 1)};
+{";".join(_EVENT_TRIGGERS)};
 """
+
+
+def _events_allow_auto(conn: sqlite3.Connection) -> bool:
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'commitment_events'").fetchone()
+    return row is None or f"'{Actor.AUTO.value}'" in row[0]
+
+
+def _widen_event_actors(conn: sqlite3.Connection) -> None:
+    """A ledger created before ``Actor.AUTO`` carries a CHECK that refuses it, and SQLite cannot alter a CHECK:
+    rebuild the events table once, copying every row, under the same write lock the ledger always takes."""
+    if _events_allow_auto(conn):
+        return
+    previous = conn.isolation_level
+    conn.isolation_level = None
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if not _events_allow_auto(conn):
+                conn.execute("DROP TRIGGER IF EXISTS commitment_events_no_update")
+                conn.execute("DROP TRIGGER IF EXISTS commitment_events_no_delete")
+                conn.execute("ALTER TABLE commitment_events RENAME TO commitment_events_legacy")
+                conn.execute(_EVENTS_TABLE)
+                conn.execute("INSERT INTO commitment_events SELECT * FROM commitment_events_legacy")
+                conn.execute("DROP TABLE commitment_events_legacy")
+                for trigger in _EVENT_TRIGGERS:
+                    conn.execute(trigger)
+        except BaseException:
+            conn.execute("ROLLBACK")
+            raise
+        conn.execute("COMMIT")
+    finally:
+        conn.isolation_level = previous
 
 
 def _initialize(conn: sqlite3.Connection) -> None:
     conn.executescript(_DDL)
+    _widen_event_actors(conn)
 
 
 def _connect(home) -> sqlite3.Connection:
@@ -255,12 +292,13 @@ def _append_event(conn: sqlite3.Connection, *, event_key: str, commitment_id: st
 
 
 def promise(home, *, event_key: str, profile: str, text: str, owner_requested: bool, due_at: float | None,
-            route: Route, now: float, next_step: str | None = None, actor: Actor = Actor.BOT) -> Transition:
+            route: Route, now: float, next_step: str | None = None, actor: Actor = Actor.BOT,
+            subject: str | None = None) -> Transition:
     promised = _clean(text)
     if promised is None:
         raise Refused(RefusalCode.INVALID, "A promise needs text.")
     commitment_id = "cm_" + uuid.uuid4().hex[:12]
-    detail = {"promise": promised}
+    detail = {"promise": promised, **({"subject": subject} if subject else {})}
     with _immediate(home) as conn:
         earlier = _event_by_key(conn, event_key)
         if earlier is not None:
@@ -340,6 +378,38 @@ def get(home, commitment_id: str) -> Commitment | None:
     finally:
         conn.close()
     return _to_commitment(row) if row is not None else None
+
+
+def find_by_event_key(home, event_key: str) -> Commitment | None:
+    """The commitment an event moved; never creates the ledger, so a profile that never promised stays untouched."""
+    path = Path(home).resolve() / "state.db"
+    if not path.is_file():
+        return None
+    from hermes_cli.sqlite_safe_read import connect_tracked
+    conn = connect_tracked(f"{path.as_uri()}?mode=ro", tracking_path=path, uri=True, timeout=10)
+    conn.row_factory = sqlite3.Row
+    try:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'commitment_events'").fetchone() is None:
+            return None
+        row = conn.execute(
+            "SELECT c.* FROM commitments c JOIN commitment_events e ON e.commitment_id = c.id WHERE e.event_key = ?",
+            (event_key,)).fetchone()
+    finally:
+        conn.close()
+    return _to_commitment(row) if row is not None else None
+
+
+def open_with_subject(home, prefix: str) -> list[tuple[Commitment, str]]:
+    conn = _connect(home)
+    try:
+        rows = conn.execute(
+            "SELECT c.*, json_extract(e.detail_json, '$.subject') AS subject FROM commitments c "
+            "JOIN commitment_events e ON e.commitment_id = c.id AND e.rev = 1 "
+            f"WHERE c.state NOT IN ({_TERMINAL_SQL}) AND substr(json_extract(e.detail_json, '$.subject'), 1, ?) = ? "
+            "ORDER BY c.created_at, c.id", (len(prefix), prefix)).fetchall()
+    finally:
+        conn.close()
+    return [(_to_commitment(row), row["subject"]) for row in rows]
 
 
 def list_active(home, *, limit: int = 50) -> list[Commitment]:
