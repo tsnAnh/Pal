@@ -15,8 +15,10 @@ struct ChatRowWindowTests {
 
     @Test func aShortTranscriptShowsEverythingAndFollowsOlderRowsPrepended() {
         var window = ChatRowWindow()
-        #expect(window.resolve(ids(100..<160)).count == 60)
-        #expect(window.resolve(ids(60..<160)).count == 100)
+        let result1 = window.resolve(ids(100..<160)).count
+        #expect(result1 == 60)
+        let result2 = window.resolve(ids(60..<160)).count
+        #expect(result2 == 100)
     }
 
     @Test func olderRowsFetchedBeyondTheWindowStayHiddenSoNothingMoves() {
@@ -32,7 +34,8 @@ struct ChatRowWindowTests {
     @Test func appendedRowsGrowTheWindowFromTheFixedStart() {
         var window = ChatRowWindow()
         _ = window.resolve(ids(0..<1_000))
-        #expect(window.resolve(ids(0..<1_010)).count == ChatRowWindow.size + 10)
+        let result3 = window.resolve(ids(0..<1_010)).count
+        #expect(result3 == ChatRowWindow.size + 10)
     }
 
     @Test func expandingPagesOlderRowsInUntilTheStart() {
@@ -42,35 +45,44 @@ struct ChatRowWindowTests {
         var shown = window.resolve(all).count
         while window.expand(all) { shown = window.resolve(all).count }
         #expect(shown == 1_000)
-        #expect(!window.expand(all))
+        let result4 = window.expand(all)
+        #expect(!result4)
     }
 
     @Test func revealingAHiddenRowOpensWindowDownToIt() {
         var window = ChatRowWindow()
         let all = ids(0..<5_000)
         _ = window.resolve(all)
-        #expect(window.reveal("r1000", in: all))
+        let result5 = window.reveal("r1000", in: all)
+        #expect(result5)
         let range = window.resolve(all)
         #expect(range.lowerBound <= 1_000)
-        #expect(!window.reveal("r4999", in: all))
-        #expect(!window.reveal("missing", in: all))
+        let result6 = window.reveal("r4999", in: all)
+        #expect(!result6)
+        let result7 = window.reveal("missing", in: all)
+        #expect(!result7)
     }
 
     @Test func trimShrinksToTheNewestRowsOnlyAboveTheCeiling() {
         var window = ChatRowWindow()
         let all = ids(0..<5_000)
         _ = window.resolve(all)
-        #expect(!window.trim(all))
+        let result8 = window.trim(all)
+        #expect(!result8)
         window.reveal("r4000", in: all)
         window.reveal("r3000", in: all)
-        #expect(window.resolve(all).count > ChatRowWindow.ceiling)
-        #expect(window.trim(all))
-        #expect(window.resolve(all).count == ChatRowWindow.size)
+        let result9 = window.resolve(all).count
+        #expect(result9 > ChatRowWindow.ceiling)
+        let result10 = window.trim(all)
+        #expect(result10)
+        let result11 = window.resolve(all).count
+        #expect(result11 == ChatRowWindow.size)
     }
 
     @Test func aMissingStartRowFallsBackToTheNewestRows() {
         var window = ChatRowWindow()
         _ = window.resolve(ids(0..<1_000))
-        #expect(window.resolve(ids(5_000..<6_000)).count == ChatRowWindow.size)
+        let result12 = window.resolve(ids(5_000..<6_000)).count
+        #expect(result12 == ChatRowWindow.size)
     }
 }
