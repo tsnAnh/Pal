@@ -29,6 +29,9 @@ struct MacRail: View {
             VStack(spacing: 0) {
                 VStack(spacing: 3) {
                     MacRailAction(systemName: "plus", label: String(localized: "Create New Bot"), identifier: "createBotButton") { router.present(.createBot) }
+                    MacRailAction(
+                        systemName: "checkmark.circle", label: String(localized: "Approvals"), identifier: "approvalsButton"
+                    ) { router.presentApprovals() }
                     if router.capabilities.contains(.connectApps) {
                         Button { router.presentConnectApps() } label: {
                             MacConnectAppsGlyph(size: 15)
