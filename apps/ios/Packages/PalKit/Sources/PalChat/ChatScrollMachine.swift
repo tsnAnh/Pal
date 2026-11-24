@@ -37,7 +37,7 @@ public struct ChatScrollGeometry: Sendable, Equatable {
         self.topAnchor = topAnchor
     }
 
-    // containerHeight is the visible rect height: the insets are already outside it, so they never enter the distance.
+    // containerHeight is ScrollGeometry.containerSize, which already excludes the insets, so the bottom inset never enters the distance.
     public var distanceFromBottom: Double { max(0, contentHeight - (offsetY + insetTop + containerHeight)) }
     public var distanceFromTop: Double { max(0, offsetY + insetTop) }
     public var wantsOlder: Bool { distanceFromTop < containerHeight * 2 || contentHeight < containerHeight * 1.5 }
@@ -177,6 +177,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         let sizeChanged = last.map { !geometry.sameSize(as: $0) } ?? true
         previous = last
         last = geometry
+        if unseen > 0, isAtBottom(geometry) { unseen = 0 }
         if userScrolling { return userScrollingGeometry(geometry) }
         switch state {
         case .pinnedToBottom: return pinnedGeometry(geometry, sizeChanged: sizeChanged)
@@ -194,17 +195,11 @@ public struct ChatScrollMachine: Sendable, Equatable {
     }
 
     private mutating func pinnedGeometry(_ geometry: ChatScrollGeometry, sizeChanged: Bool) -> Command {
-        if isAtBottom(geometry) {
-            repairs = 0
-            return .none
-        }
-        if !sizeChanged, repairs == 0 {
-            guard isAway(geometry) else { return .none }
-            state = .readingHistory
-            readingAnchor = geometry.topAnchor ?? readingAnchor
-            return .none
-        }
-        return repair()
+        if isAtBottom(geometry) { return .none }
+        guard !sizeChanged, isAway(geometry) else { return .none }
+        state = .readingHistory
+        readingAnchor = geometry.topAnchor ?? readingAnchor
+        return .none
     }
 
     private mutating func repair() -> Command {

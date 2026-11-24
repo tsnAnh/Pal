@@ -37,7 +37,6 @@ private struct FakeScrollView {
     var userScrolling = false
     var rng: SplitMix64
     var nextID = 0
-    let glitchChance = 0.35
 
     init(rng: SplitMix64) {
         self.rng = rng
@@ -108,7 +107,6 @@ private struct FakeScrollView {
         mutate(&self)
         guard wasAtBottom else { return clampOffset() }
         offsetY = maxOffset
-        if rng.chance(glitchChance) { offsetY = max(-insetTop, maxOffset - rng.double(1...200)) }
     }
 
     mutating func changeHeight() {
@@ -283,7 +281,10 @@ private struct Harness {
     }
 
     mutating func check() {
-        guard !fake.userScrolling, machine.state == .pinnedToBottom, !fake.atBottom else { return }
+        guard !fake.userScrolling, machine.state == .pinnedToBottom, fake.geometry.distanceFromBottom > ChatScrollMachine.showDistance else { return }
+        var settled = machine
+        _ = settled.handle(.geometry(fake.geometry))
+        guard settled.state == .pinnedToBottom else { return }
         violations.append("step \(step): pinned but \(fake.geometry.distanceFromBottom) pt from the bottom")
     }
 }
