@@ -59,7 +59,7 @@ SHELL_FILES = {("App", "Mac", "MacShell.swift")}
 ROW_FILES = {("App", "Chat", "ChatRows.swift"), ("App", "Chat", "AssistantBubble.swift")}
 AVATAR_ROW_FILES = {("App", "Mac", "MacSidebar.swift"), ("App", "HomeView.swift"), ("App", "Rooms", "RoomRows.swift")}
 CHAT_MODEL_GUARDED = (
-    "rows", "rowsNewestFirst", "rowIDs", "connection", "isRunning", "workingStatus", "hasPendingClarify", "hasPendingPrompt",
+    "rows", "rowsNewestFirst", "rowIDs", "windowRows", "windowRowIDs", "hiddenOlder", "connection", "isRunning", "workingStatus", "hasPendingClarify", "hasPendingPrompt",
     "olderHistory", "findMatches", "findPosition",
 )
 GUARDED_WRITE_FIELDS = {

@@ -25,6 +25,7 @@ struct ChatTranscriptList: View {
 
     var body: some View {
         let _ = PalPerf.event("chat.scroll.body") // swiftlint:disable:this redundant_discardable_let
+        let _ = ChatOpenMetrics.listBody() // swiftlint:disable:this redundant_discardable_let
         ScrollView {
             ChatTranscriptRows(model: model, scroll: scroll, router: router, desk: desk.desk, connectionIsSlow: connectionIsSlow)
         }
@@ -100,11 +101,11 @@ private struct ChatTranscriptRows: View {
         let ink = BubblePalette.ink(accent: source.accent)
         LazyVStack(alignment: .leading, spacing: 0) {
             if !model.rows.isEmpty {
-                OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
+                OlderHistoryRow(state: model.olderHistoryShown, ink: ink) { model.wantOlder() }
                     .chatListRow()
                     .padding(.top, 8)
             }
-            ForEach(model.rows) { row in
+            ForEach(model.windowRows) { row in
                 ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
                     router.push(.botThread(BotThreadRoute(
                         botName: model.bot.name,
@@ -171,6 +172,7 @@ private struct ChatRowHeightFloor: ViewModifier {
     private static let settleLimit = Duration.seconds(1)
 
     func body(content: Content) -> some View {
+        let _ = ChatOpenMetrics.rowBody() // swiftlint:disable:this redundant_discardable_let
         content
             .onGeometryChange(for: CGRect.self) { // perf-lint: ok
                 $0.frame(in: .named(ChatScrollController.contentSpace))

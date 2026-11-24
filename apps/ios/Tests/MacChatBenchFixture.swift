@@ -116,13 +116,23 @@ enum MacChatBenchFixture {
         plainReply,
     ].joined(separator: "\n\n")
 
-    static func world(streamingTail: Bool) -> RebuildWorld {
+    private static let imageReply = """
+    The latency chart for the last release:
+
+    ![latency chart](https://example.invalid/latency.png)
+
+    It flattens after the fix.
+    """
+
+    static func world(streamingTail: Bool, messageCount: Int = MacChatBenchFixture.messageCount, images: Bool = false) -> RebuildWorld {
         var world = RebuildWorld()
         world.isRunning = streamingTail
         for index in 0..<messageCount {
             let date = rebuildAt(Double(index) * 95 + (index % 17 == 0 ? 4_000 : 0))
             if index.isMultiple(of: 2) {
                 world.append(rebuildUser("u\(index)", questions[(index / 2) % questions.count], at: date))
+            } else if images, index % 13 == 1 {
+                world.append(rebuildAssistant("a\(index)", imageReply, at: date))
             } else {
                 world.append(rebuildAssistant("a\(index)", replies[(index / 2) % replies.count], at: date))
             }
