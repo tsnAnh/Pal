@@ -5,9 +5,8 @@ from datetime import UTC, datetime
 
 from gateway import commitments as ledger
 from gateway import commitments_wake
-from gateway.commitments import Actor, Details, Refused, RefusalCode, Route, State
-from gateway.session_context import get_session_env
-from hermes_cli.profiles import current_profile_name
+from gateway.commitments import Actor, Details, Refused, RefusalCode, State
+from gateway.commitments_capture import current_profile, current_route
 from hermes_constants import get_hermes_home
 from tools.approval_context import get_current_approval_session_id, get_current_tool_call_id, get_current_turn_id
 from tools.registry import registry, tool_error, tool_result
@@ -15,11 +14,7 @@ from tools.registry import registry, tool_error, tool_result
 _UPDATE_TARGETS = tuple(s for s in State if s is not State.OPEN and s not in ledger.TERMINAL_STATES)
 _CLOSE_TARGETS = tuple(s for s in State if s in ledger.TERMINAL_STATES)
 _TARGETS = {"update": frozenset(_UPDATE_TARGETS), "close": frozenset(_CLOSE_TARGETS)}
-_ROUTE_ENV = {
-    "platform": "HERMES_SESSION_PLATFORM", "chat_id": "HERMES_SESSION_CHAT_ID",
-    "thread_id": "HERMES_SESSION_THREAD_ID", "chat_type": "HERMES_SESSION_CHAT_TYPE",
-    "session_key": "HERMES_SESSION_KEY", "session_id": "HERMES_SESSION_ID",
-}
+_MODEL_ACTORS = tuple(a for a in Actor if a is not Actor.AUTO)
 _DETAIL_FIELDS = ("note", "next_step", "blocker_what", "blocker_who", "evidence", "reason")
 
 
@@ -53,7 +48,7 @@ def build_schema() -> dict:
         "blocker_who": {"type": "string", "description": "Who can unblock it."},
         "evidence": {"type": "string", "description": "Proof it is done: a link, a result, a sent message."},
         "reason": {"type": "string", "description": "Why it is dropped."},
-        "by": {"type": "string", "enum": [a.value for a in Actor],
+        "by": {"type": "string", "enum": [a.value for a in _MODEL_ACTORS],
                "description": "Who dropped it; required when abandoning."},
         "expected_rev": {"type": "integer", "description": "Revision you last saw; defaults to the current one."},
     }
@@ -91,14 +86,6 @@ def _due(args: dict) -> float | None:
     return parsed.timestamp()
 
 
-def _route() -> Route:
-    return Route(**{field: get_session_env(env) or None for field, env in _ROUTE_ENV.items()})
-
-
-def _profile() -> str:
-    return get_session_env("HERMES_SESSION_PROFILE") or current_profile_name("default") or "default"
-
-
 def _event_key(action: str, commitment_id: str) -> str:
     session, turn, call = get_current_approval_session_id(), get_current_turn_id(), get_current_tool_call_id()
     if not (session and turn and call):
@@ -114,9 +101,9 @@ def _promise(args: dict, now: float) -> dict:
     owner_requested = args.get("owner_requested")
     if not isinstance(owner_requested, bool):
         raise Refused(RefusalCode.INVALID, "owner_requested is required: true when your owner asked, else false.")
-    made = ledger.promise(get_hermes_home(), event_key=_event_key("promise", ""), profile=_profile(),
+    made = ledger.promise(get_hermes_home(), event_key=_event_key("promise", ""), profile=current_profile(),
                           text=_required(args, "text"), owner_requested=owner_requested, due_at=_due(args),
-                          route=_route(), now=now, next_step=_text(args, "next_step"))
+                          route=current_route(), now=now, next_step=_text(args, "next_step"))
     follow_up_error = commitments_wake.ensure_job()
     return {"id": made.commitment_id, "state": made.to_state.value, "rev": made.rev,
             **({"replayed": True} if made.replayed else {}),
@@ -141,9 +128,12 @@ def _actor(args: dict, to: State) -> Actor:
             raise Refused(RefusalCode.MISSING_FIELDS, "Abandoning needs: by.")
         return Actor.BOT
     try:
-        return Actor(by)
+        actor = Actor(by)
     except ValueError:
         raise Refused(RefusalCode.INVALID, "by is not a known actor.") from None
+    if actor not in _MODEL_ACTORS:
+        raise Refused(RefusalCode.INVALID, "by is not a known actor.")
+    return actor
 
 
 def _expected_rev(args: dict, home, commitment_id: str) -> int:

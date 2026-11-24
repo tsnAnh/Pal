@@ -592,6 +592,15 @@ def format_process_notification(evt: dict) -> str | None:
         f"{attribution}Command: {_cmd}\nOutput:\n{_out}]")
 
 
+def surfaced_notification(evt: dict) -> str | None:
+    """The turn text for an event its owner is about to receive. The same moment settles the promise the event
+    answers (a finished delegation, a teammate's reply), so the ledger closes on the evidence the agent sees."""
+    if text := format_process_notification(evt):
+        from gateway.commitments_capture import settle_from_event
+        settle_from_event(evt)
+    return text
+
+
 def _empty_output_note(command: str) -> str:
     """What a completion with no output says instead of a blank: an exit 0 with nothing printed reads
     as success, and for a ``message_agent`` delivery it hides whether the target took the message."""
