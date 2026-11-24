@@ -16,6 +16,9 @@ public enum TimelinePacer {
                 PalPerf.event("chat.snapshot.coalesced", count: Int(next.version - lastVersion - 1))
             }
             lastVersion = next.version
+            if ChatSendTrace.isEnabled, let last = next.rows.last, case .assistant(let text, _, true) = last.item.content, !text.isEmpty {
+                ChatSendTrace.firstToken()
+            }
             apply(next)
             await pause()
         }
