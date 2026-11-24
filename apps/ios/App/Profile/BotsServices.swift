@@ -14,6 +14,7 @@ struct BotsServices: Sendable {
     let messagingSettings: MessagingSettingsService
     let gatewayService: GatewayServiceClient
     let connectCatalog: @Sendable (String) async throws -> ConnectCatalog
+    let ownerConnectService: @Sendable () -> ConnectAppsService
     let computer: ComputerService
     let teach: TeachService
     let rooms: @Sendable (String) -> RoomsService
@@ -37,6 +38,7 @@ struct BotsServices: Sendable {
         connectCatalog = { profile in
             try await ConnectAppsService(rpc: ConnectionRPC(model: connection), profile: profile).load()
         }
+        ownerConnectService = { ConnectAppsService(rpc: ConnectionRPC(model: connection), profile: nil) }
         computer = ComputerService(gateway: gateway)
         models = { profile in BotModelClient(gateway: gateway, profile: profile) }
         keys = BotKeysService(gateway: gateway)

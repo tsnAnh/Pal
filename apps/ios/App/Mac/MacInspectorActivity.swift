@@ -17,6 +17,7 @@ struct InspectorActivity: View {
         VStack(spacing: 0) {
             InspectorRoutinesSection(routines: routines, creation: $creation)
             InspectorSlackSection(botName: botName, router: router, profile: profile)
+            InspectorDiscordSection(botName: botName, router: router)
             InspectorComputerSection(botName: botName, router: router, profile: profile)
             InspectorSection(title: String(localized: "Model"), identifier: "inspectorModel") {
                 InspectorLinkRow(identifier: "profileModelRow", router: router, route: .botModel(botName: botName)) {
@@ -76,6 +77,22 @@ private struct InspectorSlackSection: View {
             }
         }
         .onAppear { Task { await profile.refreshSlack() } }
+    }
+}
+
+private struct InspectorDiscordSection: View {
+    let botName: String
+    let router: AppRouter
+
+    var body: some View {
+        InspectorSection(title: String(localized: "Discord"), identifier: "inspectorDiscord") {
+            InspectorLinkRow(identifier: "profileDiscordRow", router: router, route: .discord(botName: botName)) {
+                PalIcon("bubble.left.and.bubble.right", ink: .secondary).font(.system(size: 13)).frame(width: 18)
+                Text("Add to Discord").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                Spacer(minLength: 0)
+                PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
+            }
+        }
     }
 }
 

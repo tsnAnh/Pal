@@ -73,6 +73,9 @@ struct StatusBlock: View {
                     title: status.actionTitle, kind: .primary, isBusy: isBusy, identifier: "\(identifierPrefix)Action", action: perform
                 )
             }
+            if let link = status.link {
+                SetupButton(title: link.label, identifier: "\(identifierPrefix)Link") { ExternalLink.open(link.url) }
+            }
         }
         .frame(maxWidth: 420)
         .frame(maxWidth: .infinity)
