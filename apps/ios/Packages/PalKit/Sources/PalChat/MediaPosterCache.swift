@@ -32,18 +32,22 @@ public final class MediaPosterCache: @unchecked Sendable {
         var size: Int?
         var width: Int?
         var height: Int?
+        var pageCount: Int?
         var hasPoster: Bool
         var storedAt: Date?
     }
 
     public static let shared = MediaPosterCache()
     static let maxAge: TimeInterval = 7 * 24 * 60 * 60
+    public static let maxBytes = 96 * 1024 * 1024
 
     private let memory = NSCache<NSString, Entry>()
     private let directory: URL
+    private let maxBytes: Int
 
-    public init(directory: URL = MediaPosterCache.defaultDirectory) {
+    public init(directory: URL = MediaPosterCache.defaultDirectory, maxBytes: Int = MediaPosterCache.maxBytes) {
         self.directory = directory
+        self.maxBytes = maxBytes
         memory.totalCostLimit = 48 * 1024 * 1024
     }
 
@@ -69,7 +73,11 @@ public final class MediaPosterCache: @unchecked Sendable {
         remember(preview, for: key)
         let directory = directory
         let stem = key.stem
-        await Task.detached(priority: .utility) { Self.write(preview, stem: stem, in: directory) }.value
+        let maxBytes = maxBytes
+        await Task.detached(priority: .utility) {
+            Self.write(preview, stem: stem, in: directory)
+            Self.prune(in: directory, maxBytes: maxBytes)
+        }.value
     }
 
     public func removeAll() async {
@@ -94,7 +102,35 @@ public final class MediaPosterCache: @unchecked Sendable {
             else { return nil }
             poster = data
         }
-        return MediaPreview(poster: poster, duration: sidecar.duration, size: sidecar.size, width: sidecar.width, height: sidecar.height)
+        return MediaPreview(
+            poster: poster, duration: sidecar.duration, size: sidecar.size, width: sidecar.width, height: sidecar.height,
+            pageCount: sidecar.pageCount
+        )
+    }
+
+    static func prune(in directory: URL, maxBytes: Int) {
+        struct Stem {
+            var files: [URL] = []
+            var bytes = 0
+            var newest = Date.distantPast
+        }
+        let manager = FileManager.default
+        let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
+        guard let entries = try? manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: Array(keys)) else { return }
+        var groups: [String: Stem] = [:]
+        for entry in entries {
+            let values = try? entry.resourceValues(forKeys: keys)
+            var group = groups[entry.deletingPathExtension().lastPathComponent, default: Stem()]
+            group.files.append(entry)
+            group.bytes += values?.fileSize ?? 0
+            group.newest = max(group.newest, values?.contentModificationDate ?? .distantPast)
+            groups[entry.deletingPathExtension().lastPathComponent] = group
+        }
+        var total = groups.values.reduce(0) { $0 + $1.bytes }
+        for group in groups.values.sorted(by: { $0.newest < $1.newest }) where total > maxBytes {
+            for file in group.files { try? manager.removeItem(at: file) }
+            total -= group.bytes
+        }
     }
 
     private static func write(_ preview: MediaPreview, stem: String, in directory: URL) {
@@ -102,7 +138,7 @@ public final class MediaPosterCache: @unchecked Sendable {
         guard (try? manager.createDirectory(at: directory, withIntermediateDirectories: true)) != nil else { return }
         let sidecar = Sidecar(
             duration: preview.duration, size: preview.size, width: preview.width, height: preview.height,
-            hasPoster: preview.poster != nil, storedAt: Date()
+            pageCount: preview.pageCount, hasPoster: preview.poster != nil, storedAt: Date()
         )
         if let poster = preview.poster {
             guard (try? poster.write(to: directory.appending(path: "\(stem).jpg", directoryHint: .notDirectory), options: .atomic)) != nil

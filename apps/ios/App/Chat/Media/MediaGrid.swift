@@ -16,7 +16,7 @@ struct MediaGrid: View {
         let audios = media.filter { $0.kind == .audio }
         VStack(alignment: .leading, spacing: Self.spacing) {
             if videos.count == 1, let only = videos.first {
-                tile(only, width: MediaTileMetrics.single, height: MediaTileMetrics.singleHeight)
+                tile(only, width: MediaTileMetrics.single, height: MediaTileMetrics.singleHeight, followsPoster: true)
             } else if !videos.isEmpty {
                 let columns = Array(repeating: GridItem(.fixed(MediaTileMetrics.tile), spacing: Self.spacing), count: 2)
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Self.spacing) {
@@ -38,12 +38,13 @@ struct MediaGrid: View {
     }
 
     @ViewBuilder
-    private func tile(_ video: MediaReference, width: CGFloat, height: CGFloat) -> some View {
-        let view = MediaTile(media: video, width: width, height: height)
+    private func tile(_ video: MediaReference, width: CGFloat, height: CGFloat, followsPoster: Bool = false) -> some View {
+        let view = MediaTile(media: video, width: width, height: height, followsPoster: followsPoster)
         #if os(macOS)
         view
             .focusable()
             .focused($focused, equals: video.id)
+            .contentShape(.focusEffect, RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
             .onKeyPress(.return) { open(video) }
             .onKeyPress(.space) { open(video) }
         #else

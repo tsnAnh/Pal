@@ -344,3 +344,55 @@ struct MediaPosterCacheTests {
         #expect(reopened == nil)
     }
 }
+
+@Suite("Media poster cache cap")
+struct MediaPosterCacheCapTests {
+    private func store(_ id: String, bytes: Int, age: TimeInterval, in directory: URL, cache: MediaPosterCache) async throws {
+        let key = MediaPosterKey(id: id, pixels: 660)
+        await cache.store(MediaPreview(poster: Data(count: bytes), duration: 1), for: key)
+        let date = Date().addingTimeInterval(-age)
+        for entry in MediaFixtures.entries(in: directory) where entry.lastPathComponent.hasPrefix(key.stem) {
+            try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: entry.path)
+        }
+    }
+
+    @Test("pruning drops the oldest entries first and keeps both files of a survivor")
+    func oldestGoFirst() async throws {
+        let directory = MediaFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = MediaPosterCache(directory: directory, maxBytes: 1_000_000)
+        try await store("old", bytes: 400, age: 300, in: directory, cache: cache)
+        try await store("mid", bytes: 400, age: 200, in: directory, cache: cache)
+        try await store("new", bytes: 400, age: 100, in: directory, cache: cache)
+        MediaPosterCache.prune(in: directory, maxBytes: 1_200)
+        let names = Set(MediaFixtures.entries(in: directory).map(\.lastPathComponent))
+        #expect(!names.contains { $0.hasPrefix("old-") })
+        #expect(names.contains { $0.hasPrefix("mid-") && $0.hasSuffix(".jpg") })
+        #expect(names.contains { $0.hasPrefix("mid-") && $0.hasSuffix(".json") })
+        #expect(names.contains { $0.hasPrefix("new-") && $0.hasSuffix(".jpg") })
+    }
+
+    @Test("storing past the cap keeps the folder under it")
+    func storeEnforcesCap() async throws {
+        let directory = MediaFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = MediaPosterCache(directory: directory, maxBytes: 3_000)
+        for index in 0..<6 { try await store("m\(index)", bytes: 1_000, age: Double(600 - index * 100), in: directory, cache: cache) }
+        let total = MediaFixtures.entries(in: directory).reduce(0) {
+            $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        }
+        #expect(total <= 3_000)
+        #expect(!MediaFixtures.entries(in: directory).isEmpty)
+    }
+
+    @Test("a folder under the cap is left alone")
+    func underCap() async throws {
+        let directory = MediaFixtures.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = MediaPosterCache(directory: directory)
+        try await store("a", bytes: 100, age: 10, in: directory, cache: cache)
+        let before = MediaFixtures.entries(in: directory).count
+        MediaPosterCache.prune(in: directory, maxBytes: 1_000_000)
+        #expect(MediaFixtures.entries(in: directory).count == before)
+    }
+}

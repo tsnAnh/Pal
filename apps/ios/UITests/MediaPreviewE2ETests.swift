@@ -134,6 +134,32 @@ final class MediaPreviewE2ETests: E2ETestCase {
         waitGone(any(app, "mediaViewer"), timeout: 10, "escape closes the viewer")
     }
 
+    func testViewerStageFollowsAResizedWindow() throws {
+        let app = openChat()
+        openVideoTile(app).click()
+        waitFor(any(app, "mediaViewerPlayer"), timeout: 30, "player inside the viewer")
+        let window = app.windows.firstMatch
+        let narrower = window.frame.width - 200
+        let edge = window.coordinate(withNormalizedOffset: CGVector(dx: 1, dy: 0.5)).withOffset(CGVector(dx: -1, dy: 0))
+        edge.press(forDuration: 0.3, thenDragTo: edge.withOffset(CGVector(dx: -200, dy: 0)))
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline, abs(window.frame.width - narrower) > 8 { Thread.sleep(forTimeInterval: 0.2) }
+        Thread.sleep(forTimeInterval: 0.6)
+        let stage = any(app, "mediaViewerPlayer").frame
+        XCTAssertGreaterThanOrEqual(stage.minX, window.frame.minX - 2, "player starts inside the resized window")
+        XCTAssertLessThanOrEqual(stage.maxX, window.frame.maxX + 2, "player ends inside the resized window")
+        XCTAssertTrue(any(app, "imageViewerClose").isHittable, "close stays reachable after the resize")
+    }
+
+    func testViewerKeepsKeyboardFocusForCopyAndSave() throws {
+        let app = openChat()
+        openVideoTile(app).click()
+        waitFor(any(app, "mediaViewerPlayer"), timeout: 30, "player inside the viewer")
+        app.typeKey("c", modifierFlags: .command)
+        XCTAssertTrue(any(app, "mediaViewer").exists, "copy keeps the viewer open")
+        XCTAssertTrue(any(app, "imageViewerDownload").isEnabled, "Save As is available once the file is loaded")
+    }
+
     func testViewerCloseButtonClosesIt() throws {
         let app = openChat()
         openVideoTile(app).click()

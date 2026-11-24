@@ -11,7 +11,7 @@ BOT_COUNT=""
 
 usage() {
   cat <<USAGE
-usage: e2e-gateway [--seed parity|perf] [--bots N] [-- command...]
+usage: e2e-gateway [--seed parity|perf|media] [--bots N] [-- command...]
 Starts a stub LLM and an isolated, auth-gated gateway in a temp HERMES_HOME with two bot
 profiles, then runs the command with HERMES_IOS_E2E_* exported (or prints them and waits
 for SIGINT when no command is given). Everything is torn down on exit. bot-alpha also carries
@@ -29,6 +29,9 @@ the disabled stdio MCP server fixture-tools (default seed only).
                   bot-alpha also gets 130 distinct saved links in a separate hidden session, so its Library
                   spans three pages. HERMES_IOS_E2E_PERF_MANIFEST names the JSON listing each profile's ordered markers.
                   See Tools/perf/perf_seed.py.
+  --seed media    instead of bot-alpha and bot-beta, create media-bot whose Bot Chat holds an assistant message
+                  with MEDIA: lines for a small video, an audio note and a video over the 200 MB ceiling, then a
+                  later message with three videos. The files live in <home>/media-fixtures. See Tools/seed-media/seed_media.py.
 USAGE
 }
 
@@ -36,7 +39,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --seed)
-      [ "$#" -ge 2 ] || { echo "--seed needs a value (parity or perf)" >&2; exit 2; }
+      [ "$#" -ge 2 ] || { echo "--seed needs a value (parity, perf or media)" >&2; exit 2; }
       SEED="$2"; shift 2 ;;
     --bots)
       [ "$#" -ge 2 ] || { echo "--bots needs a number" >&2; exit 2; }
@@ -57,7 +60,8 @@ case "$SEED" in
     SEED_SLUGS="$("$PYTHON" -I "$SEED_TOOL" slugs ${BOTS_ARGS[@]+"${BOTS_ARGS[@]}"})"
     IFS=, read -r -a PROFILES <<<"$SEED_SLUGS" ;;
   perf) ;;
-  *) echo "unknown seed: $SEED (supported: parity, perf)" >&2; exit 2 ;;
+  media) PROFILES=(media-bot) ;;
+  *) echo "unknown seed: $SEED (supported: parity, perf, media)" >&2; exit 2 ;;
 esac
 
 WORK_DIR="$(mktemp -d /tmp/hermes-ios-e2e.XXXXXX)"
@@ -189,6 +193,11 @@ if [ "$SEED" = "perf" ]; then
     --sizes bot-alpha=600,bot-beta=2000 --marked --library-links 130 --manifest "$PERF_MANIFEST" >"$WORK_DIR/seed.log" 2>&1 \
     || { echo "seed perf failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
   export HERMES_IOS_E2E_PERF_MANIFEST="$PERF_MANIFEST"
+fi
+
+if [ "$SEED" = "media" ]; then
+  "$PYTHON" -I "$IOS_DIR/Tools/seed-media/seed_media.py" --home "$HOME_DIR" --repo "$GATEWAY_REPO" >"$WORK_DIR/seed.log" 2>&1 \
+    || { echo "seed media failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
 fi
 
 if [ "$#" -eq 0 ]; then

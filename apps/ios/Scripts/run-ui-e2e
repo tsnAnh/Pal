@@ -14,7 +14,7 @@ Runs the UI tests against a sandbox gateway (stub LLM, temp HERMES_HOME).
          (HERMES_UI_E2E_ARTIFACTS overrides it). MacPerfTourTests runs only when selected with HERMES_UI_E2E_ONLY; its phases.jsonl
          and the app's pal-frames.csv land in <artifacts>/perf. HERMES_UI_E2E_MAC_DERIVED overrides the Mac DerivedData path.
          HERMES_UI_E2E_MAC_OPTIMIZED=1 builds the Debug app with Release code generation (-O, whole module, no debug dylib) for perf runs.
-HERMES_UI_E2E_SEED (parity or perf) starts the gateway with that e2e-gateway seed and hands HERMES_UITEST_SEED to the tests.
+HERMES_UI_E2E_SEED (parity, perf or media) starts the gateway with that e2e-gateway seed and hands HERMES_UITEST_SEED to the tests.
 HERMES_UI_E2E_BOTS (with the parity seed) grows the roster to that many bots.
 HERMES_UI_E2E_TOUR_PHASES (comma list of surface names) narrows MacPerfTourTests to those phases.
 HERMES_UI_E2E_ONLY narrows the run to one -only-testing selector. The artifact path is printed last.
