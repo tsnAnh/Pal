@@ -34,6 +34,17 @@ public enum DropSource: Equatable, Sendable {
         }
     }
 
+    public var label: String {
+        switch self {
+        case .fileURL: "fileURL"
+        case .image(let identifier): "image(\(identifier))"
+        case .content(let identifier): "content(\(identifier))"
+        case .webLink: "webLink"
+        case .text: "text"
+        case .unsupported: "unsupported"
+        }
+    }
+
     public static func carriesAttachment(typeIdentifiers: [String]) -> Bool {
         classify(typeIdentifiers: typeIdentifiers).isAttachment
     }
@@ -58,6 +69,16 @@ public enum DropFailure: Equatable, Sendable {
     case unreadable
     case tooLarge(limitMegabytes: Int)
     case rejected(String)
+
+    public var label: String {
+        switch self {
+        case .webLinkOnly: "webLinkOnly"
+        case .unsupported: "unsupported"
+        case .unreadable: "unreadable"
+        case .tooLarge: "tooLarge"
+        case .rejected: "rejected"
+        }
+    }
 
     public var message: String {
         switch self {

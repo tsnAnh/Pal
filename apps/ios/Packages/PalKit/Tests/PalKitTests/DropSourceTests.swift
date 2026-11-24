@@ -85,4 +85,13 @@ struct DropSourceTests {
         #expect(DropBatch().isEmpty)
         #expect(!DropBatch(failures: [.unsupported]).isEmpty)
     }
+
+    @Test("the persisted drop log names a source and a failure without leaking a file name")
+    func logLabels() {
+        #expect(DropSource.fileURL.label == "fileURL")
+        #expect(DropSource.image(typeIdentifier: "public.png").label == "image(public.png)")
+        #expect(DropSource.unsupported.label == "unsupported")
+        #expect(DropFailure.rejected("secret-name.pdf").label == "rejected")
+        #expect(DropFailure.tooLarge(limitMegabytes: 24).label == "tooLarge")
+    }
 }

@@ -5,6 +5,7 @@ import Synchronization
 public enum DiagnosticLevel: String, Sendable {
     case debug
     case info
+    case notice
     case warning
     case error
 }
@@ -52,6 +53,7 @@ public struct Diagnostics: Sendable {
             switch event.level {
             case .debug: logger.debug("\(event.line, privacy: .public)")
             case .info: logger.info("\(event.line, privacy: .public)")
+            case .notice: logger.notice("\(event.line, privacy: .public)")
             case .warning: logger.warning("\(event.line, privacy: .public)")
             case .error: logger.error("\(event.line, privacy: .public)")
             }
@@ -71,6 +73,7 @@ public struct Diagnostics: Sendable {
 
     public func debug(_ category: String, _ message: String) { log(.debug, category, message) }
     public func info(_ category: String, _ message: String) { log(.info, category, message) }
+    public func notice(_ category: String, _ message: String) { log(.notice, category, message) }
     public func warning(_ category: String, _ message: String) { log(.warning, category, message) }
     public func error(_ category: String, _ message: String) { log(.error, category, message) }
 

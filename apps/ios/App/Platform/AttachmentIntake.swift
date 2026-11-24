@@ -1,7 +1,6 @@
 import Observation
 import PalChat
 import PalDesign
-import PalDiagnostics
 import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
@@ -84,27 +83,42 @@ private struct AttachmentDropDelegate: DropDelegate {
     let targeting: DropTargeting
     let intake: IntakeHandler
 
+    private static let destination = "swiftui.onDrop[public.item]"
+
     func validateDrop(info: DropInfo) -> Bool {
         let providers = info.itemProviders(for: [.item])
-        return providers.isEmpty || providers.contains { DropSource.classify(typeIdentifiers: $0.registeredTypeIdentifiers) != .text }
+        let accepted = providers.isEmpty || providers.contains { DropSource.classify(typeIdentifiers: $0.registeredTypeIdentifiers) != .text }
+        DropTrace.note(
+            "validate", items: providers.map(\.registeredTypeIdentifiers), destination: Self.destination,
+            verdict: accepted ? "accept" : "refuse", refusal: accepted ? nil : "only-text-items"
+        )
+        return accepted
     }
 
     func dropEntered(info: DropInfo) {
-        targeting.itemCount = max(1, info.itemProviders(for: [.item]).count)
+        let providers = info.itemProviders(for: [.item])
+        DropTrace.note("enter", items: providers.map(\.registeredTypeIdentifiers), destination: Self.destination, verdict: "enter")
+        targeting.itemCount = max(1, providers.count)
         targeting.isTargeted = true
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .copy)
+        DropTrace.note("update", items: info.itemProviders(for: [.item]).map(\.registeredTypeIdentifiers), destination: Self.destination, verdict: "copy")
+        return DropProposal(operation: .copy)
     }
 
     func dropExited(info: DropInfo) {
+        DropTrace.note("exit", items: [], destination: Self.destination, verdict: "exit")
+        DropTrace.reset()
         targeting.isTargeted = false
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        let providers = info.itemProviders(for: [.item])
+        DropTrace.note("perform", items: providers.map(\.registeredTypeIdentifiers), destination: Self.destination, verdict: "perform")
+        DropTrace.reset()
         targeting.isTargeted = false
-        return AttachmentIntake.receive(info.itemProviders(for: [.item]), intake: intake)
+        return AttachmentIntake.receive(providers, intake: intake)
     }
 }
 #endif
@@ -116,17 +130,22 @@ enum AttachmentIntake {
     }
 
     #if os(macOS)
-    private static let diagnostics = Diagnostics.osLog()
-
     @MainActor static func receive(_ providers: [NSItemProvider], intake: @escaping IntakeHandler) -> Bool {
         let candidates = providers
             .map { ($0, DropSource.classify(typeIdentifiers: $0.registeredTypeIdentifiers)) }
             .filter { $0.1 != .text }
-        guard !candidates.isEmpty else { return false }
+        guard !candidates.isEmpty else {
+            DropTrace.note("receive", items: providers.map(\.registeredTypeIdentifiers), destination: "intake", verdict: "refuse", refusal: "no-candidates")
+            return false
+        }
+        DropTrace.note("receive", items: providers.map(\.registeredTypeIdentifiers), destination: "intake", verdict: "accept")
         Task {
             var batch = DropBatch()
             for (provider, source) in candidates { await collect(provider, as: source, into: &batch) }
-            batch.failures.forEach { diagnostics.info("attachments", "drop not attached: \($0)") }
+            let failures = batch.failures.map(\.label)
+            DropTrace.diagnostics.notice(
+                "attachments", "drop loaded files=\(batch.files.count) images=\(batch.images.count) failures=\(failures)"
+            )
             intake(batch)
         }
         return true
