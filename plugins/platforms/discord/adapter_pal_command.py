@@ -42,10 +42,14 @@ class DiscordPalCommandMixin:
                 if not allowed or not self._is_pal_owner(interaction):
                     return []
                 query = (current or "").strip().lower()
+                bots = self._bots()
+                choices = [(choice.name, choice.display_name) for choice in bots.installed_bots()]
+                if all(name != DEFAULT_BOT for name, _ in choices):
+                    choices.insert(0, (DEFAULT_BOT, bots.default_display_name()))
                 return [
-                    discord.app_commands.Choice(name=choice.display_name[:CHOICE_NAME_MAX], value=choice.name)
-                    for choice in self._bots().installed_bots()
-                    if not query or query in choice.display_name.lower() or query in choice.name.lower()
+                    discord.app_commands.Choice(name=display[:CHOICE_NAME_MAX], value=name)
+                    for name, display in choices
+                    if not query or query in display.lower() or query in name.lower()
                 ][:MAX_CHOICES]
             except Exception:  # health: allow BLE001 -- autocomplete fails closed with no suggestions
                 return []
