@@ -9,6 +9,7 @@ from gateway.proactive_scorecard.mining import AskItem, Message, MinedSession, Q
 from gateway.proactive_scorecard.rubric import Criterion
 from persistence_assembly import open_persistence, profile_scope
 from tests.fixtures.storage_seed import seed_messages, seed_session
+from tests.gateway.proactive_scorecard.card_fixture import BOT_CHAT_WINDOW, DAY, NOW, seed_bot_chat
 
 WEEK_2026_W10 = 1772409600.0
 HOUR = 3600.0
@@ -257,3 +258,38 @@ def test_the_store_source_sees_a_commitment_event_but_not_a_commitment_list(tmp_
                       {"role": "assistant", "content": "I'll report back soon."})
     stats = total(mining.mine({"alpha": mining.PersistenceSource(tmp_path, bot="alpha")}))
     assert (stats["promise_turns"], stats["unrecorded_promises"], stats["owner_chases"]) == (2, 1, 1)
+
+
+DELEGATED = ({"id": "c1", "type": "function",
+              "function": {"name": "delegate_task", "arguments": "{\"background\": true}"}},)
+
+
+def bot_chat_stats(tmp_path, window=BOT_CHAT_WINDOW, **seed):
+    seed_bot_chat(tmp_path, **seed)
+    return mining.tally(mining.PersistenceSource(tmp_path, bot="alpha"), since=window[0], until=window[1])
+
+
+def test_a_long_lived_bot_chat_is_counted_for_the_window_its_messages_fall_in(tmp_path):
+    stats = bot_chat_stats(tmp_path)
+    assert (stats.sessions, stats.owner_turns, stats.assistant_turns, stats.question_turns) == (1, 3, 3, 1)
+    assert stats.promise_turns >= 1 and stats.unrecorded_promises >= 1
+
+
+def test_messages_before_the_window_are_not_counted_and_the_week_is_the_in_window_one(tmp_path):
+    seed_bot_chat(tmp_path)
+    since, until = BOT_CHAT_WINDOW
+    report = mining.mine({"alpha": mining.PersistenceSource(tmp_path, bot="alpha")}, since=since, until=until)
+    in_window = mining._week_key(NOW - 18 * DAY)
+    assert list(report["bots"]["alpha"]["weeks"]) == [in_window]
+    assert mining._week_key(NOW - 18 * DAY - 264 * HOUR) != in_window
+    assert total(report)["owner_turns"] == 3
+
+
+def test_a_window_holding_no_message_of_the_session_counts_no_session(tmp_path):
+    stats = bot_chat_stats(tmp_path, (NOW - 60 * DAY, NOW - 50 * DAY))
+    assert stats.sessions == 0
+
+
+def test_a_background_delegation_in_a_promise_turn_counts_as_recorded(tmp_path):
+    stats = bot_chat_stats(tmp_path, extra_calls=DELEGATED)
+    assert (stats.promise_turns, stats.unrecorded_promises) == (1, 0)
