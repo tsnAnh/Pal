@@ -338,6 +338,13 @@ final class PassiveTextView: NSTextView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    override func registerForDraggedTypes(_ newTypes: [NSPasteboard.PasteboardType]) {}
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        unregisterDraggedTypes()
+    }
+
     override func scrollWheel(with event: NSEvent) {
         nextResponder?.scrollWheel(with: event)
     }

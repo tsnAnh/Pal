@@ -85,4 +85,50 @@ struct DropSourceTests {
         #expect(DropBatch().isEmpty)
         #expect(!DropBatch(failures: [.unsupported]).isEmpty)
     }
+
+    @Test("the persisted drop log names a source and a failure without leaking a file name")
+    func logLabels() {
+        #expect(DropSource.fileURL.label == "fileURL")
+        #expect(DropSource.image(typeIdentifier: "public.png").label == "image(public.png)")
+        #expect(DropSource.unsupported.label == "unsupported")
+        #expect(DropFailure.rejected("secret-name.pdf").label == "rejected")
+        #expect(DropFailure.tooLarge(limitMegabytes: 24).label == "tooLarge")
+    }
+
+    @Test("a pasteboard shape is accepted when any item is a file, an image, a document or a file promise")
+    func acceptsDrag() {
+        let finder = ["public.file-url", "public.utf8-plain-text", "public.tiff"]
+        let safari = ["public.url", "public.utf8-plain-text", "public.html", "public.png", "public.tiff"]
+        let screenshotPromise = ["com.apple.NSFilePromiseItemMetaData", "com.apple.pasteboard.promised-file-content-type"]
+        let photosPromise = ["com.apple.NSFilePromiseItemMetaData", "com.apple.pasteboard.promised-file-url", "dyn.ah62d4rv4gu8"]
+        for shape in [finder, safari, screenshotPromise, photosPromise, ["public.jpeg"], ["com.adobe.pdf"], ["public.heic"]] {
+            #expect(DropSource.acceptsDrag(items: [shape]), "\(shape)")
+        }
+        #expect(DropSource.acceptsDrag(items: [["public.utf8-plain-text"], finder]))
+    }
+
+    @Test("text, a bare link and an empty pasteboard are refused with a stated reason")
+    func refusesDrag() {
+        #expect(!DropSource.acceptsDrag(items: [["public.utf8-plain-text", "public.rtf"]]))
+        #expect(!DropSource.acceptsDrag(items: [["public.url", "public.utf8-plain-text"]]))
+        #expect(!DropSource.acceptsDrag(items: []))
+        #expect(DropSource.refusal(items: []) == "empty-pasteboard")
+        #expect(DropSource.refusal(items: [["public.utf8-plain-text"]]) == "no-attachment-source")
+        #expect(DropSource.refusal(items: [["public.png"]]) == "none")
+    }
+
+    @Test("the registered set holds files, images and documents, and no text or bare link type")
+    func registeredSet() {
+        let registered = DropSource.registeredTypeIdentifiers
+        #expect(registered.contains("public.file-url") && registered.contains("public.image") && registered.contains("com.adobe.pdf"))
+        for identifier in ["public.item", "public.data", "public.content", "public.url", "public.utf8-plain-text", "public.text"] {
+            #expect(!registered.contains(identifier), "\(identifier)")
+        }
+    }
+
+    @Test("a promised file reports a promise marker so the receiver, not a data read, loads it")
+    func promiseMarkers() {
+        #expect(DropSource.isFilePromise(typeIdentifiers: ["com.apple.NSFilePromiseItemMetaData", "public.png"]))
+        #expect(!DropSource.isFilePromise(typeIdentifiers: ["public.png", "public.tiff"]))
+    }
 }
