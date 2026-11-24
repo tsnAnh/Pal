@@ -25,6 +25,7 @@ struct HeldDraftSheet: View {
                     .textSelection(.enabled)
             }
             .bubbleWidth(.leading)
+            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("heldDraftBubble")
             card
         }

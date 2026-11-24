@@ -62,7 +62,10 @@ struct PalApp: App {
         )
         _signIn = State(initialValue: signIn)
         _autoApprove = State(initialValue: ActionAutoApprove { method, params in try await model.rpc(method, params) })
-        _heldDrafts = State(initialValue: HeldDraftsModel(source: HeldDraftDesk(connector: LiveChatConnector(connection: model))))
+        _heldDrafts = State(initialValue: HeldDraftsModel(
+            source: HeldDraftFixture.source(arguments: ProcessInfo.processInfo.arguments)
+                ?? HeldDraftDesk(connector: LiveChatConnector(connection: model))
+        ))
         roster.gatewayEventSink = { event in
             Task { @MainActor in signIn.receive(event) }
         }
