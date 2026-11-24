@@ -101,7 +101,7 @@ final class HeldDraftApprovalsE2ETests: BotProfileTestCase {
         #if os(macOS)
         app.buttons["approvalDetailBack"].hit()
         #else
-        app.navigationBars.buttons.element(boundBy: 0).hit()
+        app.buttons["approvalDetail-back"].hit()
         #endif
         open(app, "Lee")
         waitFor(app.staticTexts["This draft waited too long. Ask the bot to write it again."], timeout: 10, "expired line")

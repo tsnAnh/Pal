@@ -38,7 +38,7 @@ struct MacApprovalsRow: View {
         .onHover { hovering = $0 }
         .task(id: roster.bots.map(\.name)) { await drafts?.load(bots: roster.heldDraftBots()) }
         .accessibilityLabel(Text("Approvals"))
-        .accessibilityValue(Text(count > 0 ? "\(count) waiting" : "None waiting"))
+        .accessibilityValue(Text(count > 0 ? String(localized: "\(count) waiting") : String(localized: "None waiting")))
         .accessibilityIdentifier("approvalsRow")
     }
 }
