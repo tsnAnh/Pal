@@ -9,7 +9,7 @@ private final class FakeDocumentGenerator: DocumentThumbnailGenerating, @uncheck
     private var started = 0
     private var running = 0
     private var peak = 0
-    private var kinds: [ChatDocumentKind] = []
+    private var kinds: [ChatDocumentKind?] = []
 
     init(outcome: Result<GeneratedThumbnail?, any Error>, delay: Duration = .zero) {
         self.outcome = outcome
@@ -18,9 +18,9 @@ private final class FakeDocumentGenerator: DocumentThumbnailGenerating, @uncheck
 
     var calls: Int { lock.withLock { started } }
     var peakConcurrency: Int { lock.withLock { peak } }
-    var seenKinds: [ChatDocumentKind] { lock.withLock { kinds } }
+    var seenKinds: [ChatDocumentKind?] { lock.withLock { kinds } }
 
-    func thumbnail(forFileAt url: URL, kind: ChatDocumentKind, maxPixel: Int) async throws -> GeneratedThumbnail? {
+    func thumbnail(forFileAt url: URL, kind: ChatDocumentKind?, maxPixel: Int) async throws -> GeneratedThumbnail? {
         lock.withLock {
             started += 1
             running += 1

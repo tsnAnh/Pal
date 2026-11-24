@@ -50,24 +50,29 @@ public enum ChatDocumentKind: String, Sendable, Equatable, CaseIterable {
 public enum DocumentCardMetrics {
     public static let width: CGFloat = 240
     public static let thumbnailHeight: CGFloat = 150
+    public static let iconHeight: CGFloat = 132
     public static let thumbnailPixels = Int(width * 3)
 }
 
 public struct DocumentStrip: Sendable, Equatable {
-    public static let openHint = "Double tap to open"
+    public static let openHint = MediaAccessibility.openHint
 
     public let name: String
     public let typeLabel: String
     public let pageCount: Int?
     public let size: Int?
-    public let kind: ChatDocumentKind
+    public let kind: FileCardKind
 
-    public init(name: String, typeLabel: String, kind: ChatDocumentKind, pageCount: Int? = nil, size: Int? = nil) {
+    public init(name: String, typeLabel: String, kind: FileCardKind, pageCount: Int? = nil, size: Int? = nil) {
         self.name = name
         self.typeLabel = typeLabel
         self.kind = kind
         self.pageCount = pageCount
         self.size = size
+    }
+
+    public init(name: String, typeLabel: String, kind: ChatDocumentKind, pageCount: Int? = nil, size: Int? = nil) {
+        self.init(name: name, typeLabel: typeLabel, kind: .document(kind), pageCount: pageCount, size: size)
     }
 
     public var pages: String? {
@@ -80,7 +85,7 @@ public struct DocumentStrip: Sendable, Equatable {
     }
 
     public var accessibilityLabel: String {
-        [kind.spokenName, name, pages].compactMap { $0 }.joined(separator: ", ")
+        MediaAccessibility.label(kind: kind.spokenName, name: name, pages: pages, size: size.map(MediaSize.label))
     }
 
     public func with(_ preview: MediaPreview?) -> DocumentStrip {
