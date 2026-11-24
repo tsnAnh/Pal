@@ -256,6 +256,10 @@ final class ChatModel {
         roster.nudge()
     }
 
+    func setForeground(_ active: Bool) {
+        if let session { Task { await session.setForeground(active) } }
+    }
+
     func markViewed() {
         if let session { Task { await session.flushCache() } }
         guard hasBaseline else { return }

@@ -97,12 +97,19 @@ public actor ChatSession: OutboxSubmitter {
     private let resolver: BotChatResolver
     let diagnostics: Diagnostics
     private let reconnectPolicy: ReconnectPolicy
-    private var connection: GatewayConnection?
+    private(set) var connection: GatewayConnection?
     private var attaching: GatewayConnection?
     var api: SessionAPI?
     private var pumps: [Task<Void, Never>] = []
     private var reconnecting = false
-    private var closing = false
+    private(set) var closing = false
+    let watchdogPolicy: WatchdogPolicy
+    var watchdog: Task<Void, Never>?
+    var watching = true
+    var foreground = true
+    var staleStrikes = 0
+    var counters = StreamCounters()
+    var lastIgnoredReason: String?
     private var linksRefresh: Task<Void, Never>?
     private var linksStale = false
     private var waiters: [UUID: StateWaiter] = [:]
@@ -141,10 +148,12 @@ public actor ChatSession: OutboxSubmitter {
         reconnectPolicy: ReconnectPolicy = ReconnectPolicy(),
         paging: PagingPolicy = PagingPolicy(),
         store: (any TimelineStore)? = nil,
-        diagnostics: Diagnostics = .silent
+        diagnostics: Diagnostics = .silent,
+        watchdog: WatchdogPolicy = WatchdogPolicy()
     ) {
         self.profile = profile
         self.paging = paging
+        watchdogPolicy = watchdog
         self.store = store
         (timelineSnapshots, timelineContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         self.connector = connector
@@ -410,6 +419,8 @@ public actor ChatSession: OutboxSubmitter {
         for waiter in abandoned { waiter.continuation.resume(returning: nil) }
         for pump in pumps { pump.cancel() }
         pumps.removeAll()
+        watchdog?.cancel()
+        watchdog = nil
         linksRefresh?.cancel()
         linksRefresh = nil
         for task in [olderLoader, newestRefresh].compactMap({ $0 }) { task.cancel() }
@@ -474,6 +485,8 @@ public actor ChatSession: OutboxSubmitter {
             Task { await self.consume(connection) },
             Task { await self.rejectServerRequests(connection) },
         ]
+        noteSubscribe("live")
+        startWatchdog(connection)
         refreshBotThreadLinks()
     }
 
@@ -516,12 +529,14 @@ public actor ChatSession: OutboxSubmitter {
         for await event in connection.events {
             guard !Task.isCancelled, !closing, self.connection === connection else { return }
             guard await handle(event) else {
+                noteSubscribe("handle-failed")
                 await connection.close()
                 await reconnect()
                 return
             }
         }
         guard !closing, self.connection === connection else { return }
+        noteSubscribe("stream-ended")
         await reconnect()
     }
 
@@ -532,7 +547,9 @@ public actor ChatSession: OutboxSubmitter {
         }
         let frame = SessionEventFrame(event)
         _ = PalPerf.interval("chat.timeline.apply") { timeline.apply(frame) }
-        switch transcript.apply(frame) {
+        let outcome = transcript.apply(frame)
+        noteFrame(outcome, frame)
+        switch outcome {
         case .applied:
             publishLive()
             if event.type == Self.messageCompleteEvent {
@@ -557,9 +574,13 @@ public actor ChatSession: OutboxSubmitter {
             _ = transcript.reconcile(with: resumed.snapshot)
             try await adoptTimeline(resumed.snapshot, page: resumed.timeline, api: api, forced: true)
             publishLive()
+            counters.resyncDone += 1
+            noteStream("resync.done")
             return true
         } catch {
             diagnostics.warning("chat", "resync failed: \(Diagnostics.describe(error))")
+            counters.resyncFailed += 1
+            noteStream("resync.failed", Diagnostics.describe(error))
             return false
         }
     }
@@ -568,6 +589,7 @@ public actor ChatSession: OutboxSubmitter {
         guard !reconnecting, !closing else { return }
         reconnecting = true
         defer { reconnecting = false }
+        noteSubscribe("reattaching")
         setPhase(.attaching)
         connection = nil
         api = nil

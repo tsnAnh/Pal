@@ -61,6 +61,7 @@ public actor SessionHub: OutboxSubmitter {
         coolDownTask = nil
         let session = current ?? ChatSession(profile: profile, connector: connector, store: store, diagnostics: diagnostics)
         current = session
+        await session.setWatching(true)
         await pool?.unpark(self)
         return session
     }
@@ -70,6 +71,7 @@ public actor SessionHub: OutboxSubmitter {
         holders -= 1
         guard holders == 0 else { return }
         await session.flushCache()
+        await session.setWatching(false)
         guard let pool else {
             await coolDown()
             return
