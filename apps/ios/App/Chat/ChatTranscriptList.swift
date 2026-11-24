@@ -101,16 +101,10 @@ private struct ChatTranscriptRows: View {
                     .padding(.top, 8)
             }
             ForEach(model.windowRows) { row in
-                ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
-                    router.push(.botThread(BotThreadRoute(
-                        botName: model.bot.name,
-                        threadID: link.threadID,
-                        focusExchangeID: link.exchangeID
-                    )))
-                }
-                .equatable()
-                .chatListRow()
-                .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row)) { scroll.rowLaidOut(row.id, frame: $0) })
+                rowView(row, source: source)
+                    .equatable()
+                    .chatListRow()
+                    .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row)) { scroll.rowLaidOut(row.id, frame: $0) })
             }
             VStack(spacing: 0) { footer(ink: ink) }
                 .animation(PalMotion.Pop(reduceMotion: reduceMotion).animation, value: showsWorkingRow)
@@ -131,6 +125,19 @@ private struct ChatTranscriptRows: View {
         #if os(iOS)
         .containerRelativeFrame(.horizontal)
         #endif
+        .background(alignment: .topLeading) {
+            ChatRowMeasureLayer(model: model, scroll: scroll) { row, source in rowView(row, source: source) }
+        }
+    }
+
+    private func rowView(_ row: ChatRow, source: ChatRowContextSource) -> ChatRowView {
+        ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
+            router.push(.botThread(BotThreadRoute(
+                botName: model.bot.name,
+                threadID: link.threadID,
+                focusExchangeID: link.exchangeID
+            )))
+        }
     }
 
     @ViewBuilder

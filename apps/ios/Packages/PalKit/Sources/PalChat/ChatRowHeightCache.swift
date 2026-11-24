@@ -27,6 +27,16 @@ public struct ChatRowHeightCache: Sendable, Equatable {
         return heights[id]
     }
 
+    public func unmeasured(in ids: [String], width queryWidth: Double, skipping skipped: Set<String> = [], limit: Int) -> [String] {
+        guard limit > 0 else { return [] }
+        var found: [String] = []
+        for id in ids.reversed() where !skipped.contains(id) && height(for: id, width: queryWidth) == nil {
+            found.append(id)
+            if found.count == limit { break }
+        }
+        return found
+    }
+
     public mutating func invalidate(_ id: String) {
         forget(id)
     }
