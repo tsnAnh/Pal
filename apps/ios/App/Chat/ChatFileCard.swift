@@ -34,7 +34,7 @@ struct ChatFileStack: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ForEach(files) { file in
-                if let kind = DocumentKind(fileName: file.name) {
+                if let kind = ChatDocumentKind(fileName: file.name) {
                     DocumentFileCard(file: file, kind: kind, isStreaming: isStreaming)
                 } else {
                     ChatFileCard(file: file, isStreaming: isStreaming)

@@ -1,14 +1,14 @@
 import CoreGraphics
 import Foundation
 
-public enum DocumentKind: String, Sendable, Equatable, CaseIterable {
+public enum ChatDocumentKind: String, Sendable, Equatable, CaseIterable {
     case pdf
     case office
     case text
     case code
     case csv
 
-    private static let extensions: [DocumentKind: Set<String>] = [
+    private static let extensions: [ChatDocumentKind: Set<String>] = [
         .pdf: ["pdf"],
         .office: ["doc", "docx", "xls", "xlsx", "ppt", "pptx", "pages", "numbers", "key", "odt", "ods", "odp"],
         .text: ["txt", "md", "markdown", "rtf", "rtfd", "log"],
@@ -19,7 +19,7 @@ public enum DocumentKind: String, Sendable, Equatable, CaseIterable {
         .csv: ["csv", "tsv"],
     ]
 
-    private static let byExtension: [String: DocumentKind] = extensions.reduce(into: [:]) { table, entry in
+    private static let byExtension: [String: ChatDocumentKind] = Self.extensions.reduce(into: [:]) { table, entry in
         for ext in entry.value { table[ext] = entry.key }
     }
 
@@ -60,9 +60,9 @@ public struct DocumentStrip: Sendable, Equatable {
     public let typeLabel: String
     public let pageCount: Int?
     public let size: Int?
-    public let kind: DocumentKind
+    public let kind: ChatDocumentKind
 
-    public init(name: String, typeLabel: String, kind: DocumentKind, pageCount: Int? = nil, size: Int? = nil) {
+    public init(name: String, typeLabel: String, kind: ChatDocumentKind, pageCount: Int? = nil, size: Int? = nil) {
         self.name = name
         self.typeLabel = typeLabel
         self.kind = kind

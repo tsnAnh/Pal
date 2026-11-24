@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DocumentFileCard: View {
     let file: FileReference
-    let kind: DocumentKind
+    let kind: ChatDocumentKind
     let isStreaming: Bool
 
     @Environment(\.mediaPreviewResolver) private var mediaResolver

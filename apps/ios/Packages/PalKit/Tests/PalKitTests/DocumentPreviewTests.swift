@@ -9,7 +9,7 @@ private final class FakeDocumentGenerator: DocumentThumbnailGenerating, @uncheck
     private var started = 0
     private var running = 0
     private var peak = 0
-    private var kinds: [DocumentKind] = []
+    private var kinds: [ChatDocumentKind] = []
 
     init(outcome: Result<GeneratedThumbnail?, any Error>, delay: Duration = .zero) {
         self.outcome = outcome
@@ -18,9 +18,9 @@ private final class FakeDocumentGenerator: DocumentThumbnailGenerating, @uncheck
 
     var calls: Int { lock.withLock { started } }
     var peakConcurrency: Int { lock.withLock { peak } }
-    var seenKinds: [DocumentKind] { lock.withLock { kinds } }
+    var seenKinds: [ChatDocumentKind] { lock.withLock { kinds } }
 
-    func thumbnail(forFileAt url: URL, kind: DocumentKind, maxPixel: Int) async throws -> GeneratedThumbnail? {
+    func thumbnail(forFileAt url: URL, kind: ChatDocumentKind, maxPixel: Int) async throws -> GeneratedThumbnail? {
         lock.withLock {
             started += 1
             running += 1
@@ -69,7 +69,7 @@ private func emptyAnswer() -> MediaPreviewAnswer {
 struct DocumentKindTests {
     @Test("document extensions map to their kind regardless of case")
     func classification() {
-        let expected: [DocumentKind: [String]] = [
+        let expected: [ChatDocumentKind: [String]] = [
             .pdf: ["a.pdf", "b.PDF"],
             .office: ["a.docx", "b.XLSX", "c.pptx", "d.pages", "e.numbers", "f.key", "g.odt"],
             .text: ["a.txt", "b.md", "c.markdown", "d.rtf", "e.log"],
@@ -77,14 +77,14 @@ struct DocumentKindTests {
             .csv: ["a.csv", "b.TSV"],
         ]
         for (kind, names) in expected {
-            for name in names { #expect(DocumentKind(fileName: name) == kind, "\(name) should be \(kind)") }
+            for name in names { #expect(ChatDocumentKind(fileName: name) == kind, "\(name) should be \(kind)") }
         }
     }
 
     @Test("html, archives, 3d, media and unknown files are not documents")
     func notDocuments() {
         for name in ["a.html", "b.htm", "c.zip", "d.usdz", "e.mp4", "f.mp3", "g.png", "h.vcf", "noextension", "i.bin"] {
-            #expect(DocumentKind(fileName: name) == nil, "\(name) is another unit's kind")
+            #expect(ChatDocumentKind(fileName: name) == nil, "\(name) is another unit's kind")
         }
     }
 
@@ -206,7 +206,8 @@ struct DocumentPreviewResolverTests {
         let retried = loader.retry()
         #expect(started && retried)
         source.setChunkFailure(nil)
-        loader.finish(try await rig.resolver.resolve(report(), kind: .pdf))
+        let again = try await rig.resolver.resolve(report(), kind: .pdf)
+        loader.finish(again)
         guard case .ready = loader.state else {
             Issue.record("retry did not reach ready: \(loader.state)")
             return

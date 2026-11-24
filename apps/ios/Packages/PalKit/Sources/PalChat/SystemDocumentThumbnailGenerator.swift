@@ -6,7 +6,7 @@ import QuickLookThumbnailing
 public struct SystemDocumentThumbnailGenerator: DocumentThumbnailGenerating {
     public init() {}
 
-    public func thumbnail(forFileAt url: URL, kind: DocumentKind, maxPixel: Int) async throws -> GeneratedThumbnail? {
+    public func thumbnail(forFileAt url: URL, kind: ChatDocumentKind, maxPixel: Int) async throws -> GeneratedThumbnail? {
         let pages = kind == .pdf ? PDFDocument(url: url)?.pageCount : nil
         let request = QLThumbnailGenerator.Request(
             fileAt: url, size: CGSize(width: maxPixel, height: maxPixel * 3 / 2), scale: 1, representationTypes: .thumbnail
