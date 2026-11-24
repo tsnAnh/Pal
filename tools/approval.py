@@ -208,8 +208,9 @@ def clear_session(session_key: str) -> None:
             # the prompt was withdrawn, nobody denied it.
             entry.cancelled = "the session ended before the prompt was answered"
             entry.event.set()
-    from tools import mcp_action_gate
+    from tools import mcp_action_gate, outbound_send_grant
     mcp_action_gate.clear_session(session_key)
+    outbound_send_grant.clear_session(session_key)
     # Session-persistent code kernels (local and remote) share this owner key and die at the same boundary so a
     # finished conversation cannot leak a live interpreter.
     for module, shutdown in (("tools.code_kernel", "shutdown_kernels_for_owner"),

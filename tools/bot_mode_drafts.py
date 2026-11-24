@@ -369,15 +369,40 @@ def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]
     return None, new_args
 
 
+def content_block(outbound: Outbound, args: dict) -> str | None:
+    if len(outbound.text) > MAX_TEXT_CHARS or sum(len(part) for part in _strings(args)) > MAX_ARGS_CHARS:
+        return "BLOCKED: This message is too long to send. It was NOT sent. Shorten it."
+    if _carries_secret(*_strings(args), outbound.text, outbound.subject):
+        return ("BLOCKED: This message contains what looks like a credential, so it was NOT sent and no "
+                "draft was made. Remove the secret and do not retry with it.")
+    return None
+
+
+def send_preview(spec) -> Outbound | None:
+    """The outbound a clarify ``send`` field describes, or None when it is not a message the owner could read in
+    full and the gate would let through. The clarify bubble and the grant both come from this one parse."""
+    if not isinstance(spec, dict) or not isinstance(spec.get("tool"), str) or not isinstance(spec.get("arguments"), dict):
+        return None
+    try:
+        outbound = classify_outbound(spec["tool"], spec["arguments"])
+    except Exception:
+        logger.exception("send preview classification failed for %s", spec["tool"])
+        return None
+    if outbound is None or not outbound.viewable or content_block(outbound, spec["arguments"]) is not None:
+        return None
+    return outbound
+
+
+def preview_text(outbound: Outbound) -> str:
+    return "\n\n".join(part for part in (card_description(outbound), outbound.text) if part.strip())
+
+
 def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
     policy = policy_for_profile()
     if policy is None:
         return None, None
-    if len(outbound.text) > MAX_TEXT_CHARS or sum(len(part) for part in _strings(args)) > MAX_ARGS_CHARS:
-        return "BLOCKED: This message is too long to send. It was NOT sent. Shorten it.", None
-    if _carries_secret(*_strings(args), outbound.text, outbound.subject):
-        return ("BLOCKED: This message contains what looks like a credential, so it was NOT sent and no "
-                "draft was made. Remove the secret and do not retry with it."), None
+    if (blocked := content_block(outbound, args)) is not None:
+        return blocked, None
     from tools import approval, approval_context
     if approval_context._no_user_can_answer():
         return _hold(outbound, args, "unattended", "Nobody is present to approve outbound messages in this run.")
@@ -388,6 +413,9 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
                      "Part of this message cannot be shown in full, so it can only be cancelled.")
     if not _inline_capable(approval):
         return _hold(outbound, args, "elsewhere", "No Pal app is connected to this chat to show the approval right now.")
+    from tools import outbound_send_grant
+    if outbound_send_grant.redeem(outbound.tool, args):
+        return None, None
     return _ask_owner(outbound, args)
 
 

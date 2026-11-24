@@ -214,6 +214,11 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional
     if allow_auto_approve and session_key and auto_approve_enabled(session_key, server_name):
         logger.info("MCP action auto-approved: server=%s tool=%s", server_name, tool_name)
         return None, grant
+    from tools import outbound_send_grant
+    from tools.mcp_tool_schema import mcp_prefixed_tool_name
+    if outbound_send_grant.redeem(mcp_prefixed_tool_name(server_name, tool_name), args):
+        logger.info("MCP action approved by the owner's pick on a clarify form: server=%s tool=%s", server_name, tool_name)
+        return None, grant
     refusal = _approve(server_name, tool_name, args)
     return (refusal, None) if refusal else (None, grant)
 
