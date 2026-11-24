@@ -25,6 +25,7 @@ private struct MacMediaViewer: View {
     let close: () -> Void
 
     @State private var player = AVPlayer()
+    @State private var staging = MediaDragStaging()
     @FocusState private var focused: Bool
 
     private var file: URL? { state.file(for: state.current.id) }
@@ -34,7 +35,8 @@ private struct MacMediaViewer: View {
             title: state.title,
             actions: [.download, .close],
             disabled: file == nil ? [.download] : [],
-            perform: perform
+            perform: perform,
+            drag: dragProvider
         ) {
             MediaPlaybackStage(state: $state, source: source) { url in
                 MacPlayerView(player: player, url: url)
@@ -54,7 +56,15 @@ private struct MacMediaViewer: View {
             close()
             return .handled
         }
-        .onDisappear { player.pause() }
+        .onCopyCommand { file.map(MediaDrag.copyable) ?? [] }
+        .onDisappear {
+            player.pause()
+            staging.release()
+        }
+    }
+
+    private func dragProvider() -> NSItemProvider {
+        MediaDrag.provider(for: state.current.reference, source: source, staging: staging, ready: file)
     }
 
     private func perform(_ action: ViewerAction) {

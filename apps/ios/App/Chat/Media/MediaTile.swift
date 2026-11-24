@@ -6,7 +6,9 @@ struct MediaTile: View {
     let media: MediaReference
     let width: CGFloat
     let height: CGFloat
+    var followsPoster = false
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.mediaPreviewResolver) private var resolver
     @Environment(\.mediaOpener) private var opener
     @Environment(\.mediaRowID) private var rowID
@@ -16,6 +18,7 @@ struct MediaTile: View {
     @State private var transfer = MediaFilePhase.idle
     @State private var transferTask: Task<Void, Never>?
     @State private var hovering = false
+    @State private var staging = MediaDragStaging()
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
@@ -27,14 +30,22 @@ struct MediaTile: View {
 
     private var shown: MediaPreviewState { loader.displayed(cached: resolver?.cached(media)) }
 
+    private var tileHeight: CGFloat {
+        guard followsPoster, case .ready(let preview) = shown else { return height }
+        return MediaPosterAspect.height(forWidth: width, mediaWidth: preview.width, mediaHeight: preview.height, placeholder: height)
+    }
+
     var body: some View {
         content
-            .frame(width: width, height: height)
+            .frame(width: width, height: tileHeight)
             .clipShape(shape)
             .shadow(color: PalTokens.scrim.opacity(0.22), radius: 6, y: 2)
             .contentShape(shape)
             .task(id: "\(media.id)#\(attempt)") { await load() }
-            .onDisappear { transferTask?.cancel() }
+            .onDisappear {
+                transferTask?.cancel()
+                staging.release()
+            }
     }
 
     @ViewBuilder
@@ -61,6 +72,8 @@ struct MediaTile: View {
         Button { opener?(media, rowID) } label: {
             ZStack {
                 posterLayer
+                    .brightness(hovering ? 0.08 : 0)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hovering)
                 playGlyph
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
@@ -68,12 +81,13 @@ struct MediaTile: View {
                 }
                 transferBadge
             }
-            .frame(width: width, height: height)
+            .frame(width: width, height: tileHeight)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .accessibilityLabel(Text("Video \(media.name). Tap to play"))
         .accessibilityIdentifier("chatMediaTile")
+        .modifier(MediaTileDrag(media: media, staging: staging))
         .modifier(
             MediaTileMenu(
                 open: { opener?(media, rowID) },
@@ -89,7 +103,7 @@ struct MediaTile: View {
             Image(platformImage: PlatformImage(cgImage: image))
                 .resizable()
                 .scaledToFill()
-                .frame(width: width, height: height)
+                .frame(width: width, height: tileHeight)
                 .clipped()
         } else {
             ZStack {

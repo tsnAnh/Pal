@@ -190,7 +190,7 @@ final class ConnectionModel {
         client = nil
         try? await auth.signOut()
         cache.removeAll()
-        surfaces.forgetAll()
+        await forgetAccountData()
         userName = ""
         userInitial = "H"
         isLocalEngine = false
@@ -252,7 +252,7 @@ final class ConnectionModel {
                 phase = .failed(Self.message(for: error))
             } else {
                 cache.removeAll()
-                surfaces.forgetAll()
+                await forgetAccountData()
                 phase = .signedOut
             }
         }

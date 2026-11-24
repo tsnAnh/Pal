@@ -127,3 +127,30 @@ struct MediaKindTests {
         #expect(MediaTileMetrics.singleHeight == MediaTileMetrics.single * 0.75)
     }
 }
+
+@Suite("Media poster aspect")
+struct MediaPosterAspectTests {
+    @Test("the real width and height set the tile height")
+    func realRatio() {
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 1920, mediaHeight: 1080) == 124)
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 1000, mediaHeight: 1000) == 220)
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 4, mediaHeight: 3) == MediaTileMetrics.singleHeight)
+    }
+
+    @Test("missing or empty dimensions keep the 4:3 placeholder")
+    func placeholder() {
+        let placeholder = MediaTileMetrics.singleHeight
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: nil, mediaHeight: nil) == placeholder)
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 1920, mediaHeight: nil) == placeholder)
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 0, mediaHeight: 1080) == placeholder)
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 1920, mediaHeight: -1) == placeholder)
+    }
+
+    @Test("extreme shapes are clamped so a row never grows past a portrait or shrinks past a strip")
+    func clamped() {
+        #expect(MediaPosterAspect.ratio(width: 9, height: 16) == MediaPosterAspect.narrowest)
+        #expect(MediaPosterAspect.ratio(width: 21, height: 9) == MediaPosterAspect.widest)
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 9, mediaHeight: 16) == (220 / MediaPosterAspect.narrowest).rounded())
+        #expect(MediaPosterAspect.height(forWidth: 220, mediaWidth: 100, mediaHeight: 1) == 110)
+    }
+}

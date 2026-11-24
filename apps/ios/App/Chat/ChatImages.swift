@@ -44,6 +44,11 @@ nonisolated enum ChatImageDecoder {
         cache.object(forKey: key(id, maxPixel))
     }
 
+    static func removeAll() {
+        cache.removeAllObjects()
+        sizes.removeAllObjects()
+    }
+
     static func originalSize(id: String) -> CGSize? {
         sizes.object(forKey: id as NSString)?.size
     }
