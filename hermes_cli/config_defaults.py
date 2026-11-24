@@ -1747,12 +1747,12 @@ DEFAULT_CONFIG = {
 
     "push": PUSH_DEFAULTS,
     "proactive": {
-        "enabled": False,
-        "daily_budget": 3,
-        "min_gap_minutes": 60,
+        "enabled": False, "daily_budget": 3, "min_gap_minutes": 60,
         "quiet_hours": {"start": "22:00", "end": "08:00"},
         "domain_tiers": {"cron": "notify", "suggestions": "suggest"},
         "muted_domains": [], "messaging_window_minutes": 30,
+        "autonomy": {"reversible_edits": "act", "run_tools": "act", "create_files": "act",
+                     "schedule_jobs": "act_and_tell", "spend_money": "ask", "message_people": "ask"},
     },
 
     "desk": {"ask_timeout_minutes": 1440, "decision_timeout_minutes": 4320},

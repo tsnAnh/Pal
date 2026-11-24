@@ -27,6 +27,7 @@ from agent.prompt_builder import (
     TOOL_USE_ENFORCEMENT_GUIDANCE, TOOL_USE_ENFORCEMENT_MODELS, drain_truncation_warnings,
 )
 from agent import prompt_builder as _pb
+from gateway.autonomy import load_autonomy, prompt_line as autonomy_prompt_line
 from agent.runtime_cwd import resolve_agent_cwd, resolve_context_cwd
 from hermes_constants import get_default_hermes_root, get_hermes_home, get_skills_dir
 from utils import is_truthy_value
@@ -575,7 +576,8 @@ def _identity_parts(agent: Any, ctx_len: Optional[int]) -> tuple[list[str], bool
 
 def _guidance_parts(agent: Any) -> list[str]:
     """Universal + tool-aware + model-gated guidance blocks, each gated by its config.yaml key."""
-    parts: list[str] = [OWNER_PROACTIVE_GUIDANCE]
+    from hermes_cli.config import load_config_readonly
+    parts: list[str] = [OWNER_PROACTIVE_GUIDANCE, autonomy_prompt_line(load_autonomy(load_config_readonly()))]
     if agent.valid_tool_names:
         parts += [
             text for flag, text in (
