@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from evals.proactive_eval.models import Ask, BotModel, Event, Judge, Variant
-from evals.proactive_eval.patterns import fold, is_bare_yes_no
-from evals.proactive_eval.rubric import NEEDED_CRITERIA, RUBRIC_VERSION, Label, label_from_criteria
+from gateway.proactive_scorecard.patterns import fold, is_bare_yes_no
+from gateway.proactive_scorecard.rubric import NEEDED_CRITERIA, RUBRIC_VERSION, Label, label_from_criteria
 from evals.proactive_eval.scenario import Scenario, Split
 
 NOT_IN_RECORD = "That is not in the record."

@@ -1,8 +1,9 @@
 """Offline measurement kit for the "proactive first" principle (no model call happens at import).
 
-- ``rubric``: the versioned rubric (``rubric.json``) and the deterministic label from criteria.
-- ``patterns``: question detection, criterion lexicons and owner-correction pattern classes.
-- ``mining``: read-only transcript miner that emits counts and pattern ids per bot and week.
+The rubric, the patterns and the read-only transcript miner ship with the gateway in
+``gateway/proactive_scorecard/``, which the scorecard reads live.
+
+- ``fixture_source``: the synthetic sessions the miner's dry run reads.
 - ``scenario``: replay scenario schema, validator and the tune / held-out split loader.
 - ``models``: bot and judge protocols, stubs, the model-family check and the repo-client adapters.
 - ``replay``: simulated owner, scenario runner, scoring, paired comparison, spot-check list, held-out ledger.

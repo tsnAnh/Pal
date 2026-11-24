@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from evals.proactive_eval.rubric import Criterion
+from gateway.proactive_scorecard.rubric import Criterion
 
 _TRAILING_NOISE = re.compile(r"[\s\*_`~\)\]\"'”’»>☀-➿\U0001f000-\U0001faff️]+$")
 _OPTION_LINE = re.compile(r"^\s*(?:[-*•]|\d{1,2}[.)]|[A-Da-d][.)])\s+\S")

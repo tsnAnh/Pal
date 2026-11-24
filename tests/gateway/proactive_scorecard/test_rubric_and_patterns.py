@@ -1,7 +1,7 @@
 import pytest
 
-from evals.proactive_eval import patterns, rubric
-from evals.proactive_eval.rubric import Criterion, Label
+from gateway.proactive_scorecard import patterns, rubric
+from gateway.proactive_scorecard.rubric import Criterion, Label
 
 
 @pytest.mark.parametrize("criteria, label, basis", [

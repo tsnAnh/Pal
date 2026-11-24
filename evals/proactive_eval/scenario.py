@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from evals.proactive_eval.rubric import Criterion, parse_criteria
+from gateway.proactive_scorecard.rubric import Criterion, parse_criteria
 
 SCENARIO_ROOT = Path(__file__).with_name("scenarios")
 

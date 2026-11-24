@@ -2,9 +2,11 @@ import json
 
 import pytest
 
-from evals.proactive_eval import cli, mining
-from evals.proactive_eval.mining import AskItem, FixtureSource, Message, MinedSession, QuestionContext
-from evals.proactive_eval.rubric import Criterion
+from evals.proactive_eval import cli
+from evals.proactive_eval.fixture_source import FIXTURE_PATH, FixtureSource
+from gateway.proactive_scorecard import mining
+from gateway.proactive_scorecard.mining import AskItem, Message, MinedSession, QuestionContext
+from gateway.proactive_scorecard.rubric import Criterion
 from persistence_assembly import open_persistence, profile_scope
 from tests.fixtures.storage_seed import seed_messages, seed_session
 
@@ -102,7 +104,7 @@ def test_the_miner_output_holds_no_message_text(capsys):
     out = capsys.readouterr().out
     report = json.loads(out)
     assert report["source"] == "synthetic-fixture" and report["judge"] == "heuristic"
-    lines = mining.FIXTURE_PATH.read_text(encoding="utf-8").splitlines()
+    lines = FIXTURE_PATH.read_text(encoding="utf-8").splitlines()
     forbidden = {m["text"] for line in lines for m in json.loads(line)["messages"]}
     assert not any(text[:30] in out for text in forbidden if len(text) >= 30)
 
