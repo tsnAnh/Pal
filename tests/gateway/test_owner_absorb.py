@@ -2,12 +2,14 @@
 as a durable admission, transferred through the steer fence, and reported ``steered``. Everything else
 (other sessions, bot DMs, operators, a turn still building its agent) keeps its FIFO place."""
 import asyncio
+import json
+import logging
 import threading
 
 import pytest
 
 from agent.interrupt_control import InterruptControlMixin, _steer_parts
-from gateway import session_finite
+from gateway import send_stats, session_finite
 from gateway.session_contract import SessionActor, Submission
 from tests.fixtures.storage_holder import raw_holder
 from tests.gateway.test_prompt_queued_controls import _call, _connection, _ledger, interactive
@@ -106,18 +108,24 @@ async def test_an_owner_message_during_a_bot_chat_turn_is_steered_in_and_every_t
 async def test_the_send_trace_times_the_steer_by_admission_id_and_never_carries_the_text(bot_chat, monkeypatch, caplog):
     db, authority = bot_chat
     turn = Turn(monkeypatch, drain=True)
-    caplog.set_level('INFO', logger='gateway.send_trace')
+    caplog.set_level('WARNING')
     with db:
         conn = _owner_connection(authority)
         await _submit_as_owner(conn, 'running')
         await asyncio.wait_for(turn.claimed.wait(), 30)
-        second = await _submit_as_owner(conn, 'secret weather plans')
+        second = await _submit_as_owner(conn, 'SENTINEL-weather plans')
         turn.release.set()
         await _drained(authority)
-    lines = [record.getMessage() for record in caplog.records if record.name == 'gateway.send_trace']
+    records = [record for record in caplog.records if record.name == 'gateway.send_trace']
+    lines = [record.getMessage() for record in records]
+    assert all(record.levelno == logging.WARNING for record in records)
     assert any(f"send_trace admitted admission={second['admission_id']} status=steered why=absorbed absorb_ms=" in line for line in lines), lines
     assert any(f"send_trace steer_drained admission={second['admission_id']} wait_ms=" in line for line in lines), lines
-    assert not any('weather' in line for line in lines), lines
+    assert not any('SENTINEL' in line or 'weather' in line for line in lines), lines
+    stats = send_stats.summary(hours=1)
+    assert stats['by_status']['steered'] == 1 and stats['by_why']['absorbed'] == 1 and stats['steer_drained'] == 1
+    assert 'SENTINEL' not in json.dumps(stats)
+    assert b'SENTINEL' not in (send_stats._db_path(None)).read_bytes()
 
 
 @pytest.mark.asyncio
@@ -162,7 +170,7 @@ async def test_the_send_trace_names_the_gate_that_kept_a_message_in_the_queue(bo
     db, authority = bot_chat
     raw_holder(db)._execute_write(lambda conn: conn.execute('UPDATE sessions SET title=? WHERE id=?', ('Weekend plans', 's')))
     turn = Turn(monkeypatch, drain=True)
-    caplog.set_level('INFO', logger='gateway.send_trace')
+    caplog.set_level('WARNING')
     with db:
         conn = _owner_connection(authority)
         await _submit_as_owner(conn, 'running')

@@ -129,6 +129,7 @@ hermes moa                  Mixture-of-Agents slots
 hermes hooks / security / backup / import / checkpoints / console
 hermes logs [-f] [errors]   View agent/error logs
 hermes diag recent [--minutes N] [--method M] [--json]   Recent gateway faults (method, code, reason, device, build, trace)
+hermes diag send-stats [--hours N] [--json]               How owner messages were absorbed: counts per status and why, absorb_ms and wait_ms min/median/max
 hermes send                 One-off message through a gateway platform
 hermes pairing / plugins / insights / journey / computer-use
 hermes acp                  ACP server (IDE integration)

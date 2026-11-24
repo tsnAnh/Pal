@@ -1,10 +1,10 @@
 import asyncio
-import logging
 import time
 from dataclasses import dataclass
 from functools import partial
 from typing import Literal, Optional
 
+from gateway import send_stats
 from gateway.session_persistence import authority_persistence
 from gateway.session_queued_controls import (
     _deliver, _receiving_agent, _register, _unregister, queued_controls,
@@ -12,8 +12,6 @@ from gateway.session_queued_controls import (
 from persistence.authority.vocabulary import STEERING
 from persistence.core.errors import AuthorityRefusal
 from tools.interrupt import YieldReason
-
-logger = logging.getLogger('gateway.send_trace')
 
 Outcome = Literal['absorbed', 'idle', 'no_agent', 'missed']
 
@@ -77,8 +75,7 @@ async def absorb_into_running_turn(authority, ref, admission_id, *, reason: Opti
 async def absorb_owner_input(authority, ref, admission_id, payload) -> Optional[str]:
     started = time.monotonic()
     status, why = await _absorb_owner_input(authority, ref, admission_id, payload)
-    logger.info('send_trace admitted admission=%s status=%s why=%s absorb_ms=%d',
-                admission_id, status or 'untouched', why, (time.monotonic() - started) * 1000)
+    await asyncio.to_thread(send_stats.admitted, admission_id, status, why, (time.monotonic() - started) * 1000)
     return status
 
 

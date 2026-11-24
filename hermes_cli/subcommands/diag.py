@@ -71,6 +71,38 @@ def cmd_diag(args: argparse.Namespace) -> int:
     return 0
 
 
+def _spread_line(label: str, spread: dict | None) -> str:
+    if spread is None:
+        return f"{label}: none"
+    return f"{label}: min {spread['min']:g}  median {spread['median']:g}  max {spread['max']:g}"
+
+
+def _print_send_stats(stats: dict) -> None:
+    print(f"send_trace, last {stats['window_hours']}h: admitted {stats['admitted']}, "
+          f"steer_drained {stats['steer_drained']}")
+    print("status: " + ", ".join(f"{name} {count}" for name, count in stats["by_status"].items()))
+    print("why: " + (", ".join(f"{name} {count}" for name, count in stats["by_why"].items()) or "none"))
+    print(_spread_line("absorb_ms", stats["absorb_ms"]))
+    print(_spread_line("wait_ms", stats["wait_ms"]))
+
+
+def cmd_send_stats(args: argparse.Namespace) -> int:
+    from gateway import send_stats
+    hours = _clamp(args.hours, 1, send_stats.MAX_HOURS)
+    try:
+        stats = send_stats.summary(hours=hours)
+    except sqlite3.Error as exc:
+        print(f"could not read the send_trace ledger ({type(exc).__name__}: {exc})", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(stats, indent=2))
+    elif stats is None:
+        print("No send_trace ledger on this host yet: the gateway has traced no owner message.")
+    else:
+        _print_send_stats(stats)
+    return 0
+
+
 def build_diag_parser(subparsers) -> None:
     parser = subparsers.add_parser(
         "diag", help="Read the gateway's local fault ledger (read-only).",
@@ -85,3 +117,10 @@ def build_diag_parser(subparsers) -> None:
     recent.add_argument("--method", help="Only faults for this RPC method.")
     recent.add_argument("--json", action="store_true", help="Print the rows as a JSON array.")
     recent.set_defaults(func=cmd_diag)
+    send_stats = sub.add_parser(
+        "send-stats", help="Count how owner messages were absorbed (read-only).",
+        description="Counts of the gateway's send_trace events per status and reason, and absorb/wait "
+        "milliseconds (min, median, max). Ids, statuses and milliseconds only; never message text.")
+    send_stats.add_argument("--hours", type=int, default=24, help="Look back N hours (1..168, default 24).")
+    send_stats.add_argument("--json", action="store_true", help="Print the counters as JSON.")
+    send_stats.set_defaults(func=cmd_send_stats)

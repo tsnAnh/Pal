@@ -453,14 +453,18 @@ class InterruptControlMixin:
             parts = _steer_parts(self)
             _set_steer_parts(self, [])
             enqueued_at = vars(self).get("_steer_enqueued_at", {})
+            waits = []
             for ticket, _ in parts:
                 if ticket is not None:
                     _steer_fates(self)[ticket] = True
                     queued = enqueued_at.pop(ticket, None)
                     if queued is not None:
-                        logging.getLogger("gateway.send_trace").info(
-                            "send_trace steer_drained admission=%s wait_ms=%d", ticket, (time.monotonic() - queued) * 1000)
+                        waits.append((ticket, (time.monotonic() - queued) * 1000))
             self._steer_last_drain = (text, parts)  # requeue_drained_steer restores its tickets
+        if waits:
+            from gateway import send_stats
+            for ticket, wait_ms in waits:
+                send_stats.steer_drained(ticket, wait_ms)
         return text
 
     def _drain_leftover_steer(self) -> Optional[str]:
