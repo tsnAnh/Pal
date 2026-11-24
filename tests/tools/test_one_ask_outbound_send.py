@@ -11,13 +11,18 @@ import threading
 
 import pytest
 
-from tests.tools.test_bot_mode_drafts import EMAIL, EMAIL_ARGS, _owner, _write_config, bot_home, owner_app  # noqa: F401
-from tests.tools.test_mcp_action_gate import Owner, _call, _register, server  # noqa: F401
+from tests.tools import test_bot_mode_drafts as drafts
+from tests.tools import test_mcp_action_gate as mcp
 from tools import bot_mode_draft_store, outbound_send_grant
 from tools.approval_context import get_current_session_key
 from tools.bot_mode_drafts import review_outbound
 from tools.clarify_split import split_clarify_arguments
 from tools.clarify_tool import CLARIFY_SCHEMA, clarify_tool
+
+EMAIL, EMAIL_ARGS, _owner, _write_config = drafts.EMAIL, drafts.EMAIL_ARGS, drafts._owner, drafts._write_config
+Owner, _call, _register = mcp.Owner, mcp._call, mcp._register
+bot_home, owner_app, server = drafts.bot_home, drafts.owner_app, mcp.server
+
 
 @pytest.fixture(autouse=True)
 def _no_grants_between_tests():
