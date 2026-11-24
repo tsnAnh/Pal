@@ -10,7 +10,7 @@ struct BubbleDeliveryStateTests {
         OutboxEntry(submissionID: "s1", botID: "b", text: "hi", attachments: [], createdAt: Date(), state: state, attempts: 0)
     }
 
-    @Test func aMessageWithoutAReceiptIsSendingOnline() {
+    @Test func aMessageWithoutAReceiptIsPendingOnline() {
         #expect(BubbleDelivery.awaitingReceipt(offline: false, outbox: entry(.pending)) == .sending)
         #expect(BubbleDelivery.awaitingReceipt(offline: false, outbox: nil) == .sending)
     }
