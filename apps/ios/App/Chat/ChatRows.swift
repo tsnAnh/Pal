@@ -165,7 +165,7 @@ struct UserBubble: View {
                         }
                         .bubbleTextSelection()
                     }
-                    .opacity(delivery == .sent ? 1 : 0.75)
+                    .opacity(delivery == .sent || delivery == .sending ? 1 : 0.75)
                     .bubbleAccessibility(text: message.spoken, identifier: "userBubble")
                     .messageActions(side: .user)
                 }
@@ -181,11 +181,9 @@ struct UserBubble: View {
     @ViewBuilder
     private var pendingStatus: some View {
         switch delivery {
-        case .sending:
-            pendingLabel("Sending", symbol: "arrow.up.circle", identifier: "deliverySending")
         case .waitingForConnection:
             pendingLabel("Waiting for connection", symbol: "clock", identifier: "deliveryWaitingForConnection")
-        case .sent, .failed:
+        case .sent, .sending, .failed:
             EmptyView()
         }
     }
