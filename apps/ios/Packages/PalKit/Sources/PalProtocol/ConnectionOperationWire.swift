@@ -5,6 +5,7 @@ public enum ConnectionTargetState: Sendable, Hashable {
     case initiated
     case connected
     case skipped
+    case declined
     case failed
     case expired
     case notConnected
@@ -16,6 +17,7 @@ public enum ConnectionTargetState: Sendable, Hashable {
         case "initiated": self = .initiated
         case "connected": self = .connected
         case "skipped": self = .skipped
+        case "declined": self = .declined
         case "failed": self = .failed
         case "expired": self = .expired
         case "not_connected": self = .notConnected
@@ -29,6 +31,7 @@ public enum ConnectionTargetState: Sendable, Hashable {
         case .initiated: "initiated"
         case .connected: "connected"
         case .skipped: "skipped"
+        case .declined: "declined"
         case .failed: "failed"
         case .expired: "expired"
         case .notConnected: "not_connected"

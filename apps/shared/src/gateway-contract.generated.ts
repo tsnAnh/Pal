@@ -1715,7 +1715,7 @@ export interface ConnectionOperationTarget {
 export type ConnectionTargetKind = 'connector' | 'mcp' | 'plugin' | 'skill'
 export type ConnectionTargetAction = 'authorize' | 'connect' | 'enable' | 'install' | 'reconnect'
 /** ``tools/connectors/contract.py::TargetState``. */
-export type ConnectionTargetState = 'pending' | 'initiated' | 'connected' | 'skipped' | 'failed' | 'expired' | 'not_connected'
+export type ConnectionTargetState = 'pending' | 'initiated' | 'connected' | 'skipped' | 'declined' | 'failed' | 'expired' | 'not_connected'
 /** One credential an MCP install still needs; the card renders a field per entry and sends the values back with the approval. */
 export interface ConnectionTargetEnvField {
   name: string
@@ -1776,7 +1776,7 @@ export interface ConnectionAnswerTarget {
   detail?: string | null
   env?: Record<string, string> | null
 }
-/** What the card says about one row: ``tools/connectors/mcp.py::apply_answer``. */
+/** What the card says about one row: ``tools/connectors/mcp.py::apply_answer``. ``skipped`` is a catalog (plugin or skill) row's Skip only; an MCP row is declined at the question form. */
 export type ConnectionAnswerStatus = 'approved' | 'skipped'
 export interface ConnectionRespondResult {
   status: 'ok'

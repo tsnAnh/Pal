@@ -85,8 +85,8 @@ async def test_a_pal_session_drives_its_mcp_operation_and_retries_a_failed_row_w
 
         skipped = await call(owner, 'connection.respond', owner=who, op_id=operation.op_id,
                              result={'targets': [{'name': 'notion', 'status': 'skipped'}]})
-        assert 'result' in skipped, skipped
-        assert operation.target('notion').state == TargetState.skipped
+        assert skipped['error']['data']['reason'] == 'INVALID_ANSWER', skipped
+        assert operation.target('notion').state == TargetState.pending
 
         operation.transition('linear', TargetState.failed, Actor.backend_watcher)
         retried = await call(owner, 'connectors.connect', owner=who, connectors=['linear'], reconnect=True)

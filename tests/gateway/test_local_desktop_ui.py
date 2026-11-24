@@ -143,11 +143,11 @@ def test_the_connection_card_opens_and_updates_on_the_owning_session(window, mon
     assert window.agent.connection_callback(operation.request_payload()) is None
     assert window.published[-1][0] == "connection.request"
     assert window.published[-1][1]["op_id"] == operation.op_id
-    operation.transition("linear", TargetState.skipped, Actor.user)
+    operation.transition("linear", TargetState.declined, Actor.user)
     session_id, event_type, payload = window.streamed[-1]
     assert (session_id, event_type) == ("canon", "connection.update")
     assert payload["owner"] == {"type": "session", "session_id": "canon"}
-    assert payload["targets"][0]["state"] == "skipped"
+    assert payload["targets"][0]["state"] == "declined"
 
 
 def test_connection_updates_reach_the_owner_in_either_install_order(window, monkeypatch):
@@ -163,10 +163,10 @@ def test_connection_updates_reach_the_owner_in_either_install_order(window, monk
     local_viewer_events.wire(window.turn, window.agent)
     ours = ConnectionOperation([Target("linear", "mcp", "install")], session_key="agent:main:local:dm:1")
     live.open(ours)
-    ours.transition("linear", TargetState.skipped, Actor.user)
+    ours.transition("linear", TargetState.declined, Actor.user)
     assert window.streamed[-1][1] == "connection.update" and sidecar == []
     other = ConnectionOperation([Target("linear", "mcp", "install")], session_key="agent:main:local:dm:1")
     other.profile_key = "another-profile"
     count = len(window.streamed)
-    other.transition("linear", TargetState.skipped, Actor.user)
+    other.transition("linear", TargetState.declined, Actor.user)
     assert len(window.streamed) == count and sidecar == [other.op_id]

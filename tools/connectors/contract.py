@@ -14,6 +14,7 @@ class TargetState(str, Enum):
     initiated = "initiated"
     connected = "connected"
     skipped = "skipped"
+    declined = "declined"
     failed = "failed"
     expired = "expired"
     # Stamped by settle() on every unresolved target; never a transition target.
@@ -35,7 +36,7 @@ class SettleReason(str, Enum):
 
 KINDS: tuple[str, ...] = ("connector", "mcp", "plugin", "skill")
 
-RESOLVED_STATES = frozenset({TargetState.connected, TargetState.skipped})
+RESOLVED_STATES = frozenset({TargetState.connected, TargetState.skipped, TargetState.declined})
 # A failed catalog row is done as well: the host already ran the install and the row carries the
 # reason. Counting it as open held the model's turn until the deadline while nobody clicked. Try
 # again still works while another row keeps the operation open, and the failed row keeps its state
@@ -50,7 +51,8 @@ _S, _A = TargetState, Actor
 
 # (kind, from) -> {to: the only actor allowed to cause it}. Every `connected` is witnessed by the
 # backend: the gateway's account list for a managed target, the install / enable / OAuth worker for
-# an MCP one. The card can only skip a target, or ask for a failed one to be run again.
+# an MCP one. The card can only skip a hosted target or ask for a failed MCP one to be run again; an
+# MCP target is declined by the owner's answer at the question form, never on the card.
 TRANSITIONS: dict[tuple[str, TargetState], dict[TargetState, Actor]] = {
     ("connector", _S.pending): {_S.initiated: _A.backend_watcher, _S.failed: _A.backend_watcher, _S.skipped: _A.user},
     ("connector", _S.initiated): {
@@ -58,16 +60,18 @@ TRANSITIONS: dict[tuple[str, TargetState], dict[TargetState, Actor]] = {
     },
     ("connector", _S.failed): {_S.initiated: _A.user, _S.skipped: _A.user},
     ("connector", _S.expired): {_S.initiated: _A.user, _S.skipped: _A.user},
-    ("mcp", _S.pending): {_S.initiated: _A.backend_watcher, _S.failed: _A.backend_watcher, _S.skipped: _A.user},
-    ("mcp", _S.initiated): {_S.connected: _A.backend_watcher, _S.failed: _A.backend_watcher, _S.skipped: _A.user},
-    ("mcp", _S.failed): {_S.initiated: _A.user, _S.skipped: _A.user},
+    ("mcp", _S.pending): {_S.initiated: _A.backend_watcher, _S.failed: _A.backend_watcher, _S.declined: _A.user},
+    ("mcp", _S.initiated): {_S.connected: _A.backend_watcher, _S.failed: _A.backend_watcher},
+    ("mcp", _S.failed): {_S.initiated: _A.user},
 }
-# ``manage_catalog`` rows install like an MCP entry: approve starts the host's install, the install
-# worker witnesses ``connected``, Try again re-runs a failed row.
+# ``manage_catalog`` rows (desktop only) install like an MCP entry but keep their card's Skip: approve
+# starts the host's install, the install worker witnesses ``connected``, Try again re-runs a failed row.
 for _kind in ("plugin", "skill"):
-    for (_k, _from), _edges in list(TRANSITIONS.items()):
-        if _k == "mcp":
-            TRANSITIONS[(_kind, _from)] = dict(_edges)
+    TRANSITIONS[(_kind, _S.pending)] = {_S.initiated: _A.backend_watcher, _S.failed: _A.backend_watcher,
+                                        _S.skipped: _A.user}
+    TRANSITIONS[(_kind, _S.initiated)] = {_S.connected: _A.backend_watcher, _S.failed: _A.backend_watcher,
+                                          _S.skipped: _A.user}
+    TRANSITIONS[(_kind, _S.failed)] = {_S.initiated: _A.user, _S.skipped: _A.user}
 
 
 def allowed(kind: str, current: TargetState, to: TargetState) -> Optional[Actor]:

@@ -59,8 +59,8 @@ def test_status_wake_and_respond_of_a_pal_mcp_operation_never_touch_a_nous_modul
 
     answered = _rpc(pal_session, "connection.respond", op_id=operation.op_id,
                     result={"targets": [{"name": "notion", "status": "skipped"}]})
-    assert "result" in answered, answered
-    assert operation.target("notion").state == TargetState.skipped
+    assert answered["error"]["data"]["reason"] == "INVALID_ANSWER", answered
+    assert operation.target("notion").state == TargetState.pending
 
     assert nous_sentinels == []
 
