@@ -23,6 +23,7 @@ final class BotLinks {
     private let connection: ConnectionModel
     private var links: [String: BotLink] = [:]
     private let warm = WarmSessionPool()
+    let snapshots = ChatSnapshotMemory()
 
     init(connection: ConnectionModel) {
         self.connection = connection

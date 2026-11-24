@@ -149,7 +149,7 @@ final class ChatModel {
     let openedBot: BotRow
     var bot: BotRow { roster.bot(named: openedBot.name) ?? openedBot }
 
-    private let links: BotLinks
+    let links: BotLinks
     let roster: RosterModel
     private let lastSeenStore: ChatLastSeenStore
     private let lastSeenAtOpen: Date?
@@ -176,7 +176,7 @@ final class ChatModel {
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
     @ObservationIgnored var openingDeadline: Task<Void, Never>?
-    @ObservationIgnored var snapshotFromEarlierRun = false
+    @ObservationIgnored var openStats = ChatOpenStats()
     private var delivering = false
     private var absorbedEchoes = AbsorbedEchoLedger()
 
@@ -213,6 +213,7 @@ final class ChatModel {
         self.roster = roster
         self.lastSeenStore = lastSeenStore
         lastSeenAtOpen = lastSeenStore.lastSeen(for: bot.name)
+        seedFromMemory()
     }
 
     func wantOlder() {
@@ -580,9 +581,7 @@ final class ChatModel {
         await session.restore()
         let current = await session.timelineSnapshot
         if before.rows.isEmpty, !current.rows.isEmpty {
-            LaunchClock.mark("chat \(openedBot.name) shown from cache (\(current.rows.count) rows)", on: .osLog())
-            ChatOpenTrace.mark(openedBot.name, "cache.frame", rows: current.rows.count, detail: "held=true")
-            opening.hold(version: current.version) { [weak self] in self?.apply($0) }
+            showCacheFrame(current)
         } else {
             apply(current)
         }
@@ -811,6 +810,7 @@ final class ChatModel {
     }
 
     private func publish(_ next: [ChatRow]) {
+        noteRows(next.count)
         if assignIfChanged(\.rows, next) {
             assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
             assignIfChanged(\.rowIDs, next.map(\.id))
