@@ -28,8 +28,13 @@ final class ChatScrollController {
     @ObservationIgnored private var revealTask: Task<Void, Never>?
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
+    @ObservationIgnored private var writers = ChatScrollWriterLedger()
+    @ObservationIgnored private var phaseName = "idle"
+    @ObservationIgnored var sampleSink: ((ChatScrollSample) -> Void)?
 
     var isPinnedToBottom: Bool { machine.state == .pinnedToBottom }
+
+    private var isRecording: Bool { ChatScrollTrace.isOn || sampleSink != nil }
 
     func observe(_ geometry: ScrollGeometry) {
         ChatOpenMetrics.geometry()
@@ -43,13 +48,21 @@ final class ChatScrollController {
             insetBottom: Double(geometry.contentInsets.bottom),
             topAnchor: topAnchor(visibleTop: visibleTop)
         )
+        let previousGeometry = lastGeometry
         lastGeometry = snapshot
         if wantsOlder != snapshot.wantsOlder { wantsOlder = snapshot.wantsOlder }
         let before = machine.state
         let command = machine.handle(.geometry(snapshot))
         publish()
-        if ChatScrollTrace.isOn {
-            ChatScrollTrace.geometry(snapshot, state: machine.state.name)
+        if isRecording {
+            let sample = ChatScrollSample(
+                geometry: snapshot, state: machine.state.name, showsButton: showsJumpButton,
+                userScrolling: machine.isUserScrolling, phase: phaseName,
+                writer: writers.attribute(from: previousGeometry, to: snapshot, userMoving: isMoving),
+                offsetDelta: previousGeometry.map { snapshot.offsetY - $0.offsetY } ?? 0
+            )
+            sampleSink?(sample)
+            ChatScrollTrace.geometry(sample)
             if command != .none || machine.state != before {
                 ChatScrollTrace.machine(event: "geometry", state: machine.state.name, command: command.name)
             }
@@ -58,6 +71,7 @@ final class ChatScrollController {
     }
 
     func observe(_ phase: ScrollPhase) {
+        if isRecording { phaseName = "\(phase)" }
         if ChatScrollTrace.isOn { ChatScrollTrace.phase(phase, state: machine.state.name) }
         let moving = phase.isMoving
         guard moving != isMoving else { return }
@@ -155,16 +169,16 @@ final class ChatScrollController {
         case .none:
             break
         case .scrollToBottom(let animated):
-            let distanceFromBottom = lastGeometry?.distanceFromBottom ?? 0
+            let distanceFromBottom = machine.distanceFromBottom ?? 0
             guard machine.state != .pinnedToBottom || distanceFromBottom > ChatScrollMachine.atBottomTolerance else { return }
             let height = lastGeometry?.containerHeight ?? 0
             let glides = animated && distanceFromBottom <= height * Self.glideViewports
             var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
             transaction.disablesAnimations = !glides
-            notePositionWrite()
+            notePositionWrite(command)
             withTransaction(transaction) { position.scrollTo(edge: .bottom) }
         case .scrollToRow(let id):
-            notePositionWrite()
+            notePositionWrite(command)
             withAnimation(.easeInOut(duration: 0.25)) { position.scrollTo(id: id, anchor: Self.revealAnchor) }
         case .restore(let anchor):
             guard let frame else {
@@ -174,12 +188,13 @@ final class ChatScrollController {
             pendingRestore = nil
             let target = Double(frame.minY) + anchor.offsetInRow
             guard abs(visibleTop - target) > Self.restoreTolerance else { return }
-            notePositionWrite()
+            notePositionWrite(command)
             position.scrollTo(y: CGFloat(target)) // perf-lint: ok
         }
     }
 
-    private func notePositionWrite() {
+    private func notePositionWrite(_ command: ChatScrollMachine.Command) {
+        if isRecording { writers.noteWrite(command) }
         ChatOpenMetrics.positionWrite()
         PalPerf.event("chat.scroll.write")
     }

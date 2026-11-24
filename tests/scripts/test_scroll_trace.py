@@ -155,3 +155,46 @@ def test_v2_jump_without_the_machine_line_is_flagged():
 def test_a_threshold_above_the_move_hides_it(capsys):
     code, _ = _run("v1_f_reading_drift", capsys, "--threshold", "10", "--max-jumps", "0")
     assert code == 0
+
+
+HEADER_V3 = ",".join(scroll_trace.COLUMNS_V3)
+
+
+def row_v3(at, distance, button, writer="none", mode="pinnedToBottom", phase="idle", user="0", kind="geo"):
+    base = row(at, kind=kind, mode=mode, phase=phase, distance=distance).split(",")
+    tail = ["top-down", "400", "", mode if kind == "machine" else "", "", writer, "0.00", "1" if distance <= 1 else "0", button, user]
+    return ",".join(base + tail)
+
+
+def trace_v3(*rows):
+    return "\n".join((HEADER_V3, *rows)) + "\n"
+
+
+def test_v3_button_up_at_the_bottom_is_a_fault_and_fails_the_gate(tmp_path, capsys):
+    path = tmp_path / "trace.csv"
+    path.write_text(trace_v3(
+        row_v3(0.0, 0.0, "0"),
+        row_v3(0.1, 12.0, "1", mode="readingHistory"),
+        row_v3(0.2, 90.0, "1", mode="readingHistory"),
+    ))
+    lines = scroll_trace.parse(path.read_text())
+    assert [f.distance for f in scroll_trace.button_faults(lines)] == [12.0]
+    assert scroll_trace.main([str(path), "--max-button-faults", "0"]) == 1
+    assert "button_faults=1 hide_distance=24.0pt" in capsys.readouterr().out
+
+
+def test_v3_reveal_of_a_row_may_show_the_button_near_the_bottom():
+    lines = scroll_trace.parse(trace_v3(row_v3(0.0, 10.0, "1", mode="programmatic")))
+    assert scroll_trace.button_faults(lines) == []
+
+
+def test_v3_writers_are_counted_and_named_on_a_jump(capsys, tmp_path):
+    path = tmp_path / "trace.csv"
+    path.write_text(trace_v3(
+        row_v3(0.0, 0.0, "0"),
+        row_v3(0.5, 0.0, "0", writer="machine:scrollToBottom"),
+        row_v3(0.9, 50.0, "0", writer="system-anchor"),
+    ))
+    assert scroll_trace.writers(scroll_trace.parse(path.read_text())) == {"machine:scrollToBottom": 1, "system-anchor": 1}
+    scroll_trace.main([str(path)])
+    assert "writer=system-anchor" in capsys.readouterr().out
