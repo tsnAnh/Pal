@@ -15,6 +15,8 @@ final class ChatTailPlanner {
     private var ids: [String] = []
     private var rows: [ChatRow] = []
     private(set) var plan = ChatTailPlan(start: 0, hiddenHeight: 0)
+    private var narrowed: ChatTailPlan?
+    static let resizeMinimumRows = 3
 
     private let lineHeight = Double(ChatLineBox(fontSize: PalTextStyle.chatBody.size).height)
 
@@ -45,6 +47,7 @@ final class ChatTailPlanner {
         if rows.count == self.rows.count, rows.first?.id == self.rows.first?.id, rows.last?.id == self.rows.last?.id { return plan }
         self.rows = rows
         ids = rows.map(\.id)
+        narrowed = nil
         let known = persisted.map { file in (file, width.map { abs($0 - file.width) <= 0.5 } ?? true) }
         let records = known.flatMap { $0.1 ? $0.0.records(width: $0.0.width, textScale: $0.0.textScale) : nil } ?? [:]
         let layoutWidth = width ?? persisted?.width ?? Self.fallbackWidth
@@ -63,6 +66,27 @@ final class ChatTailPlanner {
         let height = { [planned] (id: String) in planned[id] ?? 0 }
         plan = tail.plan(ids: ids, viewport: context.viewport ?? persisted?.viewport, height: height)
         return plan
+    }
+
+    func resizingPlan(viewport: Double?) -> ChatTailPlan {
+        if let narrowed { return narrowed }
+        guard let viewport, plan.start < ids.count else { return plan }
+        func height(_ id: String) -> Double { planned[id] ?? 0 }
+        var index = ids.count
+        var covered = 0.0
+        while index > plan.start, covered < viewport || ids.count - index < Self.resizeMinimumRows {
+            index -= 1
+            covered += height(ids[index])
+        }
+        guard index > plan.start else { return plan }
+        let hidden = plan.hiddenHeight + ids[plan.start..<index].reduce(0) { $0 + height($1) }
+        let next = ChatTailPlan(start: index, hiddenHeight: hidden)
+        narrowed = next
+        return next
+    }
+
+    func endResizing() {
+        narrowed = nil
     }
 
     func extend(deficit: Double) -> Bool {

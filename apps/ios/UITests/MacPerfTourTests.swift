@@ -51,6 +51,7 @@ final class MacPerfTourTests: MacPerfTourCase {
             ("modals-dialogs", modalsDialogs),
             ("sidebar-rail", sidebarRail),
             ("sidebar-drag", sidebarDrag),
+            ("sidebar-drag-long-chat", sidebarDragLongChat),
             ("window-resize", windowResize),
         ]
         let selected = Set((environment["HERMES_UITEST_TOUR_PHASES"] ?? "").split(separator: ",").map(String.init))

@@ -14,6 +14,7 @@ final class VisibleRowsStage {
 
     let model: ChatModel
     let host: MacChatBenchHost
+    let scroll: ChatScrollController
     var world: RebuildWorld
     private(set) var lastGeometry: ChatScrollGeometry?
     private(set) var blankStreak = 0
@@ -52,7 +53,7 @@ final class VisibleRowsStage {
     init(opening: RebuildWorld? = nil) async throws {
         let environment = try MacChatBenchSession.environment()
         model = environment.model
-        let scroll = ChatScrollController()
+        scroll = ChatScrollController()
         host = MacChatBenchHost(root: environment.surface(draft: MacChatBenchDraft(), scroll: scroll), size: MacChatBench.pane)
         world = opening ?? Self.world()
         scroll.sampleSink = { [unowned self] in lastGeometry = $0.geometry }

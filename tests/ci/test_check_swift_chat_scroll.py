@@ -131,3 +131,38 @@ def test_the_opt_out_marker_waives_the_line(tmp_path):
 
 def test_the_real_tree_is_clean():
     assert css.scan(REPO / "apps" / "ios") == []
+
+
+TICK_CONTROLLER_PRE_FIX = (
+    "final class ChatScrollController {\n"
+    "    func observe(_ geometry: ScrollGeometry) {\n"
+    "        if abs(previous - snapshot.containerWidth) > Self.restoreTolerance {\n"
+    "            rowHeights.widthChanged()\n"
+    "            measureTick &+= 1\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+)
+TICK_CONTROLLER = (
+    "final class ChatScrollController {\n"
+    "    func observe(_ geometry: ScrollGeometry) {\n"
+    "        if abs(previous - snapshot.containerWidth) > Self.restoreTolerance {\n"
+    "            widthMoved()\n"
+    "        }\n"
+    "    }\n"
+    "    private func widthMoved() {\n"
+    "        rowHeights.widthChanged()\n"
+    "        measureTick &+= 1\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_row_heights_invalidated_on_every_width_tick_fail(tmp_path):
+    found = css.scan(_tree(tmp_path, controller=TICK_CONTROLLER_PRE_FIX))
+    assert len(found) == 2
+    assert all("every width tick" in entry for entry in found)
+
+
+def test_a_width_change_that_settles_once_after_the_drag_passes(tmp_path):
+    assert css.scan(_tree(tmp_path, controller=TICK_CONTROLLER)) == []

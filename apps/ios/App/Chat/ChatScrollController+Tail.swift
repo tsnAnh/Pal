@@ -3,16 +3,35 @@ import PalDiagnostics
 import SwiftUI
 
 extension ChatScrollController {
+    var isResizing: Bool { resizeSettleTask != nil }
+
+    func widthMoved() {
+        let started = resizeSettleTask == nil
+        resizeSettleTask?.cancel()
+        resizeSettleTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.resizeSettle)
+            guard let self, !Task.isCancelled else { return }
+            resizeSettleTask = nil
+            planner.endResizing()
+            rowHeights.widthChanged()
+            measureTick &+= 1
+            planTick &+= 1
+        }
+        if started { planTick &+= 1 }
+    }
+
     func renderPlan(of rows: [ChatRow], persisted: ChatRowHeightFile?, textScale: String) -> ChatTailPlan {
         _ = planTick
         tracker.textScale = textScale
         let geometry = lastGeometry
-        return planner.resolve(
+        let settled = planner.resolve(
             rows: rows,
             context: .init(persisted: persisted, viewport: geometry.map(\.containerHeight), width: geometry.map(\.containerWidth)),
             measured: { [rowHeights] id, width in rowHeights.height(of: id, width: width) },
             seed: { [rowHeights] row, height, width in rowHeights.adopt(row.id, height: height, width: width, layout: row.layoutKey) }
         )
+        guard isResizing, isPinnedToBottom else { return settled }
+        return planner.resizingPlan(viewport: geometry.map(\.containerHeight))
     }
 
     func persistHeights() {
@@ -27,7 +46,7 @@ extension ChatScrollController {
     func observeTail(_ snapshot: ChatScrollGeometry) -> Bool {
         tracker.meter.geometry(snapshot, atMilliseconds: tracker.elapsedMilliseconds)
         touch()
-        if planner.hiddenHeight > 0, snapshot.distanceFromTop - planner.hiddenHeight < snapshot.containerHeight * Self.tailLeadViewports {
+        if !isResizing, planner.hiddenHeight > 0, snapshot.distanceFromTop - planner.hiddenHeight < snapshot.containerHeight * Self.tailLeadViewports {
             scheduleTailExtension()
         }
         return snapshot.wantsOlder && planner.hiddenHeight == 0

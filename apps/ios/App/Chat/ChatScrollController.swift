@@ -12,13 +12,14 @@ final class ChatScrollController {
     static let restoreTolerance = 0.5
     static let measureBatchSize = 4
     static let measureTimeout = Duration.milliseconds(400)
+    static let resizeSettle = Duration.milliseconds(150)
     static let tailLeadViewports = 2.0
 
     var position = ScrollPosition(idType: String.self, edge: .bottom)
     private(set) var showsJumpButton = false
     private(set) var unseen = 0
     private(set) var wantsOlder = false
-    private(set) var measureTick = 0
+    var measureTick = 0
     var planTick = 0
     @ObservationIgnored private(set) var machine = ChatScrollMachine()
     @ObservationIgnored private var isMoving = false
@@ -28,6 +29,7 @@ final class ChatScrollController {
     @ObservationIgnored private var frames: [String: CGRect] = [:]
     @ObservationIgnored private var pendingRestore: ChatRowAnchor?
     @ObservationIgnored let rowHeights = ChatRowHeights()
+    @ObservationIgnored var resizeSettleTask: Task<Void, Never>?
     @ObservationIgnored private var revealTask: Task<Void, Never>?
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
@@ -61,8 +63,7 @@ final class ChatScrollController {
         let wantsOlderNow = observeTail(snapshot)
         if wantsOlder != wantsOlderNow { wantsOlder = wantsOlderNow }
         if abs((previousGeometry?.containerWidth ?? 0) - snapshot.containerWidth) > Self.restoreTolerance {
-            rowHeights.widthChanged()
-            measureTick &+= 1
+            widthMoved()
         }
         let before = machine.state
         let command = machine.handle(.geometry(snapshot))
@@ -140,7 +141,7 @@ final class ChatScrollController {
 
     func measureBatch(of rows: [ChatRow]) -> [ChatRow] {
         _ = measureTick
-        guard let width = lastGeometry?.containerWidth, width > 0 else { return [] }
+        guard resizeSettleTask == nil, let width = lastGeometry?.containerWidth, width > 0 else { return [] }
         return rowHeights.batch(of: rows, width: width)
     }
 
