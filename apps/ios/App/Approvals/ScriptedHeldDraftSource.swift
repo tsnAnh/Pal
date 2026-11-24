@@ -32,7 +32,10 @@ actor ScriptedHeldDraftSource: HeldDraftSource {
 
     private var all: [HeldDraft] {
         [
-            HeldDraft(id: Self.samID, channel: "telegram", recipient: "Sam", text: "Running late, start without me.", expiresAt: Date().addingTimeInterval(7200)),
+            HeldDraft(
+                id: Self.samID, channel: "telegram", recipient: "Sam", text: "Running late, start without me.",
+                expiresAt: Date().addingTimeInterval(7200)
+            ),
             HeldDraft(id: Self.danaID, channel: "email", recipient: "Dana", text: "Lunch at noon?\nI booked the corner table."),
             HeldDraft(id: Self.lateID, channel: "telegram", recipient: "Lee", text: "Too late now.", standing: .expired, canSend: false),
         ]

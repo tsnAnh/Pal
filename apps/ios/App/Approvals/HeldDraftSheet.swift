@@ -73,9 +73,8 @@ struct HeldDraftSheet: View {
                 .padding(.bottom, 4)
         }
         let again: Bool = if case .failed = model.phase { true } else { false }
-        choice(again ? String(localized: "Send again") : String(localized: "Send"), id: again ? "heldDraftSendAgain" : "heldDraftSend", enabled: model.canSend) {
-            await model.send()
-        }
+        let sendTitle = again ? String(localized: "Send again") : String(localized: "Send")
+        choice(sendTitle, id: again ? "heldDraftSendAgain" : "heldDraftSend", enabled: model.canSend) { await model.send() }
         if !again {
             choice(String(localized: "Edit"), id: "heldDraftEdit", enabled: model.canEdit) {
                 model.beginEdit()

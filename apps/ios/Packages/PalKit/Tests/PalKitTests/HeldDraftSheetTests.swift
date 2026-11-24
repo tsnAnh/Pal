@@ -31,6 +31,24 @@ private final class Counter: Sendable {
     }
 }
 
+private struct RefusalCase {
+    let reason: String
+    let state: String?
+    let message: String
+    let expect: HeldDraftSheetModel.Phase
+
+    init(_ reason: String, _ state: String?, _ message: String, _ expect: HeldDraftSheetModel.Phase) {
+        self.reason = reason
+        self.state = state
+        self.message = message
+        self.expect = expect
+    }
+}
+
+private func failedMessage(_ reason: String) -> String {
+    "The message was NOT sent: \(reason). It is still waiting for approval; approve it again to retry."
+}
+
 private func refusal(_ reason: String, state: String?, message: String = "refused") -> any Error {
     var data: [String: JSONValue] = ["reason": .string(reason)]
     if let state { data["state"] = .string(state) }
@@ -52,12 +70,18 @@ private func draft(
 private func model(
     _ log: AnswerLog,
     draft held: HeldDraft = draft(),
-    reply: @escaping @Sendable (HeldDraftChoice, String?) async throws -> HeldDraftOutcome = { choice, _ in choice == .once ? .sent : .cancelled }
-) -> HeldDraftSheetModel {
-    HeldDraftSheetModel(draft: held, now: { fixedNow }) { draft, choice, text in
-        log.record(draft, choice, text)
-        return try await reply(choice, text)
+    reply: @escaping @Sendable (HeldDraftChoice, String?) async throws -> HeldDraftOutcome = { choice, _ in
+        choice == .once ? .sent : .cancelled
     }
+) -> HeldDraftSheetModel {
+    HeldDraftSheetModel(
+        draft: held,
+        now: { fixedNow },
+        answer: { draft, choice, text in
+            log.record(draft, choice, text)
+            return try await reply(choice, text)
+        }
+    )
 }
 
 @Suite("Held draft sheet")
@@ -195,17 +219,17 @@ struct HeldDraftSheetTests {
     }
 
     @Test func eachRefusalOnSendLandsOnTheTrueState() async {
-        let cases: [(reason: String, state: String?, message: String, expect: HeldDraftSheetModel.Phase)] = [
-            ("already_sent", "sent", "This draft was already sent.", .sent(at: nil)),
-            ("already_cancelled", "cancelled", "This draft was cancelled and was not sent.", .cancelled),
-            ("discarded", "cancelled", "This draft was cancelled and was not sent.", .cancelled),
-            ("expired", "expired", "This draft expired and can no longer be sent.", .expired),
-            ("in_progress", "approved", "This draft is being sent right now.", .unavailable("This draft is being sent right now.")),
-            ("busy", "pending", "This draft is being answered somewhere else.", .unavailable("This draft is being answered somewhere else.")),
-            ("not_found", nil, "This draft no longer exists.", .unavailable("This draft no longer exists.")),
-            ("corrupt", nil, "This draft could not be read.", .unavailable("This draft could not be read.")),
-            ("send_failed", "failed", "The message was NOT sent: rate limited. It is still waiting for approval; approve it again to retry.", .failed(reason: "rate limited")),
-            ("send_failed", "failed", "something unexpected", .failed(reason: nil)),
+        let cases: [RefusalCase] = [
+            RefusalCase("already_sent", "sent", "This draft was already sent.", .sent(at: nil)),
+            RefusalCase("already_cancelled", "cancelled", "This draft was cancelled and was not sent.", .cancelled),
+            RefusalCase("discarded", "cancelled", "This draft was cancelled and was not sent.", .cancelled),
+            RefusalCase("expired", "expired", "This draft expired and can no longer be sent.", .expired),
+            RefusalCase("in_progress", "approved", "Being sent right now.", .unavailable("Being sent right now.")),
+            RefusalCase("busy", "pending", "Answered somewhere else.", .unavailable("Answered somewhere else.")),
+            RefusalCase("not_found", nil, "This draft no longer exists.", .unavailable("This draft no longer exists.")),
+            RefusalCase("corrupt", nil, "This draft could not be read.", .unavailable("This draft could not be read.")),
+            RefusalCase("send_failed", "failed", failedMessage("rate limited"), .failed(reason: "rate limited")),
+            RefusalCase("send_failed", "failed", "something unexpected", .failed(reason: nil)),
         ]
         for item in cases {
             let sheet = model(AnswerLog()) { _, _ in throw refusal(item.reason, state: item.state, message: item.message) }
@@ -228,7 +252,7 @@ struct HeldDraftSheetTests {
     }
 
     @Test func anUnviewableDraftTurnsSendOffForGood() async {
-        let sheet = model(AnswerLog()) { _, _ in throw refusal("unviewable", state: "pending", message: "This message cannot be shown in full, so it can only be cancelled.") }
+        let sheet = model(AnswerLog()) { _, _ in throw refusal("unviewable", state: "pending", message: "Only cancel is possible.") }
         await sheet.send()
         #expect(sheet.phase == .waiting)
         #expect(sheet.blocksSend && !sheet.canSend)
@@ -237,7 +261,7 @@ struct HeldDraftSheetTests {
 
     @Test func aFailedSendNamesTheChannelAndTheRealReason() async {
         let sheet = model(AnswerLog()) { _, _ in
-            throw refusal("send_failed", state: "failed", message: "The message was NOT sent: rate limited. It is still waiting for approval; approve it again to retry.")
+            throw refusal("send_failed", state: "failed", message: failedMessage("rate limited"))
         }
         await sheet.send()
         #expect(sheet.statusLine == "Not sent. Telegram said: rate limited. It may or may not have gone out; check Telegram before sending again.")
@@ -272,7 +296,7 @@ struct HeldDraftSheetTests {
         let attempts = Counter()
         let sheet = model(log) { _, _ in
             let number = attempts.next()
-            if number == 1 { throw refusal("send_failed", state: "failed", message: "The message was NOT sent: offline. It is still waiting for approval; approve it again to retry.") }
+            if number == 1 { throw refusal("send_failed", state: "failed", message: failedMessage("offline")) }
             return .sent
         }
         sheet.beginEdit()

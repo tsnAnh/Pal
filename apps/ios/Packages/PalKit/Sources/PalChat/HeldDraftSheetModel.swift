@@ -149,15 +149,18 @@ public final class HeldDraftSheetModel {
         case "send_failed":
             shownText = attempted
             phase = .failed(reason: refusal.sendFailureReason)
-        default:
-            switch refusal.state {
-            case "sent": phase = .sent(at: nil)
-            case "cancelled": phase = .cancelled
-            case "failed" where choice == .once:
-                shownText = attempted
-                phase = .failed(reason: refusal.sendFailureReason)
-            default: phase = .unavailable(refusal.message)
-            }
+        default: settleByState(refusal, choice: choice, attempted: attempted)
+        }
+    }
+
+    private func settleByState(_ refusal: HeldDraftRefusal, choice: HeldDraftChoice, attempted: String) {
+        switch refusal.state {
+        case "sent": phase = .sent(at: nil)
+        case "cancelled": phase = .cancelled
+        case "failed" where choice == .once:
+            shownText = attempted
+            phase = .failed(reason: refusal.sendFailureReason)
+        default: phase = .unavailable(refusal.message)
         }
     }
 }

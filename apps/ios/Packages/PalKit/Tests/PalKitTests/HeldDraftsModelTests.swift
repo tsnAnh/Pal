@@ -103,7 +103,11 @@ struct HeldDraftsModelTests {
 
 @Suite("Held draft cards")
 struct HeldDraftCardTests {
-    private func card(_ draft: [String: JSONValue], id: String = "draft:0123456789abcdef0123456789abcdef", choices: [JSONValue] = ["once", "deny"]) -> JSONValue {
+    private func card(
+        _ draft: [String: JSONValue],
+        id: String = "draft:0123456789abcdef0123456789abcdef",
+        choices: [JSONValue] = ["once", "deny"]
+    ) -> JSONValue {
         ["request_id": .string(id), "command": "Running late.", "choices": .array(choices), "draft": .object(draft)]
     }
 
