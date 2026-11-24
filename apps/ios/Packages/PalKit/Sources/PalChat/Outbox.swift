@@ -8,6 +8,11 @@ public struct OutboxEntry: Codable, Sendable, Hashable, Identifiable {
         case pending
         case admitted(admissionID: String)
         case failed(reason: String)
+
+        public var isAdmitted: Bool {
+            if case .admitted = self { return true }
+            return false
+        }
     }
 
     public var submissionID: String

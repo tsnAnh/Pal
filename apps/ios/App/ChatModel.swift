@@ -827,7 +827,7 @@ final class ChatModel {
             case .person:
                 var state: BubbleDelivery = switch delivery {
                 case .sent, .queued: .sent
-                case .sending: isOffline ? .waitingForConnection : .sending
+                case .sending: .awaitingReceipt(offline: isOffline, outbox: entry)
                 }
                 if let entry, case .failed = entry.state { state = .failed(submissionID: entry.submissionID) }
                 var content = MessageImages.extract(from: text, role: .user)

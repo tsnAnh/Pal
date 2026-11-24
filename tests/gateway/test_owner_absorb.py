@@ -115,9 +115,63 @@ async def test_the_send_trace_times_the_steer_by_admission_id_and_never_carries_
         turn.release.set()
         await _drained(authority)
     lines = [record.getMessage() for record in caplog.records if record.name == 'gateway.send_trace']
-    assert any(f"send_trace admitted admission={second['admission_id']} status=steered absorb_ms=" in line for line in lines), lines
+    assert any(f"send_trace admitted admission={second['admission_id']} status=steered why=absorbed absorb_ms=" in line for line in lines), lines
     assert any(f"send_trace steer_drained admission={second['admission_id']} wait_ms=" in line for line in lines), lines
     assert not any('weather' in line for line in lines), lines
+
+
+@pytest.mark.asyncio
+async def test_a_retried_submission_answers_the_same_steer_and_never_steers_twice(bot_chat, monkeypatch):
+    db, authority = bot_chat
+    turn = Turn(monkeypatch, drain=True)
+    with db:
+        conn = _owner_connection(authority)
+        await _submit_as_owner(conn, 'running')
+        await asyncio.wait_for(turn.claimed.wait(), 30)
+        first = await _submit_as_owner(conn, 'also this')
+        retry = await _submit_as_owner(conn, 'also this')
+        assert (first['status'], retry['status']) == ('steered', 'steered')
+        assert retry['admission_id'] == first['admission_id']
+        assert [ticket for ticket, _ in _steer_parts(turn.agent)] == [first['admission_id']]
+        turn.release.set()
+        await _drained(authority)
+    assert turn.taken == ['also this'] and turn.ran == ['running']
+    assert _ledger(authority.persistence) == [('running', 'terminal', 'completed'), ('also this', 'terminal', 'steered')]
+
+
+@pytest.mark.asyncio
+async def test_a_message_that_carries_more_than_text_is_not_steered_and_runs_after_the_turn(bot_chat, monkeypatch):
+    db, authority = bot_chat
+    turn = Turn(monkeypatch, drain=True)
+    with db:
+        conn = _owner_connection(authority)
+        await _submit_as_owner(conn, 'running')
+        await asyncio.wait_for(turn.claimed.wait(), 30)
+        reply = await _call(conn, 'prompt.submit', submission_id='whole turn', text='whole turn', finite=True)
+        assert reply['result']['status'] == 'queued', reply
+        assert turn.agent._pending_steer is None
+        turn.release.set()
+        await async_wait_until(lambda: turn.ran == ['running', 'whole turn'], timeout=30, what='the queued prompt to run')
+        await _drained(authority)
+    assert turn.taken == [None, None]
+    assert _ledger(authority.persistence) == [('running', 'terminal', 'completed'), ('whole turn', 'terminal', 'completed')]
+
+
+@pytest.mark.asyncio
+async def test_the_send_trace_names_the_gate_that_kept_a_message_in_the_queue(bot_chat, monkeypatch, caplog):
+    db, authority = bot_chat
+    raw_holder(db)._execute_write(lambda conn: conn.execute('UPDATE sessions SET title=? WHERE id=?', ('Weekend plans', 's')))
+    turn = Turn(monkeypatch, drain=True)
+    caplog.set_level('INFO', logger='gateway.send_trace')
+    with db:
+        conn = _owner_connection(authority)
+        await _submit_as_owner(conn, 'running')
+        await asyncio.wait_for(turn.claimed.wait(), 30)
+        await _submit_as_owner(conn, 'follow-up')
+        turn.release.set()
+        await _drained(authority)
+    lines = [record.getMessage() for record in caplog.records if record.name == 'gateway.send_trace']
+    assert any('status=untouched why=not_bot_chat' in line for line in lines), lines
 
 
 @pytest.mark.asyncio

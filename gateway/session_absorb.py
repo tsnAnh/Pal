@@ -76,28 +76,28 @@ async def absorb_into_running_turn(authority, ref, admission_id, *, reason: Opti
 
 async def absorb_owner_input(authority, ref, admission_id, payload) -> Optional[str]:
     started = time.monotonic()
-    status = await _absorb_owner_input(authority, ref, admission_id, payload)
-    if status is not None:
-        logger.info('send_trace admitted admission=%s status=%s absorb_ms=%d',
-                    admission_id, status, (time.monotonic() - started) * 1000)
+    status, why = await _absorb_owner_input(authority, ref, admission_id, payload)
+    logger.info('send_trace admitted admission=%s status=%s why=%s absorb_ms=%d',
+                admission_id, status or 'untouched', why, (time.monotonic() - started) * 1000)
     return status
 
 
-async def _absorb_owner_input(authority, ref, admission_id, payload) -> Optional[str]:
+async def _absorb_owner_input(authority, ref, admission_id, payload) -> tuple[Optional[str], str]:
+    """``(status, why)``: the disposition ``prompt.submit`` reports and the gate that decided it."""
     if 'local_operator_v1' in payload or (payload.get('turn_author') or {}).get('is_bot'):
-        return None
+        return None, 'operator'
     if not await is_bot_chat(authority, ref.session_id):
-        return None
+        return None, 'not_bot_chat'
     row = _admission(authority, admission_id)
     if row['status'] != 'queued':
-        return 'steered' if row['outcome'] in (STEERING, 'steered') else 'turn'
+        return ('steered' if row['outcome'] in (STEERING, 'steered') else 'turn'), 'not_queued'
     state = authority._handle(ref).execution_state
     if state != 'running':
-        return 'turn' if state == 'idle' else 'queued'
+        return ('turn' if state == 'idle' else 'queued'), state
     if 'steer' not in queued_controls(authority, row):
-        return 'queued'
+        return 'queued', 'not_steerable'
     try:
         transfer = await absorb_into_running_turn(authority, ref, admission_id, reason=YieldReason.OWNER_MESSAGE)
-    except AuthorityRefusal:
-        return 'queued'
-    return 'steered' if transfer.outcome == 'absorbed' else 'queued'
+    except AuthorityRefusal as refusal:
+        return 'queued', refusal.reason
+    return ('steered' if transfer.outcome == 'absorbed' else 'queued'), transfer.outcome
