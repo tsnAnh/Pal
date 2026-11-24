@@ -59,6 +59,20 @@ struct StepConfirmList: View {
     }
 }
 
+private struct StepInitialTile: View {
+    let title: String
+
+    var body: some View {
+        Text(String(title.first(where: \.isLetter) ?? title.first ?? " ").uppercased())
+            .hermesText(.rowTitle)
+            .fontWeight(.semibold)
+            .foregroundStyle(PalTokens.textPrimary)
+            .frame(width: 36, height: 36)
+            .background(PalTokens.control, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+            .accessibilityHidden(true)
+    }
+}
+
 struct StepSwitchGroups: View {
     let model: StepFlowModel
     let groups: [SetupSwitchGroup]
@@ -112,6 +126,7 @@ struct StepSwitchGroups: View {
         let isOn = model.engine.isOn(item.id)
         let subtitle = isOn ? item.subtitle : (item.subtitleWhenOff ?? item.subtitle)
         return HStack(spacing: 12) {
+            if item.showsInitial { StepInitialTile(title: item.title) }
             VStack(alignment: .leading, spacing: PalMetrics.rowTextSpacing) {
                 Text(item.title)
                     .hermesText(.rowTitle)

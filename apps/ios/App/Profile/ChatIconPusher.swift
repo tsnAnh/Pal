@@ -8,11 +8,10 @@ import PalProtocol
 import UniformTypeIdentifiers
 
 struct ChatIconPusher: Sendable {
-    static let provider = "slack"
-
     let client: any ChatInstallClient
+    var providerID = "slack"
 
-    private var scope: ChatInstallScope { ChatInstallScope(provider: Self.provider, workspace: "") }
+    private var scope: ChatInstallScope { ChatInstallScope(provider: providerID, workspace: "") }
 
     @MainActor
     func push(_ spec: BotAvatarSpec, onlyWhenInstalled: Bool) async {
