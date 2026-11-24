@@ -112,9 +112,7 @@ final class ChatModel {
     private(set) var rows: [ChatRow] = []
     private(set) var rowsNewestFirst: [ChatRow] = []
     private(set) var rowIDs: [String] = []
-    private(set) var windowRows: [ChatRow] = []
-    private(set) var windowRowIDs: [String] = []
-    private(set) var hiddenOlder = 0
+    private(set) var windowRange: Range<Int> = 0..<0
     @ObservationIgnored var window = ChatRowWindow()
     private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
@@ -122,7 +120,7 @@ final class ChatModel {
     private(set) var hasPendingClarify = false
     private(set) var hasPendingPrompt = false
     private(set) var olderHistory = OlderHistory.idle
-    private(set) var isOpening = true
+    var isOpening = true
     var sendError: String?
     private(set) var answeringConnections: Set<String> = []
     private var pending = PendingAttachments()
@@ -146,7 +144,7 @@ final class ChatModel {
     private(set) var findMatchIDs: Set<String> = []
     private(set) var findPosition = 0
 
-    private let openedBot: BotRow
+    let openedBot: BotRow
     var bot: BotRow { roster.bot(named: openedBot.name) ?? openedBot }
 
     private let links: BotLinks
@@ -174,10 +172,12 @@ final class ChatModel {
     private var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
+    @ObservationIgnored var openingDeadline: Task<Void, Never>?
+    @ObservationIgnored var snapshotFromEarlierRun = false
     private var delivering = false
     private var absorbedEchoes = AbsorbedEchoLedger()
 
-    private let opening = ChatOpenCoordinator()
+    let opening = ChatOpenCoordinator()
     private var findSearch: Task<Void, Never>?
     private var pendingReveal: RowKey?
 
@@ -222,6 +222,7 @@ final class ChatModel {
         roster.markRead(bot.name)
         guard running == nil else { return }
         ChatOpenTrace.begin(bot: bot.name)
+        armOpeningDeadline()
         let link: BotLink
         do {
             link = try links.link(for: bot.name)
@@ -239,6 +240,7 @@ final class ChatModel {
         ChatOpenTrace.finish(bot: bot.name)
         running?.cancel()
         running = nil
+        closeOpening()
         opening.cancel()
         findSearch?.cancel()
         findSearch = nil
@@ -587,7 +589,7 @@ final class ChatModel {
         let current = await session.timelineSnapshot
         if before.rows.isEmpty, !current.rows.isEmpty {
             LaunchClock.mark("chat \(openedBot.name) shown from cache (\(current.rows.count) rows)", on: .osLog())
-            ChatOpenTrace.mark(openedBot.name, "cache.frame", rows: current.rows.count)
+            ChatOpenTrace.mark(openedBot.name, "cache.frame", rows: current.rows.count, detail: "held=true")
             opening.hold(version: current.version) { [weak self] in self?.apply($0) }
         } else {
             apply(current)
@@ -654,14 +656,15 @@ final class ChatModel {
     }
 
     func apply(_ next: TimelineSnapshot) {
-        if let snapshot, next.version <= snapshot.version { return }
-        let previous = snapshot
+        guard acceptsSnapshot(next) else { return }
+        let previous = takePreviousSnapshot()
         snapshot = next
         assignIfChanged(\.olderHistory, OlderHistory(next.older))
         rebuild(patching: previous)
         observeActivityChange()
         resolvePendingReveal()
         ChatOpenTrace.frameApplied(bot: openedBot.name, version: next.version, rows: next.rows.count)
+        traceOpen("apply")
     }
 
     private func retryLoop() async {
@@ -815,17 +818,11 @@ final class ChatModel {
     }
 
     private func publish(_ next: [ChatRow]) {
-        guard assignIfChanged(\.rows, next) else { return }
-        assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
-        assignIfChanged(\.rowIDs, next.map(\.id))
+        if assignIfChanged(\.rows, next) {
+            assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
+            assignIfChanged(\.rowIDs, next.map(\.id))
+        }
         publishWindow()
-    }
-
-    func publishWindow() {
-        let range = window.resolve(rowIDs)
-        assignIfChanged(\.windowRows, Array(rows[range]))
-        assignIfChanged(\.windowRowIDs, Array(rowIDs[range]))
-        assignIfChanged(\.hiddenOlder, range.lowerBound)
     }
 
     private func commit(_ patch: StreamingRowPatch) {
@@ -833,7 +830,6 @@ final class ChatModel {
         guard let last = rows.indices.last, rows[last] != patch.row else { return }
         rows[last] = patch.row
         rowsNewestFirst[0] = patch.row
-        windowRows[windowRows.count - 1] = patch.row
     }
 
     private func publishActivity() {
@@ -842,7 +838,7 @@ final class ChatModel {
         assignIfChanged(\.hasPendingClarify, pendingClarify != nil)
         assignIfChanged(\.hasPendingPrompt, !(snapshot?.pendingPrompts.isEmpty ?? true) || snapshot?.hasPendingConnection == true)
         if !hasBaseline, snapshot?.sessionID != nil { hasBaseline = true }
-        if isOpening, !rows.isEmpty || snapshot?.sessionID != nil { isOpening = false; opening.firstPaint() }
+        if isOpening, !rows.isEmpty || snapshot?.sessionID != nil { endOpening("opened") }
         opening.rowsChanged()
         recomputeFind(resetPosition: false)
     }
@@ -981,4 +977,11 @@ struct PreparedUpload: Sendable {
     let data: Data
     let filename: String
     let thumbnail: Data?
+}
+
+extension ChatModel {
+    func publishWindow() {
+        assignIfChanged(\.windowRange, window.resolve(rowIDs))
+        traceOpen("window")
+    }
 }

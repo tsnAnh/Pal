@@ -200,7 +200,7 @@ private struct ChatOpeningOverlay: View {
                     .foregroundStyle(PalTokens.textSecondary)
                     .accessibilityIdentifier("chatLoading")
             }
-        } else if model.rows.isEmpty, !model.isRunning, !hidesIntro {
+        } else if model.rows.isEmpty, model.hasSession, !model.isRunning, !hidesIntro {
             NewChatIntro(bot: model.bot, mood: model.avatarMood, suggestion: Self.firstSuggestion) {
                 model.send(Self.firstSuggestion)
             }

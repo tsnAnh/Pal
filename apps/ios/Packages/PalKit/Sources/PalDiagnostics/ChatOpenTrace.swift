@@ -5,6 +5,7 @@ public enum ChatOpenTrace {
     public static let fileName = "pal-chat-open.jsonl"
 
     private static let enabled = PalPerf.isRequested()
+    public static var isOn: Bool { enabled }
     private static let sink = Sink()
     private static let state = Mutex(State())
 
