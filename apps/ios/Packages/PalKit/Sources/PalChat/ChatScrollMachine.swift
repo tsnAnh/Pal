@@ -37,7 +37,8 @@ public struct ChatScrollGeometry: Sendable, Equatable {
         self.topAnchor = topAnchor
     }
 
-    public var distanceFromBottom: Double { max(0, contentHeight + insetBottom - containerHeight - offsetY) }
+    // containerHeight is the visible rect height: the insets are already outside it, so they never enter the distance.
+    public var distanceFromBottom: Double { max(0, contentHeight - (offsetY + insetTop + containerHeight)) }
     public var distanceFromTop: Double { max(0, offsetY + insetTop) }
     public var wantsOlder: Bool { distanceFromTop < containerHeight * 2 || contentHeight < containerHeight * 1.5 }
 

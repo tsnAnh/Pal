@@ -23,7 +23,7 @@ private func geo(
 }
 
 private func bottomGeo(content: Double = 1000, container: Double = 500, insetBottom: Double = 0) -> ChatScrollGeometry {
-    geo(offset: content + insetBottom - container, content: content, container: container, insetBottom: insetBottom)
+    geo(offset: content - container, content: content, container: container, insetBottom: insetBottom)
 }
 
 private func awayGeo(_ distance: Double, content: Double = 1000, container: Double = 500) -> ChatScrollGeometry {
@@ -53,13 +53,22 @@ struct ChatScrollMachineTests {
 
     @Test func geometryDerivesDistancesAndSizeEquality() {
         let g = geo(offset: 100, content: 1000, container: 500, insetTop: 20, insetBottom: 30)
-        #expect(g.distanceFromBottom == 430)
+        #expect(g.distanceFromBottom == 380)
         #expect(g.distanceFromTop == 120)
         #expect(g.sameSize(as: geo(offset: 0, content: 1000.4, container: 500, insetTop: 20, insetBottom: 30)))
         #expect(!g.sameSize(as: geo(offset: 100, content: 1001, container: 500, insetTop: 20, insetBottom: 30)))
         #expect(geo(offset: 0, content: 1200, container: 500).wantsOlder)
         #expect(!geo(offset: 5000, content: 9000, container: 500).wantsOlder)
         #expect(geo(offset: 5000, content: 600, container: 500).wantsOlder)
+    }
+
+    @Test func theBottomInsetNeverEntersTheDistance() {
+        let atBottom = geo(offset: 500, content: 1000, container: 500, insetBottom: 160)
+        #expect(atBottom.distanceFromBottom == 0)
+        #expect(geo(offset: 440, content: 1000, container: 500, insetBottom: 160).distanceFromBottom == 60)
+        #expect(geo(offset: 500, content: 1000, container: 500, insetTop: 52, insetBottom: 160).distanceFromBottom == 0)
+        #expect(geo(offset: 448, content: 1000, container: 500, insetTop: 52, insetBottom: 160).distanceFromBottom == 0)
+        #expect(geo(offset: 400, content: 1000, container: 500, insetTop: 52, insetBottom: 160).distanceFromBottom == 48)
     }
 
     @Test func pinnedStaysSilentOnGrowthAtTheBottom() {

@@ -48,14 +48,15 @@ private struct FakeScrollView {
     }
 
     var content: Double { heights.reduce(0, +) }
-    var maxOffset: Double { max(-insetTop, content + insetBottom - containerHeight) }
+    var visibleHeight: Double { containerHeight - insetTop - insetBottom }
+    var maxOffset: Double { max(-insetTop, content - visibleHeight - insetTop) }
     var atBottom: Bool { geometry.distanceFromBottom <= ChatScrollMachine.atBottomTolerance }
 
     var geometry: ChatScrollGeometry {
         ChatScrollGeometry(
             offsetY: offsetY,
             contentHeight: content,
-            containerHeight: containerHeight,
+            containerHeight: visibleHeight,
             containerWidth: containerWidth,
             insetTop: insetTop,
             insetBottom: insetBottom,
@@ -65,7 +66,7 @@ private struct FakeScrollView {
 
     var visibleIDs: [String] {
         let top = max(0, offsetY + insetTop)
-        let bottom = top + containerHeight
+        let bottom = top + visibleHeight
         return ids.indices.filter { index in
             let rowTop = self.rowTop(index)
             return rowTop < bottom && rowTop + heights[index] > top

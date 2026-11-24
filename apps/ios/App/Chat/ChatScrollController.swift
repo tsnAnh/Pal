@@ -42,7 +42,7 @@ final class ChatScrollController {
         let snapshot = ChatScrollGeometry(
             offsetY: Double(geometry.contentOffset.y),
             contentHeight: Double(geometry.contentSize.height),
-            containerHeight: Double(geometry.containerSize.height),
+            containerHeight: Double(geometry.visibleRect.height),
             containerWidth: Double(geometry.containerSize.width),
             insetTop: Double(geometry.contentInsets.top),
             insetBottom: Double(geometry.contentInsets.bottom),
