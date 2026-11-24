@@ -18,10 +18,12 @@ from gateway.session_persistence import authority_persistence
 from persistence.authority.admissions import QueuedReplacement, steer_replayed
 from persistence.authority.vocabulary import STEERING
 from persistence.core.errors import AuthorityRefusal
+from tools.interrupt import YieldReason
 
 # A steer carries plain text and its presentation only. Attachments, finite runs, classic-CLI turns,
 # native envelopes and automation rows are whole turns: neither verb may drop what they carry.
 _TEXT_ONLY = frozenset({'text', 'surface_v1', 'display_v1', 'local_operator_v1'})
+_METADATA_ONLY = {'cli_turn_v1': frozenset({'clarify_batch'})}
 # Sessions launched from an interactive local surface (classic CLI, TUI, Desktop, ACP editor): their
 # plain-text rows are prompt.submit input, whose observers settle a ``steered``/``cancelled`` row.
 # ``desktop`` is the label a Desktop chat migrated from main keeps (hermes_state_local_migration).
@@ -48,16 +50,37 @@ def _interactive(authority, session_id):
     return sources[session_id] in _INTERACTIVE_SOURCES
 
 
+def extra_payload_keys(payload, allowed=frozenset()):
+    names = []
+    for key in sorted(set(payload) - _TEXT_ONLY - allowed):
+        value, harmless = payload[key], _METADATA_ONLY.get(key)
+        if harmless is None or not isinstance(value, dict):
+            names.append(key)
+        else:
+            names.extend(f'{key}.{name}' for name in sorted(set(value) - harmless))
+    return names
+
+
+def steer_blocker(authority, row, *, any_source=False):
+    payload = row.get('payload') or {}
+    text = payload.get('text')
+    if row.get('status') != 'queued':
+        return 'status'
+    if names := extra_payload_keys(payload):
+        return 'payload_keys:' + ','.join(names)
+    if not isinstance(text, str) or not text.strip():
+        return 'empty'
+    if (payload.get('display_v1') or {}).get('kind') == 'hidden':
+        return 'hidden'
+    if not any_source and not _interactive(authority, row['target_session_id']):
+        return 'source'
+    return None
+
+
 def queued_controls(authority, row):
     """The queued-row verbs this owner serves for ``row``: a client shows only these (an older owner
     lists none, so its clients show none)."""
-    payload = row.get('payload') or {}
-    text = payload.get('text')
-    if (row.get('status') != 'queued' or set(payload) - _TEXT_ONLY or not isinstance(text, str) or not text.strip()
-            or (payload.get('display_v1') or {}).get('kind') == 'hidden'
-            or not _interactive(authority, row['target_session_id'])):
-        return []
-    return ['steer', 'replace']
+    return ['steer', 'replace'] if steer_blocker(authority, row) is None else []
 
 
 def pending_rows(authority, ref):
@@ -118,6 +141,20 @@ def _receiving_agent(authority, session_id, generation):
             or not callable(getattr(agent, 'steer', None))):
         return None
     return agent
+
+
+def _latch(authority, session_id, generation, admission_id, text):
+    latched, texts = authority.latched_transfers.get(session_id, (None, {}))
+    if latched != generation:
+        texts = {}
+    texts[admission_id] = text
+    authority.latched_transfers[session_id] = (generation, texts)
+
+
+def deliver_latched(authority, session_id, generation, agent):
+    latched, texts = authority.latched_transfers.pop(session_id, (None, {}))
+    for admission_id, text in texts.items() if latched == generation else ():
+        _deliver(authority, session_id, generation, agent, admission_id, text, YieldReason.OWNER_MESSAGE)
 
 
 def _deliver(authority, session_id, generation, agent, admission_id, text, reason=None):

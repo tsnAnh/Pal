@@ -177,6 +177,7 @@ class SessionAuthority:
         # session -> (generation, [steer text]) accepted before that generation adopted an agent;
         # adopt_agent hands it to that agent (never a later generation's), the drain drops the rest.
         self.pending_steers = {}
+        self.latched_transfers = {}
         # session -> (generation, {admission_id: delivered}): queued admissions prompt.steer_queued handed
         # to that running claim (gateway/session_queued_controls.py); its settlement decides each one.
         self.steer_transfers = {}
@@ -1086,6 +1087,8 @@ class SessionAuthority:
             latched, steers = self.pending_steers.pop(session_id, (None, ()))
             for text in steers if latched == generation else ():
                 agent.steer(text)
+            from gateway.session_queued_controls import deliver_latched
+            deliver_latched(self, session_id, generation, agent)
 
     def check_approval_generation(self, session_id, generation):
         handle = self._handle(SessionRef(self.profile_id, session_id))
@@ -1388,6 +1391,7 @@ class SessionAuthority:
             self.pending_stops.pop(ref.session_id, None)
             self.pending_stop_causes.pop(ref.session_id, None)
             self.pending_steers.pop(ref.session_id, None)
+            self.latched_transfers.pop(ref.session_id, None)
             self.adopted.pop(ref.session_id, None)
             # An automation turn nobody waits on settles here, at the exit that fenced it (GW-10),
             # so the followers already queued run in this drain; a person's turn still pauses.
@@ -1435,9 +1439,11 @@ class SessionAuthority:
                 return
             admission_id = row['admission_id']
             from gateway.run_plugin_injection import admission_turn_scope
+            from gateway.session_owner_batch import fold_queued_owner_input
+            turn = await fold_queued_owner_input(self, ref, live, row)
             try:
-                with admission_turn_scope(self, ref, live, row):
-                    response, outcome = await self._execute_claimed(ref, live, row)
+                with admission_turn_scope(self, ref, live, turn):
+                    response, outcome = await self._execute_claimed(ref, live, turn)
                 if outcome == 'settled_unknown':
                     self.deferred_resets.pop(live.route, None)  # no settlement follows, as below
                     continue

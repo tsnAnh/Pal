@@ -224,15 +224,15 @@ async def test_a_message_the_turn_never_drained_goes_back_to_the_queue_and_runs_
 
 
 @pytest.mark.asyncio
-async def test_a_message_sent_while_the_turn_builds_its_agent_stays_queued_and_runs_next(bot_chat, monkeypatch):
+async def test_a_message_sent_while_the_turn_builds_its_agent_that_never_adopts_one_runs_next_once(
+        bot_chat, monkeypatch):
     db, authority = bot_chat
     turn = Turn(monkeypatch, adopt=False)
     with db:
         conn = _owner_connection(authority)
         await _submit_as_owner(conn, 'running')
         await asyncio.wait_for(turn.claimed.wait(), 30)
-        assert (await _submit_as_owner(conn, 'early'))['status'] == 'queued'
-        assert not authority.pending_steers
+        assert (await _submit_as_owner(conn, 'early'))['status'] == 'steered'
         turn.release.set()
         await async_wait_until(lambda: turn.ran == ['running', 'early'], timeout=30, what='the queued prompt to run')
         await _drained(authority)
