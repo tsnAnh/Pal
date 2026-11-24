@@ -73,3 +73,15 @@ struct ChatRowHeightCacheTests {
         #expect(cache.unmeasured(in: ["a"], width: 500, limit: 1) == ["a"])
     }
 }
+
+@Suite("Chat row height cache rerecord")
+struct ChatRowHeightCacheRerecordTests {
+    @Test func aRerecordAtTheSameWidthReplacesOnlyThatRow() {
+        var cache = ChatRowHeightCache()
+        cache.record("a", height: 44, width: 390)
+        cache.record("b", height: 60, width: 390)
+        cache.record("a", height: 50, width: 390.3)
+        #expect(cache.height(for: "a", width: 390) == 50)
+        #expect(cache.height(for: "b", width: 390) == 60)
+    }
+}

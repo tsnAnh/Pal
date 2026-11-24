@@ -124,9 +124,13 @@ struct ChatBottomBar: View {
             focused: focused,
             send: { text in
                 dictation.stop()
-                model.dismissError()
-                model.send(text)
-                draft = ""
+                var settled = Transaction()
+                settled.disablesAnimations = true
+                withTransaction(settled) {
+                    model.dismissError()
+                    model.send(text)
+                    draft = ""
+                }
                 scroll.sent(animated: !reduceMotion)
             },
             openVoiceMode: {

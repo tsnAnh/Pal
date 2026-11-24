@@ -43,6 +43,14 @@ ALLOWLIST = Path(__file__).with_name("chat_scroll_single_writer_allowlist.txt")
 FIX = "route it through ChatScrollMachine: emit a command and let ChatScrollController.perform apply it"
 HEIGHT_FIX = "give the row its height through ChatScrollController and ChatRowHeights (measured, minHeight(for:)) and ChatRowHeightFloor only"
 HEIGHT_OWNER = "App/Chat/ChatRowHeights.swift"
+SEND_VIEW = "App/Chat/ChatView+Bottom.swift"
+SEND_CALL = re.compile(r"\bmodel\.send\(")
+SEND_TRANSACTION = re.compile(r"\bwithTransaction\b")
+SEND_FIX = ("the send closure changes the composer, the draft and the rows inside one non-animating withTransaction "
+            "(Transaction.disablesAnimations); an animated composer or notice collapse drives a geometry event per frame into the scroll machine")
+WHOLE_ROW_COMPARE = re.compile(r"!=\s*row\b(?!\.)|\brow\s*!=")
+LAYOUT_KEY_FIX = ("compare row.layoutKey, not the whole row: a delivery state change must not forget a measured height, "
+                  "and a forgotten height is measured again and moves the list")
 HEIGHT_CACHE = re.compile(r"\bChatRowHeightCache\b")
 ROW_HEIGHT_FRAME = re.compile(r"\.frame\(\s*(?:minHeight|height)\s*:")
 HEIGHT_FLOOR = re.compile(r"\bstruct ChatRowHeightFloor\b")
@@ -134,6 +142,14 @@ def body_lines(lines: list[tuple[int, str, str]], opening: re.Pattern[str]) -> s
     return inside
 
 
+def owner_rule(rel: str, code: str, transaction_seen: bool) -> tuple[str, str] | None:
+    if rel == SEND_VIEW and SEND_CALL.search(code) and not transaction_seen:
+        return "a send outside a withTransaction", SEND_FIX
+    if rel == HEIGHT_OWNER and WHOLE_ROW_COMPARE.search(code):
+        return "a whole-row comparison in the height owner", LAYOUT_KEY_FIX
+    return None
+
+
 def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
     waivers, found = parse_allowlist(allowlist)
     used: set[Waiver] = set()
@@ -152,8 +168,13 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
         writer = body_lines(lines, PERFORM) if rel == CONTROLLER else set()
         layout = body_lines(lines, LAYOUT_CALLBACK) if rel == CONTROLLER else set()
         floor = body_lines(lines, HEIGHT_FLOOR) if rel == LIST_VIEW else set()
+        transaction_seen = False
         for number, raw, code in lines:
             flagged = False
+            if owner_finding := owner_rule(rel, code, transaction_seen):
+                report(rel, number, raw, *owner_finding)
+                flagged = True
+            transaction_seen = transaction_seen or (rel == SEND_VIEW and bool(SEND_TRANSACTION.search(code)))
             if number in layout and DIRECT_PERFORM.search(code):
                 report(rel, number, raw, "a scroll write inside the layout commit (perform( in a layout callback); use performNextTurn(")
                 flagged = True
