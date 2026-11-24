@@ -1,5 +1,6 @@
 import Foundation
 import PalClient
+import PalDesign
 import PalProtocol
 import PalRoster
 import Testing
