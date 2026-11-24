@@ -51,10 +51,10 @@ struct ChatTranscriptList: View {
             if scroll.showsJumpButton, !model.isFinding {
                 ChatJumpToNewest(scroll: scroll)
                     .padding(.bottom, 4)
-                    .transition(jumpButtonTransition)
+                    .transition(pop.transition)
             }
         }
-        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0), value: scroll.showsJumpButton)
+        .animation(pop.animation, value: scroll.showsJumpButton)
         .modifier(ChatFindReveal(model: model, scroll: scroll))
         .task(id: model.connection) {
             connectionIsSlow = false
@@ -67,13 +67,7 @@ struct ChatTranscriptList: View {
     private static let reconnectingNoticeDelay = Duration.seconds(1)
     private static let catchUpNoticeDelay = LoadingPolicy.catchUpNoticeWindow
 
-    private var jumpButtonTransition: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        return .asymmetric(
-            insertion: .scale(scale: 0.9).combined(with: .opacity),
-            removal: .scale(scale: 0.9).combined(with: .opacity).animation(.easeIn(duration: 0.17))
-        )
-    }
+    private var pop: PalMotion.Pop { PalMotion.Pop(reduceMotion: reduceMotion) }
 }
 
 private struct ChatTranscriptRows: View {
@@ -82,6 +76,7 @@ private struct ChatTranscriptRows: View {
     let router: AppRouter
     let desk: ChatDeskModel
     let connectionIsSlow: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(macOS)
     @Environment(MacShell.self) private var shell
     #endif
@@ -118,6 +113,7 @@ private struct ChatTranscriptRows: View {
                 .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row)) { scroll.rowLaidOut(row.id, frame: $0) })
             }
             VStack(spacing: 0) { footer(ink: ink) }
+                .animation(PalMotion.Pop(reduceMotion: reduceMotion).animation, value: showsWorkingRow)
                 .chatListRow()
             ForEach(desk.cards) { card in
                 ChatDeskCardView(card: card, botName: model.bot.displayName) { choice in
@@ -143,11 +139,14 @@ private struct ChatTranscriptRows: View {
             connectionStatus
                 .padding(.top, 12)
         }
-        if model.isRunning, !model.hasPendingPrompt {
+        if showsWorkingRow {
             ChatWorkingRow(status: model.workingStatus, ink: ink, avatar: model.bot.spec)
                 .padding(.top, ChatMetrics.senderSwitchGap)
+                .transition(PalMotion.Pop(reduceMotion: reduceMotion).transition)
         }
     }
+
+    private var showsWorkingRow: Bool { model.isRunning && !model.hasPendingPrompt }
 
     @ViewBuilder
     private var connectionStatus: some View {
