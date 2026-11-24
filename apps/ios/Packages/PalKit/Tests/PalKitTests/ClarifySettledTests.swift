@@ -42,12 +42,14 @@ struct ClarifySettledTests {
             ClarifyRecord(question: "A?", answer: .skipped),
             ClarifyRecord(question: "B?", answer: .answered(["", ""])),
         ])
-        #expect(settled.entries.allSatisfy(\.isSkipped))
+        let skipped = settled.entries.map { $0.isSkipped }
+        #expect(skipped == [true, true])
     }
 
     @Test func aFormOnlyKeepsTheChosenLabelsTypedTextAndSkips() throws {
         let settled = try #require(ClarifySettled(form: answeredForm()))
-        #expect(settled.entries.map(\.question) == ["Platforms?", "Mockups first?", "Anything else?", "Who may use it?"])
+        let questions = settled.entries.map { $0.question }
+        #expect(questions == ["Platforms?", "Mockups first?", "Anything else?", "Who may use it?"])
         #expect(settled.entries[0].chosen == ["iPhone"])
         #expect(settled.entries[1].chosen == ["Setup", "Kanban"])
         #expect(settled.entries[2].chosen == ["dark mode"])
@@ -83,8 +85,13 @@ struct ClarifySettledTests {
         let settled = try #require(ClarifySettled(form: form))
         for (index, answer) in wire.enumerated() {
             switch answer {
-            case .skipped: #expect(settled.entries[index].isSkipped)
-            case .answered(let text): #expect(!settled.entries[index].isSkipped && text.contains(settled.entries[index].chosen[0]))
+            case .skipped:
+                let entry = settled.entries[index]
+                #expect(entry.isSkipped)
+            case .answered(let text):
+                let entry = settled.entries[index]
+                let carriesPick = !entry.isSkipped && text.contains(entry.chosen[0])
+                #expect(carriesPick)
             }
         }
     }

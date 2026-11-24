@@ -34,7 +34,8 @@ struct ChatModelClarifySettledTests {
         let settled = ChatRow.Kind.clarifyAnswered([ClarifyRecord(question: "Mac or iPhone?", answer: .answered(["Mac"]))])
         #expect(model.rows.last?.kind == settled)
         #expect(model.windowRows.last?.kind == settled)
-        #expect(model.rows.map(\.id) == rowsBefore)
+        let rowsAfter = model.rows.map { $0.id }
+        #expect(rowsAfter == rowsBefore)
         #expect(model.windowRowIDs == model.rowIDs)
     }
 
@@ -85,11 +86,14 @@ struct ChatModelClarifySettledTests {
         world.append(rebuildAssistant("a1", "Mac it is.", at: rebuildAt(10)))
         model.apply(world.snapshot(version: 2))
 
-        #expect(model.windowRows.map(\.id) == model.rowIDs)
+        let shownIDs = model.windowRows.map { $0.id }
+        #expect(shownIDs == model.rowIDs)
         #expect(model.rows.count == 3)
         let kinds = model.windowRows.map(\.kind)
-        #expect(kinds.contains { if case .clarifyAnswered = $0 { true } else { false } })
-        #expect(kinds.contains { if case .assistant = $0 { true } else { false } })
+        let hasSettled = kinds.contains { if case .clarifyAnswered = $0 { true } else { false } }
+        let hasReply = kinds.contains { if case .assistant = $0 { true } else { false } }
+        #expect(hasSettled)
+        #expect(hasReply)
     }
 
     @Test("the jump button hides while the newest row is a question card")
