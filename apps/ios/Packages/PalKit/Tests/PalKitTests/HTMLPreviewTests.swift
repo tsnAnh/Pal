@@ -52,11 +52,11 @@ struct HTMLPreviewTests {
         for text in ["https://example.com/a", "http://example.com", "mailto:a@example.com", "tel:+15555550100"] {
             let url = try #require(URL(string: text))
             let decision = policy.navigation(to: url, isMainFrame: true, onlineAllowed: true)
-            #expect(decision == .confirmOpen(HTMLExternalOpen(url: url, reason: .link)), text)
+            #expect(decision == .confirmOpen(HTMLExternalOpen(url: url, reason: .link)), Comment(rawValue: text))
         }
         for text in ["javascript:alert(1)", "data:text/html,hi", "blob:null/1", "sms:1", "ftp://example.com/a", "itms-apps://x"] {
             let url = try #require(URL(string: text))
-            #expect(policy.navigation(to: url, isMainFrame: true, onlineAllowed: true) == .cancel, text)
+            #expect(policy.navigation(to: url, isMainFrame: true, onlineAllowed: true) == .cancel, Comment(rawValue: text))
         }
     }
 
@@ -101,8 +101,10 @@ struct HTMLPreviewTests {
     @Test("online starts blocked, toggles with a reload each time, and Block again reverses it")
     func onlineToggle() {
         var state = HTMLRenderState()
-        #expect(!state.toggleOnline(), "nothing to reload before the page starts")
-        #expect(state.begin())
+        let beforeStart = state.toggleOnline()
+        #expect(!beforeStart, "nothing to reload before the page starts")
+        let started = state.begin()
+        #expect(started)
         #expect(state.phase == .loading)
         #expect(!state.online)
         #expect(state.onlineLabel == "Online blocked")
@@ -110,14 +112,16 @@ struct HTMLPreviewTests {
         state.finish()
         #expect(state.phase == .ready)
         let loaded = state.generation
-        #expect(state.toggleOnline())
+        let allowed = state.toggleOnline()
+        #expect(allowed)
         #expect(state.online)
         #expect(state.phase == .loading)
         #expect(state.generation == loaded + 1)
         #expect(state.onlineLabel == "Online allowed")
         #expect(state.onlineActionLabel == "Block again")
         state.finish()
-        #expect(state.toggleOnline())
+        let blockedAgain = state.toggleOnline()
+        #expect(blockedAgain)
         #expect(!state.online)
         #expect(state.generation == loaded + 2)
     }
@@ -127,20 +131,25 @@ struct HTMLPreviewTests {
         var state = HTMLRenderState()
         state.fail(.timedOut)
         #expect(state.phase == .idle, "nothing fails before it starts")
-        #expect(state.begin())
-        #expect(!state.begin(), "a second start is ignored")
-        #expect(!state.retry(), "a loading page has nothing to retry")
+        let started = state.begin()
+        let startedTwice = state.begin()
+        let retriedWhileLoading = state.retry()
+        #expect(started)
+        #expect(!startedTwice, "a second start is ignored")
+        #expect(!retriedWhileLoading, "a loading page has nothing to retry")
         state.fail(.timedOut)
         #expect(state.phase == .failed(.timedOut))
         #expect(HTMLRenderState.Failure.timedOut.message == "The page took too long to load.")
         let failed = state.generation
-        #expect(state.retry())
+        let retried = state.retry()
+        #expect(retried)
         #expect(state.phase == .loading)
         #expect(state.generation == failed + 1)
         state.finish()
         state.fail(.processTerminated)
         #expect(state.phase == .failed(.processTerminated))
-        #expect(state.toggleOnline(), "Allow online also reloads a failed page")
+        let allowedWhileFailed = state.toggleOnline()
+        #expect(allowedWhileFailed, "Allow online also reloads a failed page")
         #expect(state.online)
         #expect(state.phase == .loading)
     }
@@ -148,7 +157,7 @@ struct HTMLPreviewTests {
     @Test("a late finish or failure never overrides a settled state")
     func settledStatesHold() {
         var state = HTMLRenderState()
-        _ = state.begin()
+        state.begin()
         state.fail(.loadFailed)
         state.finish()
         #expect(state.phase == .failed(.loadFailed))
