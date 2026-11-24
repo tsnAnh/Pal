@@ -143,6 +143,12 @@ def render_log(rows: list[dict], *, as_json: bool = False) -> str:
     return "\n".join(lines)
 
 
+def _is_primary() -> bool:
+    from hermes_cli.primary_profile import primary_profile_name
+    from hermes_cli.profiles import current_profile_name
+    return current_profile_name("default") == primary_profile_name()
+
+
 def load_ledger() -> list[dict]:
     from hermes_constants import get_hermes_home
     home = get_hermes_home()
@@ -150,17 +156,40 @@ def load_ledger() -> list[dict]:
         return []
     from gateway import commitments
     now = time.time()
-    return [{"id": c.id, "state": c.state.value, "promise": c.promise, "due_at": c.due_at,
-             "overdue": c.overdue(now), "stuck": c.stuck(now), "owner_requested": c.owner_requested,
-             "next_step": c.next_step, "blocker_what": c.blocker_what, "blocker_who": c.blocker_who}
-            for c in commitments.list_for_follow_up(home, closed_since=now)]
+    items = [{"kind": commitments.Kind.PROMISE.value, "id": c.id, "state": c.state.value, "promise": c.promise,
+              "due_at": c.due_at, "overdue": c.overdue(now), "stuck": c.stuck(now),
+              "owner_requested": c.owner_requested, "next_step": c.next_step, "blocker_what": c.blocker_what,
+              "blocker_who": c.blocker_who}
+             for c in commitments.list_for_follow_up(home, closed_since=now)]
+    if not _is_primary():
+        return items
+    return items + [{"kind": c.kind.value, "id": c.id, "state": c.standing.value, "duty": c.promise,
+                     "trigger": c.trigger.value, "action_class": c.action_class.value, "done_when": c.done_when,
+                     "hits": c.hits, "dismissed": c.dismissed, "last_fired": c.last_fired}
+                    for c in commitments.list_mandates(home)]
+
+
+def _render_duties(duties: list[dict]) -> list[str]:
+    lines = [f"{'ID':<15}  {'STANDING':<9}  {'TRIGGER':<15}  {'ACTION':<16}  {'HITS':>4}  {'DISMISSED':>9}  DUTY"]
+    for duty in duties:
+        lines.append(f"{duty['id']:<15}  {duty['state']:<9}  {duty['trigger']:<15}  {duty['action_class']:<16}  "
+                     f"{duty['hits']:>4}  {duty['dismissed']:>9}  {duty['duty'][:60]}")
+        lines.append(f"{'':<15}  done when: {duty['done_when']}; last fired {_stamp(duty['last_fired'])}")
+    return lines
 
 
 def render_ledger(items: list[dict], *, as_json: bool = False) -> str:
     if as_json:
         return json.dumps(items, ensure_ascii=False, indent=2)
-    if not items:
-        return "No open promises."
+    promises = [item for item in items if item["kind"] == "promise"]
+    duties = [item for item in items if item["kind"] != "promise"]
+    if not duties:
+        return "\n".join(_render_promises(promises)) if promises else "No open promises."
+    shown = _render_promises(promises) if promises else ["No open promises."]
+    return "\n".join(["Promises", *shown, "", "Standing duties and proposals", *_render_duties(duties)])
+
+
+def _render_promises(items: list[dict]) -> list[str]:
     lines = [f"{'ID':<15}  {'STATE':<11}  {'DUE':<16}  {'FLAGS':<15}  PROMISE"]
     for item in items:
         flags = ", ".join(name for name in ("overdue", "stuck") if item[name]) or "-"
@@ -170,7 +199,7 @@ def render_ledger(items: list[dict], *, as_json: bool = False) -> str:
             lines.append(f"{'':<15}  blocked by {item['blocker_what']}; {item['blocker_who']} can unblock it")
         if item["next_step"]:
             lines.append(f"{'':<15}  next step: {item['next_step']}")
-    return "\n".join(lines)
+    return lines
 
 
 @dataclass(frozen=True, slots=True)

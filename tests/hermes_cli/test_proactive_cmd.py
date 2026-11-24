@@ -183,3 +183,45 @@ def test_score_is_part_of_the_hermes_cli_parser():
     parser, _subparsers = _build_cli_parser()
     args = parser.parse_args(["proactive", "score", "--all-profiles", "--json"])
     assert args.func is proactive_cmd.score_command and args.all_profiles and args.json
+
+
+def _ledger_with_a_promise_and_a_duty(home):
+    import itertools
+    from gateway import commitments as cm
+    from gateway.autonomy import ActionClass
+    keys = itertools.count()
+    route = cm.Route(platform="telegram", chat_id="42")
+    now = time.time()
+    SessionDB(db_path=home / "state.db").close()
+    cm.promise(home, event_key=f"k{next(keys)}", profile="main", text="Send the weekly report", owner_requested=True,
+               due_at=None, route=route, now=now)
+    accepted = cm.propose_mandate(home, event_key=f"k{next(keys)}", profile="main", text="Build the Mac app on merge",
+                                  trigger=cm.Trigger.PR_MERGED, action_class=ActionClass.RUN_TOOLS,
+                                  done_when="the app is installed", owner_requested=False, route=route, now=now)
+    cm.accept(home, accepted.commitment_id, event_key=f"k{next(keys)}", expected_rev=1, actor=cm.Actor.OWNER, now=now)
+    cm.propose_mandate(home, event_key=f"k{next(keys)}", profile="main", text="Restart the gateway when idle",
+                       trigger=cm.Trigger.GATEWAY_RESTART, action_class=ActionClass.RUN_TOOLS,
+                       done_when="send-stats is green", owner_requested=False, route=route, now=now)
+
+
+def test_the_ledger_lists_standing_duties_and_proposals_in_their_own_section_on_the_primary_bot(home, monkeypatch):
+    monkeypatch.setattr("hermes_cli.primary_profile.primary_profile_name", lambda: "main")
+    monkeypatch.setattr("hermes_cli.profiles.current_profile_name", lambda default=None: "main")
+    _ledger_with_a_promise_and_a_duty(home)
+    text = proactive_cmd.render_ledger(proactive_cmd.load_ledger())
+    promises, duties = text.split("Standing duties and proposals")
+    assert "Send the weekly report" in promises and "Build the Mac app" not in promises
+    assert "Build the Mac app on merge" in duties and "Restart the gateway when idle" in duties
+    assert "active" in duties and "proposed" in duties and "pr_merged" in duties
+    kinds = [item["kind"] for item in json.loads(proactive_cmd.render_ledger(proactive_cmd.load_ledger(), as_json=True))]
+    assert kinds == ["promise", "mandate", "proposal"]
+
+
+def test_the_ledger_shows_no_duty_section_on_a_bot_that_is_not_primary(home, monkeypatch):
+    monkeypatch.setattr("hermes_cli.primary_profile.primary_profile_name", lambda: "boss")
+    monkeypatch.setattr("hermes_cli.profiles.current_profile_name", lambda default=None: "main")
+    _ledger_with_a_promise_and_a_duty(home)
+    text = proactive_cmd.render_ledger(proactive_cmd.load_ledger())
+    assert "Send the weekly report" in text
+    assert "Standing duties" not in text and "Build the Mac app" not in text
+    assert [item["kind"] for item in proactive_cmd.load_ledger()] == ["promise"]
