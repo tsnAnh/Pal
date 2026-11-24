@@ -125,6 +125,13 @@ private final class PassthroughWebView: WKWebView {
     override func scrollWheel(with event: NSEvent) {
         nextResponder?.scrollWheel(with: event)
     }
+
+    override func registerForDraggedTypes(_ newTypes: [NSPasteboard.PasteboardType]) {}
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        unregisterDraggedTypes()
+    }
 }
 
 struct EmbedWebView: NSViewRepresentable {
@@ -136,6 +143,7 @@ struct EmbedWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let webView = PassthroughWebView(frame: .zero, configuration: embedConfiguration())
+        webView.unregisterDraggedTypes()
         startEmbedLoad(webView, descriptor: descriptor, dark: dark, coordinator: context.coordinator)
         return webView
     }

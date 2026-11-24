@@ -18,6 +18,37 @@ public enum DropSource: Equatable, Sendable {
         "public.image",
     ]
 
+    public static let registeredTypeIdentifiers = [
+        "public.file-url",
+        "public.image",
+        "public.png",
+        "public.jpeg",
+        "public.heic",
+        "public.tiff",
+        "com.compuserve.gif",
+        "org.webmproject.webp",
+        "com.adobe.pdf",
+    ]
+
+    public static let filePromiseMarkers: Set<String> = [
+        "com.apple.NSFilePromiseItemMetaData",
+        "com.apple.pasteboard.promised-file-url",
+        "com.apple.pasteboard.promised-file-content-type",
+    ]
+
+    public static func isFilePromise(typeIdentifiers: [String]) -> Bool {
+        typeIdentifiers.contains { filePromiseMarkers.contains($0) }
+    }
+
+    public static func acceptsDrag(items: [[String]]) -> Bool {
+        items.contains { isFilePromise(typeIdentifiers: $0) || carriesAttachment(typeIdentifiers: $0) }
+    }
+
+    public static func refusal(items: [[String]]) -> String {
+        guard !items.isEmpty else { return "empty-pasteboard" }
+        return acceptsDrag(items: items) ? "none" : "no-attachment-source"
+    }
+
     public static func classify(typeIdentifiers: [String]) -> DropSource {
         if typeIdentifiers.contains(UTType.fileURL.identifier) { return .fileURL }
         if let image = imageType(in: typeIdentifiers) { return .image(typeIdentifier: image) }

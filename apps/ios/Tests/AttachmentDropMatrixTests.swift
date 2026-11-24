@@ -1,11 +1,9 @@
 #if os(macOS)
 import AppKit
-import ImageIO
 import PalChat
 import SwiftUI
 import Testing
 import UniformTypeIdentifiers
-import WebKit
 
 @testable import Pal
 
@@ -205,150 +203,67 @@ private func shortName(_ view: NSView?) -> String {
 }
 
 @MainActor
-private func verdict(_ view: NSView?) -> String {
+private func verdict(_ view: NSView?, _ pasteboard: NSPasteboard) -> String {
     switch view {
     case nil: "nobody"
-    case is NSTextView, is WKWebView, is NSTextField: "EATEN"
-    default: "pane"
+    case let ours as AttachmentDropView: ours.decide("enter", pasteboard) == [] ? "REFUSED" : "ok"
+    default: "EATEN"
     }
-}
-
-private final class MatrixPromiseDelegate: NSObject, @preconcurrency NSFilePromiseProviderDelegate, @unchecked Sendable {
-    let data: Data
-    let name: String
-
-    init(data: Data, name: String) {
-        self.data = data
-        self.name = name
-    }
-
-    func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String { name }
-
-    func filePromiseProvider(
-        _ filePromiseProvider: NSFilePromiseProvider,
-        writePromiseTo url: URL,
-        completionHandler: @escaping (Error?) -> Void
-    ) {
-        do {
-            try data.write(to: url)
-            completionHandler(nil)
-        } catch {
-            completionHandler(error)
-        }
-    }
-}
-
-private struct MatrixSource {
-    let name: String
-    let attaches: Bool
-    let write: @MainActor (NSPasteboard) -> Void
 }
 
 @MainActor
-private final class MatrixFixtures {
-    let pasteboard = NSPasteboard(name: NSPasteboard.Name("dev.tsnanh.pal.drop-matrix"))
-    let directory = FileManager.default.temporaryDirectory.appending(path: "drop-matrix-\(UUID().uuidString)", directoryHint: .isDirectory)
-    var delegates: [MatrixPromiseDelegate] = []
-    let image: NSImage
-    let bitmap: NSBitmapImageRep
-    let png: Data
+private final class MatrixDelivery {
+    var batch: DropBatch?
+}
 
-    init() throws {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        image = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
-            NSColor.systemTeal.setFill()
-            rect.fill()
-            return true
+@MainActor
+private func deliver(_ pasteboard: NSPasteboard, attaches: Bool) async throws -> String {
+    let delivery = MatrixDelivery()
+    let taken = AttachmentIntake.receive(payloads: AttachmentDropView.payloads(from: pasteboard)) { delivery.batch = $0 }
+    #expect(taken == attaches, "receive returned \(taken)")
+    guard taken else { return "not taken" }
+    for _ in 0..<40 where delivery.batch == nil { try await Task.sleep(for: .milliseconds(100)) }
+    guard let batch = delivery.batch else {
+        Issue.record("the intake never delivered a batch")
+        return "NEVER DELIVERED"
+    }
+    defer { batch.temporaryDirectories.forEach { try? FileManager.default.removeItem(at: $0) } }
+    #expect(batch.failures.isEmpty && batch.files.count + batch.images.count >= 1, "batch \(batch.failures.map(\.label))")
+    return "files=\(batch.files.count) images=\(batch.images.count) failures=\(batch.failures.map(\.label))"
+}
+
+@MainActor
+private func claimantRows(_ fixtures: MatrixFixtures, _ rigs: [(MatrixPaneState, MatrixRig)]) -> ([String], [String]) {
+    var frameRows: [String] = []
+    var hitRows: [String] = []
+    for source in fixtures.sources {
+        source.write(fixtures.pasteboard)
+        let offered = fixtures.pasteboard.pasteboardItems?.flatMap { $0.types.map(\.rawValue) } ?? []
+        #expect(!offered.isEmpty, "\(source.name) wrote nothing to the pasteboard")
+        var frameCells: [String] = []
+        var hitCells: [String] = []
+        for (state, rig) in rigs {
+            let point = rig.windowPoint(top: state.pointTop)
+            let frame = rig.window.contentView.flatMap { frameClaimant($0, at: $0.convert(point, from: nil), offered: offered) }
+            let hit = hitClaimant(in: rig.window, at: point, offered: offered)
+            let frameCell = "\(verdict(frame, fixtures.pasteboard)):\(shortName(frame))"
+            frameCells.append(frameCell)
+            hitCells.append("\(verdict(hit, fixtures.pasteboard)):\(shortName(hit))")
+            #expect(frameCell.hasPrefix("ok:") == source.attaches, "\(source.name) over \(state.rawValue): \(frameCell)")
         }
-        let tiff = try #require(image.tiffRepresentation)
-        bitmap = try #require(NSBitmapImageRep(data: tiff))
-        png = try #require(bitmap.representation(using: .png, properties: [:]))
+        frameRows.append("\(source.name) | " + frameCells.joined(separator: " | "))
+        hitRows.append("\(source.name) | " + hitCells.joined(separator: " | "))
     }
-
-    private func encoded(_ type: UTType) -> Data {
-        guard let cgImage = bitmap.cgImage else { return png }
-        let data = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(data, type.identifier as CFString, 1, nil) else { return png }
-        CGImageDestinationAddImage(destination, cgImage, nil)
-        return CGImageDestinationFinalize(destination) ? data as Data : png
-    }
-
-    private func file(_ name: String, _ contents: Data) -> URL {
-        let url = directory.appending(path: name)
-        try? contents.write(to: url)
-        return url
-    }
-
-    private func single(_ pasteboard: NSPasteboard, _ build: (NSPasteboardItem) -> Void) {
-        pasteboard.clearContents()
-        let item = NSPasteboardItem()
-        build(item)
-        pasteboard.writeObjects([item])
-    }
-
-    private func promise(_ pasteboard: NSPasteboard, type: UTType, name: String, data: Data) {
-        let delegate = MatrixPromiseDelegate(data: data, name: name)
-        delegates.append(delegate)
-        pasteboard.clearContents()
-        pasteboard.writeObjects([NSFilePromiseProvider(fileType: type.identifier, delegate: delegate)])
-    }
-
-    var sources: [MatrixSource] {
-        let pdf = Data("%PDF-1.1\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF".utf8)
-        return [
-            MatrixSource(name: "Finder file URL", attaches: true) { pasteboard in
-                let url = self.file("note.png", self.png)
-                self.single(pasteboard) {
-                    $0.setString(url.absoluteString, forType: .fileURL)
-                    $0.setString(url.lastPathComponent, forType: .string)
-                }
-            },
-            MatrixSource(name: "PNG data", attaches: true) { pasteboard in self.single(pasteboard) { $0.setData(self.png, forType: .png) } },
-            MatrixSource(name: "JPEG data", attaches: true) { pasteboard in
-                self.single(pasteboard) { $0.setData(self.encoded(.jpeg), forType: NSPasteboard.PasteboardType(UTType.jpeg.identifier)) }
-            },
-            MatrixSource(name: "HEIC data", attaches: true) { pasteboard in
-                self.single(pasteboard) { $0.setData(self.encoded(.heic), forType: NSPasteboard.PasteboardType(UTType.heic.identifier)) }
-            },
-            MatrixSource(name: "TIFF data", attaches: true) { pasteboard in
-                self.single(pasteboard) { $0.setData(self.bitmap.tiffRepresentation ?? self.png, forType: .tiff) }
-            },
-            MatrixSource(name: "screenshot thumbnail (promise)", attaches: true) { pasteboard in
-                self.promise(pasteboard, type: .png, name: "Screenshot.png", data: self.png)
-            },
-            MatrixSource(name: "Safari/Chrome image (url+html+image)", attaches: true) { pasteboard in
-                self.single(pasteboard) {
-                    $0.setString("https://example.com/photo.png", forType: .URL)
-                    $0.setString("https://example.com/photo.png", forType: .string)
-                    $0.setString("<img src=\"https://example.com/photo.png\">", forType: .html)
-                    $0.setData(self.png, forType: .png)
-                }
-            },
-            MatrixSource(name: "Photos (promise)", attaches: true) { pasteboard in
-                self.promise(pasteboard, type: .jpeg, name: "IMG_0001.jpeg", data: self.encoded(.jpeg))
-            },
-            MatrixSource(name: "PDF Finder file", attaches: true) { pasteboard in
-                let url = self.file("report.pdf", pdf)
-                self.single(pasteboard) {
-                    $0.setString(url.absoluteString, forType: .fileURL)
-                    $0.setString(url.lastPathComponent, forType: .string)
-                }
-            },
-            MatrixSource(name: "PDF data only", attaches: true) { pasteboard in self.single(pasteboard) { $0.setData(pdf, forType: .pdf) } },
-            MatrixSource(name: "plain text", attaches: false) { pasteboard in self.single(pasteboard) { $0.setString("hello", forType: .string) } },
-        ]
-    }
+    return (frameRows, hitRows)
 }
 
 @MainActor
 @Suite("Attachment drop matrix", .serialized)
 struct AttachmentDropMatrixTests {
-    @Test("every drag source against every pane state: who claims the drag")
-    func matrix() throws {
+    @Test("every drag source against every pane state: every attaching drag reaches the one destination and delivers")
+    func matrix() async throws {
         let fixtures = try MatrixFixtures()
         defer { try? FileManager.default.removeItem(at: fixtures.directory) }
-        var frameRows: [String] = []
-        var hitRows: [String] = []
         var rigs: [(MatrixPaneState, MatrixRig)] = []
         for state in MatrixPaneState.allCases {
             let rig = MatrixRig(image: fixtures.image)
@@ -360,21 +275,12 @@ struct AttachmentDropMatrixTests {
             ([rig.1.hosting as NSView] + descendants(of: rig.1.hosting)).filter { !$0.registeredDraggedTypes.isEmpty }
                 .map { "\(shortName($0)): \($0.registeredDraggedTypes.map(\.rawValue))" }
         } ?? []
+        let (frameRows, hitRows) = claimantRows(fixtures, rigs)
+        var deliveryRows: [String] = []
         for source in fixtures.sources {
             source.write(fixtures.pasteboard)
-            let offered = fixtures.pasteboard.pasteboardItems?.flatMap { $0.types.map(\.rawValue) } ?? []
-            #expect(!offered.isEmpty, "\(source.name) wrote nothing to the pasteboard")
-            var frameCells: [String] = []
-            var hitCells: [String] = []
-            for (state, rig) in rigs {
-                let point = rig.windowPoint(top: state.pointTop)
-                let frame = rig.window.contentView.flatMap { frameClaimant($0, at: $0.convert(point, from: nil), offered: offered) }
-                let hit = hitClaimant(in: rig.window, at: point, offered: offered)
-                frameCells.append("\(verdict(frame)):\(shortName(frame))")
-                hitCells.append("\(verdict(hit)):\(shortName(hit))")
-            }
-            frameRows.append("\(source.name) | " + frameCells.joined(separator: " | "))
-            hitRows.append("\(source.name) | " + hitCells.joined(separator: " | "))
+            let outcome = try await deliver(fixtures.pasteboard, attaches: source.attaches)
+            deliveryRows.append("\(source.name) | \(outcome)")
         }
         let header = "source | " + MatrixPaneState.allCases.map(\.rawValue).joined(separator: " | ")
         let report = """
@@ -382,9 +288,11 @@ struct AttachmentDropMatrixTests {
         == claimant by frame order (deepest registered view under the point, front to back) ==
         \(header)
         \(frameRows.joined(separator: "\n"))
-        == claimant by hit test (hitTest, then superviews) ==
+        == claimant by hit test (hitTest, then superviews; informational, a row that differs from the table above is the risk case) ==
         \(header)
         \(hitRows.joined(separator: "\n"))
+        == delivery to the intake (files, images, failures) ==
+        \(deliveryRows.joined(separator: "\n"))
         """
         print(report)
         let url = FileManager.default.temporaryDirectory.appending(path: "pal-drop-matrix.txt")

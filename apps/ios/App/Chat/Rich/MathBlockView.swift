@@ -100,6 +100,7 @@ private struct MathLabel: NSViewRepresentable {
         let label = MTMathUILabel(frame: .zero)
         label.labelMode = .display
         label.displayErrorInline = false
+        label.unregisterDraggedTypes()
         return label
     }
 
