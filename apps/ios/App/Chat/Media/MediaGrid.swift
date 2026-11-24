@@ -20,8 +20,8 @@ struct MediaGrid: View {
             } else if !videos.isEmpty {
                 let columns = Array(repeating: GridItem(.fixed(MediaTileMetrics.tile), spacing: Self.spacing), count: 2)
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Self.spacing) {
-                    ForEach(videos) { video in
-                        tile(video, width: MediaTileMetrics.tile, height: MediaTileMetrics.tile)
+                    ForEach(Array(videos.enumerated()), id: \.element.id) { index, video in
+                        tile(video, width: MediaTileMetrics.tile, height: MediaTileMetrics.tile, position: (index, videos.count))
                     }
                 }
                 .frame(width: MediaTileMetrics.tile * 2 + Self.spacing, alignment: .leading)
@@ -38,8 +38,10 @@ struct MediaGrid: View {
     }
 
     @ViewBuilder
-    private func tile(_ video: MediaReference, width: CGFloat, height: CGFloat, followsPoster: Bool = false) -> some View {
-        let view = MediaTile(media: video, width: width, height: height, followsPoster: followsPoster)
+    private func tile(
+        _ video: MediaReference, width: CGFloat, height: CGFloat, followsPoster: Bool = false, position: (index: Int, total: Int)? = nil
+    ) -> some View {
+        let view = MediaTile(media: video, width: width, height: height, followsPoster: followsPoster, position: position)
         #if os(macOS)
         view
             .focusable()

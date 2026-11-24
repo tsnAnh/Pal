@@ -13,6 +13,7 @@ struct MediaKindTests {
             .audio: ["a.mp3", "b.WAV", "c.m4a", "d.aac", "e.flac", "f.ogg", "g.opus", "h.aiff", "i.AIFF"],
             .pdf: ["a.pdf", "b.PDF"],
             .archive: ["a.zip", "b.TAR", "c.gz", "d.7z", "e.rar", "f.tar.gz", "g.zst"],
+            .model3D: ["a.usdz", "b.OBJ", "c.stl", "d.Stl"],
             .document: ["a.txt", "b.md", "c.CSV", "d.docx", "e.xlsx", "f.json", "g.pptx"],
             .other: ["a.bin", "noextension", "b.exe", "c.unknownext", ""],
         ]
@@ -53,6 +54,8 @@ struct MediaKindTests {
         #expect(MediaKind(fileName: "x.bin", mimeType: "application/zip") == .archive)
         #expect(MediaKind(fileName: "x.bin", mimeType: "application/gzip") == .archive)
         #expect(MediaKind(fileName: "x.bin", mimeType: "application/x-7z-compressed") == .archive)
+        #expect(MediaKind(fileName: "x.bin", mimeType: "model/vnd.usdz+zip") == .model3D)
+        #expect(MediaKind(fileName: "x.bin", mimeType: "model/stl") == .model3D)
     }
 
     @Test("only video and audio render inline")

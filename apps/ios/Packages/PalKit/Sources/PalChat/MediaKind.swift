@@ -8,10 +8,12 @@ public enum MediaKind: String, Sendable, Equatable, CaseIterable {
     case pdf
     case document
     case archive
+    case model3D
     case other
 
     private static let audioExtensions = MessageFiles.audioExtensions.union(["aiff"])
     private static let archiveExtensions: Set<String> = ["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst"]
+    private static let model3DExtensions: Set<String> = ["usdz", "obj", "stl"]
     private static let documentExtensions: Set<String> = [
         "rtf", "rtfd", "txt", "md", "markdown", "csv", "tsv", "json", "xml", "yaml", "yml", "toml", "ini", "log",
         "html", "htm", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pages", "numbers", "key", "odt", "ods", "odp",
@@ -39,6 +41,8 @@ public enum MediaKind: String, Sendable, Equatable, CaseIterable {
             self = .video
         } else if mime.hasPrefix("audio/") {
             self = .audio
+        } else if mime.hasPrefix("model/") {
+            self = .model3D
         } else if mime == "application/pdf" {
             self = .pdf
         } else if Self.archiveMimeTypes.contains(mime) {
@@ -65,6 +69,8 @@ public enum MediaKind: String, Sendable, Equatable, CaseIterable {
             self = .pdf
         } else if Self.archiveExtensions.contains(ext) {
             self = .archive
+        } else if Self.model3DExtensions.contains(ext) {
+            self = .model3D
         } else if Self.documentExtensions.contains(ext) {
             self = .document
         } else {

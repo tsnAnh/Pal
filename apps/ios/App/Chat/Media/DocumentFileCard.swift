@@ -4,7 +4,7 @@ import SwiftUI
 
 struct DocumentFileCard: View {
     let file: FileReference
-    let kind: ChatDocumentKind
+    let kind: FileCardKind
     let isStreaming: Bool
 
     @Environment(\.mediaPreviewResolver) private var mediaResolver
@@ -19,17 +19,23 @@ struct DocumentFileCard: View {
     #endif
 
     private var media: MediaReference { MediaReference(file: file) }
-    private var resolver: DocumentPreviewResolver? {
-        mediaResolver.map { DocumentPreviewResolver(source: $0.source, cache: $0.cache) }
+    private var resolver: FileCardResolver? {
+        mediaResolver.map { FileCardResolver(media: $0) }
     }
     private var thumbnailKey: String { "document:\(file.id)" }
-    private var shown: MediaPreviewState { loader.displayed(cached: resolver?.cached(media)) }
+    private var shown: MediaPreviewState { loader.displayed(cached: resolver?.cached(media, kind: kind)) }
+
+    private var shownThumbnail: CGImage? {
+        guard kind.hasThumbnail else { return nil }
+        return thumbnail ?? ChatImageDecoder.cached(id: thumbnailKey, maxPixel: DocumentCardMetrics.thumbnailPixels)
+    }
 
     private var strip: DocumentStrip {
-        let base = DocumentStrip(name: file.name, typeLabel: file.typeLabel, kind: kind)
+        let typeLabel = kind.typeLabel(of: file)
+        let base = DocumentStrip(name: file.name, typeLabel: typeLabel, kind: kind)
         switch shown {
         case .ready(let preview): return base.with(preview)
-        case .tooLarge(let size): return DocumentStrip(name: file.name, typeLabel: file.typeLabel, kind: kind, size: size)
+        case .tooLarge(let size): return DocumentStrip(name: file.name, typeLabel: typeLabel, kind: kind, size: size)
         case .idle, .loading, .failed: return base
         }
     }
@@ -43,7 +49,7 @@ struct DocumentFileCard: View {
     @ViewBuilder
     private var card: some View {
         let view = DocumentCard(
-            strip: strip, state: shown, thumbnail: thumbnail ?? ChatImageDecoder.cached(id: thumbnailKey, maxPixel: DocumentCardMetrics.thumbnailPixels),
+            strip: strip, state: shown, thumbnail: shownThumbnail,
             transfer: transfer, open: openFile, download: { withFile(limit: nil) { MediaFileActions.deliver($0, name: file.name) } },
             retry: { if loader.retry() { attempt += 1 } }
         )

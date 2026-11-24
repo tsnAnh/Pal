@@ -15,7 +15,7 @@ public struct GeneratedThumbnail: Sendable, Equatable {
 }
 
 public protocol DocumentThumbnailGenerating: Sendable {
-    func thumbnail(forFileAt url: URL, kind: ChatDocumentKind, maxPixel: Int) async throws -> GeneratedThumbnail?
+    func thumbnail(forFileAt url: URL, kind: ChatDocumentKind?, maxPixel: Int) async throws -> GeneratedThumbnail?
 }
 
 public actor DocumentThumbnailQueue {
@@ -87,7 +87,7 @@ public struct DocumentPreviewResolver: Sendable {
         cache.cached(MediaPosterKey(id: reference.id, pixels: pixels))
     }
 
-    public func resolve(_ reference: MediaReference, kind: ChatDocumentKind) async throws -> MediaPreviewState {
+    public func resolve(_ reference: MediaReference, kind: ChatDocumentKind?) async throws -> MediaPreviewState {
         let key = MediaPosterKey(id: reference.id, pixels: pixels)
         if let hit = await cache.load(key) { return .ready(hit) }
         if let size = reference.size, !MediaLimits.allowsThumbnail(size: size) { return .tooLarge(size: size) }
@@ -108,7 +108,7 @@ public struct DocumentPreviewResolver: Sendable {
         }
     }
 
-    private func thumbnail(_ reference: MediaReference, kind: ChatDocumentKind) async throws -> Outcome {
+    private func thumbnail(_ reference: MediaReference, kind: ChatDocumentKind?) async throws -> Outcome {
         let file: URL
         do {
             file = try await MediaDownloads.download(reference, from: source, limit: MediaLimits.thumbnailSourceBytes)

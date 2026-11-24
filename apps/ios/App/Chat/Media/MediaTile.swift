@@ -7,6 +7,7 @@ struct MediaTile: View {
     let width: CGFloat
     let height: CGFloat
     var followsPoster = false
+    var position: (index: Int, total: Int)?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.mediaPreviewResolver) private var resolver
@@ -62,7 +63,7 @@ struct MediaTile: View {
         case .tooLarge(let size):
             MediaTooLargeCard(media: media, size: size, compact: compact, transfer: transfer) { download() }
         case .failed(let reason, let retryable):
-            MediaFailedCard(reason: reason, retryable: retryable, kind: media.kind) {
+            MediaFailedCard(media: media, reason: reason, retryable: retryable, compact: compact) {
                 if loader.retry() { attempt += 1 }
             }
         }
@@ -85,7 +86,10 @@ struct MediaTile: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .accessibilityLabel(Text("Video \(media.name). Tap to play"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(MediaAccessibility.video(name: media.name, duration: preview.duration ?? media.duration, position: position)))
+        .accessibilityHint(Text(MediaAccessibility.openHint))
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("chatMediaTile")
         .modifier(MediaTileDrag(media: media, staging: staging))
         .modifier(
