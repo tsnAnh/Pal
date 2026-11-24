@@ -372,3 +372,22 @@ def events(home, commitment_id: str) -> list[Event]:
     finally:
         conn.close()
     return [_to_event(row) for row in rows]
+
+
+@dataclass(frozen=True, slots=True)
+class Outcome:
+    commitment_id: str
+    created_at: float
+    due_at: float | None
+    closed: State | None
+    closed_by: Actor | None
+    closed_at: float | None
+
+
+def outcomes(conn: sqlite3.Connection, *, as_of: float) -> list[Outcome]:
+    rows = conn.execute(
+        "SELECT c.id, c.created_at, c.due_at, e.to_state, e.actor, e.at FROM commitments c "
+        f"LEFT JOIN commitment_events e ON e.commitment_id = c.id AND e.to_state IN ({_TERMINAL_SQL}) AND e.at <= ? "
+        "ORDER BY c.created_at, c.id", (as_of,)).fetchall()
+    return [Outcome(row[0], row[1], row[2], State(row[3]) if row[3] else None, Actor(row[4]) if row[4] else None,
+                    row[5]) for row in rows]

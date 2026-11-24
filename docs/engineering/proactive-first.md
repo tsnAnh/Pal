@@ -14,7 +14,7 @@ A bot is proactive when, in a conversation, it does the following.
 | During the work | It decides and acts on reversible choices and states the assumption in one line. It asks only what is irreversible, costly, or known only to the owner. It asks one batched question with a recommended answer per item. |
 | After the work | It follows through, verifies the result, monitors what it started, and reports only what changed. |
 
-A question is justified or not by the rubric (`evals/proactive_eval/rubric.json`). A turn that ends with a question or an options list is **AVOIDABLE** when files, history, the web, a tool or memory already hold the answer, or a safe default exists, or a wrong guess is cheap to undo. It is **NEEDED** when the answer is owner-only, the action is irreversible or costly, or the turn asks approval for content that leaves to the outside. A needed criterion always beats an avoidable one.
+A question is justified or not by the rubric (`gateway/proactive_scorecard/rubric.json`). A turn that ends with a question or an options list is **AVOIDABLE** when files, history, the web, a tool or memory already hold the answer, or a safe default exists, or a wrong guess is cheap to undo. It is **NEEDED** when the answer is owner-only, the action is irreversible or costly, or the turn asks approval for content that leaves to the outside. A needed criterion always beats an avoidable one.
 
 ## Guard rails that do not move
 
@@ -69,7 +69,7 @@ Owner, via the chief, part 291: bots must always offer the user choices. This is
 3. Options are concrete actions ("Send as written", "Edit then send", "Cancel"), not a bare yes or no.
 4. It must not increase the number of questions. Ask only what is needed, each one answerable with one tap.
 
-**Ask quality** is the measured behaviour. It is counted per bot per week by the miner and per variant by the replay harness: the share of asks that carry options, the share with the recommended option first, the share whose only options are yes or no, the share with no options and no suggested default, the share of question turns that batch two or more questions, asks per task (must not rise), and the needed asks a bot skipped (replay only, must not rise). The definitions are in `evals/proactive_eval/rubric.json`.
+**Ask quality** is the measured behaviour. It is counted per bot per week by the miner and per variant by the replay harness: the share of asks that carry options, the share with the recommended option first, the share whose only options are yes or no, the share with no options and no suggested default, the share of question turns that batch two or more questions, asks per task (must not rise), and the needed asks a bot skipped (replay only, must not rise). The definitions are in `gateway/proactive_scorecard/rubric.json`.
 
 ## What proactive does not mean
 

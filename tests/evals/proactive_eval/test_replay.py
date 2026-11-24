@@ -4,7 +4,7 @@ import pytest
 
 from evals.proactive_eval import models, replay, scenario, variants
 from evals.proactive_eval.models import Ask, BotTurn, Event, StubBot, StubJudge, Variant
-from evals.proactive_eval.rubric import Label
+from gateway.proactive_scorecard.rubric import Label
 from evals.proactive_eval.scenario import ScenarioError, Split, parse_scenario
 
 RAW = {

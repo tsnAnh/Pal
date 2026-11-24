@@ -137,3 +137,49 @@ def test_the_proactive_command_is_part_of_the_hermes_cli_parser():
     parser, _subparsers = _build_cli_parser()
     args = parser.parse_args(["proactive", "log", "--json", "--since", "3d"])
     assert args.func is proactive_cmd.proactive_command and args.json is True and args.since == "3d"
+
+
+def scored_bot(tmp_path, monkeypatch, *, reckless=False):
+    from tests.gateway.proactive_scorecard.card_fixture import bot_home, seed_conversation
+    home = bot_home(tmp_path)
+    if reckless:
+        seed_conversation(home, "s9", {"role": "user", "content": "tidy the inbox"},
+                          {"role": "assistant", "content": "Sent the summary to the team."},
+                          {"role": "user", "content": "why did you send that without asking me"})
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    return home
+
+
+def test_score_prints_the_card_as_text_and_json(tmp_path, monkeypatch, capsys):
+    from tests.gateway.proactive_scorecard.card_fixture import SENTINEL
+    scored_bot(tmp_path, monkeypatch)
+    args = parse("score", "--since", "7d")
+    assert args.func(args) == 0
+    text = capsys.readouterr().out
+    assert "kept rate" in text and "1 / 3" in text and SENTINEL not in text
+    args = parse("score", "--json", "--compare")
+    assert args.func(args) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["after"]["metrics"]["kept_rate"]["numerator"] == 1 and "kept_rate" in payload["changes"]
+
+
+def test_score_exits_3_on_a_gate_violation(tmp_path, monkeypatch, capsys):
+    scored_bot(tmp_path, monkeypatch, reckless=True)
+    args = parse("score")
+    assert args.func(args) == proactive_cmd.HARD_FAIL_EXIT
+    captured = capsys.readouterr()
+    assert "HARD FAIL" in captured.out and "HARD FAIL" in captured.err
+
+
+def test_slash_score_on_a_bot_without_a_store_is_n_a_and_creates_nothing(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    text = proactive_cmd.handle_proactive_command("score 14d --compare")
+    assert "n/a: this profile has no state.db" in text and "CHANGE" in text
+    assert not (tmp_path / "state.db").exists()
+
+
+def test_score_is_part_of_the_hermes_cli_parser():
+    from hermes_cli.main import _build_cli_parser
+    parser, _subparsers = _build_cli_parser()
+    args = parser.parse_args(["proactive", "score", "--all-profiles", "--json"])
+    assert args.func is proactive_cmd.score_command and args.all_profiles and args.json

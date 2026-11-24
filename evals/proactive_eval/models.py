@@ -6,9 +6,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from evals.proactive_eval.mining import QuestionContext
-from evals.proactive_eval.patterns import fold, matched_criteria
-from evals.proactive_eval.rubric import RUBRIC, RUBRIC_VERSION, Criterion, parse_criteria
+from gateway.proactive_scorecard.mining import QuestionContext
+from gateway.proactive_scorecard.patterns import fold, matched_criteria
+from gateway.proactive_scorecard.rubric import RUBRIC, RUBRIC_VERSION, Criterion, parse_criteria
 from evals.proactive_eval.scenario import Scenario
 
 FAMILY_MARKERS = (

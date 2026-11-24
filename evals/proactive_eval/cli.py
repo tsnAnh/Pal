@@ -8,7 +8,9 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from evals.proactive_eval import mining, models, replay, rubric, scenario, variants
+from evals.proactive_eval import models, replay, scenario, variants
+from evals.proactive_eval.fixture_source import FixtureSource
+from gateway.proactive_scorecard import mining, rubric
 
 DEFAULT_LEDGER = Path("heldout-ledger.jsonl")
 _AGE = re.compile(r"^(\d+)d$")
@@ -83,8 +85,8 @@ def command_mine(args: argparse.Namespace) -> dict:
     since, until = parse_moment(args.since), parse_moment(args.until)
     judge = models.make_question_judge(models.ModelSpec.parse(args.judge_model)) if args.judge_model else None
     if args.dry_run:
-        fixture = mining.FixtureSource()
-        sources = {bot: mining.FixtureSource(bot=bot) for bot in fixture.bots()}
+        fixture = FixtureSource()
+        sources = {bot: FixtureSource(bot=bot) for bot in fixture.bots()}
         return mining.mine(sources, since=since, until=until, judge=judge, source_label="synthetic-fixture")
     return mining.mine(_stores(args), since=since, until=until, judge=judge, source_label="store")
 

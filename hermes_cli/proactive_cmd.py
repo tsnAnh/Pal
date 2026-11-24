@@ -6,12 +6,14 @@ import re
 import sys
 import time
 from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from hermes_cli.subcommands._shared import add_json_flag
 
 DEFAULT_SINCE = "7d"
+HARD_FAIL_EXIT = 3
 _SINCE_UNITS = {"m": 60, "h": 3600, "d": 86400}
 _LOG_FIELDS = ("offer_id", "created_at", "domain", "kind", "consent", "title", "status", "reason", "route_json",
                "alerted_at", "outcome", "outcome_at", "outcome_device")
@@ -20,8 +22,9 @@ USAGE = (
     "  /reach                  show whether proactive alerts are on and what is muted\n"
     "  /reach log [7d]         recent proactive offers and what you did with them\n"
     "  /reach ledger           open promises, with whether each is overdue or stuck\n"
+    "  /reach score [7d] [--compare]  the proactive scorecard, counts only; --compare adds the window before\n"
     "  /reach on|off           allow or stop Hermes-initiated alerts\n"
-    "  /reach mute <domain>    silence a domain (cron, suggestions, commitments)\n"
+    "  /reach mute <domain>    silence a domain (cron, suggestions, commitments, scorecard)\n"
     "  /reach unmute <domain>  allow it again")
 
 
@@ -36,6 +39,16 @@ def build_parser(subparsers) -> argparse.ArgumentParser:
     log.add_argument("--since", default=DEFAULT_SINCE, metavar="AGE", help="How far back: 30m, 12h, 7d (default 7d)")
     ledger = sub.add_parser("ledger", help="Show open promises and whether each is overdue or stuck")
     add_json_flag(ledger, "Emit machine-readable JSON")
+    score = sub.add_parser(
+        "score", help="Score how proactive this bot was, from counts only (read-only)",
+        description="Read-only: opens state.db without writing and never prints message text. Exit code 3 "
+                    "is a HARD FAIL (a gate violation). One bot: `hermes -p <bot> proactive score --since 28d "
+                    "--json`. Every profile: `hermes proactive score --all-profiles --since 28d --json`.")
+    add_json_flag(score, "Emit machine-readable JSON")
+    score.add_argument("--since", default=DEFAULT_SINCE, metavar="AGE", help="Window: 30m, 12h, 7d (default 7d)")
+    score.add_argument("--compare", action="store_true", help="Also score the window before it and show the change")
+    score.add_argument("--all-profiles", action="store_true", help="Every profile under the default Hermes root")
+    score.set_defaults(func=score_command)
     sub.add_parser("on", help="Allow Hermes-initiated proactive alerts")
     sub.add_parser("off", help="Stop Hermes-initiated proactive alerts")
     for name, help_text in (("mute", "Silence a domain's alerts"), ("unmute", "Allow a muted domain again")):
@@ -160,6 +173,64 @@ def render_ledger(items: list[dict], *, as_json: bool = False) -> str:
     return "\n".join(lines)
 
 
+@dataclass(frozen=True, slots=True)
+class ScoreReport:
+    text: str
+    hard_fail: bool
+
+
+def _profile_homes(all_profiles: bool) -> dict[str, Path]:
+    from hermes_constants import get_default_hermes_root, get_hermes_home
+    if not all_profiles:
+        return {"": get_hermes_home()}
+    root = get_default_hermes_root()
+    profiles = root / "profiles"
+    homes = {"default": root} if (root / "state.db").is_file() else {}
+    for home in sorted(profiles.iterdir()) if profiles.is_dir() else ():
+        if (home / "state.db").is_file():
+            homes[home.name] = home
+    return homes
+
+
+def score_report(since: str = DEFAULT_SINCE, *, compare: bool = False, as_json: bool = False,
+                 all_profiles: bool = False) -> ScoreReport:
+    from gateway.proactive_scorecard import card
+    span, now = parse_since(since), time.time()
+    window, earlier = card.Window(now - span, now), card.Window(now - 2 * span, now - span)
+    payloads, sections, failed = {}, [], False
+    for label, home in _profile_homes(all_profiles).items():
+        after = card.compute(window, home, now=now)
+        before = card.compute(earlier, home, now=now) if compare else None
+        failed = failed or after.hard_fail
+        payloads[label] = card.comparison_json(before, after) if before else card.to_json(after)
+        text = card.render_text(after, label=label or None)
+        if before:
+            text += f"\n\nChange against the {since} before:\n" + card.render_comparison(card.compare(before, after))
+        sections.append(text)
+    if as_json:
+        body = payloads[""] if not all_profiles else {"profiles": payloads, "hard_fail": failed}
+        return ScoreReport(json.dumps(body, ensure_ascii=False, indent=2), failed)
+    return ScoreReport("\n\n".join(sections) or "No profile with a state.db.", failed)
+
+
+def _slash_score(rest: list[str]) -> str:
+    ages = [item for item in rest if item != "--compare"]
+    return score_report(ages[0] if ages else DEFAULT_SINCE, compare="--compare" in rest).text
+
+
+def score_command(args: argparse.Namespace) -> int:
+    try:
+        report = score_report(args.since, compare=args.compare, as_json=args.json, all_profiles=args.all_profiles)
+    except ValueError as exc:
+        print(f"proactive: {exc}", file=sys.stderr)
+        return 1
+    print(report.text)
+    if report.hard_fail:
+        print("HARD FAIL: a gate violation was counted; it must be 0.", file=sys.stderr)
+        return HARD_FAIL_EXIT
+    return 0
+
+
 def _usage_unless(rest: list[str], build) -> str:
     return build(rest) if rest else USAGE
 
@@ -168,6 +239,7 @@ _SLASH_DISPATCH = {
     "": lambda rest: status_text(),
     "log": lambda rest: render_log(load_log(parse_since(rest[0] if rest else DEFAULT_SINCE))),
     "ledger": lambda rest: render_ledger(load_ledger()),
+    "score": _slash_score,
     "on": lambda rest: set_enabled(True),
     "off": lambda rest: set_enabled(False),
     "mute": lambda rest: _usage_unless(rest, lambda r: set_muted(r[0], True)),

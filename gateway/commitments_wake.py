@@ -13,9 +13,11 @@ from types import MappingProxyType
 from gateway import commitments as ledger
 from gateway import reach, reach_log
 from gateway.commitments import Actor, Commitment, State
+from gateway.proactive_scorecard import weekly
 from gateway.reach_policy import Messaging
 from gateway.reach_routes import NON_MESSAGING_SOURCES
 from hermes_constants import get_hermes_home
+from hermes_time import now as local_now
 
 logger = logging.getLogger(__name__)
 
@@ -111,10 +113,16 @@ def offers_due(home, now: float) -> list[reach.Offer]:
 
 def report_due(home) -> int:
     home = Path(home)
-    if not (home / "scripts" / SCRIPT_NAME).is_file():
+    script = home / "scripts" / SCRIPT_NAME
+    scorecard = weekly.enabled(home)
+    if scorecard and not script.is_file():
+        ensure_job()
+    if not script.is_file():
         return 0
     write_gate_script(home)
     due = offers_due(home, time.time())
+    if scorecard and (weekly_offer := weekly.offer_due(home, local_now())) is not None:
+        due.append(weekly_offer)
     for item in due:
         reach.offer_threadsafe(home, item, wait=False)
     return len(due)

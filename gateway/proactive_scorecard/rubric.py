@@ -36,7 +36,7 @@ class Verdict:
 
 
 def load_rubric() -> dict:
-    return json.loads(RUBRIC_PATH.read_text(encoding="utf-8"))
+    return json.loads(RUBRIC_PATH.read_text(encoding="utf-8-sig"))
 
 
 RUBRIC = load_rubric()

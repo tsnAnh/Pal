@@ -15,7 +15,8 @@ DEFAULT_MIN_GAP_MINUTES = 60
 DEFAULT_MESSAGING_WINDOW_MINUTES = 30
 DEFAULT_QUIET_START = "22:00"
 DEFAULT_QUIET_END = "08:00"
-DEFAULT_DOMAIN_TIERS = {"cron": "notify", "suggestions": "suggest", "commitments": "notify"}
+DEFAULT_DOMAIN_TIERS = {"cron": "notify", "suggestions": "suggest", "commitments": "notify",
+                        "scorecard": "suggest"}
 BUDGET_WINDOW_SECONDS = 24 * 60 * 60
 
 

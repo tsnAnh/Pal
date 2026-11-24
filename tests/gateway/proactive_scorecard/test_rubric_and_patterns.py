@@ -1,7 +1,7 @@
 import pytest
 
-from evals.proactive_eval import patterns, rubric
-from evals.proactive_eval.rubric import Criterion, Label
+from gateway.proactive_scorecard import patterns, rubric
+from gateway.proactive_scorecard.rubric import Criterion, Label
 
 
 @pytest.mark.parametrize("criteria, label, basis", [
@@ -83,3 +83,28 @@ def test_a_neutral_owner_message_matches_no_correction_class():
 
 def test_correction_class_names_never_contain_message_text():
     assert all(name.replace("_", "").isalpha() for name in patterns.CORRECTION_PATTERNS)
+
+
+@pytest.mark.parametrize("text", [
+    "Xong chưa?", "any update on the report?", "Is it done yet?", "tới đâu rồi em", "how's it going with the deploy",
+])
+def test_an_owner_asking_for_status_is_a_chase(text):
+    assert patterns.is_chase(text)
+
+
+@pytest.mark.parametrize("text", ["Please draft the release note", "thanks, looks good", "Làm luôn đi"])
+def test_an_ordinary_owner_message_is_not_a_chase(text):
+    assert not patterns.is_chase(text)
+
+
+@pytest.mark.parametrize("text", [
+    "Draft ready. I'll check back tomorrow.", "I will let you know when CI is green.",
+    "Mình sẽ báo lại khi xong nhé.", "Em sẽ kiểm tra lại sau 1 tiếng.",
+])
+def test_an_assistant_turn_that_promises_later_work_is_a_promise(text):
+    assert patterns.makes_promise(text)
+
+
+@pytest.mark.parametrize("text", ["I checked it and it passes.", "Done: PR #12 merged.", "Đã gửi rồi."])
+def test_a_finished_report_is_not_a_promise(text):
+    assert not patterns.makes_promise(text)
