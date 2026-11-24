@@ -161,6 +161,10 @@ final class ChatModel {
     var arrivals: [String: Date] = [:]
     @ObservationIgnored private var identity = ChatRowIdentity()
     private var outboxRowIDs: Set<String> = []
+    private var unsaved: [OutboxEntry] = []
+    @ObservationIgnored private var echoLedger = AdmittedEchoLedger()
+    @ObservationIgnored private var reapable: Set<String> = []
+    @ObservationIgnored private var reaping: Set<String> = []
     var built: [String: BuiltRow] = [:]
     var hasBaseline = false
     @ObservationIgnored var builtOffline = true
@@ -275,13 +279,25 @@ final class ChatModel {
             }
         }
         pending.removeAll()
+        let provisional = OutboxEntry(
+            submissionID: UUID().uuidString, botID: bot.name, text: body, attachments: images,
+            createdAt: Date(), state: .pending, attempts: 0
+        )
+        unsaved.append(provisional)
+        outboxEntries.append(provisional)
+        rebuild()
         Task {
             do {
-                let entry = try await outbox.enqueue(botID: bot.name, text: body, attachments: images)
+                let entry = try await outbox.enqueue(
+                    botID: bot.name, text: body, attachments: images, submissionID: provisional.submissionID
+                )
+                unsaved.removeAll { $0.submissionID == entry.submissionID }
                 await refreshOutbox()
                 _ = await outbox.deliver(entry.submissionID)
                 await refreshOutbox()
             } catch {
+                unsaved.removeAll { $0.submissionID == provisional.submissionID }
+                await refreshOutbox()
                 sendError = String(localized: "Your message could not be saved.")
             }
         }
@@ -589,10 +605,6 @@ final class ChatModel {
     private func attach(_ session: ChatSession) async {
         let preparing = PalPerf.begin("chat.open.outbox")
         await refreshOutbox()
-        if !outboxEntries.contains(where: { if case .failed = $0.state { true } else { false } }) {
-            try? await outbox?.purgeFinished()
-        }
-        await refreshOutbox()
         preparing.end()
         var delay = Duration.milliseconds(500)
         let intro = roster.takeIntro(for: bot.name)
@@ -665,8 +677,21 @@ final class ChatModel {
     }
 
     private func refreshOutbox() async {
-        outboxEntries = await outbox?.snapshot(botID: bot.name) ?? []
+        let stored = await outbox?.snapshot(botID: bot.name) ?? []
+        let storedIDs = Set(stored.map(\.submissionID))
+        outboxEntries = stored + unsaved.filter { !storedIDs.contains($0.submissionID) }
         rebuild()
+    }
+
+    private func reapAdmitted() {
+        let doomed = reapable.subtracting(reaping)
+        guard let outbox, !doomed.isEmpty else { return }
+        reaping.formUnion(doomed)
+        Task {
+            do { try await outbox.discardAdmitted(doomed) } catch { return }
+            reaping.subtract(doomed)
+            await refreshOutbox()
+        }
     }
 
     private func observeActivityChange() {
@@ -689,6 +714,19 @@ final class ChatModel {
 
     private func sourceItems() -> [(id: String, item: TranscriptItem, stored: Int?)] {
         let timelineRows = snapshot?.rows ?? []
+        let echoed = echoLedger.resolve(
+            entries: outboxEntries, text: displayText(for:), timeline: timelineRows.map(\.item)
+        )
+        let echoedBy = Dictionary(echoed.echoes.map { ($0.value, $0.key) }, uniquingKeysWith: { min($0, $1) })
+        for row in timelineRows {
+            if let submissionID = echoedBy[row.item.id] { identity.keep("submission:\(submissionID)", for: row.id) }
+        }
+        let staleBefore = Date().addingTimeInterval(-AdmittedEchoLedger.retention)
+        reapable = Set(echoed.echoes.keys)
+        if hasBaseline {
+            reapable.formUnion(outboxEntries.filter { $0.state.isAdmitted && $0.createdAt < staleBefore }.map(\.submissionID))
+        }
+        let unechoed = Set(echoed.unechoed.map(\.submissionID))
         let timelineIDs = identity.ids(
             for: timelineRows, outboxIDs: outboxRowIDs, forwarded: snapshot?.forwardedKeys ?? [:]
         )
@@ -705,8 +743,9 @@ final class ChatModel {
         for entry in outboxEntries {
             let id = "submission:\(entry.submissionID)"
             guard !known.contains(id), !absorbed.contains(entry.submissionID) else { continue }
-            if case .admitted = entry.state { continue }
-            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: .sending), timestamp: entry.createdAt)
+            if entry.state.isAdmitted, !unechoed.contains(entry.submissionID) { continue }
+            let delivery: TranscriptItem.Delivery = entry.state.isAdmitted ? .sent : .sending
+            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: delivery), timestamp: entry.createdAt)
             if case .failed(let reason) = entry.state { item.deliveryFailure = reason }
             sources.append((id: id, item: item, stored: nil))
             shownOutbox.insert(id)
@@ -723,6 +762,7 @@ final class ChatModel {
         } else {
             rebuilds.full += 1
             publish(builtRows())
+            reapAdmitted()
         }
         builtOffline = isOffline
         publishActivity()
