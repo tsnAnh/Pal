@@ -5,9 +5,9 @@ from datetime import UTC, datetime
 
 from gateway import commitments as ledger
 from gateway import commitments_wake
-from gateway.commitments import Actor, Details, Refused, RefusalCode, Route, State
-from gateway.session_context import get_session_env
-from hermes_cli.profiles import current_profile_name
+from gateway.autonomy import ActionClass
+from gateway.commitments import Actor, Details, Refused, RefusalCode, State, Trigger
+from gateway.commitments_capture import current_profile, current_route
 from hermes_constants import get_hermes_home
 from tools.approval_context import get_current_approval_session_id, get_current_tool_call_id, get_current_turn_id
 from tools.registry import registry, tool_error, tool_result
@@ -15,11 +15,7 @@ from tools.registry import registry, tool_error, tool_result
 _UPDATE_TARGETS = tuple(s for s in State if s is not State.OPEN and s not in ledger.TERMINAL_STATES)
 _CLOSE_TARGETS = tuple(s for s in State if s in ledger.TERMINAL_STATES)
 _TARGETS = {"update": frozenset(_UPDATE_TARGETS), "close": frozenset(_CLOSE_TARGETS)}
-_ROUTE_ENV = {
-    "platform": "HERMES_SESSION_PLATFORM", "chat_id": "HERMES_SESSION_CHAT_ID",
-    "thread_id": "HERMES_SESSION_THREAD_ID", "chat_type": "HERMES_SESSION_CHAT_TYPE",
-    "session_key": "HERMES_SESSION_KEY", "session_id": "HERMES_SESSION_ID",
-}
+_MODEL_ACTORS = tuple(a for a in Actor if a is not Actor.AUTO)
 _DETAIL_FIELDS = ("note", "next_step", "blocker_what", "blocker_who", "evidence", "reason")
 
 
@@ -37,13 +33,22 @@ def build_schema() -> dict:
     update_states = ", ".join(s.value for s in _UPDATE_TARGETS)
     close_states = ", ".join(s.value for s in _CLOSE_TARGETS)
     properties = {
-        "action": {"type": "string", "enum": ["promise", "update", "close", "list"],
+        "action": {"type": "string", "enum": list(_ACTIONS),
                    "description": "promise records a new promise, update moves it along, close finishes or drops "
-                                  "it, list shows the open ones."},
-        "id": {"type": "string", "description": "Commitment id (update and close)."},
-        "text": {"type": "string", "description": "What you promised, in one plain sentence (promise)."},
-        "owner_requested": {"type": "boolean", "description": "true when your owner asked for it, false when you "
-                                                              "offered it (promise)."},
+                                  "it, list shows the open ones. Standing duties (primary bot only): "
+                                  "propose_mandate suggests one, accept (only when your owner asked in this turn), "
+                                  "pause, resume and dismiss move it, list_mandates shows them."},
+        "id": {"type": "string", "description": "Commitment id (update, close, accept, pause, resume, dismiss)."},
+        "text": {"type": "string", "description": "What you promised, or the standing duty, in one plain sentence "
+                                                  "(promise, propose_mandate)."},
+        "owner_requested": {"type": "boolean", "description": "true when your owner asked for it in this turn, false "
+                                                              "when you offered it (promise, propose_mandate, and the moves of a duty)."},
+        "trigger": {"type": "string", "enum": [t.value for t in Trigger],
+                    "description": "The event that starts the duty (propose_mandate)."},
+        "action_class": {"type": "string", "enum": [a.value for a in ActionClass],
+                         "description": "What kind of action the duty takes (propose_mandate)."},
+        "done_when": {"type": "string", "description": "When the duty counts as done each time it fires "
+                                                       "(propose_mandate)."},
         "due": {"type": "string", "description": "ISO 8601 date-time with offset by which it is due (promise)."},
         "state": {"type": "string", "enum": [s.value for s in (*_UPDATE_TARGETS, *_CLOSE_TARGETS)],
                   "description": f"Target state. update takes {update_states}; close takes {close_states}."},
@@ -52,19 +57,18 @@ def build_schema() -> dict:
         "blocker_what": {"type": "string", "description": "What blocks it."},
         "blocker_who": {"type": "string", "description": "Who can unblock it."},
         "evidence": {"type": "string", "description": "Proof it is done: a link, a result, a sent message."},
-        "reason": {"type": "string", "description": "Why it is dropped."},
-        "by": {"type": "string", "enum": [a.value for a in Actor],
+        "reason": {"type": "string", "description": "Why it is dropped or dismissed."},
+        "by": {"type": "string", "enum": [a.value for a in _MODEL_ACTORS],
                "description": "Who dropped it; required when abandoning."},
         "expected_rev": {"type": "integer", "description": "Revision you last saw; defaults to the current one."},
     }
     return {
         "name": "commitment",
-        "description": "Record and track promises to your owner that outlive this turn. " + _lifecycle(),
+        "description": "Record and track promises to your owner that outlive this turn. " + _lifecycle()
+                       + " Standing duties: a proposal becomes an active mandate only when your owner accepts it.",
         "parameters": {"type": "object", "properties": properties, "required": ["action"]},
     }
 
-
-COMMITMENT_SCHEMA = build_schema()
 
 
 def _text(args: dict, name: str) -> str | None:
@@ -91,14 +95,6 @@ def _due(args: dict) -> float | None:
     return parsed.timestamp()
 
 
-def _route() -> Route:
-    return Route(**{field: get_session_env(env) or None for field, env in _ROUTE_ENV.items()})
-
-
-def _profile() -> str:
-    return get_session_env("HERMES_SESSION_PROFILE") or current_profile_name("default") or "default"
-
-
 def _event_key(action: str, commitment_id: str) -> str:
     session, turn, call = get_current_approval_session_id(), get_current_turn_id(), get_current_tool_call_id()
     if not (session and turn and call):
@@ -114,9 +110,9 @@ def _promise(args: dict, now: float) -> dict:
     owner_requested = args.get("owner_requested")
     if not isinstance(owner_requested, bool):
         raise Refused(RefusalCode.INVALID, "owner_requested is required: true when your owner asked, else false.")
-    made = ledger.promise(get_hermes_home(), event_key=_event_key("promise", ""), profile=_profile(),
+    made = ledger.promise(get_hermes_home(), event_key=_event_key("promise", ""), profile=current_profile(),
                           text=_required(args, "text"), owner_requested=owner_requested, due_at=_due(args),
-                          route=_route(), now=now, next_step=_text(args, "next_step"))
+                          route=current_route(), now=now, next_step=_text(args, "next_step"))
     follow_up_error = commitments_wake.ensure_job()
     return {"id": made.commitment_id, "state": made.to_state.value, "rev": made.rev,
             **({"replayed": True} if made.replayed else {}),
@@ -141,9 +137,12 @@ def _actor(args: dict, to: State) -> Actor:
             raise Refused(RefusalCode.MISSING_FIELDS, "Abandoning needs: by.")
         return Actor.BOT
     try:
-        return Actor(by)
+        actor = Actor(by)
     except ValueError:
         raise Refused(RefusalCode.INVALID, "by is not a known actor.") from None
+    if actor not in _MODEL_ACTORS:
+        raise Refused(RefusalCode.INVALID, "by is not a known actor.")
+    return actor
 
 
 def _expected_rev(args: dict, home, commitment_id: str) -> int:
@@ -183,18 +182,69 @@ def _list(args: dict, now: float) -> dict:
     return {"commitments": [_item(row, now) for row in ledger.list_active(get_hermes_home())]}
 
 
+def _duty(row: ledger.Commitment) -> dict:
+    return {"id": row.id, "duty": row.promise, "standing": row.standing.value, "rev": row.rev,
+            "trigger": row.trigger.value, "action_class": row.action_class.value, "done_when": row.done_when,
+            "hits": row.hits, "dismissed": row.dismissed, "last_fired": _iso(row.last_fired)}
+
+
+def _propose_mandate(args: dict, now: float) -> dict:
+    owner_requested = args.get("owner_requested")
+    if not isinstance(owner_requested, bool):
+        raise Refused(RefusalCode.INVALID, "owner_requested is required: true when your owner asked, else false.")
+    made = ledger.propose_mandate(
+        get_hermes_home(), event_key=_event_key("propose_mandate", ""), profile=current_profile(),
+        text=_required(args, "text"), trigger=_text(args, "trigger"), action_class=_text(args, "action_class"),
+        done_when=_required(args, "done_when"), owner_requested=owner_requested, route=current_route(), now=now)
+    return {"id": made.commitment_id, "standing": ledger.Standing.PROPOSED.value, "rev": made.rev,
+            **({"replayed": True} if made.replayed else {})}
+
+
+def _duty_move(move):
+    def run(args: dict, now: float) -> dict:
+        home = get_hermes_home()
+        commitment_id = _required(args, "id")
+        asked = args.get("owner_requested") is True
+        if move is ledger.accept and not asked:
+            raise Refused(RefusalCode.OWNER_ONLY, "Only your owner accepts a proposal: call accept when an owner "
+                                                  "message in this turn asked for it, with owner_requested true.")
+        moved = move(home, commitment_id, event_key=_event_key(move.__name__, commitment_id),
+                     expected_rev=_expected_rev(args, home, commitment_id),
+                     actor=Actor.OWNER if asked else Actor.BOT, now=now, reason=_text(args, "reason"))
+        return {**_duty(ledger.get(home, commitment_id)), **({"replayed": True} if moved.replayed else {})}
+    return run
+
+
+def _list_mandates(args: dict, now: float) -> dict:
+    return {"mandates": [_duty(row) for row in ledger.list_mandates(get_hermes_home())]}
+
+
+def _primary_only(handler):
+    def run(args: dict, now: float) -> dict:
+        ledger.require_primary(current_profile())
+        return handler(args, now)
+    return run
+
+
 _ACTIONS = {
     "promise": _promise,
     "update": lambda args, now: _move(args, now, "update"),
     "close": lambda args, now: _move(args, now, "close"),
     "list": _list,
+    "propose_mandate": _primary_only(_propose_mandate),
+    "accept": _primary_only(_duty_move(ledger.accept)),
+    "pause": _primary_only(_duty_move(ledger.pause)),
+    "resume": _primary_only(_duty_move(ledger.resume)),
+    "dismiss": _primary_only(_duty_move(ledger.dismiss)),
+    "list_mandates": _primary_only(_list_mandates),
 }
+COMMITMENT_SCHEMA = build_schema()
 
 
 def commitment_tool(args: dict) -> str:
     action = args.get("action")
     if action not in _ACTIONS:
-        return tool_error("action must be promise, update, close or list.", code=RefusalCode.INVALID.value)
+        return tool_error(f"action must be one of {', '.join(_ACTIONS)}.", code=RefusalCode.INVALID.value)
     try:
         return tool_result(_ACTIONS[action](args, time.time()))
     except Refused as refused:

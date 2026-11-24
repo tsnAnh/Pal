@@ -13,6 +13,7 @@ from types import MappingProxyType
 from gateway import commitments as ledger
 from gateway import reach, reach_log
 from gateway.commitments import Actor, Commitment, State
+from gateway.commitments_capture import settle_cron_runs
 from gateway.proactive_scorecard import weekly
 from gateway.reach_policy import Messaging
 from gateway.reach_routes import NON_MESSAGING_SOURCES
@@ -35,6 +36,13 @@ WAKE_PROMPT = (
     "next step. Your owner hears about finished, blocked, overdue and stuck promises without a message from "
     "you, so end with a one-line note for the log."
 )
+
+
+class Registration(StrEnum):
+    REGISTERED = "registered"
+    PRESENT = "already present"
+    REFUSED = "not allowed on this host"
+    FAILED = "failed"
 
 
 class ReportKind(StrEnum):
@@ -120,6 +128,7 @@ def report_due(home) -> int:
     if not script.is_file():
         return 0
     write_gate_script(home)
+    settle_cron_runs(home, time.time())
     due = offers_due(home, time.time())
     if scorecard and (weekly_offer := weekly.offer_due(home, local_now())) is not None:
         due.append(weekly_offer)
@@ -166,19 +175,43 @@ def write_gate_script(home) -> Path:
     return path
 
 
-def ensure_job() -> str | None:
+def register_job() -> tuple[Registration, str | None]:
     from tools.hosted_tool_policy import host_feature_refusal
     if refusal := host_feature_refusal("cron_scripts", "Promise follow-through"):
-        return refusal
+        return Registration.REFUSED, refusal
     from cron.job_provenance import CREATED_BY_AGENT
     from cron.jobs import _jobs_lock, create_job, load_jobs
     try:
         write_gate_script(get_hermes_home())
         with _jobs_lock():
-            if not any(job.get("script") == SCRIPT_NAME for job in load_jobs()):
-                create_job(prompt=WAKE_PROMPT, schedule=SCHEDULE, name=JOB_NAME, script=SCRIPT_NAME,
-                           deliver="local", created_by=CREATED_BY_AGENT)
+            if any(job.get("script") == SCRIPT_NAME for job in load_jobs()):
+                return Registration.PRESENT, None
+            create_job(prompt=WAKE_PROMPT, schedule=SCHEDULE, name=JOB_NAME, script=SCRIPT_NAME,
+                       deliver="local", created_by=CREATED_BY_AGENT)
     except (OSError, ValueError) as exc:
         logger.warning("Promise follow-through job not scheduled", exc_info=True)
-        return f"The follow-up check could not be scheduled ({type(exc).__name__}); the promise is recorded."
-    return None
+        return (Registration.FAILED,
+                f"The follow-up check could not be scheduled ({type(exc).__name__}); the promise is recorded.")
+    return Registration.REGISTERED, None
+
+
+def ensure_job() -> str | None:
+    return register_job()[1]
+
+
+def register_for_profiles(homes) -> dict[str, Registration]:
+    """Gateway start: every served profile gets the wake job whether or not it ever promises or turns the weekly
+    scorecard on, so an auto-captured promise is followed from its first day. One log line per profile."""
+    from gateway.run import _profile_runtime_scope
+    outcomes: dict[str, Registration] = {}
+    for name, home in homes:
+        try:
+            with _profile_runtime_scope(Path(home), hydrate_secrets=False):
+                outcome, error = register_job()
+        except Exception as exc:
+            outcome, error = Registration.FAILED, type(exc).__name__
+            logger.warning("Promise follow-through job for profile %s not registered", name, exc_info=True)
+        outcomes[name] = outcome
+        log = logger.warning if outcome is Registration.FAILED else logger.info
+        log("Promise follow-through job for profile %s: %s%s", name, outcome.value, f" ({error})" if error else "")
+    return outcomes

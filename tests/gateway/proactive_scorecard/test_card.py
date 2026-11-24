@@ -9,7 +9,8 @@ import pytest
 
 from gateway.proactive_scorecard import card
 from gateway.proactive_scorecard.card import Window
-from tests.gateway.proactive_scorecard.card_fixture import DAY, HOUR, NOW, SENTINEL, bot_home, seed_conversation
+from tests.gateway.proactive_scorecard.card_fixture import (
+    BOT_CHAT_WINDOW, DAY, HOUR, NOW, SENTINEL, bot_home, seed_bot_chat, seed_conversation)
 from tests.gateway.reach_harness import make_home
 
 THIS_WEEK = Window(NOW - 7 * DAY, NOW + HOUR)
@@ -147,3 +148,14 @@ def test_scoring_a_bot_that_never_promised_creates_no_ledger(tmp_path):
     scored = card.compute(THIS_WEEK, home, now=NOW)
     assert scored.metrics["kept_rate"].na.startswith("n/a: ")
     assert snapshot(home)[0] == tables and "commitments" not in tables
+
+
+def test_a_long_lived_bot_chat_is_scored_for_the_window_its_messages_fall_in(tmp_path):
+    home = make_home(tmp_path, "chatty")
+    seed_bot_chat(home)
+    scored = card.compute(Window(*BOT_CHAT_WINDOW), home, now=NOW)
+    assert fraction(scored.metrics["nudges_per_100_owner_turns"]) == (1, 3)
+    assert fraction(scored.metrics["handbacks"])[1] == 3
+    assert fraction(scored.metrics["unrecorded_promises"]) == (1, 1)
+    text = card.render_text(scored)
+    assert "1 / 1 promise turns" in text and "n/a: 0 / 0" not in text

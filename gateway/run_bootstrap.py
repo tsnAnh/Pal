@@ -417,6 +417,8 @@ def _start_gateway_start_cron_and_housekeeping(runner):
     except Exception as exc:
         logger.warning("Could not resolve profile homes for cron: %s", exc)
         cron_profile_homes = []
+    from gateway.commitments_wake import register_for_profiles
+    register_for_profiles(cron_profile_homes)
     # External providers own one unscoped remote registry, so they can only serve a single home.
     cron_provider = scheduler_for_profile_mode(
         resolve_cron_scheduler(), multiplex_profiles=len(cron_profile_homes) > 1)
