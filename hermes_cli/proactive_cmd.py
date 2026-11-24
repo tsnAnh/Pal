@@ -19,8 +19,9 @@ USAGE = (
     "Usage:\n"
     "  /reach                  show whether proactive alerts are on and what is muted\n"
     "  /reach log [7d]         recent proactive offers and what you did with them\n"
+    "  /reach ledger           open promises, with whether each is overdue or stuck\n"
     "  /reach on|off           allow or stop Hermes-initiated alerts\n"
-    "  /reach mute <domain>    silence a domain (cron, suggestions)\n"
+    "  /reach mute <domain>    silence a domain (cron, suggestions, commitments)\n"
     "  /reach unmute <domain>  allow it again")
 
 
@@ -33,6 +34,8 @@ def build_parser(subparsers) -> argparse.ArgumentParser:
     log = sub.add_parser("log", help="Show recent proactive offers and their outcomes")
     add_json_flag(log, "Emit machine-readable JSON")
     log.add_argument("--since", default=DEFAULT_SINCE, metavar="AGE", help="How far back: 30m, 12h, 7d (default 7d)")
+    ledger = sub.add_parser("ledger", help="Show open promises and whether each is overdue or stuck")
+    add_json_flag(ledger, "Emit machine-readable JSON")
     sub.add_parser("on", help="Allow Hermes-initiated proactive alerts")
     sub.add_parser("off", help="Stop Hermes-initiated proactive alerts")
     for name, help_text in (("mute", "Silence a domain's alerts"), ("unmute", "Allow a muted domain again")):
@@ -127,34 +130,76 @@ def render_log(rows: list[dict], *, as_json: bool = False) -> str:
     return "\n".join(lines)
 
 
+def load_ledger() -> list[dict]:
+    from hermes_constants import get_hermes_home
+    home = get_hermes_home()
+    if not (home / "state.db").exists():
+        return []
+    from gateway import commitments
+    now = time.time()
+    return [{"id": c.id, "state": c.state.value, "promise": c.promise, "due_at": c.due_at,
+             "overdue": c.overdue(now), "stuck": c.stuck(now), "owner_requested": c.owner_requested,
+             "next_step": c.next_step, "blocker_what": c.blocker_what, "blocker_who": c.blocker_who}
+            for c in commitments.list_for_follow_up(home, closed_since=now)]
+
+
+def render_ledger(items: list[dict], *, as_json: bool = False) -> str:
+    if as_json:
+        return json.dumps(items, ensure_ascii=False, indent=2)
+    if not items:
+        return "No open promises."
+    lines = [f"{'ID':<15}  {'STATE':<11}  {'DUE':<16}  {'FLAGS':<15}  PROMISE"]
+    for item in items:
+        flags = ", ".join(name for name in ("overdue", "stuck") if item[name]) or "-"
+        lines.append(f"{item['id']:<15}  {item['state']:<11}  {_stamp(item['due_at']):<16}  {flags:<15}  "
+                     f"{item['promise'][:60]}")
+        if item["state"] == "blocked":
+            lines.append(f"{'':<15}  blocked by {item['blocker_what']}; {item['blocker_who']} can unblock it")
+        if item["next_step"]:
+            lines.append(f"{'':<15}  next step: {item['next_step']}")
+    return "\n".join(lines)
+
+
+def _usage_unless(rest: list[str], build) -> str:
+    return build(rest) if rest else USAGE
+
+
+_SLASH_DISPATCH = {
+    "": lambda rest: status_text(),
+    "log": lambda rest: render_log(load_log(parse_since(rest[0] if rest else DEFAULT_SINCE))),
+    "ledger": lambda rest: render_ledger(load_ledger()),
+    "on": lambda rest: set_enabled(True),
+    "off": lambda rest: set_enabled(False),
+    "mute": lambda rest: _usage_unless(rest, lambda r: set_muted(r[0], True)),
+    "unmute": lambda rest: _usage_unless(rest, lambda r: set_muted(r[0], False)),
+}
+
+_CLI_DISPATCH = {
+    None: lambda args: status_text(),
+    "log": lambda args: render_log(load_log(parse_since(args.since)), as_json=args.json),
+    "ledger": lambda args: render_ledger(load_ledger(), as_json=args.json),
+    "on": lambda args: set_enabled(True),
+    "off": lambda args: set_enabled(False),
+    "mute": lambda args: set_muted(args.domain, True),
+    "unmute": lambda args: set_muted(args.domain, False),
+}
+
+
 def handle_proactive_command(args: str) -> str:
     parts = (args or "").split()
     action, rest = (parts[0].lower() if parts else ""), parts[1:]
+    handler = _SLASH_DISPATCH.get(action)
+    if handler is None:
+        return USAGE
     try:
-        if action == "":
-            return status_text()
-        if action == "log":
-            return render_log(load_log(parse_since(rest[0] if rest else DEFAULT_SINCE)))
-        if action in ("on", "off"):
-            return set_enabled(action == "on")
-        if action in ("mute", "unmute") and rest:
-            return set_muted(rest[0], action == "mute")
+        return handler(rest)
     except ValueError as exc:
         return str(exc)
-    return USAGE
 
 
 def proactive_command(args: argparse.Namespace) -> int:
-    action = getattr(args, "proactive_action", None)
     try:
-        if action is None:
-            print(status_text())
-        elif action == "log":
-            print(render_log(load_log(parse_since(args.since)), as_json=args.json))
-        elif action in ("on", "off"):
-            print(set_enabled(action == "on"))
-        else:
-            print(set_muted(args.domain, action == "mute"))
+        print(_CLI_DISPATCH[getattr(args, "proactive_action", None)](args))
     except ValueError as exc:
         print(f"proactive: {exc}", file=sys.stderr)
         return 1

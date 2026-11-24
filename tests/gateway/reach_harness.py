@@ -63,6 +63,7 @@ def telegram_runner(chat_id: str = "555", **kwargs) -> FakeRunner:
 
 def make_authority(home: Path, runner: FakeRunner | None = None) -> SimpleNamespace:
     return SimpleNamespace(db=SimpleNamespace(db_path=str(home / "state.db")), events={}, profile_id=str(home),
+                           persistence=SimpleNamespace(scope=SimpleNamespace(profile_dir=home.resolve())),
                            runner=runner or FakeRunner())
 
 
@@ -90,6 +91,8 @@ def rows(home: Path) -> list[dict]:
     conn = sqlite3.connect(home / "state.db")
     conn.row_factory = sqlite3.Row
     try:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'reach_offers'").fetchone() is None:
+            return []
         return [dict(r) for r in conn.execute("SELECT * FROM reach_offers ORDER BY created_at")]
     finally:
         conn.close()

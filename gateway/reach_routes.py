@@ -139,8 +139,14 @@ def _channel_key(channel: Messaging) -> tuple:
     return (channel.platform, channel.chat_id, channel.thread_id)
 
 
-def routes(authority, home: Path, policy: Policy, now: float | None = None) -> tuple[Route, ...]:
-    return rank(candidate_routes(authority, home, policy, time.time() if now is None else now))
+def routes(authority, home: Path, policy: Policy, now: float | None = None,
+           prefer: Messaging | None = None) -> tuple[Route, ...]:
+    ranked = rank(candidate_routes(authority, home, policy, time.time() if now is None else now))
+    if prefer is None or transport_for(authority, prefer.platform) is None:
+        return ranked
+    first = Route(channel=prefer, attention=Attention.REACHABLE, last_input_at=None, attention_at=None)
+    rest = (r for r in ranked if not isinstance(r.channel, Messaging) or _channel_key(r.channel) != _channel_key(prefer))
+    return (first, *rest)
 
 
 async def send_messaging(authority, channel: Messaging, text: str) -> bool:

@@ -353,6 +353,17 @@ def list_active(home, *, limit: int = 50) -> list[Commitment]:
     return [_to_commitment(row) for row in rows]
 
 
+def list_for_follow_up(home, *, closed_since: float) -> list[Commitment]:
+    conn = _connect(home)
+    try:
+        rows = conn.execute(
+            f"SELECT * FROM commitments WHERE state NOT IN ({_TERMINAL_SQL}) OR updated_at >= ? ORDER BY created_at, id",
+            (closed_since,)).fetchall()
+    finally:
+        conn.close()
+    return [_to_commitment(row) for row in rows]
+
+
 def events(home, commitment_id: str) -> list[Event]:
     conn = _connect(home)
     try:
