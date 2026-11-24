@@ -13,6 +13,15 @@ struct ChatRowWindowTests {
         #expect(range.upperBound == all.count)
     }
 
+    @Test func aTranscriptThatArrivesAfterAnEmptyOneShowsOnlyTheNewestRows() {
+        var window = ChatRowWindow()
+        #expect(window.resolve([]).isEmpty)
+        let all = ids(0..<400)
+        let range = window.resolve(all)
+        #expect(range.count == ChatRowWindow.size)
+        #expect(range.upperBound == all.count)
+    }
+
     @Test func aShortTranscriptShowsEverythingAndFollowsOlderRowsPrepended() {
         var window = ChatRowWindow()
         let result1 = window.resolve(ids(100..<160)).count
