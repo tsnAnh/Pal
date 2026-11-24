@@ -14,7 +14,16 @@ extension ChatModel {
         return next.version > snapshot.version
     }
 
+    var persistedHeights: ChatRowHeightFile? { openStats.heights }
+
+    func restoreSession(_ session: ChatSession) async {
+        async let heights = links.heights.load(for: openedBot.name)
+        await session.restore()
+        openStats.heights = await heights
+    }
+
     func seedFromMemory() {
+        openStats.heights = links.heights.remembered(for: openedBot.name)
         guard let remembered = links.snapshots.snapshot(for: openedBot.name) else { return }
         apply(remembered)
         snapshotFromEarlierRun = true

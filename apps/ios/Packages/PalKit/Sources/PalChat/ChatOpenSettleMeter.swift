@@ -34,7 +34,7 @@ public struct ChatOpenSettleMeter: Sendable, Equatable {
         if firstContent == 0, geometry.contentHeight > 0 { firstContent = geometry.contentHeight }
         latestContent = geometry.contentHeight
         latestTime = time
-        maxPastEnd = max(maxPastEnd, geometry.overshoot)
+        if geometry.contentHeight > 0 { maxPastEnd = max(maxPastEnd, geometry.overshoot) }
     }
 
     public mutating func rows(count: Int) {

@@ -35,6 +35,12 @@ struct ChatFirstLayoutFixtureTests {
         #expect(meter.report(atMilliseconds: 0).maxPastEnd > 8)
     }
 
+    @Test func anEmptyListIsNotPastItsEnd() {
+        var meter = ChatOpenSettleMeter()
+        meter.geometry(geo(offset: 0, content: 0), atMilliseconds: 0)
+        #expect(meter.report(atMilliseconds: 0).maxPastEnd == 0)
+    }
+
     @Test func persistedExactHeightsPredictTheSettledContent() {
         let rows = (0..<161).map { "r\($0)" }
         var tail = ChatTail()

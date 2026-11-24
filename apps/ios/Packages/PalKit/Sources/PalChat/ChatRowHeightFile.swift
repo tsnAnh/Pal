@@ -19,12 +19,14 @@ public struct ChatRowHeightFile: Codable, Sendable, Equatable {
     public var layout: Int
     public var width: Double
     public var textScale: String
+    public var viewport: Double?
     public var rows: [ChatRowHeightRecord]
 
-    public init(width: Double, textScale: String, rows: [ChatRowHeightRecord]) {
+    public init(width: Double, textScale: String, viewport: Double? = nil, rows: [ChatRowHeightRecord]) {
         self.layout = Self.layoutVersion
         self.width = width
         self.textScale = textScale
+        self.viewport = viewport
         var seen = Set<String>()
         var kept: [ChatRowHeightRecord] = []
         for row in rows.reversed() where row.height > 0 && row.height.isFinite {

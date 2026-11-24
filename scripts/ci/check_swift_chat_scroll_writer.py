@@ -16,6 +16,9 @@ else in ``App/Chat/**/*.swift``, ``App/ChatView*.swift`` and ``App/Platform/Chat
   re-runs the whole list and froze a 14,000-message chat);
 * the transcript ``ForEach`` in ``ChatTranscriptList.swift`` iterates ``model.windowRows``, never ``model.rows``
   (the full transcript; a long chat would lay out thousands of rows);
+* the transcript ``ForEach`` renders the planned tail (``windowRows[plan.start...]``), never the whole window: rows
+  before the tail are one ``ChatHiddenRowsSpacer`` of their known height (a ``LazyVStack`` estimates every unrealized
+  row from the realized ones, and a tall tail row inflated the content to four times its settled height);
 * reading ``contentOffset`` is allowed only in ``ChatScrollController.swift`` and ``ChatScrollTrace.swift``;
 * the chat list has ONE row height owner: ``ChatRowHeightCache`` is named only in ``ChatRowHeights.swift`` (the
   object ``ChatScrollController`` owns; rows are measured and laid out through it), and the transcript list sets a row height frame only inside
@@ -42,6 +45,7 @@ PLATFORM = "App/Platform/ChatPlatform.swift"
 ALLOWLIST = Path(__file__).with_name("chat_scroll_single_writer_allowlist.txt")
 FIX = "route it through ChatScrollMachine: emit a command and let ChatScrollController.perform apply it"
 HEIGHT_FIX = "give the row its height through ChatScrollController and ChatRowHeights (measured, minHeight(for:)) and ChatRowHeightFloor only"
+TAIL_FIX = "iterate the planned tail (windowRows[plan.start...]) and give the rows before it to ChatHiddenRowsSpacer"
 HEIGHT_OWNER = "App/Chat/ChatRowHeights.swift"
 SEND_VIEW = "App/Chat/ChatView+Bottom.swift"
 SEND_CALL = re.compile(r"\bmodel\.send\(")
@@ -58,6 +62,8 @@ PERFORM = re.compile(r"\bfunc perform\(")
 LAYOUT_CALLBACK = re.compile(r"\bfunc (?:observe\(_ geometry|rowLaidOut)\b")
 DIRECT_PERFORM = re.compile(r"(?<![\w.])perform\(")
 FULL_TRANSCRIPT_LOOP = re.compile(r"\bForEach\(\s*model\.rows\b")
+WHOLE_WINDOW_LOOP = re.compile(r"\bForEach\(\s*(?:model\.)?windowRows\s*\)")
+HIDDEN_SPACER = re.compile(r"\bstruct ChatHiddenRowsSpacer\b")
 STRING = re.compile(r'"(?:\\.|[^"\\])*"')
 OFFSET_READ = re.compile(r"\bcontentOffset\b")
 SCROLL_POSITION = ".scrollPosition("
@@ -150,6 +156,14 @@ def owner_rule(rel: str, code: str, transaction_seen: bool) -> tuple[str, str] |
     return None
 
 
+def transcript_loop_rule(code: str) -> tuple[str, str] | None:
+    if FULL_TRANSCRIPT_LOOP.search(code):
+        return "the transcript ForEach over model.rows (the whole transcript); iterate model.windowRows", FIX
+    if WHOLE_WINDOW_LOOP.search(code):
+        return "the transcript ForEach over the whole window", TAIL_FIX
+    return None
+
+
 def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
     waivers, found = parse_allowlist(allowlist)
     used: set[Waiver] = set()
@@ -167,7 +181,7 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
         lines = code_lines(path.read_text(encoding="utf-8-sig"))
         writer = body_lines(lines, PERFORM) if rel == CONTROLLER else set()
         layout = body_lines(lines, LAYOUT_CALLBACK) if rel == CONTROLLER else set()
-        floor = body_lines(lines, HEIGHT_FLOOR) if rel == LIST_VIEW else set()
+        floor = body_lines(lines, HEIGHT_FLOOR) | body_lines(lines, HIDDEN_SPACER) if rel == LIST_VIEW else set()
         transaction_seen = False
         for number, raw, code in lines:
             flagged = False
@@ -178,8 +192,8 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
             if number in layout and DIRECT_PERFORM.search(code):
                 report(rel, number, raw, "a scroll write inside the layout commit (perform( in a layout callback); use performNextTurn(")
                 flagged = True
-            if rel == LIST_VIEW and FULL_TRANSCRIPT_LOOP.search(code):
-                report(rel, number, raw, "the transcript ForEach over model.rows (the whole transcript); iterate model.windowRows")
+            if rel == LIST_VIEW and (loop := transcript_loop_rule(code)):
+                report(rel, number, raw, *loop)
                 flagged = True
             if rel != HEIGHT_OWNER and HEIGHT_CACHE.search(code):
                 report(rel, number, raw, "a second row height owner (ChatRowHeightCache outside ChatRowHeights)", HEIGHT_FIX)

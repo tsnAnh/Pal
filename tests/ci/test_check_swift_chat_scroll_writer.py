@@ -130,7 +130,7 @@ def test_the_transcript_loop_over_the_whole_model_fails(tmp_path):
     whole = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(model.rows) { Text($0.id) } }")
     found = _scan(_tree(tmp_path / "a", App__Chat__ChatTranscriptList_swift=whole))
     assert len(found) == 1 and "model.windowRows" in found[0] and found[0].endswith(FIX)
-    windowed = whole.replace("model.rows", "model.windowRows")
+    windowed = whole.replace("ForEach(model.rows)", "ForEach(model.windowRows[plan.start...])")
     assert _scan(_tree(tmp_path / "b", App__Chat__ChatTranscriptList_swift=windowed)) == []
 
 
@@ -273,3 +273,28 @@ def test_a_second_height_cache_outside_the_controller_fails(tmp_path):
     assert len(_scan(_tree(tmp_path / "ctl", App__Chat__ChatScrollController_swift=controller))) == 1
     owner = "final class ChatRowHeights {\n    private var cache = ChatRowHeightCache()\n}\n"
     assert _scan(_tree(tmp_path / "ok", App__Chat__ChatRowHeights_swift=owner)) == []
+
+
+TAIL_FIX = "iterate the planned tail (windowRows[plan.start...]) and give the rows before it to ChatHiddenRowsSpacer"
+SPACER_LIST = COMPLIANT_LIST + (
+    "struct ChatHiddenRowsSpacer: View {\n"
+    "    var body: some View {\n"
+    "        Color.clear.frame(height: height)\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_the_hidden_rows_spacer_may_set_a_frame_height(tmp_path):
+    assert _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=SPACER_LIST)) == []
+
+
+def test_the_transcript_loop_over_the_whole_window_fails(tmp_path):
+    whole = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(model.windowRows) { row in rowView(row) } }")
+    found = _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=whole))
+    assert len(found) == 1 and "the whole window" in found[0] and found[0].endswith(TAIL_FIX)
+
+
+def test_the_transcript_loop_over_the_planned_tail_passes(tmp_path):
+    tail = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(windowRows[plan.start...]) { row in rowView(row) } }")
+    assert _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=tail)) == []

@@ -12,27 +12,33 @@ final class ChatScrollController {
     static let restoreTolerance = 0.5
     static let measureBatchSize = 4
     static let measureTimeout = Duration.milliseconds(400)
+    static let tailLeadViewports = 2.0
 
     var position = ScrollPosition(idType: String.self, edge: .bottom)
     private(set) var showsJumpButton = false
     private(set) var unseen = 0
     private(set) var wantsOlder = false
     private(set) var measureTick = 0
+    var planTick = 0
     @ObservationIgnored private(set) var machine = ChatScrollMachine()
     @ObservationIgnored private var isMoving = false
-    @ObservationIgnored private var lastGeometry: ChatScrollGeometry?
+    @ObservationIgnored private(set) var lastGeometry: ChatScrollGeometry?
     @ObservationIgnored private var visibleTop = 0.0
     @ObservationIgnored private var visibleIDs: [String] = []
     @ObservationIgnored private var frames: [String: CGRect] = [:]
     @ObservationIgnored private var pendingRestore: ChatRowAnchor?
-    @ObservationIgnored private let rowHeights = ChatRowHeights()
+    @ObservationIgnored let rowHeights = ChatRowHeights()
     @ObservationIgnored private var revealTask: Task<Void, Never>?
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
+    @ObservationIgnored let planner = ChatTailPlanner()
+    @ObservationIgnored let tracker = ChatOpenTracker()
+    @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
     @ObservationIgnored private var contentLedger = ChatContentLedger()
     @ObservationIgnored private var phaseName = "idle"
     @ObservationIgnored var sampleSink: ((ChatScrollSample) -> Void)?
+    @ObservationIgnored var rowSink: ((String, CGRect) -> Void)?
 
     var isPinnedToBottom: Bool { machine.state == .pinnedToBottom }
 
@@ -52,7 +58,8 @@ final class ChatScrollController {
         )
         let previousGeometry = lastGeometry
         lastGeometry = snapshot
-        if wantsOlder != snapshot.wantsOlder { wantsOlder = snapshot.wantsOlder }
+        let wantsOlderNow = observeTail(snapshot, previous: previousGeometry)
+        if wantsOlder != wantsOlderNow { wantsOlder = wantsOlderNow }
         if abs((previousGeometry?.containerWidth ?? 0) - snapshot.containerWidth) > Self.restoreTolerance {
             rowHeights.widthChanged()
             measureTick &+= 1
@@ -103,8 +110,9 @@ final class ChatScrollController {
         visibleIDs.removeAll { !live.contains($0) }
         if let pending = pendingRestore, !live.contains(pending.rowID) { pendingRestore = nil }
         if isRecording { contentLedger.noteRows() }
-        if ChatScrollTrace.isOn { ChatScrollTrace.rows(ids.count, state: machine.state.name) }
-        send(.rowsChanged(ids))
+        let rendered = noteRendered(planner.rendered(from: ids))
+        if ChatScrollTrace.isOn { ChatScrollTrace.rows(rendered.count, state: machine.state.name) }
+        send(.rowsChanged(rendered))
     }
 
     func streamingChanged(_ running: Bool) {
@@ -119,7 +127,8 @@ final class ChatScrollController {
     func rowLaidOut(_ id: String, frame: CGRect) {
         ChatOpenMetrics.rowLaidOut(id)
         frames[id] = frame
-        if let width = lastGeometry?.containerWidth { rowHeights.laidOut(id, height: Double(frame.height), width: width) }
+        rowSink?(id, frame)
+        if let width = lastGeometry?.containerWidth { noteLaidOut(id, height: Double(frame.height), width: width) }
         guard let pending = pendingRestore, pending.rowID == id else { return }
         performNextTurn(.restore(pending), frame: frame)
     }
@@ -162,6 +171,7 @@ final class ChatScrollController {
 
     func reveal(_ id: String) {
         revealTask?.cancel()
+        if planner.reveal(id) { tailMoved() }
         revealTask = Task { @MainActor [weak self] in
             await Task.yield()
             guard let self, !Task.isCancelled else { return }
@@ -231,7 +241,7 @@ final class ChatScrollController {
         PalPerf.event("chat.scroll.write")
     }
 
-    private func send(_ event: ChatScrollMachine.Event) {
+    func send(_ event: ChatScrollMachine.Event) {
         let command = machine.handle(event)
         publish()
         if ChatScrollTrace.isOn {

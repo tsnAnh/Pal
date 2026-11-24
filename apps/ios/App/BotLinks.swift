@@ -24,6 +24,7 @@ final class BotLinks {
     private var links: [String: BotLink] = [:]
     private let warm = WarmSessionPool()
     let snapshots = ChatSnapshotMemory()
+    private(set) lazy var heights = ChatRowHeightStore(cache: connection.cache) { [unowned connection] in connection.accountKey }
 
     init(connection: ConnectionModel) {
         self.connection = connection

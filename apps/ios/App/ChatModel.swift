@@ -582,7 +582,7 @@ final class ChatModel {
             noteLive()
         }
         let before = await session.timelineSnapshot
-        await session.restore()
+        await restoreSession(session)
         let current = await session.timelineSnapshot
         if before.rows.isEmpty, !current.rows.isEmpty {
             showCacheFrame(current)
