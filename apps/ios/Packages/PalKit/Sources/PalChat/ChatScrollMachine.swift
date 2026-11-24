@@ -116,14 +116,13 @@ public struct ChatScrollMachine: Sendable, Equatable {
     public static let atBottomTolerance = 1.0
     public static let showDistance = 80.0
     public static let hideDistance = 24.0
-    public static let maxRepairs = 3
     public static let revealAttempts = 12
 
     public private(set) var state: State = .pinnedToBottom
     public private(set) var unseen = 0
 
     private var userScrolling = false
-    private var repairs = 0
+    private var repairInFlight = false
     private var attempts = 0
     private var pendingRestore: ChatRowAnchor?
     private var readingAnchor: ChatRowAnchor?
@@ -195,16 +194,23 @@ public struct ChatScrollMachine: Sendable, Equatable {
     }
 
     private mutating func pinnedGeometry(_ geometry: ChatScrollGeometry, sizeChanged: Bool) -> Command {
-        if isAtBottom(geometry) { return .none }
-        guard !sizeChanged, isAway(geometry) else { return .none }
+        if isAtBottom(geometry) {
+            repairInFlight = false
+            return .none
+        }
+        if sizeChanged { return repair() }
+        guard isAway(geometry) else { return .none }
+        if repairInFlight {
+            repairInFlight = false
+            return .none
+        }
         state = .readingHistory
         readingAnchor = geometry.topAnchor ?? readingAnchor
         return .none
     }
 
     private mutating func repair() -> Command {
-        guard repairs < Self.maxRepairs else { return .none }
-        repairs += 1
+        repairInFlight = true
         return .scrollToBottom(animated: false)
     }
 
@@ -212,7 +218,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         if isHome(geometry) {
             state = .pinnedToBottom
             unseen = 0
-            repairs = 0
+            repairInFlight = false
             return
         }
         if let pending = pendingRestore, geometry.topAnchor?.rowID != pending.rowID { return }
@@ -224,7 +230,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         if isAtBottom(geometry) {
             state = .pinnedToBottom
             unseen = 0
-            repairs = 0
+            repairInFlight = false
             return .none
         }
         return sizeChanged ? repair() : .none
@@ -232,7 +238,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
 
     private mutating func userScrollBegan() {
         userScrolling = true
-        repairs = 0
+        repairInFlight = false
         pendingRestore = nil
         if case .programmatic = state { state = .readingHistory }
     }
@@ -242,7 +248,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         if let last, isHome(last) || (state == .pinnedToBottom && !isAway(last)) {
             state = .pinnedToBottom
             unseen = 0
-            repairs = 0
+            repairInFlight = false
         } else {
             state = .readingHistory
             readingAnchor = last?.topAnchor ?? readingAnchor
@@ -279,7 +285,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
 
     private mutating func jump(animated: Bool) -> Command {
         unseen = 0
-        repairs = 0
+        repairInFlight = false
         pendingRestore = nil
         if state == .pinnedToBottom, lastIsAtBottom { return .none }
         state = .programmatic(.bottom)

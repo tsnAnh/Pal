@@ -76,11 +76,11 @@ struct ChatScrollMachineTests {
         #expect(machine.state == .pinnedToBottom)
     }
 
-    @Test func pinnedLeavesTheScrollPositionToTheSystemAnchor() {
+    @Test func pinnedRepairsEverySizeChangeThatLeavesTheBottom() {
         var machine = ChatScrollMachine()
         _ = machine.handle(.geometry(bottomGeo()))
         for content in [1100.0, 1200, 1300, 1400, 1500] {
-            #expect(machine.handle(.geometry(geo(offset: content - 540, content: content))) == .none)
+            #expect(machine.handle(.geometry(geo(offset: content - 540, content: content))) == .scrollToBottom(animated: false))
         }
         #expect(machine.handle(.geometry(bottomGeo(content: 1500))) == .none)
         #expect(machine.state == .pinnedToBottom)
