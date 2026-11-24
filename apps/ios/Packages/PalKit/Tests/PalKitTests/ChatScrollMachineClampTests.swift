@@ -31,7 +31,7 @@ struct ChatScrollMachineClampTests {
         #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_500))) == .clampToContent)
         #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_500))) == .clampToContent)
         #expect(machine.handle(.geometry(settled(content: 19_500))) == .none)
-        #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_723))) == .none)
+        #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_723))) == .scrollToBottom(animated: false))
     }
 
     @Test func contentShrinkingBelowTheOffsetClampsToTheEndWhileReadingHistory() {

@@ -24,8 +24,7 @@ extension ChatScrollController {
         store.save(file, for: bot)
     }
 
-    func observeTail(_ snapshot: ChatScrollGeometry, previous: ChatScrollGeometry?) -> Bool {
-        if let previous, abs(previous.containerWidth - snapshot.containerWidth) > Self.restoreTolerance { planner.widthChanged() }
+    func observeTail(_ snapshot: ChatScrollGeometry) -> Bool {
         tracker.meter.geometry(snapshot, atMilliseconds: tracker.elapsedMilliseconds)
         touch()
         if planner.hiddenHeight > 0, snapshot.distanceFromTop - planner.hiddenHeight < snapshot.containerHeight * Self.tailLeadViewports {

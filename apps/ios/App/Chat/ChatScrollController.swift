@@ -58,7 +58,7 @@ final class ChatScrollController {
         )
         let previousGeometry = lastGeometry
         lastGeometry = snapshot
-        let wantsOlderNow = observeTail(snapshot, previous: previousGeometry)
+        let wantsOlderNow = observeTail(snapshot)
         if wantsOlder != wantsOlderNow { wantsOlder = wantsOlderNow }
         if abs((previousGeometry?.containerWidth ?? 0) - snapshot.containerWidth) > Self.restoreTolerance {
             rowHeights.widthChanged()

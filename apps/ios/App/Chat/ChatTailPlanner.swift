@@ -92,11 +92,6 @@ final class ChatTailPlanner {
         return ChatRowHeightFile(width: width, textScale: textScale, viewport: viewport, rows: records)
     }
 
-    func widthChanged() {
-        planned.removeAll(keepingCapacity: true)
-        rows = []
-    }
-
     private func replan() {
         let height = { [planned] (id: String) in planned[id] ?? 0 }
         plan = tail.plan(ids: ids, viewport: nil, height: height)

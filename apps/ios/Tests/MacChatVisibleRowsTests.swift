@@ -7,7 +7,7 @@ import Testing
 @testable import Pal
 
 @MainActor
-private final class VisibleRowsStage {
+final class VisibleRowsStage {
     static let rows = 60
     static let blankLimit = 80.0
     static let framesAllowed = 2
@@ -15,6 +15,7 @@ private final class VisibleRowsStage {
     let model: ChatModel
     let host: MacChatBenchHost
     var world: RebuildWorld
+    private(set) var lastGeometry: ChatScrollGeometry?
     private(set) var blankStreak = 0
     private(set) var longestBlankStreak = 0
     private(set) var worstGap = 0.0
@@ -51,8 +52,10 @@ private final class VisibleRowsStage {
     init(opening: RebuildWorld? = nil) async throws {
         let environment = try MacChatBenchSession.environment()
         model = environment.model
-        host = MacChatBenchHost(root: environment.surface(draft: MacChatBenchDraft(), scroll: ChatScrollController()), size: MacChatBench.pane)
+        let scroll = ChatScrollController()
+        host = MacChatBenchHost(root: environment.surface(draft: MacChatBenchDraft(), scroll: scroll), size: MacChatBench.pane)
         world = opening ?? Self.world()
+        scroll.sampleSink = { [unowned self] in lastGeometry = $0.geometry }
         try await Task.sleep(for: .milliseconds(20))
         push()
         try await step(90)
@@ -89,6 +92,18 @@ private final class VisibleRowsStage {
             blankStreak = gap > Self.blankLimit ? blankStreak + 1 : 0
             longestBlankStreak = max(longestBlankStreak, blankStreak)
         }
+    }
+
+    func rowTops() -> [Int: Double] {
+        var tops: [Int: Double] = [:]
+        func walk(_ view: NSView) {
+            if let text = view as? NSTextView, let tag = OpenJumpProbe.tag(of: text.string) {
+                tops[tag] = Double(view.convert(view.bounds, to: host.view).minY)
+            }
+            for sub in view.subviews { walk(sub) }
+        }
+        walk(host.view)
+        return tops
     }
 
     private func viewportGap() -> Double {
