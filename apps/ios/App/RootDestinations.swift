@@ -76,6 +76,16 @@ extension RootView {
         }
     }
 
+    func discordDestination(_ name: String) -> some View {
+        DiscordEntryView(
+            botName: name,
+            displayName: roster.bot(named: name)?.displayName ?? name,
+            spec: roster.bot(named: name)?.spec,
+            services: bots.services,
+            source: ChatInstallSource.make(botName: name, connection: model)
+        )
+    }
+
     @ViewBuilder
     func channelDestination(_ route: AppRoute) -> some View {
         switch route {
@@ -87,6 +97,8 @@ extension RootView {
                 services: bots.services,
                 source: ChatInstallSource.make(botName: name, connection: model)
             )
+        case .discord(let name):
+            discordDestination(name)
         case .telegram(let name):
             let displayName = roster.bot(named: name)?.displayName ?? name
             ModelHost {
