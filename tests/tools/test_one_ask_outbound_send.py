@@ -283,3 +283,82 @@ class TestAPreviewTheOwnerCanReadBeforeThePick:
     def test_an_invalid_send_field_renders_nothing(self):
         question = {"question": "Send this to Ada?", "choices": OPTIONS, "send": _send({"body": "x"}, tool="terminal")}
         assert split_clarify_arguments({"questions": [question]}) == ({"questions": [question]}, "")
+
+
+LONG_MESSAGE = "\n\n".join(f"Paragraph {n}: " + ("the scope is clear and the rate is fixed. " * 12)
+                           for n in range(1, 7)).strip()
+
+
+@pytest.fixture
+def bubbles():
+    from tools.details_bubble import bound_details_sink
+    posted = []
+    with bound_details_sink(lambda text: posted.append(text) or True):
+        yield posted
+
+
+def _with_event(text, *, internal=False):
+    from types import SimpleNamespace
+
+    from gateway.session_context import _SESSION_TURN_EVENT
+    return _SESSION_TURN_EVENT.set(SimpleNamespace(text=text, internal=internal))
+
+
+class TestTheDetailsBubbleReadsLikeAMessage:
+    def test_a_long_mcp_message_is_shown_whole_as_paragraphs_with_nothing_technical(self, server, bubbles):
+        _register()
+        args = {"action": "send", "org_uid": "2047222673165360028",
+                "params": {"file_attachments": [{"filename": "offer.pdf"}, "/srv/files/spec.md"],
+                           "message": LONG_MESSAGE, "recipient": "Edmund"}}
+        with Owner(choice="once") as chat:
+            assert _call("send_message", args) == {"result": "ok"}
+        (bubble,) = bubbles
+        assert LONG_MESSAGE in bubble and "…" not in bubble and "..." not in bubble
+        assert "\\n" not in bubble and "{" not in bubble and "}" not in bubble
+        for technical in ("send_message", "org_uid", "2047222673165360028", "exactly the details shown", "params"):
+            assert technical not in bubble
+        assert bubble.startswith("To Edmund via ") and "Attachments: offer.pdf, spec.md" in bubble
+        assert "/srv/files" not in bubble and chat.cards[0]["draft"]["text"] == LONG_MESSAGE
+
+    def test_the_draft_gate_bubble_names_attachments_without_their_paths(self, bot_home, owner_app, bubbles, tmp_path):
+        attachment = tmp_path / "menu.pdf"
+        attachment.write_bytes(b"x" * 2048)
+        _owner("once")
+        review_outbound(EMAIL, {**EMAIL_ARGS, "attachments": [str(attachment)]})
+        (bubble,) = bubbles
+        assert bubble == ("To ada@example.com via Gmail\nSubject: Lunch\n\nLunch at noon?\n\nAttachments: menu.pdf")
+
+
+class TestTheCardFollowsTheConversationLanguage:
+    VIETNAMESE = "sao tau chọn rồi mà còn hỏi nữa? đù má"
+
+    def _card(self, bot_home, owner_app, message, **event):
+        owner = _owner("once")
+        token = _with_event(message, **event)
+        try:
+            review_outbound(EMAIL, EMAIL_ARGS)
+        finally:
+            from gateway.session_context import _SESSION_TURN_EVENT
+            _SESSION_TURN_EVENT.reset(token)
+        return owner.cards[0]
+
+    def test_a_vietnamese_latest_message_gives_vietnamese_card_strings(self, bot_home, owner_app):
+        card = self._card(bot_home, owner_app, self.VIETNAMESE)
+        assert card["question"] == "Gửi tin nhắn này?" and card["language"] == "vi"
+        assert card["labels"] == {"send": "Gửi", "edit": "Sửa", "cancel": "Hủy", "note": "Chỉ gửi khi bạn chọn Gửi."}
+
+    @pytest.mark.parametrize("message", ["send it to Ada please", "", "ok", "Gửi"[:0] + "cafe déjà vu — señor Ångström"])
+    def test_english_and_unmarked_text_give_english(self, bot_home, owner_app, message):
+        card = self._card(bot_home, owner_app, message)
+        assert card["question"] == "Send this message?" and card["language"] == "en"
+        assert card["labels"]["send"] == "Send" and card["labels"]["cancel"] == "Cancel"
+
+    def test_a_synthetic_turn_never_picks_the_language(self, bot_home, owner_app):
+        assert self._card(bot_home, owner_app, self.VIETNAMESE, internal=True)["language"] == "en"
+
+    def test_the_bubble_uses_the_same_language(self, bot_home, owner_app, bubbles):
+        self._card(bot_home, owner_app, self.VIETNAMESE)
+        assert bubbles[0].startswith("Gửi tới ada@example.com qua Gmail\nChủ đề: Lunch")
+
+    def test_the_choices_the_apps_send_back_stay_once_and_deny(self, bot_home, owner_app):
+        assert self._card(bot_home, owner_app, self.VIETNAMESE)["choices"] == ["once", "deny"]

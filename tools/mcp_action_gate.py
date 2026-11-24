@@ -33,6 +33,11 @@ GATE_FAILED = "action_gate_failed"
 _DEFAULT_REFUSED_MESSAGE = "This step moves money, so it is not done through the assistant. Do it yourself on the service's website."
 _TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 _RECIPIENT_KEYS = ("recipient", "to", "freelancer", "freelancer_id", "client", "user_id", "room_id", "job_id", "job")
+_RECIPIENT_NAME_KEYS = ("recipient", "to", "freelancer", "client")
+_ATTACHMENT_KEYS = ("file_attachments", "attachments", "files", "file_paths", "media", "documents")
+_ATTACHMENT_NAME_KEYS = ("filename", "file_name", "name", "title")
+_NEST_DEPTH = 3
+_MESSAGE_MAX_CHARS = 100_000
 _TEXT_KEYS = ("cover_letter", "message", "body", "text", "content", "proposal", "description")
 _FIELD_VALUE_MAX_CHARS = 600
 _MAX_FIELDS = 24
@@ -150,6 +155,34 @@ def _first_value(args: Mapping, keys: tuple[str, ...]) -> str:
     return ""
 
 
+def _nested(args: Mapping, keys: tuple[str, ...], depth: int = _NEST_DEPTH):
+    """First value stored under one of ``keys`` in ``args`` or the objects inside it, nearest first."""
+    for key in keys:
+        if args.get(key) not in (None, "", [], {}):
+            return args[key]
+    if depth > 0:
+        for value in args.values():
+            if isinstance(value, Mapping) and (found := _nested(value, keys, depth - 1)) is not None:
+                return found
+    return None
+
+
+def _full_text(value: Any) -> str:
+    """The message as the owner will send it: redacted and stripped of control characters, never cut."""
+    return _safe_text(value, _MESSAGE_MAX_CHARS) if isinstance(value, str) else ""
+
+
+def _attachment_names(args: Mapping) -> tuple[str, ...]:
+    found = _nested(args, _ATTACHMENT_KEYS)
+    names = []
+    for item in found if isinstance(found, (list, tuple)) else [found] if found else []:
+        if isinstance(item, Mapping):
+            item = next((item[k] for k in _ATTACHMENT_NAME_KEYS if isinstance(item.get(k), str) and item[k].strip()), "")
+        if isinstance(item, str) and item.strip():
+            names.append(_safe_text(item.replace("\\", "/").rsplit("/", 1)[-1], 200))
+    return tuple(names)
+
+
 def build_card(server_name: str, tool_name: str, args: Mapping) -> dict:
     """The approval card, built from the call alone. Tool output never reaches it."""
     from tools.bot_mode_drafts import DRAFT_KIND
@@ -159,13 +192,15 @@ def build_card(server_name: str, tool_name: str, args: Mapping) -> dict:
                for name, value in list(shown.items())[:_MAX_FIELDS]]
     if len(shown) > _MAX_FIELDS:
         details.append({"name": "more", "value": f"{len(shown) - _MAX_FIELDS} more fields not shown"})
-    text = _first_value(shown, _TEXT_KEYS) or "\n".join(f"{d['name']}: {d['value']}" for d in details) or tool_name
-    recipient = _first_value(shown, _RECIPIENT_KEYS)
+    message = _full_text(_nested(shown, _TEXT_KEYS))
+    text = message or "\n".join(f"{d['name']}: {d['value']}" for d in details) or tool_name
+    named = _nested(shown, _RECIPIENT_NAME_KEYS)
+    recipient = _safe_text(named) if isinstance(named, (str, int, float)) and not isinstance(named, bool) else ""
     channel = display_name(server_name)
     draft = {"kind": DRAFT_KIND, "channel": channel, "recipient": recipient, "subject": tool_name,
              "text": text, "editable": False, "held": False}
-    return {"text": text, "draft": draft, "details": details,
-            "description": f"Run '{tool_name}' on {channel} once with exactly the details shown, or deny."}
+    return {"text": text, "draft": draft, "details": details, "attachments": _attachment_names(shown),
+            "description": f"Send via {channel}" + (f" to {recipient}" if recipient else "")}
 
 
 def _approve(server_name: str, tool_name: str, args: Mapping) -> Optional[str]:
@@ -173,7 +208,7 @@ def _approve(server_name: str, tool_name: str, args: Mapping) -> Optional[str]:
     card = build_card(server_name, tool_name, args)
     result = approval.request_draft_approval(
         text=card["text"], description=card["description"], pattern_key=f"mcp_action:{server_name}/{tool_name}",
-        draft=card["draft"], details=card["details"])
+        draft=card["draft"], details=card["details"], attachments=card["attachments"])
     if result.get("approved") is True:
         return None
     logger.info("MCP action not approved: server=%s tool=%s outcome=%s", server_name, tool_name,

@@ -355,7 +355,8 @@ def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]
     from tools import approval
     result = approval.request_draft_approval(
         text=outbound.text, description=card_description(outbound), pattern_key=outbound.pattern_key,
-        draft=_card(outbound), details=details_payload(outbound))
+        draft=_card(outbound), details=details_payload(outbound), subject=outbound.subject,
+        attachments=_attachment_names(outbound))
     if not result.get("approved"):
         if result.get("outcome") == "timeout":
             return _hold(outbound, args, "timeout", "The owner did not answer in time.")
@@ -393,8 +394,16 @@ def send_preview(spec) -> Outbound | None:
     return outbound
 
 
+def _attachment_names(outbound: Outbound) -> tuple[str, ...]:
+    from tools import approval_card_text
+    return tuple(approval_card_text.attachment_names(
+        line for name, value in outbound.details if name.lower() in _ATTACHMENT_KEYS for line in value.splitlines()))
+
+
 def preview_text(outbound: Outbound) -> str:
-    return "\n\n".join(part for part in (card_description(outbound), outbound.text) if part.strip())
+    from tools import approval_card_text
+    return approval_card_text.bubble(_card(outbound), outbound.text, outbound.subject, _attachment_names(outbound),
+                                     approval_card_text.owner_language())
 
 
 def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
