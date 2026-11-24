@@ -135,9 +135,11 @@ public struct ChatScrollMachine: Sendable, Equatable {
 
     public var isUserScrolling: Bool { userScrolling }
 
+    public var distanceFromBottom: Double? { last?.distanceFromBottom }
+
     public var showsJumpButton: Bool {
         switch state {
-        case .readingHistory: true
+        case .readingHistory: (distanceFromBottom ?? .infinity) > Self.hideDistance
         case .programmatic(.row): true
         case .pinnedToBottom, .programmatic(.bottom): false
         }
@@ -162,6 +164,14 @@ public struct ChatScrollMachine: Sendable, Equatable {
 
     private var lastIsAtBottom: Bool { last.map(isAtBottom) ?? false }
 
+    private func isHome(_ geometry: ChatScrollGeometry) -> Bool {
+        geometry.distanceFromBottom <= Self.hideDistance
+    }
+
+    private func isAway(_ geometry: ChatScrollGeometry) -> Bool {
+        geometry.distanceFromBottom > Self.showDistance
+    }
+
     private mutating func handleGeometry(_ geometry: ChatScrollGeometry) -> Command {
         let sizeChanged = last.map { !geometry.sameSize(as: $0) } ?? true
         previous = last
@@ -177,7 +187,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
     }
 
     private mutating func userScrollingGeometry(_ geometry: ChatScrollGeometry) -> Command {
-        if state == .pinnedToBottom, !isAtBottom(geometry) { state = .readingHistory }
+        if state == .pinnedToBottom, isAway(geometry) { state = .readingHistory }
         readingAnchor = geometry.topAnchor ?? readingAnchor
         return .none
     }
@@ -188,6 +198,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
             return .none
         }
         if !sizeChanged, repairs == 0 {
+            guard isAway(geometry) else { return .none }
             state = .readingHistory
             readingAnchor = geometry.topAnchor ?? readingAnchor
             return .none
@@ -202,9 +213,10 @@ public struct ChatScrollMachine: Sendable, Equatable {
     }
 
     private mutating func readingGeometry(_ geometry: ChatScrollGeometry) {
-        if isAtBottom(geometry) {
+        if isHome(geometry) {
             state = .pinnedToBottom
             unseen = 0
+            repairs = 0
             return
         }
         if let pending = pendingRestore, geometry.topAnchor?.rowID != pending.rowID { return }
@@ -231,7 +243,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
 
     private mutating func userScrollEnded() {
         userScrolling = false
-        if lastIsAtBottom {
+        if let last, isHome(last) || (state == .pinnedToBottom && !isAway(last)) {
             state = .pinnedToBottom
             unseen = 0
             repairs = 0

@@ -169,7 +169,7 @@ final class ChatScrollController {
         case .none:
             break
         case .scrollToBottom(let animated):
-            let distanceFromBottom = lastGeometry?.distanceFromBottom ?? 0
+            let distanceFromBottom = machine.distanceFromBottom ?? 0
             guard machine.state != .pinnedToBottom || distanceFromBottom > ChatScrollMachine.atBottomTolerance else { return }
             let height = lastGeometry?.containerHeight ?? 0
             let glides = animated && distanceFromBottom <= height * Self.glideViewports
