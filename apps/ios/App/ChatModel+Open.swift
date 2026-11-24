@@ -3,9 +3,42 @@ import PalChat
 import PalDiagnostics
 
 extension ChatModel {
+    var snapshotFromEarlierRun: Bool {
+        get { openStats.snapshotFromEarlierRun }
+        set { openStats.snapshotFromEarlierRun = newValue }
+    }
+
     func acceptsSnapshot(_ next: TimelineSnapshot) -> Bool {
+        if next.rows.isEmpty, next.sessionID == nil, !rows.isEmpty { return false }
         guard let snapshot, !snapshotFromEarlierRun else { return true }
         return next.version > snapshot.version
+    }
+
+    func seedFromMemory() {
+        guard let remembered = links.snapshots.snapshot(for: openedBot.name) else { return }
+        apply(remembered)
+        snapshotFromEarlierRun = true
+    }
+
+    func showCacheFrame(_ cached: TimelineSnapshot) {
+        LaunchClock.mark("chat \(openedBot.name) shown from cache (\(cached.rows.count) rows)", on: .osLog())
+        ChatOpenTrace.mark(openedBot.name, "cache.frame", rows: cached.rows.count, detail: "held=false")
+        PalPerf.event("chat.open.cache.rows", count: cached.rows.count)
+        apply(cached)
+        opening.hold(version: cached.version) { [weak self] in self?.apply($0) }
+    }
+
+    func noteRows(_ count: Int) {
+        let elapsed = Int(openStats.openedAt.duration(to: .now) / .milliseconds(1))
+        if count > 0, !openStats.hasShownRows {
+            openStats.hasShownRows = true
+            PalPerf.event("chat.open.firstrows", label: openedBot.name, since: openStats.openedAt)
+            LaunchClock.mark("chat \(openedBot.name) first rows (\(count)) after \(elapsed) ms", on: .osLog())
+        } else if count == 0, !rows.isEmpty {
+            openStats.clearedAfterData = true
+            PalPerf.event("chat.open.rows.cleared")
+            LaunchClock.mark("chat \(openedBot.name) rows cleared after data after \(elapsed) ms", on: .osLog())
+        }
     }
 
     func takePreviousSnapshot() -> TimelineSnapshot? {
@@ -14,6 +47,7 @@ extension ChatModel {
     }
 
     func closeOpening() {
+        if let snapshot { links.snapshots.remember(snapshot, for: openedBot.name) }
         openingDeadline?.cancel()
         openingDeadline = nil
         snapshotFromEarlierRun = snapshot != nil
