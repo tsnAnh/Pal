@@ -64,7 +64,7 @@ public final class HeldDraftsModel {
         phase = .ready
     }
 
-    public func sheet(for entry: HeldDraftEntry) -> HeldDraftSheetModel {
+    public func cardModel(for entry: HeldDraftEntry) -> HeldDraftSheetModel {
         let source = source
         let profile = entry.bot.name
         return HeldDraftSheetModel(draft: entry.draft) { draft, choice, editedText in

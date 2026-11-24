@@ -40,7 +40,7 @@ private struct ApprovalsContent: View {
     }
 
     private func open(_ entry: HeldDraftEntry) {
-        opened = Opened(entry: entry, model: drafts.sheet(for: entry))
+        opened = Opened(entry: entry, model: drafts.cardModel(for: entry))
     }
 
     private func closeDetail() {

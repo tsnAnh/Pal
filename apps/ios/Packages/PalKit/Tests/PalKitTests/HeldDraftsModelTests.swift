@@ -65,7 +65,7 @@ struct HeldDraftsModelTests {
         let source = ScriptedSource(["ada": [held("a1")]])
         let model = HeldDraftsModel(source: source)
         await model.load(bots: [ada])
-        let sheet = model.sheet(for: try #require(model.entries.first))
+        let sheet = model.cardModel(for: try #require(model.entries.first))
         sheet.beginEdit()
         sheet.editText = "hello Sam, at 6"
         await sheet.sendEdited()
@@ -76,7 +76,7 @@ struct HeldDraftsModelTests {
         let source = ScriptedSource(["ada": [held("a1")]])
         let model = HeldDraftsModel(source: source)
         await model.load(bots: [ada])
-        let sheet = model.sheet(for: try #require(model.entries.first))
+        let sheet = model.cardModel(for: try #require(model.entries.first))
         sheet.beginEdit()
         sheet.back()
         #expect(source.answers.withLock { $0 }.isEmpty)
