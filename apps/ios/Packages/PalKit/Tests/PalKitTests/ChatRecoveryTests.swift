@@ -226,10 +226,15 @@ private func hasReply(_ snapshot: TimelineSnapshot) -> Bool { rowTexts(snapshot)
             let json = #"{"events":[],"latest_seq":\#(latest),"replay_epoch":"\#(epoch)","snapshot_required":\#(snapshot)}"#
             return try JSONDecoder().decode(EventsSinceResult.self, from: Data(json.utf8))
         }
-        #expect(ChatSession.verdict(try answer(latest: 5), cursor: cursor) == .current)
-        #expect(ChatSession.verdict(try answer(latest: 6), cursor: cursor) == .behind("gateway-ahead"))
-        #expect(ChatSession.verdict(try answer(latest: 2), cursor: cursor) == .behind("gateway-regressed"))
-        #expect(ChatSession.verdict(try answer(latest: 5, epoch: "e2"), cursor: cursor) == .behind("epoch-changed"))
-        #expect(ChatSession.verdict(try answer(latest: 5, snapshot: true), cursor: cursor) == .behind("snapshot-required"))
+        let same = try answer(latest: 5)
+        let ahead = try answer(latest: 6)
+        let regressed = try answer(latest: 2)
+        let restarted = try answer(latest: 5, epoch: "e2")
+        let required = try answer(latest: 5, snapshot: true)
+        #expect(ChatSession.verdict(same, cursor: cursor) == .current)
+        #expect(ChatSession.verdict(ahead, cursor: cursor) == .behind("gateway-ahead"))
+        #expect(ChatSession.verdict(regressed, cursor: cursor) == .behind("gateway-regressed"))
+        #expect(ChatSession.verdict(restarted, cursor: cursor) == .behind("epoch-changed"))
+        #expect(ChatSession.verdict(required, cursor: cursor) == .behind("snapshot-required"))
     }
 }
