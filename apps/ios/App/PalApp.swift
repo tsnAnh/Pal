@@ -1,5 +1,6 @@
 import AppIntents
 import PalBotProfile
+import PalChat
 import PalClient
 import PalConnect
 import PalDesign
@@ -23,6 +24,7 @@ struct PalApp: App {
     @State private var hostPool: DeviceHostPool
     @State private var signIn: ServiceSignInCenter
     @State private var autoApprove: ActionAutoApprove
+    @State private var heldDrafts: HeldDraftsModel
     @State private var links: BotLinks
     @State private var bots: BotsKit
     @State private var templateImport: TemplateImportModel
@@ -60,6 +62,7 @@ struct PalApp: App {
         )
         _signIn = State(initialValue: signIn)
         _autoApprove = State(initialValue: ActionAutoApprove { method, params in try await model.rpc(method, params) })
+        _heldDrafts = State(initialValue: HeldDraftsModel(source: HeldDraftDesk(connector: LiveChatConnector(connection: model))))
         roster.gatewayEventSink = { event in
             Task { @MainActor in signIn.receive(event) }
         }
@@ -92,6 +95,7 @@ struct PalApp: App {
                 .environment(appearance)
                 .environment(signIn)
                 .environment(autoApprove)
+                .environment(\.heldDrafts, heldDrafts)
                 #if os(macOS)
                 .environment(shell)
                 .environment(shortcuts)
@@ -260,6 +264,8 @@ struct RootView: View {
                         } content: {
                             ConnectAppsScreen(model: $0) { router.dismissSheet() }
                         }
+                    case .approvals:
+                        ApprovalsView(bots: roster.heldDraftBots(for: router.approvalsProfile)) { router.dismissSheet() }
                     case .kanban:
                         EmptyView()
                     }

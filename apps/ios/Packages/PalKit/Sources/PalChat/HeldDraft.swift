@@ -89,8 +89,12 @@ public struct HeldDraft: Sendable, Hashable, Identifiable {
         return name.isEmpty ? String(localized: "someone") : name
     }
 
-    public var headerLine: String {
-        String(localized: "Message to \(recipientName) on \(channelName) (waiting)")
+    public var headerLine: String { header(waiting: true) }
+
+    public func header(waiting: Bool) -> String {
+        waiting
+            ? String(localized: "Message to \(recipientName) on \(channelName) (waiting)")
+            : String(localized: "Message to \(recipientName) on \(channelName)")
     }
 
     static func reason(_ raw: String?) -> String? {

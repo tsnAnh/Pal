@@ -56,6 +56,13 @@ public final class HeldDraftSheetModel {
         phase == .editing && inFlight == nil && !blocksSend && !Self.trimmed(editText).isEmpty
     }
 
+    public var headerLine: String {
+        switch phase {
+        case .waiting, .editing, .sending, .failed: draft.header(waiting: true)
+        case .sent, .cancelled, .expired, .unavailable: draft.header(waiting: false)
+        }
+    }
+
     public var isSettled: Bool {
         switch phase {
         case .sent, .cancelled, .expired, .unavailable: true

@@ -37,6 +37,7 @@ struct ChatBottomBar: View {
     @Binding var isVoiceModePresented: Bool
 
     @Environment(SettingsHub.self) private var hub
+    @Environment(\.heldDrafts) private var heldDrafts
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(macOS)
     @Environment(MacShell.self) private var shell
@@ -70,6 +71,12 @@ struct ChatBottomBar: View {
                     .padding(.horizontal, ChatMetrics.edgeMargin)
                     .transition(.opacity)
                 }
+                let waiting = heldDrafts?.count(for: model.bot.name) ?? 0
+                if waiting > 0, !model.isAskingClarify {
+                    HeldDraftBanner(count: waiting) { router.presentApprovals(profile: model.bot.name) }
+                        .padding(.horizontal, ChatMetrics.edgeMargin)
+                        .transition(.opacity)
+                }
                 if let notice = hub.usageNotice {
                     UsageBanner(notice: notice) {
                         reviewUsage()
@@ -84,6 +91,9 @@ struct ChatBottomBar: View {
             .animation(.snappy(duration: 0.2), value: hub.usageNotice)
             .animation(.easeOut(duration: 0.2), value: dictation.failure ?? model.sendError)
             .task { await hub.refreshUsageIfStale() }
+            .task(id: model.bot.name) {
+                await heldDrafts?.load(bots: [HeldDraftBot(name: model.bot.name, displayName: model.bot.displayName)])
+            }
         }
     }
 

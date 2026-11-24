@@ -1,4 +1,5 @@
 import PalBotProfile
+import PalChat
 import PalConnect
 import PalDesign
 import SwiftUI
@@ -10,12 +11,15 @@ struct BotProfileView: View {
 
     @Environment(\.hermesTheme) private var theme
     @Environment(ActionAutoApprove.self) private var autoApprove
+    @Environment(\.heldDrafts) private var heldDrafts
 
     init(model: BotProfileModel, services: ConnectedServicesModel, router: AppRouter) {
         _model = State(initialValue: model)
         _services = State(initialValue: services)
         self.router = router
     }
+
+    private var heldCount: Int { heldDrafts?.count(for: model.botName) ?? 0 }
 
     var body: some View {
         ScrollView {
@@ -35,6 +39,7 @@ struct BotProfileView: View {
         .task { await model.loadSlack() }
         .onAppear { Task { await model.refreshSlack() } }
         .task { await services.load() }
+        .task { await heldDrafts?.load(bots: [HeldDraftBot(name: model.botName, displayName: model.displayName)]) }
         .task(id: model.row?.conversationID) { await autoApprove.load(sessionID: model.row?.conversationID) }
         .toast($model.toast)
         .macSheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } }), size: .form) { editing in
@@ -124,6 +129,12 @@ struct BotProfileView: View {
                     icon: .symbol("display"),
                     accessibilityIdentifier: "profileComputerRow"
                 ) { router.push(.computer(botName: model.botName)) }
+                SettingsRow.navigate(
+                    String(localized: "Approvals"),
+                    value: heldCount > 0 ? "\(heldCount)" : nil,
+                    icon: .symbol("checkmark.circle"),
+                    accessibilityIdentifier: "profileApprovalsRow"
+                ) { router.presentApprovals(profile: model.botName) }
             }
             .padding(.top, ProfileMetrics.editToCards)
             SectionCaption(String(localized: "Configure bot"), accessibilityIdentifier: "profileConfigureCaption")
