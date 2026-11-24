@@ -1809,6 +1809,7 @@ def run_conversation(
     addresses, after every history rewrite including post-turn micro-compaction.
     """
     from agent.turn_context import export_current_turn_boundary
+    from agent.turn_author import owner_turn
     from agent.turn_finalizer import fence_result_reply, settle_held_final
     from agent.voice_turn_route import end_voice_turn_route
     from tools.vision_tools_history_budget import native_turn_images
@@ -1817,7 +1818,9 @@ def run_conversation(
     agent._turn_user_intervened = False
     # Images attached natively to this user turn stay visible to vision_analyze for the turn, so
     # it does not embed the same pixels a second time into the same request (#76411).
-    with native_turn_images(user_message):
+    with owner_turn(turn_author, synthetic=synthetic_turn or bool(persist_user_display_kind),
+                    platform=getattr(agent, "platform", None), unattended=is_unattended_turn(agent)), \
+            native_turn_images(user_message):
         try:
             result = _run_conversation_turn(
                 agent,

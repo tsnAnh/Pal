@@ -3,6 +3,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 
+from agent.turn_author import is_owner_turn
 from gateway import commitments as ledger
 from gateway import commitments_wake
 from gateway.autonomy import ActionClass
@@ -42,7 +43,7 @@ def build_schema() -> dict:
         "text": {"type": "string", "description": "What you promised, or the standing duty, in one plain sentence "
                                                   "(promise, propose_mandate)."},
         "owner_requested": {"type": "boolean", "description": "true when your owner asked for it in this turn, false "
-                                                              "when you offered it (promise, propose_mandate, and the moves of a duty)."},
+                                                              "when you offered it (promise, propose_mandate)."},
         "trigger": {"type": "string", "enum": [t.value for t in Trigger],
                     "description": "The event that starts the duty (propose_mandate)."},
         "action_class": {"type": "string", "enum": [a.value for a in ActionClass],
@@ -204,13 +205,13 @@ def _duty_move(move):
     def run(args: dict, now: float) -> dict:
         home = get_hermes_home()
         commitment_id = _required(args, "id")
-        asked = args.get("owner_requested") is True
-        if move is ledger.accept and not asked:
-            raise Refused(RefusalCode.OWNER_ONLY, "Only your owner accepts a proposal: call accept when an owner "
-                                                  "message in this turn asked for it, with owner_requested true.")
+        by_owner = is_owner_turn()
+        if move is ledger.accept and not by_owner:
+            raise Refused(RefusalCode.OWNER_ONLY, "Only your owner accepts a proposal: call accept in a turn your "
+                                                  "owner started, when their message asked for it.")
         moved = move(home, commitment_id, event_key=_event_key(move.__name__, commitment_id),
                      expected_rev=_expected_rev(args, home, commitment_id),
-                     actor=Actor.OWNER if asked else Actor.BOT, now=now, reason=_text(args, "reason"))
+                     actor=Actor.OWNER if by_owner else Actor.BOT, now=now, reason=_text(args, "reason"))
         return {**_duty(ledger.get(home, commitment_id)), **({"replayed": True} if moved.replayed else {})}
     return run
 
