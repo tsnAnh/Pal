@@ -17,6 +17,7 @@ import check_swift_chat_scroll_writer as writer
 LIST = "App/Chat/ChatTranscriptList.swift"
 CONTROLLER = "App/Chat/ChatScrollController.swift"
 PLATFORM = "App/Platform/ChatPlatform.swift"
+HEIGHT_FIX = "give the row its height through ChatScrollController and ChatRowHeights (measured, minHeight(for:)) and ChatRowHeightFloor only"
 FIX = "route it through ChatScrollMachine: emit a command and let ChatScrollController.perform apply it"
 
 COMPLIANT_LIST = (
@@ -33,7 +34,7 @@ COMPLIANT_CONTROLLER = (
     "    private(set) var machine = ChatScrollMachine()\n"
     "    func observe(_ geometry: ScrollGeometry) {\n"
     "        let y = geometry.contentOffset.y\n"
-    "        perform(machine.handle(.geometry(y)))\n"
+    "        performNextTurn(machine.handle(.geometry(y)))\n"
     "    }\n"
     "    func perform(_ command: ChatScrollMachine.Command) {\n"
     "        switch command {\n"
@@ -108,10 +109,29 @@ def test_mains_flipped_list_fails_on_each_old_writer(tmp_path):
 
 def test_scroll_to_outside_perform_fails_and_inside_passes(tmp_path):
     outside = COMPLIANT_CONTROLLER.replace(
-        "        perform(machine.handle(.geometry(y)))\n", "        position.scrollTo(y: y)\n"
+        "        performNextTurn(machine.handle(.geometry(y)))\n", "        position.scrollTo(y: y)\n"
     )
     found = _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=outside))
     assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:5:") and found[0].endswith(FIX)
+
+
+def test_a_scroll_write_inside_the_layout_commit_fails(tmp_path):
+    inside = COMPLIANT_CONTROLLER.replace("performNextTurn(machine", "perform(machine")
+    found = _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=inside))
+    assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:5:") and "layout commit" in found[0] and found[0].endswith(FIX)
+
+
+def test_a_direct_perform_outside_the_layout_callbacks_passes(tmp_path):
+    outside = COMPLIANT_CONTROLLER.replace("    func perform(", "    func jump() { perform(.none) }\n    func perform(")
+    assert _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=outside)) == []
+
+
+def test_the_transcript_loop_over_the_whole_model_fails(tmp_path):
+    whole = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(model.rows) { Text($0.id) } }")
+    found = _scan(_tree(tmp_path / "a", App__Chat__ChatTranscriptList_swift=whole))
+    assert len(found) == 1 and "model.windowRows" in found[0] and found[0].endswith(FIX)
+    windowed = whole.replace("model.rows", "model.windowRows")
+    assert _scan(_tree(tmp_path / "b", App__Chat__ChatTranscriptList_swift=windowed)) == []
 
 
 def test_perform_ends_at_its_closing_brace(tmp_path):
@@ -224,3 +244,32 @@ def test_the_cli_exits_1_and_names_the_fix_on_a_failing_tree(tmp_path):
 
 def test_a_tree_without_the_chat_code_has_nothing_to_judge(tmp_path):
     assert writer.main(["check", str(tmp_path)]) == 0
+
+
+FLOOR_LIST = COMPLIANT_LIST + (
+    "struct ChatRowHeightFloor: ViewModifier {\n"
+    "    func body(content: Content) -> some View {\n"
+    "        content.frame(minHeight: floor, alignment: .top)\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_a_row_height_frame_inside_the_height_floor_passes(tmp_path):
+    assert _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=FLOOR_LIST)) == []
+
+
+def test_a_row_height_frame_outside_the_height_floor_fails(tmp_path):
+    guessed = FLOOR_LIST.replace("ScrollView { rows }", "ScrollView { rows.frame(height: estimate) }")
+    found = _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=guessed))
+    assert len(found) == 1 and "outside ChatRowHeightFloor" in found[0] and found[0].endswith(HEIGHT_FIX)
+
+
+def test_a_second_height_cache_outside_the_controller_fails(tmp_path):
+    rival = "struct ChatRowMeasureLayer: View {\n    @State private var heights = ChatRowHeightCache()\n}\n"
+    found = _scan(_tree(tmp_path, App__Chat__ChatRowMeasureLayer_swift=rival))
+    assert len(found) == 1 and "second row height owner" in found[0] and found[0].endswith(HEIGHT_FIX)
+    controller = COMPLIANT_CONTROLLER.replace("    func perform(", "    private var heights = ChatRowHeightCache()\n    func perform(")
+    assert len(_scan(_tree(tmp_path / "ctl", App__Chat__ChatScrollController_swift=controller))) == 1
+    owner = "final class ChatRowHeights {\n    private var cache = ChatRowHeightCache()\n}\n"
+    assert _scan(_tree(tmp_path / "ok", App__Chat__ChatRowHeights_swift=owner)) == []

@@ -13,6 +13,11 @@ struct StreamingRowPatch {
 }
 
 extension ChatModel {
+    func commit(_ patch: StreamingRowPatch) {
+        built[patch.sourceID] = patch.built
+        streamPacer.submit(patch) { [weak self] in self?.show($0) }
+    }
+
     func streamingPatch(from previous: TimelineSnapshot, to next: TimelineSnapshot) -> StreamingRowPatch? {
         guard builtWithBaseline, builtOffline == isOffline, let tail = rows.last,
               let newest = next.rows.last, let oldest = previous.rows.last,

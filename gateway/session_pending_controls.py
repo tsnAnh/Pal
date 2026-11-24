@@ -26,7 +26,7 @@ class PendingControls:
                       'choices': ['once', 'deny']}
             if isinstance(data.get('question'), str):
                 prompt['question'] = _redact_approval_command(data['question'])
-            for key in ('edit', 'draft', 'details'):
+            for key in ('edit', 'draft', 'details', 'language', 'labels'):
                 if key in data:
                     prompt[key] = deepcopy(data[key])
             if timeout_s is not None:

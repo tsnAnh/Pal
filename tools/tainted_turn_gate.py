@@ -75,6 +75,7 @@ def _owner_approves(tool_name: str, args: Mapping) -> Optional[str]:
     card = build_card(GATE_SERVER, tool_name, args)
     result = approval.request_draft_approval(
         text=card["text"], pattern_key=f"owner_call:{tool_name}", draft=card["draft"], details=card["details"],
+        attachments=card["attachments"],
         description=f"Run '{tool_name}' once with exactly the details shown, or deny.")
     if result.get("approved") is True:
         return None

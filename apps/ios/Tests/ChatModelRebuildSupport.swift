@@ -53,7 +53,7 @@ func rebuildRoster() throws -> RosterModel {
 let rebuildBotName = "scout"
 
 @MainActor
-func rebuildChatModel(lastSeen: Date? = nil) throws -> ChatModel {
+func rebuildChatModel(lastSeen: Date? = nil, streamInterval: Duration = .zero) throws -> ChatModel {
     let roster = try rebuildRoster()
     let row = BotRow(
         name: rebuildBotName, isDefault: false, isPrimary: false, isPinned: false, displayName: "Scout", conversationID: nil,
@@ -63,7 +63,9 @@ func rebuildChatModel(lastSeen: Date? = nil) throws -> ChatModel {
     let defaults = try #require(UserDefaults(suiteName: "chat-model-rebuild-\(UUID().uuidString)"))
     let store = ChatLastSeenStore(defaults: defaults)
     if let lastSeen { store.record(lastSeen, for: rebuildBotName) }
-    return ChatModel(bot: row, links: BotLinks(connection: roster.connection), roster: roster, lastSeenStore: store)
+    let model = ChatModel(bot: row, links: BotLinks(connection: roster.connection), roster: roster, lastSeenStore: store)
+    model.streamPacer.interval = streamInterval
+    return model
 }
 
 let rebuildStart = Date(timeIntervalSince1970: 1_800_000_000)
@@ -184,6 +186,9 @@ final class RebuildHarness {
         #expect(model.rowIDs == oracle.rowIDs, context)
         #expect(model.rowsNewestFirst == Array(model.rows.reversed()), context)
         #expect(model.rowIDs == model.rows.map(\.id), context)
+        #expect(model.windowRows == model.rows, context)
+        #expect(model.windowRowIDs == model.rowIDs, context)
+        #expect(model.hiddenOlder == 0, context)
         #expect(model.findMatches == oracle.findMatches, context)
         #expect(model.findPosition == oracle.findPosition, context)
         #expect(model.currentFindRowID == oracle.currentFindRowID, context)
@@ -202,6 +207,9 @@ func rebuildNotifications(_ model: ChatModel, _ body: () -> Void) -> [String: In
         ("rows", { _ = model.rows }),
         ("rowsNewestFirst", { _ = model.rowsNewestFirst }),
         ("rowIDs", { _ = model.rowIDs }),
+        ("windowRows", { _ = model.windowRows }),
+        ("windowRowIDs", { _ = model.windowRowIDs }),
+        ("hiddenOlder", { _ = model.hiddenOlder }),
         ("connection", { _ = model.connection }),
         ("isRunning", { _ = model.isRunning }),
         ("workingStatus", { _ = model.workingStatus }),

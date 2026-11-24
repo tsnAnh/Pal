@@ -16,6 +16,10 @@ public struct ChatRowIdentity: Sendable {
         }
     }
 
+    public mutating func keep(_ id: String, for key: RowKey) {
+        if aliases[key] == nil { aliases[key] = id }
+    }
+
     private mutating func resolve(_ row: ChatTimelineRow, outboxIDs: Set<String>, origins: [RowKey: RowKey]) -> String {
         if let alias = aliases[row.id] { return alias }
         let id = outboxIDs.contains(row.item.id) ? row.item.id : originAlias(of: row.id, origins: origins)

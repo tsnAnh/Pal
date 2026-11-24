@@ -34,18 +34,31 @@ final class MacChatBenchSession {
     var world: RebuildWorld
     private var version: UInt64 = 1_000
 
-    static func environment() throws -> MacChatBenchEnvironment {
-        MacChatBenchEnvironment(model: try rebuildChatModel())
+    static func environment(streamInterval: Duration = .zero) throws -> MacChatBenchEnvironment {
+        MacChatBenchEnvironment(model: try rebuildChatModel(streamInterval: streamInterval))
     }
 
-    init(environment: MacChatBenchEnvironment, streamingTail: Bool, size: CGSize = MacChatBench.pane) {
-        let initial = MacChatBenchFixture.world(streamingTail: streamingTail)
+    init(
+        environment: MacChatBenchEnvironment,
+        streamingTail: Bool,
+        size: CGSize = MacChatBench.pane,
+        messageCount: Int = MacChatBenchFixture.messageCount,
+        images: Bool = false,
+        stalls: MainStallProbe? = nil
+    ) {
+        let initial = MacChatBenchFixture.world(streamingTail: streamingTail, messageCount: messageCount, images: images)
         model = environment.model
         world = initial
         host = MacChatBenchHost(root: environment.surface(draft: draft, scroll: scroll), size: size)
         host.settle()
-        model.apply(initial.snapshot(version: version))
-        host.settle()
+        let snapshot = initial.snapshot(version: version)
+        if let stalls {
+            stalls.measure("apply") { model.apply(snapshot) }
+            stalls.measure("first-frame") { host.settle() }
+        } else {
+            model.apply(snapshot)
+            host.settle()
+        }
         scroll.jumpToBottom(animated: false)
     }
 

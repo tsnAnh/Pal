@@ -52,6 +52,21 @@ struct OwnerDecisionTests {
         #expect(transcript.ignoredPromptIDs.isEmpty)
     }
 
+    @Test func aHeldDraftShowsTheLabelsTheGatewayChoseForTheConversationLanguage() throws {
+        var transcript = try opened()
+        let vietnamese: JSONValue = [
+            "kind": "approval", "prompt_id": "d2", "execution_generation": 1, "question": "Gửi tin nhắn này?",
+            "command": "Tôi đến trễ.", "choices": ["once", "deny"], "draft": ["channel": "messages", "editable": true],
+            "labels": ["send": "Gửi", "edit": "Sửa", "cancel": "Hủy"],
+        ]
+        #expect(transcript.apply(frame("approval.request", vietnamese, seq: 2)) == .applied)
+        let shown = try #require(form(transcript, "d2"))
+        #expect(shown.choices == ["Gửi", "Sửa", "Hủy"])
+        #expect(shown.prompt.ownerChoice(forLabel: "Gửi") == "once")
+        #expect(shown.prompt.ownerChoice(forLabel: "Hủy") == "deny")
+        #expect(shown.prompt.ownerChoice(forLabel: "Sửa") == nil)
+    }
+
     @Test func aMoneyConsentIsTheClarifyFormWithContinueCancelAndNoEdit() throws {
         var transcript = try opened()
         _ = transcript.apply(frame("approval.request", consent, seq: 2))

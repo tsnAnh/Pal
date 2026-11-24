@@ -25,6 +25,7 @@ struct ChatTranscriptList: View {
 
     var body: some View {
         let _ = PalPerf.event("chat.scroll.body") // swiftlint:disable:this redundant_discardable_let
+        let _ = ChatOpenMetrics.listBody() // swiftlint:disable:this redundant_discardable_let
         ScrollView {
             ChatTranscriptRows(model: model, scroll: scroll, router: router, desk: desk.desk, connectionIsSlow: connectionIsSlow)
         }
@@ -47,13 +48,13 @@ struct ChatTranscriptList: View {
         .modifier(ChatScreenAccessibility(model: model))
         .paneOverflowProbe("chat.pane")
         .overlay(alignment: .bottom) {
-            if scroll.showsJumpButton, !model.isFinding {
+            if showsJumpButton {
                 ChatJumpToNewest(scroll: scroll)
                     .padding(.bottom, 4)
-                    .transition(jumpButtonTransition)
+                    .transition(pop.transition)
             }
         }
-        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0), value: scroll.showsJumpButton)
+        .animation(pop.animation, value: showsJumpButton)
         .modifier(ChatFindReveal(model: model, scroll: scroll))
         .task(id: model.connection) {
             connectionIsSlow = false
@@ -66,12 +67,16 @@ struct ChatTranscriptList: View {
     private static let reconnectingNoticeDelay = Duration.seconds(1)
     private static let catchUpNoticeDelay = LoadingPolicy.catchUpNoticeWindow
 
-    private var jumpButtonTransition: AnyTransition {
-        guard !reduceMotion else { return .opacity }
-        return .asymmetric(
-            insertion: .scale(scale: 0.9).combined(with: .opacity),
-            removal: .scale(scale: 0.9).combined(with: .opacity).animation(.easeIn(duration: 0.17))
-        )
+    private var pop: PalMotion.Pop { PalMotion.Pop(reduceMotion: reduceMotion) }
+
+    private var showsJumpButton: Bool {
+        ChatJumpButtonPolicy.shows(scrollWants: scroll.showsJumpButton, finding: model.isFinding, newestIsQuestion: model.newestRowIsQuestion)
+    }
+}
+
+enum ChatJumpButtonPolicy {
+    static func shows(scrollWants: Bool, finding: Bool, newestIsQuestion: Bool) -> Bool {
+        scrollWants && !finding && !newestIsQuestion
     }
 }
 
@@ -81,6 +86,7 @@ private struct ChatTranscriptRows: View {
     let router: AppRouter
     let desk: ChatDeskModel
     let connectionIsSlow: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(macOS)
     @Environment(MacShell.self) private var shell
     #endif
@@ -100,23 +106,18 @@ private struct ChatTranscriptRows: View {
         let ink = BubblePalette.ink(accent: source.accent)
         LazyVStack(alignment: .leading, spacing: 0) {
             if !model.rows.isEmpty {
-                OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
+                OlderHistoryRow(state: model.olderHistoryShown, ink: ink) { model.wantOlder() }
                     .chatListRow()
                     .padding(.top, 8)
             }
-            ForEach(model.rows) { row in
-                ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
-                    router.push(.botThread(BotThreadRoute(
-                        botName: model.bot.name,
-                        threadID: link.threadID,
-                        focusExchangeID: link.exchangeID
-                    )))
-                }
-                .equatable()
-                .chatListRow()
-                .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row)) { scroll.rowLaidOut(row.id, frame: $0) })
+            ForEach(model.windowRows) { row in
+                rowView(row, source: source)
+                    .equatable()
+                    .chatListRow()
+                    .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row), streaming: row.isStreaming) { scroll.rowLaidOut(row.id, frame: $0) })
             }
             VStack(spacing: 0) { footer(ink: ink) }
+                .animation(PalMotion.Pop(reduceMotion: reduceMotion).animation, value: showsWorkingRow)
                 .chatListRow()
             ForEach(desk.cards) { card in
                 ChatDeskCardView(card: card, botName: model.bot.displayName) { choice in
@@ -134,6 +135,19 @@ private struct ChatTranscriptRows: View {
         #if os(iOS)
         .containerRelativeFrame(.horizontal)
         #endif
+        .background(alignment: .topLeading) {
+            ChatRowMeasureLayer(model: model, scroll: scroll) { row, source in rowView(row, source: source) }
+        }
+    }
+
+    private func rowView(_ row: ChatRow, source: ChatRowContextSource) -> ChatRowView {
+        ChatRowView(row: row, context: source.context(for: row), model: model, openModelProviders: openModelProviders) { link in
+            router.push(.botThread(BotThreadRoute(
+                botName: model.bot.name,
+                threadID: link.threadID,
+                focusExchangeID: link.exchangeID
+            )))
+        }
     }
 
     @ViewBuilder
@@ -142,11 +156,14 @@ private struct ChatTranscriptRows: View {
             connectionStatus
                 .padding(.top, 12)
         }
-        if model.isRunning, !model.hasPendingPrompt {
+        if showsWorkingRow {
             ChatWorkingRow(status: model.workingStatus, ink: ink, avatar: model.bot.spec)
                 .padding(.top, ChatMetrics.senderSwitchGap)
+                .transition(PalMotion.Pop(reduceMotion: reduceMotion).transition)
         }
     }
+
+    private var showsWorkingRow: Bool { model.isRunning && !model.hasPendingPrompt }
 
     @ViewBuilder
     private var connectionStatus: some View {
@@ -165,25 +182,46 @@ private struct ChatTranscriptRows: View {
 
 private struct ChatRowHeightFloor: ViewModifier {
     let floor: CGFloat?
+    let streaming: Bool
     let laidOut: (CGRect) -> Void
     @State private var settled = false
+    @State private var reserved: CGFloat = 0
+    @ScaledMetric(relativeTo: .body) private var bodySize = PalTextStyle.chatBody.size
 
     private static let settleLimit = Duration.seconds(1)
 
+    private var minimum: CGFloat? {
+        if streaming { return reserved }
+        return settled ? nil : floor
+    }
+
     func body(content: Content) -> some View {
+        let _ = ChatOpenMetrics.rowBody() // swiftlint:disable:this redundant_discardable_let
         content
             .onGeometryChange(for: CGRect.self) { // perf-lint: ok
                 $0.frame(in: .named(ChatScrollController.contentSpace))
             } action: { frame in
                 laidOut(frame)
                 if let floor, !settled, frame.height >= floor - 0.5 { settled = true }
+                reserve(frame.height)
             }
-            .frame(minHeight: settled ? nil : floor, alignment: .top)
+            .frame(minHeight: minimum, alignment: .top)
             .task {
                 guard floor != nil, !settled else { return }
                 try? await Task.sleep(for: Self.settleLimit)
                 settled = true
             }
+    }
+
+    private func reserve(_ height: CGFloat) {
+        guard streaming else {
+            if reserved != 0 { reserved = 0 }
+            return
+        }
+        let next = CGFloat(StreamingHeightReserve.reserved(
+            measured: Double(height), current: Double(reserved), line: Double(ChatLineBox(fontSize: bodySize).height)
+        ))
+        if next != reserved { reserved = next }
     }
 }
 
@@ -199,7 +237,7 @@ private struct ChatOpeningOverlay: View {
                     .foregroundStyle(PalTokens.textSecondary)
                     .accessibilityIdentifier("chatLoading")
             }
-        } else if model.rows.isEmpty, !model.isRunning, !hidesIntro {
+        } else if model.rows.isEmpty, model.hasSession, !model.isRunning, !hidesIntro {
             NewChatIntro(bot: model.bot, mood: model.avatarMood, suggestion: Self.firstSuggestion) {
                 model.send(Self.firstSuggestion)
             }

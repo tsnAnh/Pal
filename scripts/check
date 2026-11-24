@@ -139,6 +139,7 @@ _GUARDS = {
     "swift-media-preview": ["scripts/ci/check_swift_media_preview.py"],
     "swift-web-surface": ["scripts/ci/check_swift_web_surface.py"],
     "swift-connection-card": ["scripts/ci/check_swift_connection_card.py"],
+    "swift-clarify-settled": ["scripts/ci/check_swift_clarify_settled.py"],
     "swift-bot-settings": ["scripts/ci/check_swift_bot_settings.py"],
     "swift-perf": ["scripts/ci/check_swift_perf.py"],
     "swift-fault-details": ["scripts/ci/check_swift_fault_details.py"],

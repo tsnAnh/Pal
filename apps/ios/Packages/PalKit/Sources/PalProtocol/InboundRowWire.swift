@@ -5,4 +5,8 @@ public protocol InboundRowWire {
 
 public extension InboundRowWire {
     var displayMetadata: JSONValue? { nil }
+
+    var submissionID: String? {
+        displayMetadata?["submission_id"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+    }
 }

@@ -184,7 +184,7 @@ public struct ScrollToBottomButton: View {
             .overlay(Capsule().strokeBorder(PalTokens.textPrimary.opacity(0.08), lineWidth: 1))
             .frame(minWidth: ChatMetrics.minimumHitTarget, minHeight: ChatMetrics.minimumHitTarget)
             .contentShape(Rectangle())
-            .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0), value: newCount)
+            .animation(reduceMotion ? nil : PalMotion.popIn, value: newCount)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(newCount > 0 ? Text("\(newCount) new messages. Scroll to latest") : Text("Scroll to latest"))

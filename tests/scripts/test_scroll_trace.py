@@ -155,3 +155,96 @@ def test_v2_jump_without_the_machine_line_is_flagged():
 def test_a_threshold_above_the_move_hides_it(capsys):
     code, _ = _run("v1_f_reading_drift", capsys, "--threshold", "10", "--max-jumps", "0")
     assert code == 0
+
+
+HEADER_V3 = ",".join(scroll_trace.COLUMNS_V3)
+
+
+def row_v3(at, distance, button, writer="none", mode="pinnedToBottom", phase="idle", user="0", kind="geo"):
+    base = row(at, kind=kind, mode=mode, phase=phase, distance=distance).split(",")
+    tail = ["top-down", "400", "", mode if kind == "machine" else "", "", writer, "0.00", "1" if distance <= 1 else "0", button, user]
+    return ",".join(base + tail)
+
+
+def trace_v3(*rows):
+    return "\n".join((HEADER_V3, *rows)) + "\n"
+
+
+def test_v3_button_up_at_the_bottom_is_a_fault_and_fails_the_gate(tmp_path, capsys):
+    path = tmp_path / "trace.csv"
+    path.write_text(trace_v3(
+        row_v3(0.0, 0.0, "0"),
+        row_v3(0.1, 12.0, "1", mode="readingHistory"),
+        row_v3(0.2, 90.0, "1", mode="readingHistory"),
+    ))
+    lines = scroll_trace.parse(path.read_text())
+    assert [f.distance for f in scroll_trace.button_faults(lines)] == [12.0]
+    assert scroll_trace.main([str(path), "--max-button-faults", "0"]) == 1
+    assert "button_faults=1 hide_distance=24.0pt" in capsys.readouterr().out
+
+
+def test_v3_reveal_of_a_row_may_show_the_button_near_the_bottom():
+    lines = scroll_trace.parse(trace_v3(row_v3(0.0, 10.0, "1", mode="programmatic")))
+    assert scroll_trace.button_faults(lines) == []
+
+
+def test_v3_writers_are_counted_and_named_on_a_jump(capsys, tmp_path):
+    path = tmp_path / "trace.csv"
+    path.write_text(trace_v3(
+        row_v3(0.0, 0.0, "0"),
+        row_v3(0.5, 0.0, "0", writer="machine:scrollToBottom"),
+        row_v3(0.9, 50.0, "0", writer="system-anchor"),
+    ))
+    assert scroll_trace.writers(scroll_trace.parse(path.read_text())) == {"machine:scrollToBottom": 1, "system-anchor": 1}
+    scroll_trace.main([str(path)])
+    assert "writer=system-anchor" in capsys.readouterr().out
+
+
+HEADER_V4 = ",".join(scroll_trace.COLUMNS_V4)
+
+
+def geo_v4(at, writer="none", offset_delta=0.0, content_delta=0.0, source="none", content_h=4000.0, user="0", phase="idle"):
+    fields = [
+        f"{at:.3f}", "geo", "", "pinnedToBottom", phase, "", "60", "0", f"{content_h}", "800", "0", "", "", "7", "500", "40",
+        "top-down", "600", "", "", "", writer, f"{offset_delta}", "1", "0", user, f"{content_delta}", source,
+    ]
+    return ",".join(fields)
+
+
+def trace_v4(*rows):
+    return "\n".join((HEADER_V4, *rows)) + "\n"
+
+
+def test_idle_swings_count_only_system_or_unattributed_moves_over_the_threshold():
+    lines = scroll_trace.parse(trace_v4(
+        geo_v4(0.0),
+        geo_v4(0.016, writer="system-anchor", offset_delta=-31.0, content_delta=12.0, source="estimate-replaced"),
+        geo_v4(0.032, writer="unattributed", offset_delta=1.5),
+        geo_v4(0.048, writer="user", offset_delta=80.0, user="1", phase="interacting"),
+        geo_v4(0.064, writer="machine:scrollToBottom", offset_delta=120.0),
+        geo_v4(0.080, writer="unattributed", offset_delta=-2.5),
+        geo_v4(0.096, writer="system-anchor", offset_delta=300.0, content_delta=300.0, source="streaming-growth"),
+    ))
+    assert [swing.offset_delta for swing in scroll_trace.idle_swings(lines)] == [-31.0, -2.5]
+    assert len(scroll_trace.idle_swings(lines, threshold=50.0)) == 0
+
+
+def test_streaming_shrinks_and_content_sources_are_reported_and_gate_the_run(tmp_path, capsys):
+    path = tmp_path / "trace.csv"
+    path.write_text(trace_v4(
+        geo_v4(0.0),
+        geo_v4(0.016, content_delta=20.0, source="streaming-growth"),
+        geo_v4(0.032, content_delta=-14.0, source="streaming-growth"),
+        geo_v4(0.048, content_delta=300.0, source="rows"),
+    ))
+    assert scroll_trace.main([str(path), "--max-streaming-shrinks", "0"]) == 1
+    out = capsys.readouterr().out
+    assert "streaming_shrinks=1" in out
+    assert "content_sources={'streaming-growth': 2, 'rows': 1}" in out
+    assert scroll_trace.main([str(path), "--max-streaming-shrinks", "1", "--max-idle-swings", "0"]) == 0
+
+
+def test_older_traces_still_parse_without_content_columns():
+    lines = scroll_trace.parse(trace(row(0.0), row(0.016)))
+    assert scroll_trace.idle_swings(lines) == [] and scroll_trace.streaming_shrinks(lines) == []
+    assert scroll_trace.content_sources(lines) == {}

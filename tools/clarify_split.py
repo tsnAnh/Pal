@@ -78,11 +78,21 @@ def split_clarify_arguments(arguments: Any) -> tuple[Any, str]:
         detail, short = split_question(text)
         if detail:
             details.append(detail)
+        if preview := _send_preview_text(item):
+            details.append(preview)
         rewritten.append({**item, "question": short} if detail else item)
     if not details:
         return arguments, ""
     out = {**parsed, "questions": rewritten}
     return (out if isinstance(arguments, dict) else json.dumps(out, ensure_ascii=False)), "\n\n".join(details)
+
+
+def _send_preview_text(item: Any) -> str:
+    """What a ``send`` question will authorize, rendered by code from the call itself so the owner reads the
+    exact message, recipient and thread the pick approves."""
+    from tools.bot_mode_drafts import preview_text, send_preview
+    outbound = send_preview(item.get("send")) if isinstance(item, dict) else None
+    return preview_text(outbound) if outbound is not None else ""
 
 
 def _parsed(arguments: Any) -> Any:

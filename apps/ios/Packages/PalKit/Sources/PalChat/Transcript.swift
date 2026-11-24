@@ -60,6 +60,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var inbound: InboundKind = .person
     var liveSegment: LiveSegment?
     var carriesImage = false
+    var submissionID: String?
     var receipt: TurnReceipt?
 
     public init(
@@ -304,7 +305,13 @@ public struct Transcript: Sendable, Equatable {
         }
     }
 
-    static func echoID(_ submissionID: String) -> String { "submission:\(submissionID)" }
+    static let echoPrefix = "submission:"
+
+    static func echoID(_ submissionID: String) -> String { echoPrefix + submissionID }
+
+    static func submissionID(ofEcho id: String) -> String? {
+        id.hasPrefix(echoPrefix) ? String(id.dropFirst(echoPrefix.count)) : nil
+    }
 
     private mutating func adoptLiveState(from snapshot: SessionSnapshot) {
         isRunning = snapshot.running
@@ -354,13 +361,15 @@ public struct Transcript: Sendable, Equatable {
         case "user":
             guard message.displayKind != hiddenKind else { return [] }
             let text = message.plainText
-            return [TranscriptItem(
+            var item = TranscriptItem(
                 id: id,
                 content: .user(text: text, delivery: .sent),
                 timestamp: serverDate(message.timestamp),
                 inbound: InboundKind.classify(text: text, of: message),
                 uid: message.messageUID
-            )]
+            )
+            item.submissionID = message.submissionID
+            return [item]
         case "assistant":
             let text = message.plainText
             guard !text.isEmpty else { return [] }
@@ -477,8 +486,10 @@ public struct Transcript: Sendable, Equatable {
         currentSegment = nil
         var echoes = fresh.compactMap(echoIndex(forAdmission:))
         var remainder = echoes.reduce(event.text) { Self.removing(userText(at: $1), from: $0) }
+        if !echoes.isEmpty { remainder = MessageImages.extract(from: remainder, role: .user).text }
         if !Self.isBlank(remainder) {
-            let unsent = items.indices.filter { !echoes.contains($0) && isUnsentEcho(at: $0) }
+            let known = Set(admissionInputs.values.map(Self.echoID))
+            let unsent = items.indices.filter { !echoes.contains($0) && !known.contains(items[$0].id) && isUnsentEcho(at: $0) }
             var trial = remainder
             let taken = unsent.filter { index in
                 guard let range = trial.range(of: userText(at: index)), !userText(at: index).isEmpty else { return false }
@@ -544,13 +555,17 @@ public struct Transcript: Sendable, Equatable {
         guard !absorbedAdmissions.contains(admission.admissionID) else { return }
         guard let text = admission.text, !text.isEmpty, admission.displayKind != Self.hiddenKind else { return }
         let id = Self.echoID(admission.inputID ?? admission.admissionID)
+        if let inputID = admission.inputID, items.contains(where: { $0.submissionID == inputID }) {
+            items.removeAll { $0.id == id }
+            return
+        }
         if let index = items.firstIndex(where: { $0.id == id }) {
             if admission.status != .queued, case .user(let existing, _) = items[index].content {
                 items[index].content = .user(text: existing, delivery: .sent)
             }
             return
         }
-        if admission.status != .queued, lastUserTurnIsUnanswered(text: text) { return }
+        if admission.status != .queued, lastUserTurnIsUnanswered(text: text, distinct: admission.inputID != nil) { return }
         items.append(TranscriptItem(
             id: id,
             content: .user(text: text, delivery: admission.status == .queued ? .queued : .sent),
@@ -558,11 +573,11 @@ public struct Transcript: Sendable, Equatable {
         ))
     }
 
-    private func lastUserTurnIsUnanswered(text: String) -> Bool {
+    private func lastUserTurnIsUnanswered(text: String, distinct: Bool) -> Bool {
         for item in items.reversed() {
             switch item.content {
             case .assistant(_, _, let streaming): if !streaming { return false }
-            case .user(let existing, _): return existing == text
+            case .user(let existing, _): return existing == text && item.submissionID == nil && !(distinct && item.id.hasPrefix(Self.echoPrefix))
             default: continue
             }
         }

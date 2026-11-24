@@ -8,6 +8,11 @@ public struct OutboxEntry: Codable, Sendable, Hashable, Identifiable {
         case pending
         case admitted(admissionID: String)
         case failed(reason: String)
+
+        public var isAdmitted: Bool {
+            if case .admitted = self { return true }
+            return false
+        }
     }
 
     public var submissionID: String
@@ -188,9 +193,9 @@ public actor Outbox {
         botID: String,
         text: String,
         attachments: [PromptAttachment] = [],
-        files: [OutgoingFile] = []
+        files: [OutgoingFile] = [],
+        submissionID: String = UUID().uuidString
     ) throws -> OutboxEntry {
-        let submissionID = UUID().uuidString
         let saved = try fileStore.save(files, submissionID: submissionID)
         let entry = OutboxEntry(
             submissionID: submissionID,
@@ -202,6 +207,7 @@ public actor Outbox {
             state: .pending,
             attempts: 0
         )
+        ChatSendTrace.begin(submission: submissionID)
         do {
             entries = try store.update { $0.append(entry) }.entries
         } catch {
@@ -250,7 +256,9 @@ public actor Outbox {
         }
         do {
             let status = try await submitter.submit(entry, files: files)
+            ChatSendTrace.receipt(submissionID, status: status.status.rawValue)
             record(submissionID, state: .admitted(admissionID: status.admissionID))
+            ChatSendTrace.mark(submissionID, "row.sent")
             fileStore.remove(submissionID: submissionID)
             return .admitted(status)
         } catch {
@@ -286,6 +294,13 @@ public actor Outbox {
             stored.removeAll { $0.submissionID == submissionID && $0.state == .pending }
         }.entries
         fileStore.remove(submissionID: submissionID)
+    }
+
+    public func discardAdmitted(_ submissionIDs: Set<String>) throws {
+        guard !submissionIDs.isEmpty else { return }
+        entries = try store.update { stored in
+            stored.removeAll { $0.state.isAdmitted && submissionIDs.contains($0.submissionID) }
+        }.entries
     }
 
     public func purgeFinished() throws {

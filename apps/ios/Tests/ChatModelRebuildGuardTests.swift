@@ -33,6 +33,9 @@ struct ChatModelRebuildGuardTests {
         #expect(fired["findPosition"] == 0)
         #expect(fired["rows"] == 1)
         #expect(fired["rowsNewestFirst"] == 1)
+        #expect(fired["windowRows"] == 1)
+        #expect(fired["windowRowIDs"] == 0)
+        #expect(fired["hiddenOlder"] == 0)
     }
 
     @Test("applying an equal snapshot again notifies nothing")

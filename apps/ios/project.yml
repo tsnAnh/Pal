@@ -196,6 +196,7 @@ targets:
           - ComputerSupport.swift
           - SignInFlowTests.swift
           - BotChatE2ETests.swift
+          - ClarifySettledE2ETests.swift
           - ComputerE2ETests.swift
           - MacShellE2ETests.swift
           - MacModalsE2ETests.swift
@@ -220,6 +221,7 @@ targets:
           - ComputerSupport.swift
           - SignInFlowTests.swift
           - BotChatE2ETests.swift
+          - ClarifySettledE2ETests.swift
           - ComputerE2ETests.swift
           - MacShellE2ETests.swift
           - MacModalsE2ETests.swift

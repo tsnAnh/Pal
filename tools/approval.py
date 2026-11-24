@@ -208,8 +208,9 @@ def clear_session(session_key: str) -> None:
             # the prompt was withdrawn, nobody denied it.
             entry.cancelled = "the session ended before the prompt was answered"
             entry.event.set()
-    from tools import mcp_action_gate
+    from tools import mcp_action_gate, outbound_send_grant
     mcp_action_gate.clear_session(session_key)
+    outbound_send_grant.clear_session(session_key)
     # Session-persistent code kernels (local and remote) share this owner key and die at the same boundary so a
     # finished conversation cannot leak a live interpreter.
     for module, shutdown in (("tools.code_kernel", "shutdown_kernels_for_owner"),
@@ -600,16 +601,19 @@ def _presence(approval_callback=None) -> tuple:
 
 
 def request_draft_approval(*, text: str, description: str, pattern_key: str, draft: dict,
-                           details: list[dict] | None = None, approval_callback=None) -> dict:
+                           details: list[dict] | None = None, approval_callback=None, subject: str = "",
+                           attachments: tuple[str, ...] = ()) -> dict:
+    from tools import approval_card_text
     from tools.details_bubble import post_details
     approval_callback, is_cli, is_gateway, is_ask = _presence(approval_callback)
+    card = approval_card_text.card_fields(approval_card_text.owner_language())
     if is_gateway or is_ask:
-        post_details("\n\n".join(part for part in (description, text) if part.strip()))
+        post_details(approval_card_text.bubble(draft, text, subject, attachments, card["language"]))
     return _human_decision(
         _DRAFT_GATE, command=text, description=description, pattern_key=pattern_key,
         session_key=get_current_session_key(), approval_callback=approval_callback,
         is_cli=is_cli, is_gateway=is_gateway, is_ask=is_ask,
-        extra_data={"draft": draft, "details": details or [], "question": "Send this message?"},
+        extra_data={"draft": draft, "details": details or [], **card},
     )
 
 

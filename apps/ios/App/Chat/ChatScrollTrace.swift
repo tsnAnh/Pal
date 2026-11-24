@@ -11,22 +11,25 @@ enum ChatScrollTrace {
     nonisolated static let header = [
         "epoch_s", "kind", "reason", "mode", "phase", "offset_y", "inset_top", "inset_bottom", "content_h",
         "container_h", "distance", "safe_top", "safe_bottom", "pin", "pin_min_y", "rows", "layout", "width",
-        "event", "state", "command",
+        "event", "state", "command", "writer", "offset_delta", "at_bottom", "button", "user_scrolling",
+        "content_delta", "content_source",
     ].joined(separator: ",") + "\n"
     static let isOn = ProcessInfo.processInfo.environment[environmentKey] == "1"
 
     private static let flushEvery = 120
     private static var lastGeometry: ChatScrollGeometry?
+    private static var lastSample: ChatScrollSample?
     private static var lastState = ""
     private static var lastPhase = "idle"
     private static var lastRows = 0
     private static var pending: [String] = []
     private static var log: TraceFile?
 
-    static func geometry(_ value: ChatScrollGeometry, state: String) {
+    static func geometry(_ sample: ChatScrollSample) {
         guard isOn else { return }
-        lastGeometry = value
-        lastState = state
+        lastGeometry = sample.geometry
+        lastSample = sample
+        lastState = sample.state
         record("geo")
     }
 
@@ -58,10 +61,19 @@ enum ChatScrollTrace {
             number(lastGeometry?.contentHeight), number(lastGeometry?.containerHeight), number(lastGeometry?.distanceFromBottom),
             "", "", anchor.map { String($0.rowID.hashValue) } ?? "", number(anchor.map { -$0.offsetInRow }), String(lastRows),
             layout, number(lastGeometry?.containerWidth), event, kind == "machine" ? lastState : "", command,
-        ]
+        ] + sampleFields(kind == "geo" ? lastSample : nil)
         pending.append(fields.joined(separator: ",") + "\n")
         guard pending.count >= flushEvery || kind == "phase" else { return }
         flush()
+    }
+
+    private static func sampleFields(_ sample: ChatScrollSample?) -> [String] {
+        guard let sample else { return ["", "", "", "", "", "", ""] }
+        return [
+            sample.writer.rawValue, number(sample.offsetDelta), sample.isAtBottom ? "1" : "0",
+            sample.showsButton ? "1" : "0", sample.userScrolling ? "1" : "0",
+            number(sample.contentDelta), sample.contentSource.rawValue,
+        ]
     }
 
     private static func number(_ value: Double?) -> String {

@@ -112,13 +112,17 @@ final class ChatModel {
     private(set) var rows: [ChatRow] = []
     private(set) var rowsNewestFirst: [ChatRow] = []
     private(set) var rowIDs: [String] = []
+    private(set) var windowRange: Range<Int> = 0..<0
+    @ObservationIgnored var window = ChatRowWindow()
     private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
     private(set) var workingStatus: String?
     private(set) var hasPendingClarify = false
     private(set) var hasPendingPrompt = false
+    private(set) var newestRowIsQuestion = false
+    @ObservationIgnored var settledPrompts: [String: ClarifySettled] = [:]
     private(set) var olderHistory = OlderHistory.idle
-    private(set) var isOpening = true
+    var isOpening = true
     var sendError: String?
     private(set) var answeringConnections: Set<String> = []
     private var pending = PendingAttachments()
@@ -142,7 +146,7 @@ final class ChatModel {
     private(set) var findMatchIDs: Set<String> = []
     private(set) var findPosition = 0
 
-    private let openedBot: BotRow
+    let openedBot: BotRow
     var bot: BotRow { roster.bot(named: openedBot.name) ?? openedBot }
 
     private let links: BotLinks
@@ -157,19 +161,26 @@ final class ChatModel {
     var arrivals: [String: Date] = [:]
     @ObservationIgnored private var identity = ChatRowIdentity()
     private var outboxRowIDs: Set<String> = []
+    private var unsaved: [OutboxEntry] = []
+    @ObservationIgnored private var echoLedger = AdmittedEchoLedger()
+    @ObservationIgnored private var reapable: Set<String> = []
+    @ObservationIgnored private var reaping: Set<String> = []
     var built: [String: BuiltRow] = [:]
     var hasBaseline = false
     @ObservationIgnored var builtOffline = true
     @ObservationIgnored var builtWithBaseline = false
     @ObservationIgnored var generatedImageIDs: Set<String> = []
     @ObservationIgnored private(set) var rebuilds = RebuildCounts()
+    let streamPacer = StreamingCommitPacer()
     private var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
+    @ObservationIgnored var openingDeadline: Task<Void, Never>?
+    @ObservationIgnored var snapshotFromEarlierRun = false
     private var delivering = false
     private var absorbedEchoes = AbsorbedEchoLedger()
 
-    private let opening = ChatOpenCoordinator()
+    let opening = ChatOpenCoordinator()
     private var findSearch: Task<Void, Never>?
     private var pendingReveal: RowKey?
 
@@ -205,6 +216,7 @@ final class ChatModel {
     }
 
     func wantOlder() {
+        if hiddenOlder > 0 { return expandWindow() }
         guard let session, olderHistory.canLoad else { return }
         Task { await session.wantOlder() }
     }
@@ -213,6 +225,7 @@ final class ChatModel {
         roster.markRead(bot.name)
         guard running == nil else { return }
         ChatOpenTrace.begin(bot: bot.name)
+        armOpeningDeadline()
         let link: BotLink
         do {
             link = try links.link(for: bot.name)
@@ -230,6 +243,7 @@ final class ChatModel {
         ChatOpenTrace.finish(bot: bot.name)
         running?.cancel()
         running = nil
+        closeOpening()
         opening.cancel()
         findSearch?.cancel()
         findSearch = nil
@@ -253,7 +267,7 @@ final class ChatModel {
         let staged = pending.readyToSend
         guard !trimmed.isEmpty || !staged.isEmpty, canSendAttachments else { return }
         if let prompt = pendingClarify, staged.isEmpty {
-            answer(prompt, with: trimmed)
+            answerFromComposer(prompt, text: trimmed)
             return
         }
         guard let outbox else { return }
@@ -270,13 +284,25 @@ final class ChatModel {
             }
         }
         pending.removeAll()
+        let provisional = OutboxEntry(
+            submissionID: UUID().uuidString, botID: bot.name, text: body, attachments: images,
+            createdAt: Date(), state: .pending, attempts: 0
+        )
+        unsaved.append(provisional)
+        outboxEntries.append(provisional)
+        rebuild()
         Task {
             do {
-                let entry = try await outbox.enqueue(botID: bot.name, text: body, attachments: images)
+                let entry = try await outbox.enqueue(
+                    botID: bot.name, text: body, attachments: images, submissionID: provisional.submissionID
+                )
+                unsaved.removeAll { $0.submissionID == entry.submissionID }
                 await refreshOutbox()
                 _ = await outbox.deliver(entry.submissionID)
                 await refreshOutbox()
             } catch {
+                unsaved.removeAll { $0.submissionID == provisional.submissionID }
+                await refreshOutbox()
                 sendError = String(localized: "Your message could not be saved.")
             }
         }
@@ -319,17 +345,6 @@ final class ChatModel {
             await refreshOutbox()
             _ = await outbox.deliver(entry.submissionID)
             await refreshOutbox()
-        }
-    }
-
-    func answer(_ prompt: PendingPrompt, with text: String) {
-        guard let session else { return }
-        Task {
-            do {
-                try await session.answerClarify(prompt, answer: text)
-            } catch {
-                sendError = String(localized: "Your answer could not be sent. Try again.")
-            }
         }
     }
 
@@ -566,7 +581,7 @@ final class ChatModel {
         let current = await session.timelineSnapshot
         if before.rows.isEmpty, !current.rows.isEmpty {
             LaunchClock.mark("chat \(openedBot.name) shown from cache (\(current.rows.count) rows)", on: .osLog())
-            ChatOpenTrace.mark(openedBot.name, "cache.frame", rows: current.rows.count)
+            ChatOpenTrace.mark(openedBot.name, "cache.frame", rows: current.rows.count, detail: "held=true")
             opening.hold(version: current.version) { [weak self] in self?.apply($0) }
         } else {
             apply(current)
@@ -583,10 +598,6 @@ final class ChatModel {
 
     private func attach(_ session: ChatSession) async {
         let preparing = PalPerf.begin("chat.open.outbox")
-        await refreshOutbox()
-        if !outboxEntries.contains(where: { if case .failed = $0.state { true } else { false } }) {
-            try? await outbox?.purgeFinished()
-        }
         await refreshOutbox()
         preparing.end()
         var delay = Duration.milliseconds(500)
@@ -637,14 +648,15 @@ final class ChatModel {
     }
 
     func apply(_ next: TimelineSnapshot) {
-        if let snapshot, next.version <= snapshot.version { return }
-        let previous = snapshot
+        guard acceptsSnapshot(next) else { return }
+        let previous = takePreviousSnapshot()
         snapshot = next
         assignIfChanged(\.olderHistory, OlderHistory(next.older))
         rebuild(patching: previous)
         observeActivityChange()
         resolvePendingReveal()
         ChatOpenTrace.frameApplied(bot: openedBot.name, version: next.version, rows: next.rows.count)
+        traceOpen("apply")
     }
 
     private func retryLoop() async {
@@ -660,8 +672,21 @@ final class ChatModel {
     }
 
     private func refreshOutbox() async {
-        outboxEntries = await outbox?.snapshot(botID: bot.name) ?? []
+        let stored = await outbox?.snapshot(botID: bot.name) ?? []
+        let storedIDs = Set(stored.map(\.submissionID))
+        outboxEntries = stored + unsaved.filter { !storedIDs.contains($0.submissionID) }
         rebuild()
+    }
+
+    private func reapAdmitted() {
+        let doomed = reapable.subtracting(reaping)
+        guard let outbox, !doomed.isEmpty else { return }
+        reaping.formUnion(doomed)
+        Task {
+            do { try await outbox.discardAdmitted(doomed) } catch { return }
+            reaping.subtract(doomed)
+            await refreshOutbox()
+        }
     }
 
     private func observeActivityChange() {
@@ -684,6 +709,19 @@ final class ChatModel {
 
     private func sourceItems() -> [(id: String, item: TranscriptItem, stored: Int?)] {
         let timelineRows = snapshot?.rows ?? []
+        let echoed = echoLedger.resolve(
+            entries: outboxEntries, text: displayText(for:), timeline: timelineRows.map(\.item)
+        )
+        let echoedBy = Dictionary(echoed.echoes.map { ($0.value, $0.key) }, uniquingKeysWith: { min($0, $1) })
+        for row in timelineRows {
+            if let submissionID = echoedBy[row.item.id] { identity.keep("submission:\(submissionID)", for: row.id) }
+        }
+        let staleBefore = Date().addingTimeInterval(-AdmittedEchoLedger.retention)
+        reapable = Set(echoed.echoes.keys)
+        if hasBaseline {
+            reapable.formUnion(outboxEntries.filter { $0.state.isAdmitted && $0.createdAt < staleBefore }.map(\.submissionID))
+        }
+        let unechoed = Set(echoed.unechoed.map(\.submissionID))
         let timelineIDs = identity.ids(
             for: timelineRows, outboxIDs: outboxRowIDs, forwarded: snapshot?.forwardedKeys ?? [:]
         )
@@ -700,8 +738,9 @@ final class ChatModel {
         for entry in outboxEntries {
             let id = "submission:\(entry.submissionID)"
             guard !known.contains(id), !absorbed.contains(entry.submissionID) else { continue }
-            if case .admitted = entry.state { continue }
-            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: .sending), timestamp: entry.createdAt)
+            if entry.state.isAdmitted, !unechoed.contains(entry.submissionID) { continue }
+            let delivery: TranscriptItem.Delivery = entry.state.isAdmitted ? .sent : .sending
+            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: delivery), timestamp: entry.createdAt)
             if case .failed(let reason) = entry.state { item.deliveryFailure = reason }
             sources.append((id: id, item: item, stored: nil))
             shownOutbox.insert(id)
@@ -717,7 +756,9 @@ final class ChatModel {
             commit(patch)
         } else {
             rebuilds.full += 1
+            streamPacer.reset()
             publish(builtRows())
+            reapAdmitted()
         }
         builtOffline = isOffline
         publishActivity()
@@ -770,16 +811,17 @@ final class ChatModel {
     }
 
     private func publish(_ next: [ChatRow]) {
-        guard assignIfChanged(\.rows, next) else { return }
-        assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
-        assignIfChanged(\.rowIDs, next.map(\.id))
+        if assignIfChanged(\.rows, next) {
+            assignIfChanged(\.rowsNewestFirst, Array(next.reversed()), force: true)
+            assignIfChanged(\.rowIDs, next.map(\.id))
+            assignIfChanged(\.newestRowIsQuestion, next.last?.kind.isQuestionCard ?? false)
+        }
+        publishWindow()
     }
 
-    private func commit(_ patch: StreamingRowPatch) {
-        built[patch.sourceID] = patch.built
-        guard let last = rows.indices.last, rows[last] != patch.row else { return }
-        rows[last] = patch.row
-        rowsNewestFirst[0] = patch.row
+    func show(_ patch: StreamingRowPatch) {
+        guard let last = rows.indices.last, rows[last].id == patch.row.id, rows[last] != patch.row else { return }
+        (rows[last], rowsNewestFirst[0]) = (patch.row, patch.row)
     }
 
     private func publishActivity() {
@@ -788,13 +830,13 @@ final class ChatModel {
         assignIfChanged(\.hasPendingClarify, pendingClarify != nil)
         assignIfChanged(\.hasPendingPrompt, !(snapshot?.pendingPrompts.isEmpty ?? true) || snapshot?.hasPendingConnection == true)
         if !hasBaseline, snapshot?.sessionID != nil { hasBaseline = true }
-        if isOpening, !rows.isEmpty || snapshot?.sessionID != nil { isOpening = false; opening.firstPaint() }
+        if isOpening, !rows.isEmpty || snapshot?.sessionID != nil { endOpening("opened") }
         opening.rowsChanged()
         recomputeFind(resetPosition: false)
     }
 
     func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
-        if let reuse, reuse.item == item, !Self.dependsOnConnection(item) {
+        if let reuse, reuse.item == item, !Self.dependsOnConnection(item), !hasStaleClarify(item, reuse) {
             if case .assistant = item.content, !generated.isEmpty {
                 return BuiltRow(item: item, kind: reuse.kind, images: reuse.images.filter { !generated.contains($0.id) }, files: reuse.files)
             }
@@ -813,7 +855,7 @@ final class ChatModel {
             case .person:
                 var state: BubbleDelivery = switch delivery {
                 case .sent, .queued: .sent
-                case .sending: isOffline ? .waitingForConnection : .sending
+                case .sending: .awaitingReceipt(offline: isOffline, outbox: entry)
                 }
                 if let entry, case .failed = entry.state { state = .failed(submissionID: entry.submissionID) }
                 var content = MessageImages.extract(from: text, role: .user)
@@ -843,7 +885,7 @@ final class ChatModel {
         case .clarifyAnswered(let record):
             return (.clarifyAnswered([record]), [], [])
         case .clarify(let card):
-            return (.clarify(card.prompt), [], [])
+            return (settledKind(for: card) ?? .clarify(card.prompt), [], [])
         case .connection(let card):
             return (.connection(card), [], [])
         case .noProvider: return (.noProvider, [], [])
@@ -927,4 +969,11 @@ struct PreparedUpload: Sendable {
     let data: Data
     let filename: String
     let thumbnail: Data?
+}
+
+extension ChatModel {
+    func publishWindow() {
+        assignIfChanged(\.windowRange, window.resolve(rowIDs))
+        traceOpen("window")
+    }
 }

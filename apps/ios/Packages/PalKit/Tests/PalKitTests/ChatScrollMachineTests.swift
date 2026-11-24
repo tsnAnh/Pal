@@ -23,7 +23,11 @@ private func geo(
 }
 
 private func bottomGeo(content: Double = 1000, container: Double = 500, insetBottom: Double = 0) -> ChatScrollGeometry {
-    geo(offset: content + insetBottom - container, content: content, container: container, insetBottom: insetBottom)
+    geo(offset: content - container, content: content, container: container, insetBottom: insetBottom)
+}
+
+private func awayGeo(_ distance: Double, content: Double = 1000, container: Double = 500) -> ChatScrollGeometry {
+    geo(offset: content - container - distance, content: content, container: container)
 }
 
 private func anchor(_ id: String, _ offset: Double = 0) -> ChatRowAnchor {
@@ -49,13 +53,19 @@ struct ChatScrollMachineTests {
 
     @Test func geometryDerivesDistancesAndSizeEquality() {
         let g = geo(offset: 100, content: 1000, container: 500, insetTop: 20, insetBottom: 30)
-        #expect(g.distanceFromBottom == 430)
+        #expect(g.distanceFromBottom == 380)
         #expect(g.distanceFromTop == 120)
         #expect(g.sameSize(as: geo(offset: 0, content: 1000.4, container: 500, insetTop: 20, insetBottom: 30)))
         #expect(!g.sameSize(as: geo(offset: 100, content: 1001, container: 500, insetTop: 20, insetBottom: 30)))
         #expect(geo(offset: 0, content: 1200, container: 500).wantsOlder)
         #expect(!geo(offset: 5000, content: 9000, container: 500).wantsOlder)
         #expect(geo(offset: 5000, content: 600, container: 500).wantsOlder)
+    }
+
+    @Test func theBottomInsetNeverEntersTheDistance() {
+        #expect(geo(offset: 500, content: 1000, container: 500, insetBottom: 160).distanceFromBottom == 0)
+        #expect(geo(offset: 440, content: 1000, container: 500, insetBottom: 160).distanceFromBottom == 60)
+        #expect(geo(offset: 400, content: 1000, container: 500, insetTop: 52, insetBottom: 160).distanceFromBottom == 48)
     }
 
     @Test func pinnedStaysSilentOnGrowthAtTheBottom() {
@@ -66,27 +76,24 @@ struct ChatScrollMachineTests {
         #expect(machine.state == .pinnedToBottom)
     }
 
-    @Test func pinnedRepairsASizeChangeDisplacementOnce() {
+    @Test func pinnedLeavesTheScrollPositionToTheSystemAnchor() {
         var machine = ChatScrollMachine()
         _ = machine.handle(.geometry(bottomGeo()))
-        #expect(machine.handle(.geometry(geo(offset: 550, content: 1100))) == .scrollToBottom(animated: false))
-        #expect(machine.handle(.geometry(bottomGeo(content: 1100))) == .none)
+        for content in [1100.0, 1200, 1300, 1400, 1500] {
+            #expect(machine.handle(.geometry(geo(offset: content - 540, content: content))) == .none)
+        }
+        #expect(machine.handle(.geometry(bottomGeo(content: 1500))) == .none)
         #expect(machine.state == .pinnedToBottom)
-        #expect(machine.handle(.geometry(geo(offset: 620, content: 1200))) == .scrollToBottom(animated: false))
     }
 
-    @Test func pinnedRepairsAreCappedAtMaxRepairs() {
+    @Test func theMeasuredRestOfTheSystemAnchorReadsAsTheBottom() {
+        let rest = geo(offset: 8030, content: 8768, container: 683, insetTop: 55, insetBottom: 92)
+        #expect(rest.distanceFromBottom == 0)
         var machine = ChatScrollMachine()
-        _ = machine.handle(.geometry(bottomGeo()))
-        var commands: [ChatScrollMachine.Command] = []
-        for step in 1...(ChatScrollMachine.maxRepairs + 2) {
-            let content = 1000 + Double(step) * 100
-            commands.append(machine.handle(.geometry(geo(offset: content - 500 - 40, content: content))))
-        }
-        let repairs = commands.filter { $0 == .scrollToBottom(animated: false) }
-        #expect(repairs.count == ChatScrollMachine.maxRepairs)
-        #expect(commands.suffix(2).allSatisfy { $0 == .none })
+        _ = machine.handle(.rowsChanged(["a"]))
+        _ = machine.handle(.geometry(rest))
         #expect(machine.state == .pinnedToBottom)
+        #expect(!machine.showsJumpButton)
     }
 
     @Test func offsetOnlyMoveLeavesPinnedForReading() {
@@ -242,21 +249,6 @@ struct ChatScrollMachineTests {
         #expect(machine.handle(.revealRetry) == .none)
     }
 
-    @Test func userScrollCancelsRepairs() {
-        var machine = ChatScrollMachine()
-        _ = machine.handle(.geometry(bottomGeo()))
-        for step in 1...ChatScrollMachine.maxRepairs {
-            let content = 1000 + Double(step) * 100
-            #expect(machine.handle(.geometry(geo(offset: content - 540, content: content))) == .scrollToBottom(animated: false))
-        }
-        #expect(machine.handle(.geometry(geo(offset: 760, content: 1400))) == .none)
-        _ = machine.handle(.userScrollBegan)
-        _ = machine.handle(.geometry(bottomGeo(content: 1400)))
-        _ = machine.handle(.userScrollEnded)
-        #expect(machine.state == .pinnedToBottom)
-        #expect(machine.handle(.geometry(geo(offset: 860, content: 1500))) == .scrollToBottom(animated: false))
-    }
-
     @Test func userScrollingOffTheBottomLeavesPinned() {
         var machine = ChatScrollMachine()
         _ = machine.handle(.geometry(bottomGeo()))
@@ -299,5 +291,93 @@ struct ChatScrollMachineTests {
         #expect(ChatScrollMachine.Event.geometry(bottomGeo()).name == "geometry")
         #expect(ChatScrollMachine.Command.restore(anchor("a")).name == "restore")
         #expect(ChatScrollMachine.Command.none.name == "none")
+    }
+}
+
+@Suite("Chat scroll machine bottom zone")
+struct ChatScrollMachineBottomZoneTests {
+    @Test func thresholdsLeaveADeadBandBetweenHideAndShow() {
+        #expect(ChatScrollMachine.hideDistance < ChatScrollMachine.showDistance)
+        #expect(ChatScrollMachine.atBottomTolerance < ChatScrollMachine.hideDistance)
+    }
+
+    @Test func wobbleInsideTheDeadBandNeverLeavesPinnedOrShowsTheButton() {
+        var machine = ChatScrollMachine()
+        _ = machine.handle(.geometry(bottomGeo()))
+        for distance in [3.0, 30.0, ChatScrollMachine.showDistance, 12.0, 0.0] {
+            #expect(machine.handle(.geometry(awayGeo(distance))) == .none)
+            #expect(machine.state == .pinnedToBottom)
+            #expect(!machine.showsJumpButton)
+        }
+    }
+
+    @Test func pinnedLeavesOnlyBeyondTheShowDistance() {
+        var machine = ChatScrollMachine()
+        _ = machine.handle(.geometry(bottomGeo()))
+        _ = machine.handle(.geometry(awayGeo(ChatScrollMachine.showDistance + 1)))
+        #expect(machine.state == .readingHistory)
+        #expect(machine.showsJumpButton)
+        #expect(machine.distanceFromBottom == ChatScrollMachine.showDistance + 1)
+    }
+
+    @Test func buttonHidesOnlyAtTheHideDistanceOnTheWayDown() {
+        var machine = readingMachine()
+        #expect(machine.showsJumpButton)
+        _ = machine.handle(.geometry(awayGeo(ChatScrollMachine.showDistance - 5)))
+        #expect(machine.state == .readingHistory)
+        #expect(machine.showsJumpButton)
+        _ = machine.handle(.geometry(awayGeo(ChatScrollMachine.hideDistance + 1)))
+        #expect(machine.showsJumpButton)
+        _ = machine.handle(.geometry(awayGeo(ChatScrollMachine.hideDistance)))
+        #expect(machine.state == .pinnedToBottom)
+        #expect(!machine.showsJumpButton)
+    }
+
+    @Test func buttonFollowsTheDistanceWhileTheUserIsStillScrolling() {
+        var machine = readingMachine()
+        _ = machine.handle(.userScrollBegan)
+        _ = machine.handle(.geometry(awayGeo(ChatScrollMachine.hideDistance + 1)))
+        #expect(machine.showsJumpButton)
+        _ = machine.handle(.geometry(awayGeo(ChatScrollMachine.hideDistance)))
+        #expect(machine.state == .readingHistory)
+        #expect(!machine.showsJumpButton)
+        _ = machine.handle(.userScrollEnded)
+        #expect(machine.state == .pinnedToBottom)
+    }
+
+    @Test func rubberBandPastTheBottomCountsAsAtTheBottom() {
+        var machine = readingMachine()
+        _ = machine.handle(.geometry(geo(offset: 560)))
+        #expect(machine.distanceFromBottom == 0)
+        #expect(machine.state == .pinnedToBottom)
+        #expect(!machine.showsJumpButton)
+    }
+
+    @Test func userScrollEndedInsideTheDeadBandKeepsPinned() {
+        var machine = ChatScrollMachine()
+        _ = machine.handle(.geometry(bottomGeo()))
+        _ = machine.handle(.userScrollBegan)
+        _ = machine.handle(.geometry(awayGeo(40)))
+        #expect(machine.handle(.userScrollEnded) == .none)
+        #expect(machine.state == .pinnedToBottom)
+        #expect(!machine.showsJumpButton)
+    }
+
+    @Test func userScrollEndedInsideTheDeadBandWhileReadingKeepsReading() {
+        var machine = readingMachine()
+        _ = machine.handle(.userScrollBegan)
+        _ = machine.handle(.geometry(awayGeo(40)))
+        _ = machine.handle(.userScrollEnded)
+        #expect(machine.state == .readingHistory)
+        #expect(machine.showsJumpButton)
+    }
+
+    @Test func reachingTheBottomClearsUnseenInAnyState() {
+        var machine = readingMachine()
+        _ = machine.handle(.rowsChanged(["a", "b", "c", "d"]))
+        #expect(machine.unseen == 1)
+        _ = machine.handle(.userScrollBegan)
+        _ = machine.handle(.geometry(bottomGeo()))
+        #expect(machine.unseen == 0)
     }
 }

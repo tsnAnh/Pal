@@ -6,7 +6,12 @@ struct ChatRowsSync: ViewModifier {
     let scroll: ChatScrollController
 
     func body(content: Content) -> some View {
-        content.onChange(of: model.rowIDs, initial: true) { _, ids in scroll.rowsChanged(ids) }
+        content
+            .onChange(of: model.windowRowIDs, initial: true) { _, ids in
+                scroll.rowsChanged(ids)
+                if scroll.isPinnedToBottom { model.trimWindow() }
+            }
+            .onChange(of: model.isRunning, initial: true) { _, running in scroll.streamingChanged(running) }
     }
 }
 
@@ -22,8 +27,8 @@ struct ChatOlderPaging: ViewModifier {
     private static let interval = Duration.milliseconds(250)
 
     func body(content: Content) -> some View {
-        content.task(id: Demand(wants: scroll.wantsOlder, state: model.olderHistory)) {
-            guard scroll.wantsOlder, model.olderHistory.canLoad else { return }
+        content.task(id: Demand(wants: scroll.wantsOlder, state: model.olderHistoryShown)) {
+            guard scroll.wantsOlder, model.canLoadOlder else { return }
             while !Task.isCancelled {
                 model.wantOlder()
                 try? await Task.sleep(for: Self.interval)
@@ -54,6 +59,7 @@ struct ChatFindReveal: ViewModifier {
     func body(content: Content) -> some View {
         content.onChange(of: model.currentFindRowID) { _, id in
             guard let id else { return }
+            model.showInWindow(id)
             scroll.reveal(id)
         }
     }

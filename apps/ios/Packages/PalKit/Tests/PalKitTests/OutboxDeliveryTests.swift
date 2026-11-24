@@ -64,6 +64,18 @@ struct OutboxDeliveryTests {
         #expect(await outbox.snapshot(botID: "b").count == 1)
     }
 
+    @Test func aQueuedReceiptAdmitsTheEntryAtOnceSoNoBubbleStaysSending() async throws {
+        let outbox = try Outbox(directory: try temporaryDirectory(), submitter: FlakySubmitter(failures: 0))
+        let entry = try await outbox.enqueue(botID: "b", text: "t")
+        #expect(try #require(await outbox.snapshot(botID: "b").first).state.isAdmitted == false)
+        guard case .admitted(let receipt) = await outbox.deliver(entry.submissionID) else {
+            Issue.record("the queued receipt was not admitted")
+            return
+        }
+        #expect(receipt.status == .queued)
+        #expect(try #require(await outbox.snapshot(botID: "b").first).state.isAdmitted)
+    }
+
     @Test func aReceiptMarksTheEntryAdmittedWithoutWaitingForAnyReply() async throws {
         let outbox = try Outbox(directory: try temporaryDirectory(), submitter: FlakySubmitter(failures: 0))
         let entry = try await outbox.enqueue(botID: "b", text: "t")

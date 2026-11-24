@@ -6,8 +6,8 @@ import SwiftUI
 struct ClarifyFormCard: View {
     let prompt: PendingPrompt
     var accent: BotAccent?
-    let submit: ([(qid: String, answer: ClarifyForm.Answer)]) async throws -> Void
-    var edit: ((String) async throws -> Void)?
+    let submit: ([(qid: String, answer: ClarifyForm.Answer)], ClarifySettled) async throws -> Void
+    var edit: ((String, ClarifySettled) async throws -> Void)?
 
     @State private var form: ClarifyForm
     @State private var settling = false
@@ -21,8 +21,8 @@ struct ClarifyFormCard: View {
     init(
         prompt: PendingPrompt,
         accent: BotAccent? = nil,
-        submit: @escaping ([(qid: String, answer: ClarifyForm.Answer)]) async throws -> Void,
-        edit: ((String) async throws -> Void)? = nil
+        submit: @escaping ([(qid: String, answer: ClarifyForm.Answer)], ClarifySettled) async throws -> Void,
+        edit: ((String, ClarifySettled) async throws -> Void)? = nil
     ) {
         self.prompt = prompt
         self.accent = accent
@@ -49,7 +49,24 @@ struct ClarifyFormCard: View {
 
     private var locked: Bool { form.isSending || settling }
 
+    private var settled: ClarifySettled? {
+        guard form.isSending else { return nil }
+        if isOwnerDecision, editing { return ClarifySettled(question: form.current.question, option: .send) }
+        return ClarifySettled(form: form)
+    }
+
     var body: some View {
+        ZStack(alignment: .top) {
+            if let settled {
+                ClarifySettledCard(settled: settled).transition(PalMotion.Settle.fade)
+            } else {
+                live.transition(PalMotion.Settle.fade)
+            }
+        }
+        .animation(PalMotion.Settle.height(reduceMotion: reduceMotion), value: settled)
+    }
+
+    private var live: some View {
         VStack(alignment: .leading, spacing: 4) {
             ClarifyHeadline(text: form.current.question)
                 .accessibilityLabel(Text("Question \(form.page + 1) of \(form.count), \(form.current.question)"))
@@ -120,6 +137,93 @@ struct ClarifyFormCard: View {
         }
     }
 
+    private func handleKey(_ action: () -> Void) -> KeyPress.Result {
+        guard !otherFocused, !locked else { return .ignored }
+        action()
+        return .handled
+    }
+
+    private func isEditOption(_ index: Int) -> Bool {
+        isOwnerDecision && prompt.ownerOptions.indices.contains(index) && prompt.ownerOptions[index] == .edit
+    }
+
+    private func beginEdit() {
+        guard let text = prompt.editableText else { return }
+        editing = true
+        if form.currentDraft.typed.isEmpty { form.setTyped(text) }
+        otherFocused = true
+    }
+
+    private func choose(_ index: Int) {
+        guard !locked else { return }
+        if isEditOption(index) {
+            beginEdit()
+            return
+        }
+        editing = false
+        cardFocused = true
+        guard form.advancesOnPick, !reduceMotion else {
+            apply(form.choose(index))
+            return
+        }
+        form.pick(index)
+        settling = true
+        Task {
+            try? await Task.sleep(for: .milliseconds(Self.settleMilliseconds))
+            settling = false
+            apply(form.choose(index))
+        }
+    }
+
+    private func skip() {
+        guard !locked, !isOwnerDecision else { return }
+        apply(form.skipPage())
+    }
+
+    private func goBack() {
+        cardFocused = true
+        form.back()
+    }
+
+    private func jump(_ index: Int) {
+        guard !locked else { return }
+        cardFocused = true
+        form.jump(to: index)
+    }
+
+    private func confirm() {
+        apply(form.failure == nil ? form.confirm() : form.retry())
+    }
+
+    private func apply(_ step: ClarifyForm.Step) {
+        guard step != .ignored, step != .stayed else { return }
+        otherFocused = false
+        cardFocused = true
+        guard step == .submit, let payload = form.payload, let record = settled else { return }
+        let edited = editedText(in: payload)
+        Task {
+            do {
+                if let edited, let edit {
+                    try await edit(edited, record)
+                } else {
+                    try await submit(payload, record)
+                }
+            } catch {
+                form.submitFailed(error)
+            }
+        }
+    }
+
+    private func editedText(in payload: [(qid: String, answer: ClarifyForm.Answer)]) -> String? {
+        guard editing, case .answered(let text)? = payload.first?.answer else { return nil }
+        return text
+    }
+
+    private static let settleMilliseconds = 150
+    private static let pageFade = 0.15
+}
+
+extension ClarifyFormCard {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let failure = form.failure {
@@ -191,91 +295,6 @@ struct ClarifyFormCard: View {
         if recap.skipped == 0 { return String(localized: "\(recap.answered) answered") }
         return String(localized: "\(recap.answered) answered · \(recap.skipped) skipped")
     }
-
-    private func handleKey(_ action: () -> Void) -> KeyPress.Result {
-        guard !otherFocused, !locked else { return .ignored }
-        action()
-        return .handled
-    }
-
-    private func isEditOption(_ index: Int) -> Bool {
-        isOwnerDecision && prompt.ownerOptions.indices.contains(index) && prompt.ownerOptions[index] == .edit
-    }
-
-    private func beginEdit() {
-        guard let text = prompt.editableText else { return }
-        editing = true
-        if form.currentDraft.typed.isEmpty { form.setTyped(text) }
-        otherFocused = true
-    }
-
-    private func choose(_ index: Int) {
-        guard !locked else { return }
-        if isEditOption(index) {
-            beginEdit()
-            return
-        }
-        editing = false
-        cardFocused = true
-        guard form.advancesOnPick, !reduceMotion else {
-            apply(form.choose(index))
-            return
-        }
-        form.pick(index)
-        settling = true
-        Task {
-            try? await Task.sleep(for: .milliseconds(Self.settleMilliseconds))
-            settling = false
-            apply(form.choose(index))
-        }
-    }
-
-    private func skip() {
-        guard !locked, !isOwnerDecision else { return }
-        apply(form.skipPage())
-    }
-
-    private func goBack() {
-        cardFocused = true
-        form.back()
-    }
-
-    private func jump(_ index: Int) {
-        guard !locked else { return }
-        cardFocused = true
-        form.jump(to: index)
-    }
-
-    private func confirm() {
-        apply(form.failure == nil ? form.confirm() : form.retry())
-    }
-
-    private func apply(_ step: ClarifyForm.Step) {
-        guard step != .ignored, step != .stayed else { return }
-        otherFocused = false
-        cardFocused = true
-        guard step == .submit, let payload = form.payload else { return }
-        let edited = editedText(in: payload)
-        Task {
-            do {
-                if let edited, let edit {
-                    try await edit(edited)
-                } else {
-                    try await submit(payload)
-                }
-            } catch {
-                form.submitFailed(error)
-            }
-        }
-    }
-
-    private func editedText(in payload: [(qid: String, answer: ClarifyForm.Answer)]) -> String? {
-        guard editing, case .answered(let text)? = payload.first?.answer else { return nil }
-        return text
-    }
-
-    private static let settleMilliseconds = 150
-    private static let pageFade = 0.15
 }
 
 private struct ClarifyPageDots: View {
@@ -343,20 +362,18 @@ struct ClarifyRowContent: View {
 
     var body: some View {
         switch kind {
-        case .clarifyAnswered(let records) where records.count == 1:
-            ClarifyAnsweredCard(question: records[0].question, answer: records[0].answer, accent: accent).bubbleWidth(.leading)
         case .clarifyAnswered(let records):
-            ClarifyAnsweredFormCard(records: records, accent: accent).bubbleWidth(.leading)
+            ClarifySettledCard(settled: ClarifySettled(records: records)).bubbleWidth(.leading)
         case .clarify(let prompt) where prompt.isForm || prompt.kind == .approval:
             ClarifyFormCard(
                 prompt: prompt,
                 accent: accent,
-                submit: { answers in try await model.answerForm(prompt, answers) },
-                edit: prompt.editableText == nil ? nil : { text in try await model.answerEdit(prompt, text: text) }
+                submit: { answers, settled in try await model.answerForm(prompt, answers, settled: settled) },
+                edit: prompt.editableText == nil ? nil : { text, settled in try await model.answerEdit(prompt, text: text, settled: settled) }
             )
             .bubbleWidth(.leading)
         case .clarify(let prompt):
-            ClarifyCard(prompt: prompt, accent: accent) { answer in model.answer(prompt, with: answer) }.bubbleWidth(.leading)
+            ClarifyCard(prompt: prompt, accent: accent) { answer, settled in await model.answer(prompt, with: answer, settled: settled) }.bubbleWidth(.leading)
         default:
             EmptyView()
         }
