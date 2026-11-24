@@ -160,6 +160,23 @@ private func hasReply(_ snapshot: TimelineSnapshot) -> Bool { rowTexts(snapshot)
         await chat.finish()
     }
 
+    @Test func aRestartThatDropsTheSubscriptionAndFailsTheFirstResyncStillShowsTheNextReply() async throws {
+        let chat = try await openChat(watchdog: quietWatchdog)
+        let resumed = chat.process.script.count("session.resume")
+        chat.process.script.override("session.resume") { number in
+            number == resumed + 1 ? .failure(RPCError(code: 5000, message: "restarting", data: ["reason": "restarting"])) : nil
+        }
+        chat.process.restart()
+        chat.process.appendReply(sequence: 2)
+        chat.gateway.dropAll()
+        let shown = try #require(await waitForTimeline(chat.session, timeout: deadline, hasReply))
+        #expect(rowTexts(shown).filter { $0 == "reply" }.count == 1)
+        let live = await isLive(chat.session, .live(lastSequence: 2, replayEpoch: "e2"))
+        #expect(live)
+        #expect(!chat.notices.contains { $0.contains("reply") })
+        await chat.finish()
+    }
+
     @Test func framesQueuedBehindAPendingResyncAreAppliedAfterIt() async throws {
         let chat = try await openChat(watchdog: quietWatchdog)
         chat.process.restart()
