@@ -38,7 +38,7 @@ public final class MediaPosterCache: @unchecked Sendable {
 
     public static let shared = MediaPosterCache()
     static let maxAge: TimeInterval = 7 * 24 * 60 * 60
-    static let maxBytes = 96 * 1024 * 1024
+    public static let maxBytes = 96 * 1024 * 1024
 
     private let memory = NSCache<NSString, Entry>()
     private let directory: URL
