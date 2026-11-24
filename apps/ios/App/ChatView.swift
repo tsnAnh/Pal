@@ -72,6 +72,7 @@ struct ChatView: View {
                 model.stop()
             }
             .onChange(of: scenePhase) { _, phase in
+                model.setForeground(phase != .background)
                 if phase != .active { model.markViewed() }
             }
             .fullCover(isPresented: $isVoiceModePresented) {
