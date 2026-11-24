@@ -41,10 +41,10 @@ struct AudioBar: View {
             MediaTooLargeCard(media: media, size: size, compact: false, transfer: transfer) { download() }
                 .frame(width: Self.width, height: 128)
         case .failed(let reason, let retryable):
-            MediaFailedCard(reason: reason, retryable: retryable, kind: .audio) {
+            MediaFailedCard(media: media, reason: reason, retryable: retryable) {
                 if loader.retry() { attempt += 1 }
             }
-            .frame(width: Self.width, height: 64)
+            .frame(width: Self.width, height: 112)
         }
     }
 
@@ -107,6 +107,7 @@ struct AudioBar: View {
         .tint(PalTokens.textPrimary)
         .disabled(duration <= 0 || playback.duration <= 0)
         .accessibilityLabel(Text("Playback position"))
+        .accessibilityValue(Text("\(MediaDuration.spoken(playback.position)) of \(MediaDuration.spoken(duration))"))
         .accessibilityIdentifier("chatAudioScrubber")
     }
 
