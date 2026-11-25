@@ -1,6 +1,6 @@
 """Generation-bound projection/control of the existing blocking approval queue.
 
-Held-draft and consent approvals and clarify prompts share the existing native waiters.
+Outbound-send and consent approvals and clarify prompts share the existing native waiters.
 Secret/sudo prompts remain native; no response is published or journaled here.
 """
 from copy import deepcopy

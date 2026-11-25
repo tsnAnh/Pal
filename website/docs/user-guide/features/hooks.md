@@ -1510,7 +1510,7 @@ This hook is observer-only: it does **not** add raw-event access or adapter acce
 
 ### `pre_approval_request`
 
-Fires before an owner-decision consent is requested (held drafts, browser-vault payment, MCP spend limit, MCP sampling, MCP elicitation) on the interactive CLI, Ink TUI, gateway platforms, and ACP clients. Tool calls and terminal commands are never asked about, so they do not fire it.
+Fires before an owner-decision consent is requested (outbound sends, browser-vault payment, MCP spend limit, MCP sampling, MCP elicitation) on the interactive CLI, Ink TUI, gateway platforms, and ACP clients. Tool calls and terminal commands are never asked about, so they do not fire it.
 
 This is the right place to wire a custom notifier — for example, a macOS menu-bar app that pops an allow/deny notification, or an audit log that records every approval request with context.
 
@@ -1607,7 +1607,7 @@ Fires right before Hermes blocks waiting for a person to type or click something
 |--------|--------|----------|
 | `"sudo"` | Masked sudo password prompt before a `sudo` command runs | Interactive CLI, Ink TUI / Desktop (`sudo.request` card), `/dev/tty` fallback |
 | `"clarify"` | A `clarify` tool question | CLI, Ink TUI / Desktop, gateway platforms |
-| `"approval"` | Owner-decision consents: held drafts, browser-vault payment, MCP spend limit, MCP sampling, MCP elicitation | CLI, Ink TUI / Desktop, ACP, gateway platforms |
+| `"approval"` | Owner-decision consents: outbound sends, browser-vault payment, MCP spend limit, MCP sampling, MCP elicitation | CLI, Ink TUI / Desktop, ACP, gateway platforms |
 
 A consent that joins an identical prompt already pending does not fire it again (the person sees one prompt, and the pair fires once for it). New kinds can be added later, so ignore kinds you don't handle.
 

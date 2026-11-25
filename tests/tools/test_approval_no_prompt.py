@@ -208,7 +208,7 @@ def owner(interactive_gateway):
     approval.unregister_gateway_notify(SESSION)
 
 
-def test_a_held_draft_card_carries_the_short_question_the_draft_and_once_or_deny(owner):
+def test_an_outbound_draft_card_carries_the_short_question_the_draft_and_once_or_deny(owner):
     result = approval.request_draft_approval(
         text="Lunch at noon?", description="Send to ada@example.com", pattern_key="outbound_draft:email:x",
         draft={"kind": "outbound_message"}, details=[{"label": "To", "value": "ada@example.com"}])

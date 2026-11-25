@@ -80,7 +80,7 @@
     },
     {
       "name": "approval.respond",
-      "summary": "Deliver the user's decision on a held draft or consent (falls back to durable identity on a stale sid).",
+      "summary": "Deliver the user's decision on an outbound send or consent (falls back to durable identity on a stale sid).",
       "params": [
         {
           "name": "params",
@@ -71599,7 +71599,7 @@
   "x-server-requests": [
     {
       "name": "approval",
-      "summary": "A held draft or a spend or payment consent awaits the user's decision.",
+      "summary": "An outbound send or a spend or payment consent awaits the user's decision.",
       "params": [
         {
           "name": "params",

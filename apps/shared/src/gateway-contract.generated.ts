@@ -8677,7 +8677,7 @@ export interface RpcMethods {
   'approval.pending': { params: ApprovalPendingParams; result: ApprovalPendingResult }
   /** Tell the backend the card is on screen, so its timeout clock starts. */
   'approval.received': { params: ApprovalReceivedParams; result: ApprovalReceivedResult }
-  /** Deliver the user's decision on a held draft or consent (falls back to durable identity on a stale sid). */
+  /** Deliver the user's decision on an outbound send or consent (falls back to durable identity on a stale sid). */
   'approval.respond': { params: ApprovalRespondParams; result: ApprovalRespondResult }
   /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
@@ -10328,7 +10328,7 @@ export type CanonicalRpcNamespace = keyof CanonicalRpcNamespaces
 
 // ── Server→client requests ──
 export interface ServerRequestMap {
-  /** A held draft or a spend or payment consent awaits the user's decision. */
+  /** An outbound send or a spend or payment consent awaits the user's decision. */
   approval: { params: ApprovalRequestParams; result: ApprovalResult }
   /** The clarify tool: ask the user 1-5 questions. */
   clarify: { params: ClarifyRequestParams; result: ClarifyResult }
