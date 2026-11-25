@@ -10,7 +10,9 @@ import json
 import os
 import socket
 import unicodedata
-from typing import Any, Dict, Mapping, MutableMapping, Optional
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Dict, Iterator, Mapping, MutableMapping, Optional
 
 TURN_AUTHOR_ENV = "HERMES_TURN_AUTHOR"
 
@@ -124,3 +126,28 @@ def a2a_key(author: Optional[dict[str, Any]]) -> Optional[str]:
     if not isinstance(author, dict) or not author.get("is_bot") or not author.get("id"):
         return None
     return f"a2a:{author['id']}"
+
+
+_OWNER_TURN: ContextVar[bool] = ContextVar("hermes_owner_turn", default=False)
+
+
+def owner_authored(author: Any, *, synthetic: bool, platform: Any, unattended: bool) -> bool:
+    """A human wrote this turn's user side: not a bot, a wake or other injected turn, a cron or webhook run,
+    a delegate_task child, or a turn nobody waits on. What a tool may call "the owner asked"."""
+    return (not unattended and not is_synthetic_turn(synthetic, platform)
+            and not (parse_turn_author(author) or {}).get("is_bot"))
+
+
+@contextmanager
+def owner_turn(author: Any, *, synthetic: bool, platform: Any, unattended: bool) -> Iterator[None]:
+    """Bind, for the tools one turn runs, whether the gateway knows its author was the owner. Unbound reads
+    False, so a tool call outside any turn never holds the owner's authority."""
+    token = _OWNER_TURN.set(owner_authored(author, synthetic=synthetic, platform=platform, unattended=unattended))
+    try:
+        yield
+    finally:
+        _OWNER_TURN.reset(token)
+
+
+def is_owner_turn() -> bool:
+    return _OWNER_TURN.get()

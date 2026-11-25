@@ -6,6 +6,8 @@ import json
 import pytest
 
 import tools.commitment_tool as tool
+from agent.delegation_context import delegated_child_context
+from agent.turn_author import owner_turn
 from gateway import commitments as cm
 from gateway.autonomy import ActionClass
 from gateway.commitments import Trigger
@@ -41,9 +43,14 @@ def propose(*, tool_call_id: str = "", **extra) -> dict:
                 tool_call_id=tool_call_id)
 
 
+def owner_scope(**turn):
+    return owner_turn(**{"author": None, "synthetic": False, "platform": "telegram", "unattended": False, **turn})
+
+
 def accepted_duty() -> dict:
     made = propose()
-    return call({"action": "accept", "id": made["id"], "owner_requested": True})
+    with owner_scope():
+        return call({"action": "accept", "id": made["id"], "owner_requested": True})
 
 
 def enum_of(schema: dict, name: str) -> list[str]:
@@ -89,6 +96,66 @@ def test_the_model_alone_cannot_accept(primary):
     assert cm.get(primary, made["id"]).kind is cm.Kind.PROPOSAL
 
 
+BOT = {"id": "bot:helper", "name": "Helper", "is_bot": True}
+NOT_OWNER_TURNS = {
+    "no turn bound": None,
+    "bot author": dict(author=BOT),
+    "wake turn": dict(synthetic=True),
+    "cron run": dict(platform="cron"),
+    "webhook delivery": dict(platform="webhook"),
+    "unattended turn": dict(unattended=True),
+}
+
+
+@pytest.mark.parametrize("turn", NOT_OWNER_TURNS.values(), ids=NOT_OWNER_TURNS.keys())
+def test_a_turn_the_owner_did_not_start_cannot_accept_whatever_the_model_claims(primary, turn):
+    made = propose()
+    args = {"action": "accept", "id": made["id"], "owner_requested": True}
+    if turn is None:
+        assert call(args)["code"] == "owner_only"
+    else:
+        with owner_scope(**turn):
+            assert call(args)["code"] == "owner_only"
+    assert cm.get(primary, made["id"]).kind is cm.Kind.PROPOSAL
+
+
+def test_a_delegated_child_cannot_accept_even_inside_the_owner_turn(primary):
+    made = propose()
+    with delegated_child_context(), owner_scope():
+        assert call({"action": "accept", "id": made["id"], "owner_requested": True})["code"] == "owner_only"
+    assert cm.get(primary, made["id"]).kind is cm.Kind.PROPOSAL
+
+
+def test_the_owner_turn_is_gone_once_the_turn_ends(primary):
+    made = propose()
+    with owner_scope():
+        pass
+    assert call({"action": "accept", "id": made["id"], "owner_requested": True})["code"] == "owner_only"
+
+
+def test_an_owner_turn_accepts_without_the_model_claiming_it(primary):
+    made = propose()
+    with owner_scope():
+        assert call({"action": "accept", "id": made["id"]})["standing"] == "active"
+
+
+def test_a_retried_accept_in_a_later_turn_does_not_inherit_the_owner_turn(primary):
+    made = propose()
+    args = {"action": "accept", "id": made["id"], "owner_requested": True}
+    with owner_scope():
+        first = call(args, tool_call_id="tap")
+    with owner_scope(synthetic=True):
+        retried = call(args, tool_call_id="tap")
+    assert (first["standing"], retried["code"]) == ("active", "owner_only")
+    assert [e.actor for e in cm.events(primary, made["id"])].count(cm.Actor.OWNER) == 1
+
+
+def test_a_duty_move_outside_an_owner_turn_is_recorded_as_the_bot_whatever_the_model_claims(primary):
+    duty = accepted_duty()
+    call({"action": "pause", "id": duty["id"], "owner_requested": True})
+    assert cm.events(primary, duty["id"])[-1].actor is cm.Actor.BOT
+
+
 def test_an_accept_the_owner_asked_for_in_the_turn_activates_it_as_the_owner(primary):
     duty = accepted_duty()
     assert duty["standing"] == "active"
@@ -98,8 +165,11 @@ def test_an_accept_the_owner_asked_for_in_the_turn_activates_it_as_the_owner(pri
 def test_a_retried_accept_is_one_acceptance(primary):
     made = propose()
     args = {"action": "accept", "id": made["id"], "owner_requested": True}
-    first, second = call(args, tool_call_id="tap"), call(args, tool_call_id="tap")
+    with owner_scope():
+        first, second = call(args, tool_call_id="tap"), call(args, tool_call_id="tap")
+        assert call(args)["code"] == "illegal_edge"
     assert (first.get("replayed"), second["replayed"], second["rev"]) == (None, True, 2)
+    assert [e.actor for e in cm.events(primary, made["id"])].count(cm.Actor.OWNER) == 1
 
 
 def test_pause_resume_and_dismiss_walk_the_lifecycle(primary):
@@ -114,7 +184,8 @@ def test_pause_resume_and_dismiss_walk_the_lifecycle(primary):
 
 def test_a_stale_expected_rev_is_refused(primary):
     made = propose()
-    assert call({"action": "accept", "id": made["id"], "owner_requested": True, "expected_rev": 9})["code"] == "rev_conflict"
+    with owner_scope():
+        assert call({"action": "accept", "id": made["id"], "expected_rev": 9})["code"] == "rev_conflict"
 
 
 def test_list_mandates_shows_duties_and_list_keeps_showing_promises_only(primary):
@@ -140,3 +211,9 @@ def test_a_bot_that_is_not_primary_keeps_its_promises(primary, monkeypatch):
     made = call({"action": "promise", "text": "Send the weekly report", "owner_requested": True})
     assert made["state"] == "open"
     assert len(call({"action": "list"})["commitments"]) == 1
+
+
+@pytest.mark.parametrize("claimed", [True, False])
+def test_a_promise_keeps_the_label_the_model_declared(primary, claimed):
+    made = call({"action": "promise", "text": "Send the weekly report", "owner_requested": claimed})
+    assert cm.get(primary, made["id"]).owner_requested is claimed
