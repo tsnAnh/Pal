@@ -19,6 +19,8 @@ struct SendStressFrame {
     let offsetDelta: Double
     let distanceDelta: Double
     let contentDelta: Double
+    let machineDistance: Double
+    let insetBottom: Double
 
     var isPinned: Bool { state == "pinnedToBottom" }
 
@@ -42,7 +44,7 @@ struct SendStressSample {
 }
 
 @MainActor
-private final class SendStressStage {
+final class SendStressStage {
     static let rounds = 6
     static let streamFrames = 40
     static let swingLimit = 20.0
@@ -63,6 +65,7 @@ private final class SendStressStage {
     private var samples: [ChatScrollSample] = []
     private var version: UInt64 = 10
     private var previous: SendStressSample?
+    private var lastGeometry: ChatScrollGeometry?
 
     init() async throws {
         let environment = try MacChatBenchSession.environment()
@@ -95,6 +98,8 @@ private final class SendStressStage {
             try await Task.sleep(for: .seconds(MacChatBench.framePeriod))
             guard let now = measure() else { throw MacChatBenchError.noTranscriptScrollView }
             let writers = samples.map(\.writer.rawValue).filter { $0 != ChatScrollWriter.none.rawValue }
+            let geometry = samples.last?.geometry ?? lastGeometry
+            lastGeometry = geometry
             samples.removeAll(keepingCapacity: true)
             frames.append(SendStressFrame(
                 index: frames.count, phase: phase, offset: now.offset, distance: now.distance,
@@ -102,7 +107,8 @@ private final class SendStressStage {
                 state: scroll.machine.state.name, button: scroll.showsJumpButton, writers: writers,
                 offsetDelta: previous.map { now.offset - $0.offset } ?? 0,
                 distanceDelta: previous.map { now.distance - $0.distance } ?? 0,
-                contentDelta: previous.map { now.content - $0.content } ?? 0
+                contentDelta: previous.map { now.content - $0.content } ?? 0,
+                machineDistance: geometry?.distanceFromBottom ?? 0, insetBottom: geometry?.insetBottom ?? 0
             ))
             previous = now
         }

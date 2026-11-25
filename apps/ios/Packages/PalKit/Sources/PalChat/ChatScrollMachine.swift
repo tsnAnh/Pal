@@ -215,7 +215,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
             return .none
         }
         if sizeChanged { return repair() }
-        guard isAway(geometry) else { return .none }
+        guard isAway(geometry) else { return repairInFlight ? repair() : .none }
         if repairInFlight {
             repairInFlight = false
             return .none
