@@ -103,10 +103,4 @@ extension View {
         modifier(TypeToFocusComposer(draft: draft, focused: focused, blocked: blocked))
     }
 }
-#else
-extension View {
-    func typeToFocusComposer(draft: Binding<String>, focused: FocusState<Bool>.Binding, blocked: @escaping () -> Bool) -> some View {
-        self
-    }
-}
 #endif

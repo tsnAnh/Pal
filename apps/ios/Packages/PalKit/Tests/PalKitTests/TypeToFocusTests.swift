@@ -28,6 +28,14 @@ struct TypeToFocusTests {
         #expect(insertion(characters) == nil)
     }
 
+    @Test(arguments: [
+        "UIKeyInputUpArrow", "UIKeyInputDownArrow", "UIKeyInputLeftArrow", "UIKeyInputRightArrow", "UIKeyInputEscape",
+        "UIKeyInputPageUp", "UIKeyInputPageDown", "UIKeyInputHome", "UIKeyInputEnd", "UIKeyInputF1", "UIKeyInputDelete",
+    ])
+    func uikitNamedKeysAreLeftAlone(_ characters: String) {
+        #expect(insertion(characters) == nil)
+    }
+
     @Test func commandAndControlAreLeftAlone() {
         #expect(insertion("v", .command) == nil)
         #expect(insertion("a", .control) == nil)

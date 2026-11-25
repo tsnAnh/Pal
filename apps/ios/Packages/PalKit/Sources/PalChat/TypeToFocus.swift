@@ -14,9 +14,11 @@ public enum TypeToFocus {
         characters: String, modifiers: Modifiers, textInputFocused: Bool, blocked: Bool
     ) -> String? {
         guard !textInputFocused, !blocked, modifiers.isDisjoint(with: [.command, .control]) else { return nil }
-        guard !characters.isEmpty, !characters.allSatisfy(\.isWhitespace) else { return nil }
+        guard !characters.isEmpty, !characters.allSatisfy(\.isWhitespace), !characters.hasPrefix(uikitKeyNamePrefix) else { return nil }
         return characters.unicodeScalars.contains(where: isNonTyping) ? nil : characters
     }
+
+    private static let uikitKeyNamePrefix = "UIKeyInput"
 
     private static func isNonTyping(_ scalar: Unicode.Scalar) -> Bool {
         scalar.properties.generalCategory == .control || (0xF700...0xF8FF).contains(scalar.value)
