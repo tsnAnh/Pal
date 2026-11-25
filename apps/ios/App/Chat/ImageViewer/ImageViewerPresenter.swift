@@ -30,8 +30,8 @@ private struct ViewerPresentation: ViewModifier {
         #if os(iOS)
         wired
             .fullCover(isPresented: Binding(get: { media != nil }, set: { if !$0 { closeMedia() } })) {
-                if let state = Binding($media) {
-                    MediaPlayerCover(state: state, source: resolver.source, close: closeMedia)
+                if let current = media {
+                    MediaPlayerCover(state: Binding(retaining: $media, fallback: current), source: resolver.source, close: closeMedia)
                 }
             }
             .fullCover(isPresented: Binding(get: { htmlSession != nil }, set: { if !$0 { HTMLViewerCoordinator.shared.close() } })) {

@@ -9,8 +9,8 @@ struct MacMediaViewerHost: View {
     let source: any MediaAssetSource
 
     var body: some View {
-        if let state = Binding($viewer) {
-            MacMediaViewer(state: state, source: source, close: close)
+        if let current = viewer {
+            MacMediaViewer(state: Binding(retaining: $viewer, fallback: current), source: source, close: close)
         }
     }
 
