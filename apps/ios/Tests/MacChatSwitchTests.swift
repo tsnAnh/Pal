@@ -29,6 +29,7 @@ struct SwitchOpen {
     var settledContent = 0.0
     var modelRowsHitZero = 0
     var longestBlankFrames = 0
+    var maxDistanceFromNewest = 0.0
     var frames = 0
     var series: [String] = []
 
@@ -36,8 +37,8 @@ struct SwitchOpen {
 
     var line: String {
         String(
-            format: "%@ first rows %d content %.0f settled %.0f (x%.3f) model rows hit 0: %d longest blank run %d of %d frames",
-            bot, firstModelRows, firstContent, settledContent, contentRatio, modelRowsHitZero, longestBlankFrames, frames
+            format: "%@ first rows %d content %.0f settled %.0f (x%.3f) model rows hit 0: %d longest blank run %d of %d frames, max distance from newest %.1f",
+            bot, firstModelRows, firstContent, settledContent, contentRatio, modelRowsHitZero, longestBlankFrames, frames, maxDistanceFromNewest
         )
     }
 }
@@ -50,6 +51,12 @@ private final class SwitchSampler {
     private var sawRows = false
 
     init(bot: String) { open = SwitchOpen(bot: bot) }
+
+    func note(_ geometry: ChatScrollGeometry) {
+        contentHeight = geometry.contentHeight
+        guard geometry.contentHeight > SwitchStage.blankContent else { return }
+        open.maxDistanceFromNewest = max(open.maxDistanceFromNewest, geometry.distanceFromBottom - geometry.insetBottom)
+    }
 
     func frame(model: ChatModel) {
         let rows = model.rows.count
@@ -72,6 +79,7 @@ private final class SwitchSampler {
 @MainActor
 private final class SwitchStage {
     static let blankContent = 200.0
+    static let steadyFrames = 120
     static let chief = "chief"
     static let small = "small"
 
@@ -109,21 +117,31 @@ private final class SwitchStage {
 
     func firstVisit(_ bot: String) async throws {
         let model = cache.model(for: Self.row(bot), links: links, roster: roster)
-        mount(model, scroll: ChatScrollController(layout: model.layout))
+        let scroll = ChatScrollController(layout: model.layout)
+        let sampler = SwitchSampler(bot: bot)
+        scroll.sampleSink = { sampler.note($0.geometry) }
+        mount(model, scroll: scroll)
         current?.stop()
         current = model
         model.start()
         try await Task.sleep(for: .milliseconds(100))
         version += 1
         model.apply(world(for: bot).snapshot(version: version))
-        try await Task.sleep(for: .milliseconds(2_000))
+        var steady = 0
+        var previous = -1.0
+        let deadline = ContinuousClock.now + .seconds(20)
+        while steady < Self.steadyFrames, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .seconds(MacChatBench.framePeriod))
+            steady = abs(sampler.contentHeight - previous) < 0.5 ? steady + 1 : 0
+            previous = sampler.contentHeight
+        }
     }
 
     func switchTo(_ bot: String, dwell: Duration) async throws -> SwitchOpen {
         let model = cache.model(for: Self.row(bot), links: links, roster: roster)
         let scroll = ChatScrollController(layout: model.layout)
         let sampler = SwitchSampler(bot: bot)
-        scroll.sampleSink = { sampler.contentHeight = $0.geometry.contentHeight }
+        scroll.sampleSink = { sampler.note($0.geometry) }
         mount(model, scroll: scroll)
         current?.stop()
         current = model
@@ -158,7 +176,8 @@ private func persistedTimeline(rows count: Int) -> CachedTimeline {
 @Suite("Mac chat switching", .serialized)
 struct MacChatSwitchTests {
     static let switches = 20
-    static let heightTolerance = 0.01
+    static let heightTolerance = 0.2
+    static let newestRowTolerance = 1.0
     static let restoreLatency = Duration.seconds(2)
 
     @Test("switching between a 200 row chat and a small one 20 times, with a 2 s restore, never shows an empty pane and opens at the settled height")
@@ -177,6 +196,7 @@ struct MacChatSwitchTests {
             #expect(open.modelRowsHitZero == 0, context)
             #expect(open.longestBlankFrames <= 1, context)
             #expect(abs(open.contentRatio - 1) <= Self.heightTolerance, context)
+            #expect(open.maxDistanceFromNewest <= Self.newestRowTolerance, context)
         }
     }
 

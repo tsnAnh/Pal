@@ -12,6 +12,7 @@ final class ChatTailPlanner {
     private var planned: [String: Double] = [:]
     private var shapes: [String: ChatRowShape] = [:]
     private var observed: Set<String> = []
+    private var estimated: Set<String> = []
     private var ids: [String] = []
     private var rows: [ChatRow] = []
     private(set) var plan = ChatTailPlan(start: 0, hiddenHeight: 0)
@@ -53,22 +54,34 @@ final class ChatTailPlanner {
         let known = persisted.map { file in (file, width.map { abs($0 - file.width) <= 0.5 } ?? true) }
         let records = known.flatMap { $0.1 ? $0.0.records(width: $0.0.width, textScale: $0.0.textScale) : nil } ?? [:]
         let layoutWidth = width ?? persisted?.width ?? Self.fallbackWidth
-        for row in rows where planned[row.id] == nil {
+        for row in rows where planned[row.id] == nil || estimated.contains(row.id) {
             let shape = row.heightShape
             shapes[row.id] = shape
             if let height = measured(row.id, layoutWidth) {
                 planned[row.id] = height
+                estimated.remove(row.id)
             } else if let record = records[row.id], record.hash == row.heightFingerprint {
                 planned[row.id] = record.height
+                estimated.remove(row.id)
                 seed(row, record.height, persisted?.width ?? layoutWidth)
             } else {
                 planned[row.id] = estimator.estimate(shape, width: layoutWidth, lineHeight: lineHeight)
+                estimated.insert(row.id)
             }
         }
         let height = { [planned] (id: String) in planned[id] ?? 0 }
         plan = tail.plan(ids: ids, viewport: context.viewport ?? persisted?.viewport, height: height)
         plan.hiddenHeight = anchored(plan)
         return plan
+    }
+
+    func resumeOpen() {
+        tail.reset()
+        rows = []
+        ids = []
+        narrowed = nil
+        drift = 0
+        plan = ChatTailPlan(start: 0, hiddenHeight: 0)
     }
 
     func resizingPlan(viewport: Double?) -> ChatTailPlan {

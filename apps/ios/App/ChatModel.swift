@@ -15,7 +15,7 @@ final class ChatModel {
     private(set) var windowRange: Range<Int> = 0..<0
     @ObservationIgnored var window = ChatRowWindow()
     @ObservationIgnored let diagnostics = Diagnostics.osLog()
-    private(set) var connection: ChatConnectionState = .connecting
+    var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
     private(set) var workingStatus: String?
     private(set) var hasPendingClarify = false
@@ -30,7 +30,7 @@ final class ChatModel {
     var restoredDraft: String?
     @ObservationIgnored var draftWork: Task<Void, Never>?
     var attachments: [PendingAttachment] { pending.items }
-    private var localImages: [String: Data] = [:]
+    var localImages: [String: Data] = [:]
     private(set) var slashItems: [SlashItem] = []
     private(set) var fileRefResult: FileRefResult?
     private var fileRefTask: Task<Void, Never>?
@@ -54,8 +54,8 @@ final class ChatModel {
 
     let links: BotLinks
     let roster: RosterModel
-    private let lastSeenStore: ChatLastSeenStore
-    private(set) var lastSeenAtOpen: Date?
+    let lastSeenStore: ChatLastSeenStore
+    var lastSeenAtOpen: Date?
     private var link: BotLink?
     var session: ChatSession?
     private var outbox: Outbox?
@@ -75,7 +75,7 @@ final class ChatModel {
     @ObservationIgnored var generatedImageIDs: Set<String> = []
     @ObservationIgnored private(set) var rebuilds = RebuildCounts()
     let streamPacer = StreamingCommitPacer()
-    private var hasBeenLive = false
+    var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
     @ObservationIgnored var openingDeadline: Task<Void, Never>?
@@ -85,8 +85,8 @@ final class ChatModel {
 
     let opening = ChatOpenCoordinator()
     let layout = ChatLayoutMemory()
-    private(set) var isActive = false
-    private var openCount = 0
+    var isActive = false
+    var openCount = 0
     private var findSearch: Task<Void, Never>?
     private var pendingReveal: RowKey?
 
@@ -131,6 +131,7 @@ final class ChatModel {
     func start() {
         roster.markRead(bot.name)
         guard running == nil else { return }
+        beginOpen()
         ChatOpenTrace.begin(bot: bot.name)
         armOpeningDeadline()
         let link: BotLink
@@ -146,6 +147,7 @@ final class ChatModel {
     }
 
     func stop() {
+        isActive = false
         flushDraft()
         markViewed()
         ChatOpenTrace.finish(bot: bot.name)

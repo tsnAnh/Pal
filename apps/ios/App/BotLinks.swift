@@ -58,7 +58,17 @@ final class BotLinks {
         return link
     }
 
-    func preload(_ bots: [String]) async {}
+    func preload(_ bots: [String]) async {
+        for name in bots where snapshots.snapshot(for: name) == nil {
+            guard let link = try? link(for: name) else { continue }
+            async let heights = self.heights.load(for: name)
+            let session = await link.sessions.acquire()
+            await session.restore()
+            snapshots.remember(await session.timelineSnapshot, for: name)
+            await link.sessions.release(session)
+            _ = await heights
+        }
+    }
 
     private static func outboxDirectory(for name: String) -> URL {
         let base = URL.applicationSupportDirectory.appending(path: "outbox", directoryHint: .isDirectory)

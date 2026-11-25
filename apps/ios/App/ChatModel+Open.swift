@@ -9,9 +9,30 @@ extension ChatModel {
     }
 
     func acceptsSnapshot(_ next: TimelineSnapshot) -> Bool {
-        if next.rows.isEmpty, next.sessionID == nil, !rows.isEmpty { return false }
+        if next.rows.isEmpty, !rows.isEmpty, !next.provesEmptyConversation { return false }
         guard let snapshot, !snapshotFromEarlierRun else { return true }
         return next.version > snapshot.version
+    }
+
+    func beginOpen() {
+        isActive = true
+        openCount += 1
+        guard openCount > 1 else { return }
+        opening.reset()
+        openStats = ChatOpenStats()
+        openStats.heights = links.heights.remembered(for: openedBot.name)
+        snapshotFromEarlierRun = snapshot != nil
+        isOpening = rows.isEmpty
+        hasBeenLive = false
+        assignIfChanged(\.connection, .connecting)
+        lastSeenAtOpen = lastSeenStore.lastSeen(for: bot.name)
+        endFinding()
+        cancelReply()
+        sendError = nil
+        imageViewer = nil
+        documentViewer = nil
+        filePreview = nil
+        localImages = [:]
     }
 
     var persistedHeights: ChatRowHeightFile? { openStats.heights }
@@ -97,4 +118,8 @@ extension ChatModel {
         ChatOpenTrace.mark(openedBot.name, "open.stalled", rows: rows.count, detail: reason)
         LaunchClock.mark("chat \(openedBot.name) open stalled: \(reason) (\(detail))", on: .osLog())
     }
+}
+
+private extension TimelineSnapshot {
+    var provesEmptyConversation: Bool { sessionID != nil && older == .start }
 }

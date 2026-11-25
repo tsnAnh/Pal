@@ -240,6 +240,10 @@ struct RootView: View {
                 await hostPool.startHosts(botNames: roster.bots.map(\.name))
             }
             .task(id: roster.isLoaded) {
+                guard roster.isLoaded else { return }
+                await links.preload(roster.preloadCandidates)
+            }
+            .task(id: roster.isLoaded) {
                 guard roster.isLoaded, ProcessInfo.processInfo.arguments.contains(ConnectAppsLaunch.argument) else { return }
                 router.presentConnectApps()
             }
