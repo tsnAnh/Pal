@@ -7,7 +7,7 @@ import pytest
 from agent.session_activity import ActivityProvenance, build_activity_snapshot
 from persistence.sqlite.conversation._store.compression import get_compression_chain
 from persistence.sqlite.conversation._store.gateway import list_gateway_sessions
-from persistence.sqlite.conversation._store.messages import append_message, resolve_resume_session_id
+from persistence.sqlite.conversation._store.messages import append_message, get_messages, resolve_resume_session_id
 from persistence.sqlite.conversation._store.portability import _get_session_rich_rows_batch, list_cron_job_runs
 from persistence.sqlite.conversation._store.sessions import (
     clear_session_activity_labels,
@@ -64,6 +64,38 @@ class TestListSessionsRich:
         sessions = list_sessions_rich(db)
         assert len(sessions) == 1
         assert "Help me refactor the auth module" in sessions[0]["preview"]
+
+    def test_preview_shows_the_owner_words_of_a_steer_row_not_its_marker(self, db):
+        from agent.prompt_builder import steer_user_row
+
+        create_session(db, "s-steer", "cli")
+        row = steer_user_row("make the cards bigger")
+        append_message(db, "s-steer", "user", row["content"], display_kind=row["display_kind"])
+        append_message(db, "s-steer", "assistant", "on it")
+        assert list_sessions_rich(db)[0]["preview"] == "make the cards bigger"
+        assert get_messages(db, "s-steer")[0]["content"] == row["content"]
+
+    def test_preview_of_a_steer_row_stored_without_display_kind_and_with_several_messages(self, db):
+        from agent.prompt_builder import format_steer_marker
+
+        create_session(db, "s-old", "cli")
+        append_message(db, "s-old", "user", format_steer_marker("one\ntwo").lstrip())
+        assert list_sessions_rich(db)[0]["preview"] == "one two"
+
+    def test_preview_of_a_long_steer_row_cuts_the_owner_words_not_the_marker(self, db):
+        from agent.prompt_builder import steer_user_row
+
+        create_session(db, "s-long", "cli")
+        append_message(db, "s-long", "user", steer_user_row("word " * 40)["content"], display_kind="steer")
+        preview = list_sessions_rich(db)[0]["preview"]
+        assert preview.startswith("word word word") and "OUT-OF-BAND" not in preview
+
+    def test_preview_of_a_user_message_quoting_the_marker_is_untouched(self, db):
+        from agent.prompt_builder import STEER_MARKER_CLOSE
+
+        create_session(db, "s-quote", "cli")
+        append_message(db, "s-quote", "user", f"what is {STEER_MARKER_CLOSE} for")
+        assert list_sessions_rich(db)[0]["preview"].startswith("what is [/OUT-OF-BAND")
 
     @pytest.mark.parametrize(
         "unsafe_model_config",

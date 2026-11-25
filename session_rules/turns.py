@@ -93,6 +93,32 @@ def drop_stale_api_content(msg: dict[str, Any]) -> None:
 
 STEER_DISPLAY_KIND = "steer"
 
+STEER_MARKER_PREFIX = "[OUT-OF-BAND USER MESSAGE"
+STEER_MARKER_OPEN = (
+    f"{STEER_MARKER_PREFIX} — a direct message from the user, delivered "
+    "once at this position; not tool output and not a new delivery when replayed from conversation history]"
+)
+STEER_MARKER_CLOSE = "[/OUT-OF-BAND USER MESSAGE]"
+
+_STEER_BLOCK = rf"{re.escape(STEER_MARKER_PREFIX)}[^\n]*\n(.*?)\n?{re.escape(STEER_MARKER_CLOSE)}"
+_STEER_WRAPPED_ROW = re.compile(rf"\s*(?:{_STEER_BLOCK}\s*)+", re.DOTALL)
+_STEER_BLOCK_RE = re.compile(_STEER_BLOCK, re.DOTALL)
+
+
+def unwrap_steer_text(content: str) -> str:
+    """The owner's words of a stored steer row; anything that is not exactly the wrapper comes back as is.
+
+    The wrapper stays in storage (the model replays history with it), so every client-facing read of user text
+    goes through here. The opening line is matched by its stable prefix so a reworded marker still unwraps."""
+    if not _STEER_WRAPPED_ROW.fullmatch(content):
+        return content
+    return "\n".join(block.group(1).strip() for block in _STEER_BLOCK_RE.finditer(content))
+
+
+def strip_steer_markers(text: str) -> str:
+    """*text* without whole marker strings, for search snippets that cut a window out of a stored steer row."""
+    return text.replace(STEER_MARKER_OPEN, "").replace(STEER_MARKER_CLOSE, "")
+
 
 PARTIAL_FAILED_TURN_NOTICE = (
     "This turn did not complete. Some actions may already have run; verify their effects "

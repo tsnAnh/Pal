@@ -11,6 +11,8 @@ import re
 import time
 from typing import Any, Optional
 
+from session_rules.turns import strip_steer_markers
+
 logger = logging.getLogger(__name__)
 
 _MATCH_TOKENS = re.compile(r'"[^"]*"|\S+')
@@ -39,7 +41,7 @@ def _hit_payload(row: dict, snippet: str, role, session_started, timestamp=None)
     """``last_active`` rides only on id-match rows (sessions table); FTS hits have no row recency and
     leave it null so a client can fall back to ``session_started`` instead of inventing one."""
     return {
-        "snippet": snippet, "role": role, "source": row.get("source"),
+        "snippet": strip_steer_markers(snippet), "role": role, "source": row.get("source"),
         "model": row.get("model"), "session_started": session_started,
         "last_active": row.get("last_active"), "timestamp": timestamp}
 

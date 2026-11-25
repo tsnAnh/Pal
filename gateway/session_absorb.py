@@ -97,11 +97,6 @@ async def absorb_owner_input(authority, ref, admission_id, payload) -> Optional[
     return status
 
 
-def _queued_ahead(authority, ref, row) -> bool:
-    return any(waiting.status == 'queued' and waiting.seq < row['seq']
-               for waiting in authority_persistence(authority).admissions.list(session_id=ref.session_id))
-
-
 async def _absorb_owner_input(authority, ref, admission_id, payload) -> tuple[Optional[str], str]:
     """``(status, why)``: the disposition ``prompt.submit`` reports and the gate that decided it."""
     if not is_owner_input(payload):
@@ -116,8 +111,6 @@ async def _absorb_owner_input(authority, ref, admission_id, payload) -> tuple[Op
         return ('turn' if state == 'idle' else 'queued'), state
     if (blocker := steer_blocker(authority, row, any_source=True)) is not None:
         return 'queued', f'not_steerable:{blocker}'
-    if await asyncio.to_thread(_queued_ahead, authority, ref, row):
-        return 'queued', 'behind_queue'
     try:
         transfer = await absorb_into_running_turn(authority, ref, admission_id, reason=YieldReason.OWNER_MESSAGE,
                                                   latch=True)

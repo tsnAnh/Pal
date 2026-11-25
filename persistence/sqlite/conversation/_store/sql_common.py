@@ -9,7 +9,7 @@ from persistence.sqlite.conversation._store.rules import (
     AUTO_LOAD_SCAFFOLD_SQL_LIKE, EPOCH_MAX, EPOCH_MIN, SKILL_SCAFFOLD_SQL_LIKE,
 )
 from session_rules.turns import (
-    LEGACY_SUMMARY_PREFIX, SKILL_EXCERPT_JOINT, SUMMARY_PREFIX, _MERGED_PRIOR_CONTEXT_HEADER, _MERGED_SUMMARY_DELIMITER,
+    STEER_MARKER_CLOSE, STEER_MARKER_PREFIX, LEGACY_SUMMARY_PREFIX, SKILL_EXCERPT_JOINT, SUMMARY_PREFIX, _MERGED_PRIOR_CONTEXT_HEADER, _MERGED_SUMMARY_DELIMITER,
     _SUMMARY_END_MARKER,
 )
 
@@ -105,9 +105,21 @@ _PREVIEW_ELIGIBLE_SQL = (f"(COALESCE(m.display_kind, '') <> 'hidden'"
     f" AND LENGTH({_sql_trim_whitespace(_PREVIEW_MERGED_PRIOR_UNWRAPPED_SQL)}) > 0)))")
 
 
+# A stored mid-turn steer row: the opening marker line, the owner's words, the closing marker. The preview
+# must cut the owner's words, so the wrapper goes before the head is taken.
+_PREVIEW_STEER_SQL = (f"({_sql_starts_with('m.content', (STEER_MARKER_PREFIX,))}"
+    f" AND INSTR(m.content, CHAR(10)) > 0)")
+_PREVIEW_STEER_BODY_SQL = (f"SUBSTR(m.content, INSTR(m.content, CHAR(10)) + 1,"
+    f" LENGTH(m.content) - INSTR(m.content, CHAR(10))"
+    f" - CASE WHEN SUBSTR(m.content, -{len(STEER_MARKER_CLOSE)}) = {_sql_literal(STEER_MARKER_CLOSE)}"
+    f" THEN {len(STEER_MARKER_CLOSE)} ELSE 0 END)")
+_PREVIEW_STEER_RAW_SQL = (f"SUBSTR({_sql_ltrim_whitespace(f'REPLACE(REPLACE({_PREVIEW_STEER_BODY_SQL}, CHAR(10), CHAR(32)), CHAR(13), CHAR(32))')},"
+    f" 1, {_PREVIEW_HEAD_CHARS})")
+
 # ``_preview_raw`` SELECT for every listing query (scaffolded rows: head + tail around SKILL_EXCERPT_JOINT).
 _PREVIEW_RAW_SELECT = (
-    f"CASE WHEN {_PREVIEW_STANDALONE_SUMMARY_SQL} THEN {_PREVIEW_FORCE_USER_REMAINDER_SQL}"
+    f"CASE WHEN {_PREVIEW_STEER_SQL} THEN {_PREVIEW_STEER_RAW_SQL}"
+    f" WHEN {_PREVIEW_STANDALONE_SUMMARY_SQL} THEN {_PREVIEW_FORCE_USER_REMAINDER_SQL}"
     f" WHEN {_PREVIEW_MERGED_SUMMARY_SQL} THEN {_PREVIEW_MERGED_PRIOR_UNWRAPPED_SQL}"
     f" WHEN {_PREVIEW_SCAFFOLDED_SQL} AND LENGTH(m.content) > {_PREVIEW_SCAFFOLD_WINDOW * 2}"
     f" THEN SUBSTR({_PREVIEW_CONTENT_SQL}, 1, {_PREVIEW_SCAFFOLD_WINDOW}) || '{SKILL_EXCERPT_JOINT}'"

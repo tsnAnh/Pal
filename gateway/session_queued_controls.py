@@ -50,9 +50,15 @@ def _interactive(authority, session_id):
     return sources[session_id] in _INTERACTIVE_SOURCES
 
 
+def _carries_media(payload):
+    data = payload.get('attachments_v1')
+    return bool(data.get('media') if isinstance(data, dict) else data)
+
+
 def extra_payload_keys(payload, allowed=frozenset()):
     names = []
-    for key in sorted(set(payload) - _TEXT_ONLY - allowed):
+    empty_media = frozenset() if _carries_media(payload) else frozenset({'attachments_v1'})
+    for key in sorted(set(payload) - _TEXT_ONLY - allowed - empty_media):
         value, harmless = payload[key], _METADATA_ONLY.get(key)
         if harmless is None or not isinstance(value, dict):
             names.append(key)
