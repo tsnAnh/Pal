@@ -22,6 +22,13 @@ The chat list scrolls vertically only. Two things keep it there:
   re-keys it or bumps the measure tick; a width change goes through ``widthMoved()``, which settles once after the drag
   (re-measuring all rows at every tick took 0.3 s per step on a 200 row chat).
 
+* a chat that has had rows never shows an empty list again: nothing under ``App/`` assigns an empty array to the chat
+  model's ``rows``, ``rowIDs`` or ``rowsNewestFirst`` or publishes one, and ``acceptsSnapshot`` in
+  ``App/ChatModel+Open.swift`` refuses an empty snapshot unless it ``provesEmptyConversation``. A justified exception
+  carries ``chat-rows: ok`` on the line;
+* every chat route gets its model from ``ChatModelCache`` (``App/Chat/ChatModelCache.swift``), which keeps the rows, the tail plan and the row
+  heights of a chat for the session; ``ChatModel(`` is built nowhere else under ``App/``.
+
 Run: python scripts/ci/check_swift_chat_scroll.py [apps_ios_root]
 """
 
@@ -32,6 +39,22 @@ import sys
 from pathlib import Path
 
 OPT_OUT = "chat-scroll: ok"
+ROWS_OPT_OUT = "chat-rows: ok"
+MODEL_CACHE = "App/Chat/ChatModelCache.swift"
+MODEL_OPEN = "App/ChatModel+Open.swift"
+MODEL_BUILD = re.compile(r"(?<![A-Za-z0-9_.])ChatModel\(")
+EMPTY_ROWS = re.compile(
+    r"(?<![A-Za-z0-9_])(?:self\.)?(?:rows|rowIDs|rowsNewestFirst)\s*=\s*\[\s*\]"
+    r"|\bpublish\(\s*\[\s*\]\s*\)"
+    r"|assignIfChanged\(\s*\\\.(?:rows|rowIDs|rowsNewestFirst)\s*,\s*\[\s*\]"
+)
+ACCEPTS = re.compile(r"func acceptsSnapshot\(")
+EMPTY_GUARD = "provesEmptyConversation"
+UNCACHED_FIX = ("a chat model built outside ChatModelCache loses the rows, tail plan and row heights of the chat on every switch, "
+                "and the pane starts empty; get it from ChatModelCache.model(for:links:roster:)")
+EMPTIED_FIX = ("a chat that has had rows must never publish an empty list; keep the last-known rows until a snapshot proves the "
+               "conversation is empty (ChatModel.acceptsSnapshot, provesEmptyConversation)")
+GUARD_FIX = "acceptsSnapshot no longer refuses an empty snapshot that does not provesEmptyConversation; a chat with rows would go blank"
 LIST_VIEW = "App/Chat/ChatTranscriptList.swift"
 LIST_FILES = (LIST_VIEW, "App/Chat/ChatScrollController.swift")
 SCROLL_CALL = re.compile(r"\.scrollTo\(")
@@ -141,6 +164,7 @@ def scan(root: Path) -> list[str]:
     controller = root / CONTROLLER
     if controller.is_file():
         found.extend(_per_tick_width_work(controller.read_text(encoding="utf-8-sig")))
+    found.extend(_rows_kept(root))
     view = root / LIST_VIEW
     if view.is_file():
         text = view.read_text(encoding="utf-8-sig")
@@ -150,6 +174,28 @@ def scan(root: Path) -> list[str]:
         found.extend(_insets_around_target_layout(text))
         if not any(WIDTH_PIN in line for _, line in active_lines(text, "iOS")):
             found.append(f"{LIST_VIEW}:1: {IOS_PIN}")
+    return found
+
+
+def _rows_kept(root: Path) -> list[str]:
+    found = []
+    for path in sorted((root / "App").rglob("*.swift")):
+        rel = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8-sig")
+        is_model = path.name.startswith("ChatModel") and rel != MODEL_CACHE
+        for number, line in enumerate(text.splitlines(), 1):
+            code = line.split("//", 1)[0]
+            if ROWS_OPT_OUT in line:
+                continue
+            if rel != MODEL_CACHE and MODEL_BUILD.search(code):
+                found.append(f"{rel}:{number}: {UNCACHED_FIX}")
+            if is_model and EMPTY_ROWS.search(code):
+                found.append(f"{rel}:{number}: {EMPTIED_FIX}")
+        if rel == MODEL_OPEN:
+            accepts = ACCEPTS.search(text)
+            body = text[accepts.start():text.find("\n    }\n", accepts.start())] if accepts else ""
+            if not accepts or EMPTY_GUARD not in body:
+                found.append(f"{rel}:{text[:accepts.start()].count(chr(10)) + 1 if accepts else 1}: {GUARD_FIX}")
     return found
 
 
