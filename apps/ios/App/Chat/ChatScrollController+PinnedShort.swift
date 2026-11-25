@@ -17,6 +17,11 @@ extension ChatScrollController {
         }
     }
 
+    func followGrowingNewest(_ id: String, grew: Bool) {
+        guard grew, machine.state == .pinnedToBottom, !machine.isUserScrolling, !isResizing, id == planner.currentRows.last?.id else { return }
+        repairInPass(.clampToContent)
+    }
+
     func releaseEdgeOnceAtBottom() {
         guard edgeIsArmed, !isResizing, machine.state == .pinnedToBottom,
               (machine.distanceFromBottom ?? .infinity) <= ChatScrollMachine.atBottomTolerance

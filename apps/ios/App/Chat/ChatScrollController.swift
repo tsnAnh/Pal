@@ -95,7 +95,11 @@ final class ChatScrollController {
                 ChatScrollTrace.machine(event: "geometry", state: machine.state.name, command: command.name)
             }
         }
-        performNextTurn(command)
+        if case .scrollToBottom = command, machine.state == .pinnedToBottom {
+            repairInPass(command)
+        } else {
+            performNextTurn(command)
+        }
         releaseEdgeOnceAtBottom()
     }
 
@@ -142,9 +146,11 @@ final class ChatScrollController {
 
     func rowLaidOut(_ id: String, frame: CGRect) {
         ChatOpenMetrics.rowLaidOut(id)
+        let grew = frames[id].map { abs($0.height - frame.height) > 0.5 } ?? false
         frames[id] = frame
         rowSink?(id, frame)
         holdNewestRow(id, frame: frame)
+        followGrowingNewest(id, grew: grew)
         if let width = lastGeometry?.containerWidth { noteLaidOut(id, height: Double(frame.height), width: width) }
         guard let pending = pendingRestore, pending.rowID == id else { return }
         performNextTurn(.restore(pending), frame: frame)
@@ -186,6 +192,13 @@ final class ChatScrollController {
             deferred = (.none, nil)
             perform(command, frame: frame)
         }
+    }
+
+    func repairInPass(_ command: ChatScrollMachine.Command) {
+        deferredWrite?.cancel()
+        deferredWrite = nil
+        deferred = (.none, nil)
+        perform(command)
     }
 
     func perform(_ command: ChatScrollMachine.Command, frame: CGRect? = nil) {

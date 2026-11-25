@@ -18,7 +18,9 @@ else in ``App/Chat/**/*.swift``, ``App/ChatView*.swift`` and ``App/Platform/Chat
 * ``ChatScrollController.swift`` must reference ``ChatScrollMachine``;
 * ``observe(_ geometry:)`` and ``rowLaidOut`` run inside the scroll view's layout commit: they hand their command to
   ``performNextTurn(`` (one write on the next run-loop turn), never to ``perform(`` (a write inside the commit
-  re-runs the whole list and froze a 14,000-message chat);
+  re-runs the whole list and froze a 14,000-message chat). The one exception is ``repairInPass(``: a pinned list that is
+  short of the bottom is repaired in the pass that moved it (the composer inset growing, the newest row growing), because a
+  repair one turn later leaves the list 7 to 36 pt short for one to three frames; it is one write per size change, never a loop;
 * the transcript ``ForEach`` in ``ChatTranscriptList.swift`` iterates ``model.windowRows``, never ``model.rows``
   (the full transcript; a long chat would lay out thousands of rows);
 * the transcript ``ForEach`` renders the planned tail (``windowRows[plan.start...]``), never the whole window: rows
