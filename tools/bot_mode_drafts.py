@@ -409,7 +409,7 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
     if not outbound.viewable or not _inline_capable(approval):
         return NOT_SENT_NOBODY_TO_ASK, None
     from tools import outbound_send_grant
-    if outbound_send_grant.redeem(outbound.tool, args):
+    if outbound_send_grant.redeem(outbound.tool, args, gate=outbound_send_grant.DRAFT_GATE):
         return None, None
     return _ask_owner(outbound, args)
 
