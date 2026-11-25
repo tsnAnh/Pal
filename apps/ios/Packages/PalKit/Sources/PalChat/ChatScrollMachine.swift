@@ -202,7 +202,8 @@ public struct ChatScrollMachine: Sendable, Equatable {
             return nil
         }
         let shrank = previous.map { geometry.contentHeight < $0.contentHeight - Self.atBottomTolerance } ?? false
-        guard shrank || clampPending else { return nil }
+        let tall = state == .pinnedToBottom && geometry.contentHeight > geometry.containerHeight + geometry.insetTop
+        guard shrank || clampPending || tall else { return nil }
         clampPending = true
         return .clampToContent
     }
