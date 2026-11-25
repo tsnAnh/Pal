@@ -14,6 +14,7 @@ final class ChatScrollController {
     static let measureTimeout = Duration.milliseconds(400)
     static let resizeSettle = Duration.milliseconds(150)
     static let tailLeadViewports = 2.0
+    static let holdWindow = Duration.milliseconds(400)
 
     var position = ScrollPosition(idType: String.self, edge: .bottom)
     private(set) var showsJumpButton = false
@@ -37,6 +38,9 @@ final class ChatScrollController {
     @ObservationIgnored let tracker = ChatOpenTracker()
     @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
+    @ObservationIgnored var newestAnchor: ChatNewestAnchor?
+    @ObservationIgnored var holdsUntil = ContinuousClock.now
+    @ObservationIgnored private var wasRunning: Bool?
     @ObservationIgnored private var contentLedger = ChatContentLedger()
     @ObservationIgnored private var phaseName = "idle"
     @ObservationIgnored var sampleSink: ((ChatScrollSample) -> Void)?
@@ -117,6 +121,8 @@ final class ChatScrollController {
     }
 
     func streamingChanged(_ running: Bool) {
+        if wasRunning == true, !running { armDocumentHold() }
+        wasRunning = running
         contentLedger.noteStreaming(running)
     }
 
@@ -129,6 +135,7 @@ final class ChatScrollController {
         ChatOpenMetrics.rowLaidOut(id)
         frames[id] = frame
         rowSink?(id, frame)
+        holdNewestRow(id, frame: frame)
         if let width = lastGeometry?.containerWidth { noteLaidOut(id, height: Double(frame.height), width: width) }
         guard let pending = pendingRestore, pending.rowID == id else { return }
         performNextTurn(.restore(pending), frame: frame)

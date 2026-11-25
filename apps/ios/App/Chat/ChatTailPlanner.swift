@@ -16,7 +16,9 @@ final class ChatTailPlanner {
     private var rows: [ChatRow] = []
     private(set) var plan = ChatTailPlan(start: 0, hiddenHeight: 0)
     private var narrowed: ChatTailPlan?
+    private var drift = 0.0
     static let resizeMinimumRows = 3
+    nonisolated static let anchorTolerance = 0.5
 
     private let lineHeight = Double(ChatLineBox(fontSize: PalTextStyle.chatBody.size).height)
 
@@ -65,6 +67,7 @@ final class ChatTailPlanner {
         }
         let height = { [planned] (id: String) in planned[id] ?? 0 }
         plan = tail.plan(ids: ids, viewport: context.viewport ?? persisted?.viewport, height: height)
+        plan.hiddenHeight = anchored(plan)
         return plan
     }
 
@@ -102,6 +105,14 @@ final class ChatTailPlanner {
         return true
     }
 
+    func holdDocument(shiftedBy delta: Double) -> Bool {
+        guard plan.start > 0, abs(delta) > Self.anchorTolerance else { return false }
+        let next = max(plan.hiddenHeight - delta, 0)
+        drift += next - plan.hiddenHeight
+        plan.hiddenHeight = next
+        return true
+    }
+
     func observe(_ id: String, height: Double, width: Double) {
         guard observed.insert(id).inserted, let shape = shapes[id] else { return }
         estimator.observe(shape, measured: height, width: width, lineHeight: lineHeight)
@@ -119,5 +130,11 @@ final class ChatTailPlanner {
     private func replan() {
         let height = { [planned] (id: String) in planned[id] ?? 0 }
         plan = tail.plan(ids: ids, viewport: nil, height: height)
+        plan.hiddenHeight = anchored(plan)
+    }
+
+    private func anchored(_ plan: ChatTailPlan) -> Double {
+        if plan.start == 0 { drift = 0 }
+        return max(plan.hiddenHeight + drift, 0)
     }
 }

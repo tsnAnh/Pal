@@ -21,17 +21,15 @@ struct ImageLayoutFrame {
     let button: Bool
     let lastRowBottom: Double?
     let composerTop: Double?
-    let image: CGSize?
+    let imageRow: CGSize?
 
     var clearance: Double? {
         guard let lastRowBottom, let composerTop else { return nil }
         return composerTop - lastRowBottom
     }
 
-    var aspect: Double? { image.map { $0.height > 0 ? Double($0.width / $0.height) : 0 } }
-
     static let header = "frame,phase,offset_y,inset_bottom,content_h,viewport_h,native_distance,machine_distance,state,button,"
-        + "last_row_bottom,composer_top,clearance,image_w,image_h,image_aspect"
+        + "last_row_bottom,composer_top,clearance,image_row_w,image_row_h"
 
     var csv: String {
         func number(_ value: Double?) -> String { value.map { String(format: "%.2f", $0) } ?? "" }
@@ -39,7 +37,7 @@ struct ImageLayoutFrame {
             String(index), phase, number(offset), number(insetBottom), number(contentHeight), number(viewportHeight),
             number(nativeDistance), number(machineDistance), state, button ? "1" : "0",
             number(lastRowBottom), number(composerTop), number(clearance),
-            number(image.map { Double($0.width) }), number(image.map { Double($0.height) }), number(aspect),
+            number(imageRow.map { Double($0.width) }), number(imageRow.map { Double($0.height) }),
         ]
         return fields.joined(separator: ",")
     }
@@ -86,11 +84,14 @@ private final class ImageLayoutStage {
     private(set) var frames: [ImageLayoutFrame] = []
     private var version: UInt64 = 10
     private var sent = 0
+    private var rowFrames: [String: CGRect] = [:]
+    private var imageRowID: String?
 
     init() async throws {
         let environment = try MacChatBenchSession.environment()
         model = environment.model
         host = MacChatBenchHost(root: environment.surface(draft: draft, scroll: scroll), size: MacChatBench.pane)
+        scroll.rowSink = { [weak self] id, frame in self?.rowFrames[id] = frame }
         try await Task.sleep(for: .milliseconds(20))
         model.apply(world.snapshot(version: version))
         try await step(30)
@@ -134,7 +135,7 @@ private final class ImageLayoutStage {
             state: scroll.machine.state.name, button: scroll.showsJumpButton,
             lastRowBottom: rows.map { Double($0.frame.maxY) }.max(),
             composerTop: tree.first { $0.identifier == "composerField" }.map { Double($0.frame.minY) },
-            image: tree.filter { $0.identifier == "chatImage" }.max { $0.frame.minY < $1.frame.minY }?.frame.size
+            imageRow: imageRowID.flatMap { rowFrames[$0]?.size }
         )
     }
 
@@ -155,6 +156,7 @@ private final class ImageLayoutStage {
         draft.text = ""
         scroll.sent(animated: true)
         try await step(8)
+        imageRowID = world.rows.last.map { "row-\($0.0)" }
     }
 
     func confirmLastSend() {
@@ -208,6 +210,9 @@ struct MacChatImageLayoutTests {
         let height: Int
     }
 
+    private static let singleBox = 320.0
+    private static let maximumChrome = 80.0
+
     private static let sources = [
         Source(name: "wide", width: 1772, height: 550), Source(name: "landscape", width: 1300, height: 1000),
         Source(name: "portrait", width: 1000, height: 1600),
@@ -218,16 +223,23 @@ struct MacChatImageLayoutTests {
         let stage = try await ImageLayoutStage()
         defer { stage.host.close() }
         var problems: [String] = []
+        var pendingHeights: [String: Double] = [:]
 
         func check(_ label: String, source: (width: Int, height: Int)? = nil) async throws {
             let frame = try await stage.settle(label)
+            let kind = String(label.prefix { $0 != "-" })
             if let source {
-                let want = Double(source.width) / Double(source.height)
-                if let aspect = frame.aspect, let size = frame.image {
-                    if abs(aspect - want) > want * 0.03 { problems.append("\(label): image aspect \(aspect) want \(want)") }
-                    if size.width > 640.5 { problems.append("\(label): image wider than the bubble column: \(size.width)") }
+                if let row = frame.imageRow {
+                    let ratio = Double(source.width) / Double(source.height)
+                    let imageHeight = min(Self.singleBox, Self.singleBox * ratio) / ratio
+                    let chrome = Double(row.height) - imageHeight
+                    if chrome < 0 || chrome > Self.maximumChrome { problems.append("\(label): row \(row.height) pt for an image \(imageHeight) pt tall") }
+                    if label.hasSuffix("-pending") { pendingHeights[kind] = Double(row.height) }
+                    if let pending = pendingHeights[kind], label.hasSuffix("-persisted"), abs(pending - Double(row.height)) > 0.5 {
+                        problems.append("\(label): row went from \(pending) to \(row.height) pt when the send was confirmed")
+                    }
                 } else {
-                    problems.append("\(label): no image tile in the accessibility tree")
+                    problems.append("\(label): no image row")
                 }
             }
             if abs(frame.machineDistance - frame.nativeDistance) > 1.5 {

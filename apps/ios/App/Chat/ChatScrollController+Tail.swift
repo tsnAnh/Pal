@@ -34,6 +34,19 @@ extension ChatScrollController {
         return planner.resizingPlan(viewport: geometry.map(\.containerHeight))
     }
 
+    func holdNewestRow(_ id: String, frame: CGRect) {
+        let rows = planner.currentRows
+        guard id == rows.last?.id else { return }
+        let next = ChatNewestAnchor(id: id, firstID: rows.first?.id, width: Double(frame.width), minY: Double(frame.minY))
+        guard let anchor = newestAnchor, anchor.isSameLayout(as: next), ContinuousClock.now < holdsUntil, isPinnedToBottom,
+              !machine.isUserScrolling, !isResizing, planner.holdDocument(shiftedBy: next.minY - anchor.minY)
+        else {
+            newestAnchor = next
+            return
+        }
+        planTick &+= 1
+    }
+
     func persistHeights() {
         guard let (store, bot) = heights, let geometry = lastGeometry, geometry.containerWidth > 0 else { return }
         let width = geometry.containerWidth
@@ -63,7 +76,12 @@ extension ChatScrollController {
         return ids
     }
 
+    func armDocumentHold() {
+        holdsUntil = .now + Self.holdWindow
+    }
+
     func tailMoved() {
+        armDocumentHold()
         planTick &+= 1
         send(.rowsChanged(noteRendered(planner.renderedIDs)))
     }
@@ -105,5 +123,16 @@ extension ChatScrollController {
             let deficit = geometry.containerHeight * Self.tailLeadViewports - (geometry.distanceFromTop - planner.hiddenHeight)
             if planner.extend(deficit: max(deficit, 0)) { tailMoved() }
         }
+    }
+}
+
+struct ChatNewestAnchor {
+    let id: String
+    let firstID: String?
+    let width: Double
+    let minY: Double
+
+    func isSameLayout(as other: ChatNewestAnchor) -> Bool {
+        id == other.id && firstID == other.firstID && abs(width - other.width) <= ChatTailPlanner.anchorTolerance
     }
 }
