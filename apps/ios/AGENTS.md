@@ -103,4 +103,3 @@ A Mac perf mistake becomes a type, lint rule or test, never a note. Run `python 
 - iPhone screenshot (device): `pymobiledevice3 developer dvt screenshot <out.png>`
 - Push: Pi APNs key DDRHGPZC24 sandbox-only, topic dev.tsnanh.pal (key limit hit); TF/App Store need a prod key; env from signature (`SignedPushEnvironment`); gateway: `hermes pm install --extra apns`
 - swift-lint baseline (`.swiftlint-baseline.json`) matches messages incl. counts: growing an oversized file/type re-fails it; offset lines, never re-baseline
-- Pal Mac tests: run one suite alone (parallel suites skew layout timing); real run: `HERMES_UI_E2E_SEED=parity HERMES_UI_E2E_ONLY=PalUITests/<Class> apps/ios/Scripts/run-ui-e2e --platform macos` (class listed in project.yml PalUITests includes, `.venv` symlink in the worktree); keep apps/ios/build out of the checkout for `scripts/check`; zsh shadows `log`, use /usr/bin/log
