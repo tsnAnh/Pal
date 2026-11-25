@@ -60,7 +60,7 @@ def test_scene_storage_outside_viewers_is_fine(tmp_path: Path) -> None:
 
 def test_cli_exits_nonzero_on_a_finding(tmp_path: Path) -> None:
     _rules(tmp_path, HOST, "if let s = Binding($viewer) { }\n")
-    result = subprocess.run([sys.executable, str(SCRIPT), str(tmp_path)], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, str(SCRIPT), str(tmp_path)], capture_output=True, text=True, check=False)
     assert result.returncode == 1
     assert "binding-force-unwrap" in result.stdout
 
