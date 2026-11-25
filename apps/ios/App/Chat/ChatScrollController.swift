@@ -38,6 +38,8 @@ final class ChatScrollController {
     @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
     @ObservationIgnored private var edgeIsArmed = true
+    @ObservationIgnored var pinnedShort = ChatPinnedShortWatch()
+    @ObservationIgnored var pinnedShortCheck: Task<Void, Never>?
     @ObservationIgnored var newestAnchor: ChatNewestAnchor?
     @ObservationIgnored var holdsUntil = ContinuousClock.now
     @ObservationIgnored private var wasRunning: Bool?
@@ -77,6 +79,7 @@ final class ChatScrollController {
         let before = machine.state
         let command = machine.handle(.geometry(snapshot))
         publish()
+        watchPinnedShort(distance: snapshot.distanceFromBottom)
         if isRecording {
             let sample = ChatScrollSample(
                 geometry: snapshot, state: machine.state.name, showsButton: showsJumpButton,
@@ -97,7 +100,7 @@ final class ChatScrollController {
     }
 
     func releaseEdgeOnceAtBottom() {
-        guard edgeIsArmed, tracker.reported, !isResizing, machine.state == .pinnedToBottom,
+        guard edgeIsArmed, !isResizing, machine.state == .pinnedToBottom,
               (machine.distanceFromBottom ?? .infinity) <= ChatScrollMachine.atBottomTolerance
         else { return }
         edgeIsArmed = false
@@ -271,6 +274,7 @@ final class ChatScrollController {
     func send(_ event: ChatScrollMachine.Event) {
         let command = machine.handle(event)
         publish()
+        if let lastGeometry { watchPinnedShort(distance: lastGeometry.distanceFromBottom) }
         if ChatScrollTrace.isOn {
             ChatScrollTrace.machine(event: event.name, state: machine.state.name, command: command.name)
         }

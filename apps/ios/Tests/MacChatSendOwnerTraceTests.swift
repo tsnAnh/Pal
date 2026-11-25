@@ -64,6 +64,7 @@ struct MacChatSendOwnerTraceTests {
         }
         let detail = unowned.map { "#\($0.index) \($0.phase) offset \(String(format: "%+.1f", $0.offsetDelta)) content \(String(format: "%+.1f", $0.contentDelta)) d=\(String(format: "%.1f", $0.distance))" }
         #expect(unowned.isEmpty, Comment(rawValue: "writes attributed unattributed: \(detail)"))
+        #expect(stage.scroll.pinnedButShortCount == 0, Comment(rawValue: "pinned_but_short episodes: \(stage.scroll.pinnedButShortCount)"))
     }
 
     static let sends = 20
@@ -103,8 +104,9 @@ struct MacChatSendOwnerTraceTests {
             if !unowned.isEmpty { misses.append("send \(round): unattributed at \(unowned)") }
         }
         let allUnattributed = stage.frames.filter { $0.writers.contains(ChatScrollWriter.unattributed.rawValue) }.count
-        print("SENDTWENTY worst=\(String(format: "%.1f", worst)) unattributedFrames=\(allUnattributed) misses=\(misses)")
+        print("SENDTWENTY pinnedButShort=\(stage.scroll.pinnedButShortCount) worst=\(String(format: "%.1f", worst)) unattributedFrames=\(allUnattributed) misses=\(misses)")
         #expect(misses.isEmpty, Comment(rawValue: "\(misses)"))
+        #expect(stage.scroll.pinnedButShortCount == 0, Comment(rawValue: "pinned_but_short episodes: \(stage.scroll.pinnedButShortCount)"))
     }
 }
 #endif

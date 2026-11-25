@@ -40,15 +40,20 @@ struct ChatScrollMachineOwnerTraceTests {
         #expect(machine.handle(.send(animated: true)) == .none)
         _ = machine.handle(.rowsChanged((0..<35).map { "row\($0)" }))
         var distances: [Int: Double] = [:]
+        var watch = ChatPinnedShortWatch()
         for frame in chiefChatSendTrace {
             for checkpoint in checkpoints where distances[checkpoint] == nil && checkpoint < frame.millisecondsAfterSend {
                 distances[checkpoint] = latest.distanceFromBottom
             }
             latest = geometry(frame)
             var command = machine.handle(.geometry(latest))
+            var now = Double(frame.millisecondsAfterSend)
+            watch.note(pinned: machine.state == .pinnedToBottom, distance: latest.distanceFromBottom, atMilliseconds: now)
             while case .scrollToBottom = command {
+                now += ChatPinnedShortWatch.frameMilliseconds
                 latest.offsetY = latest.contentHeight - container - insetTop
                 command = machine.handle(.geometry(latest))
+                watch.note(pinned: machine.state == .pinnedToBottom, distance: latest.distanceFromBottom, atMilliseconds: now)
             }
             #expect(
                 machine.state != .pinnedToBottom || latest.distanceFromBottom <= ChatScrollMachine.atBottomTolerance,
@@ -61,5 +66,7 @@ struct ChatScrollMachineOwnerTraceTests {
         }
         #expect(machine.state == .pinnedToBottom)
         #expect(!machine.showsJumpButton)
+        #expect(watch.overdue(atMilliseconds: 3_000) == nil)
+        #expect(watch.episodes == 0)
     }
 }
