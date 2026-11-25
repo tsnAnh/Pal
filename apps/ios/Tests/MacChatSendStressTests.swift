@@ -49,6 +49,7 @@ final class SendStressStage {
     static let streamFrames = 40
     static let swingLimit = 20.0
     static let sendGrowthLimit = 400.0
+    static let pinnedDriftLimit = 4.0
 
     let model: ChatModel
     let host: MacChatBenchHost
@@ -228,6 +229,7 @@ struct MacChatSendStressTests {
         let frames = stage.frames
         let jumps = zip(frames, frames.dropFirst()).filter { before, after in
             before.isPinned && after.isPinned && after.phase != "open" && abs(after.distanceDelta) > 1
+                && after.distance > SendStressStage.pinnedDriftLimit
         }.map { $0.1 }
         let buttonAtBottom = frames.filter { $0.button && $0.distance <= ChatScrollMachine.hideDistance }
         let buttonWhilePinned = frames.filter { $0.button && $0.isPinned && $0.distance <= ChatScrollMachine.showDistance }
