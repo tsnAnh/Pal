@@ -17,7 +17,14 @@ extension ChatModel {
     func beginOpen() {
         isActive = true
         openCount += 1
-        guard openCount > 1 else { return }
+        let reopened = openCount > 1
+        if reopened { resetForReopen() }
+        openStats.source = reopened ? (rows.isEmpty ? .none : .model) : (rows.isEmpty ? .none : .snapshot)
+        openStats.rowsAtStart = rows.count
+        if !rows.isEmpty { reportOpen(rows: rows.count, zeroRows: .zero) }
+    }
+
+    private func resetForReopen() {
         opening.reset()
         openStats = ChatOpenStats()
         openStats.heights = links.heights.remembered(for: openedBot.name)
@@ -58,12 +65,22 @@ extension ChatModel {
         opening.hold(version: cached.version) { [weak self] in self?.apply($0) }
     }
 
+    func reportOpen(rows count: Int, zeroRows: Duration) {
+        guard openStats.counters == nil else { return }
+        let counters = ChatOpenCounters(
+            source: openStats.source, rowsAtFirstPublish: count, zeroRowsMilliseconds: Int(zeroRows / .milliseconds(1))
+        )
+        openStats.counters = counters
+        diagnostics.notice("chat", "model \(openedBot.name) \(counters.message)")
+    }
+
     func noteRows(_ count: Int) {
         let elapsed = Int(openStats.openedAt.duration(to: .now) / .milliseconds(1))
         if count > 0, !openStats.hasShownRows {
             openStats.hasShownRows = true
             PalPerf.event("chat.open.firstrows", label: openedBot.name, since: openStats.openedAt)
             LaunchClock.mark("chat \(openedBot.name) first rows (\(count)) after \(elapsed) ms", on: .osLog())
+            if isActive { reportOpen(rows: count, zeroRows: openStats.openedAt.duration(to: .now)) }
         } else if count == 0, !rows.isEmpty {
             openStats.clearedAfterData = true
             PalPerf.event("chat.open.rows.cleared")
@@ -77,6 +94,7 @@ extension ChatModel {
     }
 
     func closeOpening() {
+        if openStats.counters == nil { reportOpen(rows: 0, zeroRows: openStats.openedAt.duration(to: .now)) }
         if let snapshot { links.snapshots.remember(snapshot, for: openedBot.name) }
         openingDeadline?.cancel()
         openingDeadline = nil
