@@ -31,7 +31,6 @@ struct ChatTranscriptList: View {
         }
         .scrollPosition($scroll.position)
         .defaultScrollAnchor(.bottom)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .safeAreaPadding(.bottom, ChatMetrics.composerClearance)
         .task(id: model.bot.name) { await desk.run() }
         .overlay { ChatOpeningOverlay(model: model, hidesIntro: !desk.desk.cards.isEmpty) }

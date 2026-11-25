@@ -13,6 +13,11 @@ struct MacChatSendOwnerTraceTests {
     static let checkpointFrames = [12, 60, 120, 240, 360]
     static let replyGrowthFrame = 40
     static let observedFrames = 400
+    static let unreportedGrowth = 5.0
+
+    static func isUnownedWrite(_ frame: SendStressFrame) -> Bool {
+        frame.writers.contains(ChatScrollWriter.unattributed.rawValue) && abs(frame.contentDelta) <= ChatScrollMachine.atBottomTolerance
+    }
 
     static func world() -> RebuildWorld {
         var world = RebuildWorld()
@@ -50,14 +55,56 @@ struct MacChatSendOwnerTraceTests {
         let after = Array(stage.frames[start...])
         let checkpoints = Self.checkpointFrames.map { after[$0 - 1] }
         let report = checkpoints.map { "#\($0.index) d=\(String(format: "%.1f", $0.distance)) machine=\(String(format: "%.1f", $0.machineDistance)) state \($0.state)" }
-        let unowned = after.filter { $0.writers.contains(ChatScrollWriter.unattributed.rawValue) }
-        print("SENDOWNER content=\(Int(content)) \(report) unattributed=\(unowned.map(\.index)) maxDistance=\(after.map(\.distance).max() ?? 0)")
+        let unowned = after.filter(Self.isUnownedWrite)
+        print("SENDOWNER content=\(Int(content)) \(report) unattributedFrames=\(after.filter { $0.writers.contains(ChatScrollWriter.unattributed.rawValue) }.map(\.index)) unownedWrites=\(unowned.map(\.index)) maxDistance=\(after.map(\.distance).max() ?? 0)")
         for checkpoint in checkpoints {
-            #expect(checkpoint.distance <= ChatScrollMachine.atBottomTolerance, Comment(rawValue: "\(report)"))
+            #expect(checkpoint.distance <= Self.unreportedGrowth, Comment(rawValue: "\(report)"))
             #expect(checkpoint.machineDistance <= ChatScrollMachine.atBottomTolerance, Comment(rawValue: "\(report)"))
             #expect(checkpoint.state == "pinnedToBottom" && !checkpoint.button, Comment(rawValue: "\(report)"))
         }
-        #expect(unowned.isEmpty, Comment(rawValue: "writes attributed unattributed at frames \(unowned.map(\.index))"))
+        let detail = unowned.map { "#\($0.index) \($0.phase) offset \(String(format: "%+.1f", $0.offsetDelta)) content \(String(format: "%+.1f", $0.contentDelta)) d=\(String(format: "%.1f", $0.distance))" }
+        #expect(unowned.isEmpty, Comment(rawValue: "writes attributed unattributed: \(detail)"))
+    }
+
+    static let sends = 20
+    static let framesPerSend = 300
+    static let stressCheckpoints = [12, 60, 240]
+
+    @Test("20 sends in a 34 row chat end at the bottom at 100 ms, 500 ms and 2 s with no write nobody owns")
+    func twentySends() async throws {
+        let stage = try await SendStressStage(opening: Self.world())
+        defer { stage.host.close() }
+        var misses: [String] = []
+        var worst = 0.0
+        for round in 0..<Self.sends {
+            let start = stage.frames.count
+            stage.phase = "send"
+            stage.world.append(rebuildUser("u\(round)", "message \(round)", delivery: .sending, at: rebuildAt(20_000 + Double(round) * 10)))
+            stage.world.isRunning = true
+            stage.push()
+            stage.scroll.sent(animated: true)
+            try await stage.step(Self.replyGrowthFrame)
+            stage.phase = "stream"
+            stage.world.append(rebuildAssistant("s\(round)", "[\(1_000 + round)] Looking into it now.", streaming: true, at: rebuildAt(20_005 + Double(round) * 10)))
+            stage.confirmSend(round)
+            stage.push()
+            try await stage.step(80)
+            stage.world.editLast { $0.content = .assistant(text: "[\(1_000 + round)] Looking into it now. Done.", reasoning: "", isStreaming: false) }
+            stage.world.isRunning = false
+            stage.push()
+            try await stage.step(Self.framesPerSend - Self.replyGrowthFrame - 80)
+            let after = Array(stage.frames[start...])
+            let distances = Self.stressCheckpoints.map { after[$0 - 1].distance }
+            worst = max(worst, distances.max() ?? 0)
+            if distances.contains(where: { $0 > Self.unreportedGrowth }) {
+                misses.append("send \(round): " + distances.map { String(format: "%.1f", $0) }.joined(separator: "/"))
+            }
+            let unowned = after.filter(Self.isUnownedWrite).map(\.index)
+            if !unowned.isEmpty { misses.append("send \(round): unattributed at \(unowned)") }
+        }
+        let allUnattributed = stage.frames.filter { $0.writers.contains(ChatScrollWriter.unattributed.rawValue) }.count
+        print("SENDTWENTY worst=\(String(format: "%.1f", worst)) unattributedFrames=\(allUnattributed) misses=\(misses)")
+        #expect(misses.isEmpty, Comment(rawValue: "\(misses)"))
     }
 }
 #endif

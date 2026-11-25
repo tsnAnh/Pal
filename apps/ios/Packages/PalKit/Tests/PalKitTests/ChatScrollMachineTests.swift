@@ -301,14 +301,30 @@ struct ChatScrollMachineBottomZoneTests {
         #expect(ChatScrollMachine.atBottomTolerance < ChatScrollMachine.hideDistance)
     }
 
-    @Test func wobbleInsideTheDeadBandNeverLeavesPinnedOrShowsTheButton() {
+    @Test func wobbleInsideTheDeadBandIsRepairedAndNeverLeavesPinnedOrShowsTheButton() {
         var machine = ChatScrollMachine()
         _ = machine.handle(.geometry(bottomGeo()))
         for distance in [3.0, 30.0, ChatScrollMachine.showDistance, 12.0, 0.0] {
-            #expect(machine.handle(.geometry(awayGeo(distance))) == .none)
+            let repair: ChatScrollMachine.Command = distance > ChatScrollMachine.atBottomTolerance ? .scrollToBottom(animated: false) : .none
+            #expect(machine.handle(.geometry(awayGeo(distance))) == repair)
             #expect(machine.state == .pinnedToBottom)
             #expect(!machine.showsJumpButton)
         }
+    }
+
+    @Test func whileTheLayoutIsMovingAFarGapIsRepairedNotTakenForReadingHistory() {
+        var machine = ChatScrollMachine()
+        _ = machine.handle(.geometry(bottomGeo()))
+        _ = machine.handle(.layoutMoving(true))
+        let far = ChatScrollMachine.showDistance + 700
+        for _ in 0..<5 {
+            #expect(machine.handle(.geometry(awayGeo(far))) == .scrollToBottom(animated: false))
+            #expect(machine.state == .pinnedToBottom)
+        }
+        _ = machine.handle(.layoutMoving(false))
+        _ = machine.handle(.geometry(awayGeo(far)))
+        #expect(machine.handle(.geometry(awayGeo(far))) == .none)
+        #expect(machine.state == .readingHistory)
     }
 
     @Test func pinnedLeavesOnlyBeyondTheShowDistance() {

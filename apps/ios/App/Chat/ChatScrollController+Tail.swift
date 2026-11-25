@@ -7,11 +7,14 @@ extension ChatScrollController {
 
     func widthMoved() {
         let started = resizeSettleTask == nil
+        if started { send(.layoutMoving(true)) }
         resizeSettleTask?.cancel()
         resizeSettleTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: Self.resizeSettle)
             guard let self, !Task.isCancelled else { return }
             resizeSettleTask = nil
+            send(.layoutMoving(false))
+            releaseEdgeOnceAtBottom()
             planner.endResizing()
             rowHeights.widthChanged()
             measureTick &+= 1

@@ -37,6 +37,7 @@ final class ChatScrollController {
     @ObservationIgnored let tracker = ChatOpenTracker()
     @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
+    @ObservationIgnored private var edgeIsArmed = true
     @ObservationIgnored var newestAnchor: ChatNewestAnchor?
     @ObservationIgnored var holdsUntil = ContinuousClock.now
     @ObservationIgnored private var wasRunning: Bool?
@@ -92,6 +93,18 @@ final class ChatScrollController {
             }
         }
         performNextTurn(command)
+        releaseEdgeOnceAtBottom()
+    }
+
+    func releaseEdgeOnceAtBottom() {
+        guard edgeIsArmed, tracker.reported, !isResizing, machine.state == .pinnedToBottom,
+              (machine.distanceFromBottom ?? .infinity) <= ChatScrollMachine.atBottomTolerance
+        else { return }
+        edgeIsArmed = false
+        Task { @MainActor [weak self] in
+            guard let self, !edgeIsArmed else { return }
+            position = ScrollPosition(idType: String.self)
+        }
     }
 
     func observe(_ phase: ScrollPhase) {
@@ -225,11 +238,13 @@ final class ChatScrollController {
             var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
             transaction.disablesAnimations = !glides
             notePositionWrite(command)
+            edgeIsArmed = true
             withTransaction(transaction) { position.scrollTo(edge: .bottom) }
         case .clampToContent:
             var transaction = Transaction()
             transaction.disablesAnimations = true
             notePositionWrite(command)
+            edgeIsArmed = true
             withTransaction(transaction) { position.scrollTo(edge: .bottom) }
         case .scrollToRow(let id):
             notePositionWrite(command)
