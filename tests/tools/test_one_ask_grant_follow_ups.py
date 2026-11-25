@@ -14,7 +14,8 @@ from tests.tools import test_bot_mode_drafts as drafts
 from tests.tools import test_mcp_action_gate as mcp
 from tests.tools.test_one_ask_outbound_send import OPTIONS, SEND_OPTION, _ask, _send
 from tools import outbound_send_grant
-from tools.bot_mode_drafts import review_outbound
+from tools.bot_mode_drafts import classify_outbound, review_outbound
+from tools.mcp_action_gate import build_card
 
 Owner, _call, _register, server = mcp.Owner, mcp._call, mcp._register, mcp.server
 bot_home, owner_app, SESSION = drafts.bot_home, drafts.owner_app, drafts.SESSION
@@ -189,3 +190,42 @@ class TestOneLogLineReadsTheOutcome:
         assert text
         for private in ("Teimoor", "Monday", ROOM, ORG, SESSION):
             assert private not in text
+class TestTheApprovalReadsLikeAMessage:
+    def _assert_human(self, text, shown):
+        assert text == BODY and "\n\n" in text and "\\n" not in text
+        main = "\n".join([text, *(f"{d['name']}" for d in shown)])
+        assert "org_uid" not in main and ORG not in main and ROOM not in main and "{" not in main
+
+    def test_the_draft_gate_card_shows_the_message_with_real_line_breaks(self, bot_home, owner_app):
+        outbound = classify_outbound(WIRE_TOOL, UPWORK_ARGS)
+        self._assert_human(outbound.text, [{"name": n} for n, _ in outbound.details])
+        assert outbound.viewable and not outbound.editable
+        technical = [value for name, value in outbound.details if ROOM in value]
+        assert len(technical) == 1 and "{" not in technical[0] and "\\n" not in technical[0]
+
+    def test_the_mcp_gate_card_shows_the_message_with_real_line_breaks(self):
+        card = build_card("upwork", RAW_TOOL, UPWORK_ARGS)
+        self._assert_human(card["text"], card["details"])
+        assert "{" not in json.dumps([d["value"] for d in card["details"]]).replace("{}", "")
+        assert [d for d in card["details"] if ROOM in d["value"]] and sum(ROOM in d["value"] for d in card["details"]) == 1
+        assert ROOM not in card["description"] and ORG not in card["description"]
+
+    def test_a_named_recipient_and_attachment_names_are_the_readable_parts(self):
+        args = {"action": "send", "org_uid": ORG, "params": {
+            "room_id": ROOM, "room_title": "Teimoor K.", "message": BODY, "file_attachments": ["/srv/files/offer.pdf"]}}
+        card = build_card("upwork", RAW_TOOL, args)
+        assert card["draft"]["recipient"] == "Teimoor K." and card["attachments"] == ("offer.pdf",)
+        assert ROOM not in card["text"] and "/srv/files" not in json.dumps(card["details"][:-1])
+        outbound = classify_outbound(WIRE_TOOL, args)
+        assert outbound.recipient == "Teimoor K." and ROOM not in outbound.text
+
+    @pytest.mark.parametrize("key", ["text", "body", "content"])
+    def test_an_unknown_tool_finds_the_body_under_another_name(self, key):
+        card = build_card("other", "post_reply", {"params": {key: BODY, "to": "Ada"}})
+        assert card["text"] == BODY and card["draft"]["recipient"] == "Ada"
+
+    def test_the_json_fallback_is_a_code_block_and_only_without_a_body(self):
+        card = build_card("other", "do_thing", {"mode": "fast", "items": [1, 2]})
+        assert "mode" in card["text"]
+        outbound = classify_outbound("mcp__other__post_update", {"mode": "fast", "items": [1, 2]})
+        assert outbound.text.startswith("```json\n") and outbound.text.endswith("\n```")

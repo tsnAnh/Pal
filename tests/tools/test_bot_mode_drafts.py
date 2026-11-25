@@ -114,7 +114,9 @@ class TestClassification:
 
     def test_a_send_without_a_text_field_shows_every_argument_and_is_not_editable(self):
         outbound = classify_outbound("connectors__gmail__SEND_DRAFT", {"draft_id": "d1"})
-        assert json.loads(outbound.text) == {"draft_id": "d1"} and not outbound.editable
+        assert outbound.text.startswith("```json\n") and outbound.text.endswith("\n```")
+        assert json.loads(outbound.text.removeprefix("```json\n").removesuffix("\n```")) == {"draft_id": "d1"}
+        assert not outbound.editable
 
 
 class TestAttendedDrafts:

@@ -21,13 +21,17 @@ _TEXT_KEYS = ("body", "message", "text", "content", "markdown_text", "html_body"
 _RECIPIENT_KEYS = ("to", "recipient", "recipients", "recipient_email", "email", "channel", "channel_id",
                    "chat_id", "target", "user", "user_id")
 _SUBJECT_KEYS = ("subject", "title")
+_NAME_KEYS = ("recipient_name", "room_title", "room_name", "to", "recipient", "room", "channel", "thread",
+              "freelancer", "client")
 _ATTACHMENT_KEYS = frozenset({
     "attachment", "attachments", "file", "files", "file_path", "file_paths", "filepath", "media", "media_files",
-    "image", "images", "document", "documents"})
+    "image", "images", "document", "documents", "file_attachments"})
 _ATTACHMENT_NAME_KEYS = ("filename", "file_name", "name", "title")
 _ATTACHMENT_SIZE_KEYS = ("size", "size_bytes", "file_size")
 _ATTACHMENT_BULK_KEYS = frozenset({"content", "data", "bytes", "base64", "blob", "b64", "body"})
 _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_NEST_DEPTH = 3
+TECHNICAL_DETAIL = "Details"
 _MCP_PREFIX = "mcp__"
 _CONNECTOR_PREFIX = "connectors__"
 
@@ -208,15 +212,62 @@ def _detail_items(args: dict, hidden: set) -> tuple[tuple[tuple[str, str], ...],
     return tuple(items), viewable
 
 
+def flatten_args(args: dict, depth: int = _NEST_DEPTH, parent: str = "") -> dict:
+    """``args`` with the objects inside it merged into one level, outer keys first. A key two levels share with
+    different values keeps both: the inner one under its dotted path, so nothing the call carries goes unshown."""
+    flat = {key: value for key, value in args.items() if not (isinstance(value, dict) and depth > 0)}
+    for key, value in args.items():
+        if not (isinstance(value, dict) and depth > 0):
+            continue
+        for inner, item in flatten_args(value, depth - 1, f"{parent}{key}.").items():
+            name = inner if inner not in flat or flat[inner] == item else f"{parent}{key}.{inner}"
+            flat[name] = item
+    return flat
+
+
+def plain_lines(value, prefix: str = "") -> list[str]:
+    """``key: value`` lines for a call's leftover fields: text as typed, lists as comma-joined names, never JSON."""
+    if isinstance(value, dict):
+        return [line for key, item in value.items() for line in plain_lines(item, f"{prefix}{key}")]
+    if isinstance(value, (list, tuple)):
+        if all(isinstance(item, (str, int, float)) and not isinstance(item, bool) for item in value):
+            return [f"{prefix}: {', '.join(str(item) for item in value)}"] if value else []
+        return [line for index, item in enumerate(value) for line in plain_lines(item, f"{prefix}[{index}]")]
+    return [f"{prefix}: {value}" if prefix else str(value)]
+
+
+def _human_details(view: dict, hidden: set) -> tuple[tuple[tuple[str, str], ...], bool]:
+    items, viewable, rest = [], True, {}
+    for key, value in view.items():
+        if key in hidden:
+            continue
+        if _is_attachment_key(key):
+            rendered = _describe_attachments(value)
+            if rendered is None:
+                viewable, rendered = False, "(cannot be shown in full)"
+            if rendered:
+                items.append((str(key), rendered))
+        elif _json_text(value) is None:
+            viewable = False
+        else:
+            rest[key] = value
+    if rest:
+        items.append((TECHNICAL_DETAIL, "\n".join(plain_lines(rest))))
+    return tuple(items), viewable
+
+
 def _assemble(tool_name: str, channel: str, args: dict, *, text: str, text_field: str | None, recipient: str,
-              recipient_key: str | None, subject: str, subject_key: str | None) -> Outbound:
+              recipient_key: str | None, subject: str, subject_key: str | None, editable_field: str | None = None,
+              consolidate: bool = False) -> Outbound:
     if text_field is None:
         whole = _json_text(args, indent=2)
         details, viewable = _detail_items(args, {key for key in args if not _is_attachment_key(key)})
-        text = whole if whole is not None else json.dumps(args, ensure_ascii=False, indent=2, default=repr)
-        return Outbound(tool_name, channel, recipient, subject, text, None, details, viewable and whole is not None)
-    details, viewable = _detail_items(args, {text_field, recipient_key, subject_key} - {None})
-    return Outbound(tool_name, channel, recipient, subject, text, text_field, details, viewable)
+        shown = whole if whole is not None else json.dumps(args, ensure_ascii=False, indent=2, default=repr)
+        return Outbound(tool_name, channel, recipient, subject, f"```json\n{shown}\n```", None, details,
+                        viewable and whole is not None)
+    hidden = {text_field, recipient_key, subject_key} - {None}
+    details, viewable = (_human_details if consolidate else _detail_items)(args, hidden)
+    return Outbound(tool_name, channel, recipient, subject, text, editable_field, details, viewable)
 
 
 def _is_non_sending_send_message(args: dict) -> bool:
@@ -237,11 +288,15 @@ def classify_outbound(tool_name: str, args: dict) -> Outbound | None:
     split = _split_tool(tool_name)
     if split is None or not _sends_text(split[2]):
         return None
-    field, text = _first_text(args, _TEXT_KEYS)
-    recipient_key, recipient = _first_text(args, _RECIPIENT_KEYS)
-    subject_key, subject = _first_text(args, _SUBJECT_KEYS)
-    return _assemble(tool_name, _channel_label(split[1]), args, text=text, text_field=field, recipient=recipient,
-                     recipient_key=recipient_key, subject=subject, subject_key=subject_key)
+    view = flatten_args(args)
+    field, text = _first_text(view, _TEXT_KEYS)
+    recipient_key, recipient = _first_text(view, _RECIPIENT_KEYS)
+    if not recipient:
+        recipient_key, recipient = _first_text(view, _NAME_KEYS)
+    subject_key, subject = _first_text(view, _SUBJECT_KEYS)
+    return _assemble(tool_name, _channel_label(split[1]), view, text=text, text_field=field, recipient=recipient,
+                     recipient_key=recipient_key, subject=subject, subject_key=subject_key,
+                     editable_field=field if field in args else None, consolidate=split[0] == "mcp")
 
 
 def looks_outbound(tool_name) -> bool:
@@ -334,7 +389,7 @@ def details_payload(outbound: Outbound) -> list[dict]:
 
 def card_description(outbound: Outbound) -> str:
     header = f"Send to {outbound.recipient or outbound.channel} via {outbound.channel}"
-    return "\n".join([header, *(f"{name}: {value}" for name, value in outbound.details)])
+    return "\n".join([header, *(f"{name}: {value}" for name, value in outbound.details if name != TECHNICAL_DETAIL)])
 
 
 def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
