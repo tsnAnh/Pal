@@ -33,7 +33,9 @@ GATE_FAILED = "action_gate_failed"
 _DEFAULT_REFUSED_MESSAGE = "This step moves money, so it is not done through the assistant. Do it yourself on the service's website."
 _TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+")
 _RECIPIENT_KEYS = ("recipient", "to", "freelancer", "freelancer_id", "client", "user_id", "room_id", "job_id", "job")
-_RECIPIENT_NAME_KEYS = ("recipient", "to", "freelancer", "client")
+_RECIPIENT_NAME_KEYS = ("recipient_name", "room_title", "room_name", "recipient", "to", "freelancer", "client", "room",
+                        "channel", "thread")
+_CHAT_TEXT_KEYS = ("message", "text", "body", "content")
 _ATTACHMENT_KEYS = ("file_attachments", "attachments", "files", "file_paths", "media", "documents")
 _ATTACHMENT_NAME_KEYS = ("filename", "file_name", "name", "title")
 _NEST_DEPTH = 3
@@ -138,7 +140,8 @@ def clear_session(session_key: str) -> None:
 
 def _safe_text(value: Any, limit: int = _FIELD_VALUE_MAX_CHARS) -> str:
     from agent.redact import redact_sensitive_text
-    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
+    from tools.bot_mode_drafts import plain_lines
+    text = value if isinstance(value, str) else "\n".join(plain_lines(value)) or str(value)
     text = "".join(ch.encode("unicode_escape").decode() if ch != "\n" and unicodedata.category(ch) in ("Cc", "Cf")
                    else ch for ch in text[:limit * 4])
     text = redact_sensitive_text(text, force=True)
@@ -183,23 +186,42 @@ def _attachment_names(args: Mapping) -> tuple[str, ...]:
     return tuple(names)
 
 
+def _message_details(flat: Mapping, hidden: set) -> list[dict]:
+    """A message's card details for a person: attachment names, then every other field of the call as one plain
+    ``Details`` entry (ids and flags included), never the call's JSON."""
+    from tools.bot_mode_drafts import TECHNICAL_DETAIL, plain_lines
+    names = _attachment_names(flat)
+    rest = {key: value for key, value in flat.items() if key not in hidden and key.lower() not in _ATTACHMENT_KEYS}
+    details = [{"name": "Attachments", "value": ", ".join(names)}] if names else []
+    if lines := plain_lines(rest):
+        details.append({"name": TECHNICAL_DETAIL, "value": _safe_text("\n".join(lines), _MESSAGE_MAX_CHARS)})
+    return details
+
+
 def build_card(server_name: str, tool_name: str, args: Mapping) -> dict:
-    """The approval card, built from the call alone. Tool output never reaches it."""
-    from tools.bot_mode_drafts import DRAFT_KIND
+    """The approval card, built from the call alone. Tool output never reaches it. A call that carries a chat
+    message reads as the message, its recipient's name and its attachment names; any other call lists its fields."""
+    from tools.bot_mode_drafts import DRAFT_KIND, flatten_args
     from tools.mcp_tool_handlers import _mask_secret_fields
     shown = _mask_secret_fields(dict(args))
-    details = [{"name": _safe_text(str(name), 80), "value": _safe_text(value)}
-               for name, value in list(shown.items())[:_MAX_FIELDS]]
-    if len(shown) > _MAX_FIELDS:
-        details.append({"name": "more", "value": f"{len(shown) - _MAX_FIELDS} more fields not shown"})
+    flat = flatten_args(shown)
     message = _full_text(_nested(shown, _TEXT_KEYS))
+    named_key = next((key for key in _RECIPIENT_NAME_KEYS if isinstance(flat.get(key), (str, int, float))
+                      and not isinstance(flat[key], bool) and str(flat[key]).strip()), None)
+    recipient = _safe_text(flat[named_key]) if named_key else ""
+    chat_key = next((key for key in _CHAT_TEXT_KEYS if isinstance(flat.get(key), str) and flat[key].strip()), None)
+    if chat_key and message and flat != shown:
+        details = _message_details(flat, {chat_key, named_key})
+    else:
+        details = [{"name": _safe_text(str(name), 80), "value": _safe_text(value)}
+                   for name, value in list(shown.items())[:_MAX_FIELDS]]
+        if len(shown) > _MAX_FIELDS:
+            details.append({"name": "more", "value": f"{len(shown) - _MAX_FIELDS} more fields not shown"})
     text = message or "\n".join(f"{d['name']}: {d['value']}" for d in details) or tool_name
-    named = _nested(shown, _RECIPIENT_NAME_KEYS)
-    recipient = _safe_text(named) if isinstance(named, (str, int, float)) and not isinstance(named, bool) else ""
     channel = display_name(server_name)
     draft = {"kind": DRAFT_KIND, "channel": channel, "recipient": recipient, "subject": tool_name,
              "text": text, "editable": False, "held": False}
-    return {"text": text, "draft": draft, "details": details, "attachments": _attachment_names(shown),
+    return {"text": text, "draft": draft, "details": details, "attachments": _attachment_names(flat),
             "description": f"Send via {channel}" + (f" to {recipient}" if recipient else "")}
 
 
@@ -251,7 +273,7 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional
         return None, grant
     from tools import outbound_send_grant
     from tools.mcp_tool_schema import mcp_prefixed_tool_name
-    if outbound_send_grant.redeem(mcp_prefixed_tool_name(server_name, tool_name), args):
+    if outbound_send_grant.redeem(mcp_prefixed_tool_name(server_name, tool_name), args, gate=outbound_send_grant.MCP_GATE):
         logger.info("MCP action approved by the owner's pick on a clarify form: server=%s tool=%s", server_name, tool_name)
         return None, grant
     refusal = _approve(server_name, tool_name, args)

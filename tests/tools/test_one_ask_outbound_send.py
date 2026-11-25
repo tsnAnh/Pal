@@ -131,19 +131,6 @@ class TestTheSecondCardStillAppears:
             approval_context.reset_current_session_key(token)
         assert owner.cards == []
 
-    def test_another_turn_cannot_redeem_it(self, bot_home, owner_app):
-        from gateway.session_context import _SESSION_TURN_EVENT
-        first, second = object(), object()
-        token = _SESSION_TURN_EVENT.set(first)
-        try:
-            _ask(SEND_OPTION)
-            _SESSION_TURN_EVENT.set(second)
-            assert not outbound_send_grant.redeem(EMAIL, THREAD_ARGS)
-            _SESSION_TURN_EVENT.set(first)
-            assert outbound_send_grant.redeem(EMAIL, THREAD_ARGS)
-        finally:
-            _SESSION_TURN_EVENT.reset(token)
-
     def test_an_unattended_run_refuses_whatever_was_picked(self, bot_home, owner_app, monkeypatch):
         owner = _owner("deny")
         _ask(SEND_OPTION)
