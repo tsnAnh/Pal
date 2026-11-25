@@ -139,7 +139,7 @@ async def test_what_the_turn_never_drained_runs_as_one_follow_up_input_in_order(
 
 
 @pytest.mark.asyncio
-async def test_an_attachment_keeps_its_place_and_the_messages_behind_it_join_its_one_turn(bot_chat, monkeypatch, caplog):
+async def test_an_attachment_keeps_its_own_turn_and_the_text_behind_it_still_steers_at_once(bot_chat, monkeypatch, caplog):
     db, authority = bot_chat
     turn = Turn(monkeypatch, drain=True)
     caplog.set_level('WARNING')
@@ -159,18 +159,56 @@ async def test_an_attachment_keeps_its_place_and_the_messages_behind_it_join_its
         assert (await _pal_send(conn, 'first'))['status'] == 'steered'
         with_picture = await _pal_send(conn, 'look', attachments=[{'path': str(picture), 'mime': 'image/png'}])
         after = [(await _pal_send(conn, name))['status'] for name in ('after one', 'after two')]
-        assert (with_picture['status'], after) == ('queued', ['queued', 'queued'])
+        assert (with_picture['status'], after) == ('queued', ['steered', 'steered'])
         turn.release.set()
-        await async_wait_until(lambda: len(turn.ran) == 2, timeout=30, what='the one follow-up turn')
+        await async_wait_until(lambda: len(turn.ran) == 2, timeout=30, what='the attachment turn')
         await _drained(authority)
-    assert turn.ran == ['running', 'look\nafter one\nafter two'] and turn.taken == ['first', None]
+    assert turn.ran == ['running', 'look'] and turn.taken == ['first\nafter one\nafter two', None]
     assert seen == [None, ['image/png']]
     reasons = [line for line in _trace(caplog) if 'status=queued' in line]
     assert any('why=not_steerable:payload_keys:attachments_v1' in line for line in reasons), reasons
-    assert any('why=behind_queue' in line for line in reasons), reasons
+    assert len(reasons) == 1, reasons
     assert _ledger(authority.persistence) == [
         ('running', 'terminal', 'completed'), ('first', 'terminal', 'steered'), ('look', 'terminal', 'completed'),
         ('after one', 'terminal', 'steered'), ('after two', 'terminal', 'steered')]
+
+
+@pytest.mark.asyncio
+async def test_text_steers_at_once_even_when_an_earlier_whole_turn_is_queued(bot_chat, monkeypatch, caplog):
+    db, authority = bot_chat
+    turn = Turn(monkeypatch, drain=True)
+    caplog.set_level('WARNING')
+    with db:
+        conn = _owner_connection(authority)
+        await _pal_send(conn, 'running')
+        await asyncio.wait_for(turn.claimed.wait(), 30)
+        queued = await _pal_send(conn, 'whole turn', finite=True)
+        later = [(await _pal_send(conn, name))['status'] for name in ('later one', 'later two')]
+        assert (queued['status'], later) == ('queued', ['steered', 'steered'])
+        turn.release.set()
+        await async_wait_until(lambda: turn.ran == ['running', 'whole turn'], timeout=30, what='the queue to advance')
+        await _drained(authority)
+    assert turn.taken[0] == 'later one\nlater two'
+    assert _ledger(authority.persistence) == [
+        ('running', 'terminal', 'completed'), ('whole turn', 'terminal', 'completed'),
+        ('later one', 'terminal', 'steered'), ('later two', 'terminal', 'steered')]
+    assert not any('behind_queue' in line for line in _trace(caplog)), _trace(caplog)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('attachments', [[], {}, {'media': [], 'media_types': []}])
+async def test_text_that_carries_an_empty_attachment_field_is_steerable(bot_chat, attachments):
+    _, authority = bot_chat
+    row = {'status': 'queued', 'target_session_id': 'any', 'payload': {'text': 'hello', 'attachments_v1': attachments}}
+    assert steer_blocker(authority, row, any_source=True) is None
+
+
+@pytest.mark.asyncio
+async def test_a_real_attachment_stays_unsteerable_by_name(bot_chat):
+    _, authority = bot_chat
+    payload = {'text': 'look', 'attachments_v1': {'media': [{'path': '/x', 'sha256': 'y'}], 'media_types': ['image/png']}}
+    row = {'status': 'queued', 'target_session_id': 'any', 'payload': payload}
+    assert steer_blocker(authority, row, any_source=True) == 'payload_keys:attachments_v1'
 
 
 @pytest.mark.asyncio

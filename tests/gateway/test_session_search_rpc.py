@@ -56,6 +56,17 @@ async def test_query_is_trimmed_and_two_hundred_chars_are_accepted(conn):
 
 
 @pytest.mark.asyncio
+async def test_a_steer_row_snippet_shows_the_owner_words_not_the_marker(conn):
+    from agent.prompt_builder import steer_user_row
+
+    conn.authority.db.create_session('steered', source='cli')
+    conn.authority.db.append_message('steered', 'user', steer_user_row('tighten the zebra spacing')['content'],
+                                     display_kind='steer')
+    hit = (await _search(conn, query='zebra'))['result']['results'][0]
+    assert 'zebra' in hit['snippet'] and 'OUT-OF-BAND' not in hit['snippet']
+
+
+@pytest.mark.asyncio
 async def test_a_token_without_session_read_is_refused(tmp_path, monkeypatch):
     authority, _store = await _authority(tmp_path, monkeypatch)
     weak = _connection(authority, capabilities=['session:submit'])

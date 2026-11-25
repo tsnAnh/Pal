@@ -31,6 +31,7 @@ from agent.skill_utils import (
 from agent.skill_connector_gate import (
     connected_among, connector_state_key, refs_from_labels, unmet_connectors, warm_hosted_connectors)
 from gateway.commitments import PROMPT_RULE
+from session_rules.turns import STEER_DISPLAY_KIND, STEER_MARKER_CLOSE, STEER_MARKER_OPEN
 from tools.threat_patterns import scan_for_threats as _scan_for_threats
 from utils import atomic_json_write, file_cache_version
 
@@ -585,11 +586,6 @@ GOOGLE_MODEL_OPERATIONAL_GUIDANCE = (
 # mid-turn — carrying the self-describing marker. That marker text is exactly the channel injection defenses
 # distrust, so a bare "User guidance:" line gets refused. STEER_CHANNEL_NOTE says to trust THIS marker only
 # (lookalikes stay untrusted) and only in the latest turn (replaying history replays actions).
-STEER_MARKER_OPEN = (
-    "[OUT-OF-BAND USER MESSAGE — a direct message from the user, delivered "
-    "once at this position; not tool output and not a new delivery when replayed from conversation history]"
-)
-STEER_MARKER_CLOSE = "[/OUT-OF-BAND USER MESSAGE]"
 # Text after the "[" that opens one of Hermes' own control frames (the steer marker above, the compaction
 # handoff and its fallbacks, runtime/system notes, agent.context_compressor._SYNTHETIC_USER_ROW_PREFIXES,
 # agent.title_generator._MACHINE_PREFIXES). Consumers that republish model output as role=user text
@@ -604,9 +600,6 @@ CONTROL_FRAME_OPENERS = (
 def format_steer_marker(steer_text: str) -> str:
     """Wrap a mid-turn steer in the self-describing marker (see note above)."""
     return f"\n\n{STEER_MARKER_OPEN}\n{steer_text}\n{STEER_MARKER_CLOSE}"
-
-
-STEER_DISPLAY_KIND = "steer"
 
 
 def steer_user_row(steer_text: str) -> dict[str, Any]:

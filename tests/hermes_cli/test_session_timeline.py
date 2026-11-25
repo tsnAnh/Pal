@@ -41,6 +41,19 @@ def timeline_store(tmp_path, monkeypatch):
             yield db, client, home
 
 
+def test_timeline_previews_a_steer_row_as_the_owner_words(timeline_store):
+    from agent.prompt_builder import steer_user_row
+
+    db, client, _ = timeline_store
+    _append_batch(db, "timeline-root", [
+        {"role": "user", "content": "start", "timestamp": 100},
+        {"role": "assistant", "content": "working"},
+        {**steer_user_row("also fix the footer"), "timestamp": 200},
+    ])
+    previews = [e["preview"] for e in client.get("/api/sessions/timeline-root/timeline").json()["entries"]]
+    assert previews == ["start", "also fix the footer"]
+
+
 def test_timeline_pages_project_human_prompts_without_tool_payloads(timeline_store):
     db, client, _ = timeline_store
     _append_batch(db, "timeline-root", [
