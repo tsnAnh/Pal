@@ -26,11 +26,19 @@ final class BotLinks {
     let snapshots = ChatSnapshotMemory()
     let drafts: DraftStore
     private let draftFlush: DraftFlushTriggers
+    private let timelineStore: @MainActor (String) -> any TimelineStore
     private(set) lazy var heights = ChatRowHeightStore(cache: connection.cache) { [unowned connection] in connection.accountKey }
 
-    init(connection: ConnectionModel, drafts: DraftStore = DraftStore(directory: BotLinks.draftsDirectory, diagnostics: .osLog())) {
+    init(
+        connection: ConnectionModel,
+        drafts: DraftStore = DraftStore(directory: BotLinks.draftsDirectory, diagnostics: .osLog()),
+        timelineStore: (@MainActor (String) -> any TimelineStore)? = nil
+    ) {
         self.connection = connection
         self.drafts = drafts
+        self.timelineStore = timelineStore ?? { [unowned connection] bot in
+            ConversationTimelineStore(bot: bot) { (connection.cache, connection.accountKey) }
+        }
         draftFlush = DraftFlushTriggers(store: drafts)
     }
 
@@ -41,7 +49,7 @@ final class BotLinks {
     func link(for bot: String) throws -> BotLink {
         if let existing = links[bot] { return existing }
         let connection = self.connection
-        let store = ConversationTimelineStore(bot: bot) { (connection.cache, connection.accountKey) }
+        let store = timelineStore(bot)
         let hub = SessionHub(
             profile: bot, connector: LiveChatConnector(connection: connection), store: store, pool: warm, diagnostics: .osLog()
         )
@@ -49,6 +57,8 @@ final class BotLinks {
         links[bot] = link
         return link
     }
+
+    func preload(_ bots: [String]) async {}
 
     private static func outboxDirectory(for name: String) -> URL {
         let base = URL.applicationSupportDirectory.appending(path: "outbox", directoryHint: .isDirectory)

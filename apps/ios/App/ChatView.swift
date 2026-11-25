@@ -9,7 +9,7 @@ struct ChatView: View {
     @State var draft = ""
     @State var dictation = DictationController()
     @State var isVoiceModePresented = false
-    @State var scroll = ChatScrollController()
+    @LazyState var scroll: ChatScrollController
     @FocusState var composerFocused: Bool
     @Environment(\.accessibilityReduceMotion) var reduceMotion
 
@@ -21,6 +21,7 @@ struct ChatView: View {
 
     init(model: ChatModel, teach: TeachModel, router: AppRouter) {
         _model = State(initialValue: model)
+        _scroll = LazyState { ChatScrollController(layout: model.layout) }
         self.teach = teach
         self.router = router
     }

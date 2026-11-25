@@ -26,6 +26,7 @@ struct PalApp: App {
     @State private var autoApprove: ActionAutoApprove
     @State private var heldDrafts: HeldDraftsModel
     @State private var links: BotLinks
+    @State private var chatModels = ChatModelCache()
     @State private var bots: BotsKit
     @State private var templateImport: TemplateImportModel
     @State private var rooms: RoomsModel
@@ -87,7 +88,7 @@ struct PalApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(
-                model: model, roster: roster, router: router, hostPool: hostPool, links: links,
+                model: model, roster: roster, router: router, hostPool: hostPool, links: links, chatModels: chatModels,
                 bots: bots, templateImport: templateImport, rooms: rooms, hub: hub
             )
                 .overlay { ReachOfferOverlay(model: offers) }
@@ -139,6 +140,7 @@ struct RootView: View {
     @Bindable var router: AppRouter
     let hostPool: DeviceHostPool
     let links: BotLinks
+    let chatModels: ChatModelCache
     let bots: BotsKit
     let rooms: RoomsModel
     let hub: SettingsHub
@@ -152,13 +154,14 @@ struct RootView: View {
 
     init(
         model: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, links: BotLinks,
-        bots: BotsKit, templateImport: TemplateImportModel, rooms: RoomsModel, hub: SettingsHub
+        chatModels: ChatModelCache, bots: BotsKit, templateImport: TemplateImportModel, rooms: RoomsModel, hub: SettingsHub
     ) {
         self.model = model
         self.roster = roster
         self.router = router
         self.hostPool = hostPool
         self.links = links
+        self.chatModels = chatModels
         self.bots = bots
         self.rooms = rooms
         self.hub = hub

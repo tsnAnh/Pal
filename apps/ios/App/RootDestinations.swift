@@ -10,7 +10,7 @@ extension RootView {
         case .chat(let name):
             if let bot = roster.bot(named: name) {
                 ModelHost {
-                    ChatModel(bot: bot, links: links, roster: roster)
+                    chatModels.model(for: bot, links: links, roster: roster)
                 } content: {
                     ChatView(model: $0, teach: bots.teach(for: name, displayName: bot.displayName), router: router)
                 }

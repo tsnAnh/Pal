@@ -29,12 +29,12 @@ final class ChatScrollController {
     @ObservationIgnored private var visibleIDs: [String] = []
     @ObservationIgnored private var frames: [String: CGRect] = [:]
     @ObservationIgnored private var pendingRestore: ChatRowAnchor?
-    @ObservationIgnored let rowHeights = ChatRowHeights()
+    @ObservationIgnored let rowHeights: ChatRowHeights
     @ObservationIgnored var resizeSettleTask: Task<Void, Never>?
     @ObservationIgnored private var revealTask: Task<Void, Never>?
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
-    @ObservationIgnored let planner = ChatTailPlanner()
+    @ObservationIgnored let planner: ChatTailPlanner
     @ObservationIgnored let tracker = ChatOpenTracker()
     @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
@@ -45,6 +45,11 @@ final class ChatScrollController {
     @ObservationIgnored private var phaseName = "idle"
     @ObservationIgnored var sampleSink: ((ChatScrollSample) -> Void)?
     @ObservationIgnored var rowSink: ((String, CGRect) -> Void)?
+
+    init(layout: ChatLayoutMemory = ChatLayoutMemory()) {
+        rowHeights = layout.rowHeights
+        planner = layout.planner
+    }
 
     var isPinnedToBottom: Bool { machine.state == .pinnedToBottom }
 
