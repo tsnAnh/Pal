@@ -10,6 +10,11 @@ else in ``App/Chat/**/*.swift``, ``App/ChatView*.swift`` and ``App/Platform/Chat
 * forbidden everywhere: ``scaleEffect(x: 1, y: -1`` (the flipped list), ``.contentMargins(`` (the mirrored composer
   inset; the composer rides ``palSafeAreaBar``), a ``.scrollPosition(`` outside ``App/Chat/ChatTranscriptList.swift``
   and a second one inside it;
+* an armed edge position (``ScrollPosition(... edge:`` and ``scrollTo(edge:``) re-resolves the bottom on its own, a second
+  writer next to the machine (it left the list 61 pt short of the bottom and flashed 92 pt past it): allowed only on the
+  ``ARMED_EDGE_ALLOWED`` lines of ``ChatScrollController.swift``, and only while that file keeps the ``edgeIsArmed`` release
+  that hands the position back once the machine is at the bottom;
+* any ``.defaultScrollAnchor(`` outside ``SYSTEM_ANCHORS`` (the one system anchor that keeps the bottom while rows grow);
 * ``ChatScrollController.swift`` must reference ``ChatScrollMachine``;
 * ``observe(_ geometry:)`` and ``rowLaidOut`` run inside the scroll view's layout commit: they hand their command to
   ``performNextTurn(`` (one write on the next run-loop turn), never to ``perform(`` (a write inside the commit
@@ -67,6 +72,17 @@ HIDDEN_SPACER = re.compile(r"\bstruct ChatHiddenRowsSpacer\b")
 STRING = re.compile(r'"(?:\\.|[^"\\])*"')
 OFFSET_READ = re.compile(r"\bcontentOffset\b")
 SCROLL_POSITION = ".scrollPosition("
+SYSTEM_ANCHORS = {LIST_VIEW: (".defaultScrollAnchor(.bottom)",)}
+ARMED_EDGE = re.compile(r"\bScrollPosition\([^)]*\bedge:\s*\.bottom|\bscrollTo\(\s*edge:\s*\.bottom")
+DEFAULT_ANCHOR = re.compile(r"\.defaultScrollAnchor\(")
+ARMED_EDGE_ALLOWED = {
+    CONTROLLER: ("ScrollPosition(idType: String.self, edge: .bottom)", "position.scrollTo(edge: .bottom)"),
+}
+ARMED_RELEASE = "edgeIsArmed"
+RELEASE_FIX = "the controller arms an edge position but has no edgeIsArmed release; an edge that is never released is a second writer"
+ARMED_EDGE_FIX = ("write the bottom with scrollTo(y:) from ChatScrollController.perform; an armed edge position is a second writer "
+                  "that re-resolves the bottom on its own")
+ANCHOR_FIX = "the chat list has one system anchor, listed in SYSTEM_ANCHORS; a second anchor is a second writer next to the machine"
 WRITES = (
     (re.compile(r"\bscrollTo\("), "a programmatic scroll"),
     (re.compile(r"\bScrollViewProxy\b"), "a ScrollViewProxy"),
@@ -164,6 +180,26 @@ def transcript_loop_rule(code: str) -> tuple[str, str] | None:
     return None
 
 
+def second_writer_findings(rel: str, raw: str, code: str) -> list[tuple[str, str]]:
+    found = []
+    if ARMED_EDGE.search(code) and not any(allowed in raw for allowed in ARMED_EDGE_ALLOWED.get(rel, ())):
+        found.append(("an armed edge scroll position", ARMED_EDGE_FIX))
+    if DEFAULT_ANCHOR.search(code) and not any(allowed in raw for allowed in SYSTEM_ANCHORS.get(rel, ())):
+        found.append(("a defaultScrollAnchor outside the system anchor allowlist", ANCHOR_FIX))
+    return found
+
+
+def controller_findings(root: Path) -> list[str]:
+    controller = root / CONTROLLER
+    text = controller.read_text(encoding="utf-8-sig") if controller.is_file() else ""
+    found = []
+    if "ChatScrollMachine" not in text:
+        found.append(f"{CONTROLLER}:1: the scroll controller does not reference ChatScrollMachine; {FIX}")
+    if "edge: .bottom" in text and ARMED_RELEASE not in text:
+        found.append(f"{CONTROLLER}:1: {RELEASE_FIX}")
+    return found
+
+
 def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
     waivers, found = parse_allowlist(allowlist)
     used: set[Waiver] = set()
@@ -211,6 +247,9 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
                 if pattern.search(code):
                     report(rel, number, raw, what)
                     flagged = True
+            for what, fix in second_writer_findings(rel, raw, code):
+                report(rel, number, raw, what, fix)
+                flagged = True
             if SCROLL_POSITION in code:
                 scroll_positions.setdefault(rel, []).append(number)
                 if rel != LIST_VIEW:
@@ -221,9 +260,7 @@ def scan(root: Path, allowlist: Path = ALLOWLIST) -> list[str]:
         if rel == LIST_VIEW and len(scroll_positions.get(rel, [])) > 1:
             number = scroll_positions[rel][1]
             report(rel, number, lines[number - 1][1], "a second .scrollPosition in the chat list")
-    controller = root / CONTROLLER
-    if not controller.is_file() or "ChatScrollMachine" not in controller.read_text(encoding="utf-8-sig"):
-        found.append(f"{CONTROLLER}:1: the scroll controller does not reference ChatScrollMachine; {FIX}")
+    found.extend(controller_findings(root))
     for waiver in waivers:
         if waiver not in used:
             found.append(f"{allowlist.name}:{waiver.line}: allowlist entry {waiver.path}:{waiver.needle} matches nothing; delete it")

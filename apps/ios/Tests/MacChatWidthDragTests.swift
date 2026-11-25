@@ -79,7 +79,8 @@ struct MacChatWidthDragTests {
             first.stallMilliseconds, first.contentChange * 100, ninetyFifth, worstStall, worstChange * 100, worstDrift, stage.distanceFromNewest,
             steps.map(\.rowBodies).max() ?? 0, stage.longestBlankStreak
         )
-        print("WIDTHDRAG from \(Int(startWidth)): \(summary) state \(stage.scroll.machine.state.name) machineDistance \(stage.scroll.machine.distanceFromBottom ?? -1)")
+        let machine = stage.scroll.machine
+        print("WIDTHDRAG from \(Int(startWidth)): \(summary) state \(machine.state.name) machineDistance \(machine.distanceFromBottom ?? -1)")
         for step in steps where ProcessInfo.processInfo.environment["PAL_WIDTHDRAG_ALL"] == "1" {
             print(String(
                 format: "WIDTHDRAG step width %.0f stall %.1f ms content %.0f (%.2f%%) bodies %d distance %.0f",

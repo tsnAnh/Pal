@@ -104,7 +104,8 @@ struct MacChatSendOwnerTraceTests {
             if !unowned.isEmpty { misses.append("send \(round): unattributed at \(unowned)") }
         }
         let allUnattributed = stage.frames.filter { $0.writers.contains(ChatScrollWriter.unattributed.rawValue) }.count
-        print("SENDTWENTY pinnedButShort=\(stage.scroll.pinnedButShortCount) worst=\(String(format: "%.1f", worst)) unattributedFrames=\(allUnattributed) misses=\(misses)")
+        let short = stage.scroll.pinnedButShortCount
+        print("SENDTWENTY pinnedButShort=\(short) worst=\(String(format: "%.1f", worst)) unattributedFrames=\(allUnattributed) misses=\(misses)")
         #expect(misses.isEmpty, Comment(rawValue: "\(misses)"))
         #expect(stage.scroll.pinnedButShortCount == 0, Comment(rawValue: "pinned_but_short episodes: \(stage.scroll.pinnedButShortCount)"))
     }
