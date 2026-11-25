@@ -37,7 +37,7 @@ final class ChatScrollController {
     @ObservationIgnored let tracker = ChatOpenTracker()
     @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
-    @ObservationIgnored private var edgeIsArmed = true
+    @ObservationIgnored var edgeIsArmed = true
     @ObservationIgnored var pinnedShort = ChatPinnedShortWatch()
     @ObservationIgnored var pinnedShortCheck: Task<Void, Never>?
     @ObservationIgnored var newestAnchor: ChatNewestAnchor?
@@ -99,17 +99,6 @@ final class ChatScrollController {
         releaseEdgeOnceAtBottom()
     }
 
-    func releaseEdgeOnceAtBottom() {
-        guard edgeIsArmed, !isResizing, machine.state == .pinnedToBottom,
-              (machine.distanceFromBottom ?? .infinity) <= ChatScrollMachine.atBottomTolerance
-        else { return }
-        edgeIsArmed = false
-        Task { @MainActor [weak self] in
-            guard let self, !edgeIsArmed else { return }
-            position = ScrollPosition(idType: String.self)
-        }
-    }
-
     func observe(_ phase: ScrollPhase) {
         if isRecording { phaseName = "\(phase)" }
         if ChatScrollTrace.isOn { ChatScrollTrace.phase(phase, state: machine.state.name) }
@@ -159,32 +148,6 @@ final class ChatScrollController {
         if let width = lastGeometry?.containerWidth { noteLaidOut(id, height: Double(frame.height), width: width) }
         guard let pending = pendingRestore, pending.rowID == id else { return }
         performNextTurn(.restore(pending), frame: frame)
-    }
-
-    var measureWidth: CGFloat? {
-        guard let width = lastGeometry?.containerWidth, width > 0 else { return nil }
-        return CGFloat(width)
-    }
-
-    func measureBatch(of rows: [ChatRow]) -> [ChatRow] {
-        _ = measureTick
-        guard resizeSettleTask == nil, let width = lastGeometry?.containerWidth, width > 0 else { return [] }
-        return rowHeights.batch(of: rows, width: width)
-    }
-
-    func measured(_ row: ChatRow, height: CGFloat) {
-        guard let width = lastGeometry?.containerWidth, width > 0 else { return }
-        rowHeights.measured(row, height: Double(height), width: width)
-        measureTick &+= 1
-    }
-
-    func measureGaveUp(on ids: [String]) {
-        guard let width = lastGeometry?.containerWidth, rowHeights.giveUp(on: ids, width: width) else { return }
-        measureTick &+= 1
-    }
-
-    func minHeight(for row: ChatRow) -> CGFloat? {
-        rowHeights.minHeight(for: row, width: lastGeometry?.containerWidth)
     }
 
     func jumpToBottom(animated: Bool) {

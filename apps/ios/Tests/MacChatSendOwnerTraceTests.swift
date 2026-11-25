@@ -54,15 +54,21 @@ struct MacChatSendOwnerTraceTests {
         try await stage.step(Self.observedFrames - Self.replyGrowthFrame)
         let after = Array(stage.frames[start...])
         let checkpoints = Self.checkpointFrames.map { after[$0 - 1] }
-        let report = checkpoints.map { "#\($0.index) d=\(String(format: "%.1f", $0.distance)) machine=\(String(format: "%.1f", $0.machineDistance)) state \($0.state)" }
+        let report = checkpoints.map {
+            "#\($0.index) d=\(String(format: "%.1f", $0.distance)) machine=\(String(format: "%.1f", $0.machineDistance)) state \($0.state)"
+        }
         let unowned = after.filter(Self.isUnownedWrite)
-        print("SENDOWNER content=\(Int(content)) \(report) unattributedFrames=\(after.filter { $0.writers.contains(ChatScrollWriter.unattributed.rawValue) }.map(\.index)) unownedWrites=\(unowned.map(\.index)) maxDistance=\(after.map(\.distance).max() ?? 0)")
+        let unattributed = after.filter { $0.writers.contains(ChatScrollWriter.unattributed.rawValue) }.map(\.index)
+        let farthest = after.map(\.distance).max() ?? 0
+        print("SENDOWNER content=\(Int(content)) \(report) unattributedFrames=\(unattributed) unownedWrites=\(unowned.map(\.index)) maxDistance=\(farthest)")
         for checkpoint in checkpoints {
             #expect(checkpoint.distance <= Self.unreportedGrowth, Comment(rawValue: "\(report)"))
             #expect(checkpoint.machineDistance <= ChatScrollMachine.atBottomTolerance, Comment(rawValue: "\(report)"))
             #expect(checkpoint.state == "pinnedToBottom" && !checkpoint.button, Comment(rawValue: "\(report)"))
         }
-        let detail = unowned.map { "#\($0.index) \($0.phase) offset \(String(format: "%+.1f", $0.offsetDelta)) content \(String(format: "%+.1f", $0.contentDelta)) d=\(String(format: "%.1f", $0.distance))" }
+        let detail = unowned.map {
+            "#\($0.index) \($0.phase) offset \(String(format: "%+.1f", $0.offsetDelta)) content \(String(format: "%+.1f", $0.contentDelta))"
+        }
         #expect(unowned.isEmpty, Comment(rawValue: "writes attributed unattributed: \(detail)"))
         #expect(stage.scroll.pinnedButShortCount == 0, Comment(rawValue: "pinned_but_short episodes: \(stage.scroll.pinnedButShortCount)"))
     }
@@ -86,7 +92,8 @@ struct MacChatSendOwnerTraceTests {
             stage.scroll.sent(animated: true)
             try await stage.step(Self.replyGrowthFrame)
             stage.phase = "stream"
-            stage.world.append(rebuildAssistant("s\(round)", "[\(1_000 + round)] Looking into it now.", streaming: true, at: rebuildAt(20_005 + Double(round) * 10)))
+            let reply = rebuildAssistant("s\(round)", "[\(1_000 + round)] Looking into it now.", streaming: true, at: rebuildAt(20_005 + Double(round) * 10))
+            stage.world.append(reply)
             stage.confirmSend(round)
             stage.push()
             try await stage.step(80)

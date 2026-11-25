@@ -23,6 +23,32 @@ extension ChatScrollController {
         if started { planTick &+= 1 }
     }
 
+    var measureWidth: CGFloat? {
+        guard let width = lastGeometry?.containerWidth, width > 0 else { return nil }
+        return CGFloat(width)
+    }
+
+    func measureBatch(of rows: [ChatRow]) -> [ChatRow] {
+        _ = measureTick
+        guard resizeSettleTask == nil, let width = lastGeometry?.containerWidth, width > 0 else { return [] }
+        return rowHeights.batch(of: rows, width: width)
+    }
+
+    func measured(_ row: ChatRow, height: CGFloat) {
+        guard let width = lastGeometry?.containerWidth, width > 0 else { return }
+        rowHeights.measured(row, height: Double(height), width: width)
+        measureTick &+= 1
+    }
+
+    func measureGaveUp(on ids: [String]) {
+        guard let width = lastGeometry?.containerWidth, rowHeights.giveUp(on: ids, width: width) else { return }
+        measureTick &+= 1
+    }
+
+    func minHeight(for row: ChatRow) -> CGFloat? {
+        rowHeights.minHeight(for: row, width: lastGeometry?.containerWidth)
+    }
+
     func renderPlan(of rows: [ChatRow], persisted: ChatRowHeightFile?, textScale: String) -> ChatTailPlan {
         _ = planTick
         tracker.textScale = textScale

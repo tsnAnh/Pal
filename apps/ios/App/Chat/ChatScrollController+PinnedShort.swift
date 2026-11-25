@@ -17,5 +17,16 @@ extension ChatScrollController {
         }
     }
 
+    func releaseEdgeOnceAtBottom() {
+        guard edgeIsArmed, !isResizing, machine.state == .pinnedToBottom,
+              (machine.distanceFromBottom ?? .infinity) <= ChatScrollMachine.atBottomTolerance
+        else { return }
+        edgeIsArmed = false
+        Task { @MainActor [weak self] in
+            guard let self, !edgeIsArmed else { return }
+            position = ScrollPosition(idType: String.self)
+        }
+    }
+
     private static var nowMilliseconds: Double { Double(LaunchClock.elapsedMilliseconds) }
 }
