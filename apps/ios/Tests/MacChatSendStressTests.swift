@@ -67,7 +67,8 @@ final class SendStressStage {
     private var previous: SendStressSample?
     private var lastGeometry: ChatScrollGeometry?
 
-    init() async throws {
+    init(opening: RebuildWorld? = nil) async throws {
+        if let opening { world = opening }
         let environment = try MacChatBenchSession.environment()
         model = environment.model
         host = MacChatBenchHost(root: environment.surface(draft: draft, scroll: scroll), size: MacChatBench.pane)
