@@ -1,6 +1,7 @@
 """Process startup phases; diagnostics remain in the gateway facade."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import time
@@ -681,11 +682,25 @@ def _start_gateway_install_signal_handlers(loop, shutdown_signal_handler, restar
         logger.info("Skipping signal handlers (not running in main thread).")
 
 
+def _purge_retired_held_drafts(config) -> None:
+    """The held-draft store is gone: delete what an older gateway left under every served profile."""
+    from gateway.run import _multiplex_profile_homes, get_hermes_home
+    from tools.bot_mode_drafts import purge_retired_hold_store
+    homes = ([home for _name, home in _multiplex_profile_homes(config)]
+             if getattr(config, "multiplex_profiles", False) else [get_hermes_home()])
+    for home in homes:
+        purge_retired_hold_store(home)
+
+
 async def _start_gateway_run_runner(runner, _signal_initiated_shutdown: list) -> Optional[bool]:
-    """MCP discovery, then ``runner.start()``. Returns the exit verdict when the process must end
-    before running mode (start failed, clean exit, aborted startup); None to continue into cron."""
+    """Retired held-draft purge, MCP discovery, then ``runner.start()``. Returns the exit verdict when the
+    process must end before running mode (start failed, clean exit, aborted startup); None to continue into cron."""
     from gateway.run import (_discover_gateway_mcp_tools, _resolve_gateway_exit_verdict,
                              _shutdown_gateway_health_export, _shutdown_mcp_servers_nonblocking)
+    try:
+        await asyncio.to_thread(_purge_retired_held_drafts, runner.config)
+    except Exception:
+        logger.warning("Could not delete the retired held-draft files", exc_info=True)
     # discover_mcp_tools() blocks up to 120s; on the loop thread it would freeze platform heartbeats.
     try:
         # MCP tool discovery — run in an executor so the asyncio event loop stays responsive even when a

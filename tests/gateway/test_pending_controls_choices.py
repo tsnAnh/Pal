@@ -26,14 +26,14 @@ def test_an_approval_prompt_offers_once_or_deny_and_carries_the_question():
     assert prompt["question"] == "Send this message?"
 
 
-def test_a_held_draft_prompt_keeps_its_draft_and_details():
+def test_an_outbound_draft_prompt_keeps_its_draft_and_details():
     events = _Events()
     controls = PendingControls(events)
     draft = {"id": "d1", "kind": "message"}
     details = [{"label": "To", "value": "Ada"}]
 
     controls.register("sid", "route", 1, {
-        "request_id": "draft:d1", "command": "Hi Ada", "description": "Send to Ada",
+        "request_id": "r1", "command": "Hi Ada", "description": "Send to Ada",
         "question": "Send this message?", "draft": draft, "details": details})
 
     (_, prompt), = events.published

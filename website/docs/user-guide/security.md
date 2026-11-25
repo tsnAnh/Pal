@@ -63,7 +63,7 @@ approvals:
 
 A few actions are not a tool call you can wave through, because they send something out in your name or spend your money. These still ask, with a short question and the exact content, and they accept only **once** or **deny**:
 
-- held drafts: a message a bot is about to send, and an MCP connector action that changes things;
+- outbound sends: a message to a person that a bot is about to send, asked once in the chat through the form, and an MCP connector action that changes things. A message to your own agents (T3 Code threads) goes through at once, and a send nobody can be asked about is refused, never parked;
 - paying with a card from the [credential vault](./features/credential-vault.md#paying-and-filling-addresses);
 - an MCP server's declared [`spend_limit`](./features/mcp.md#tool-costs-and-spend-limits), once a call would take the chat past it;
 - MCP [sampling](./features/mcp.md) and [elicitation](./features/mcp.md#mcp-elicitation-support) requests from a server.

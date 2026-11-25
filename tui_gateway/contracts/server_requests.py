@@ -191,7 +191,7 @@ class ApprovalResult(Result):
 
 
 server_request("approval", params=ApprovalRequestParams, result=ApprovalResult,
-               doc="A held draft or a spend or payment consent awaits the user's decision.")
+               doc="An outbound send or a spend or payment consent awaits the user's decision.")
 
 
 # ── one-string prompts ────────────────────────────────────────────────────────────────────────

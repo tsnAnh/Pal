@@ -263,7 +263,7 @@ class GatewayInboundMixin(
         """Whether a turn may bypass the global emergency stop: pause blocks NEW agent turns, never
         running work or control traffic — recognized slash commands (incl. /pause off, the in-band
         resume) and replies owned by in-flight work (pending update prompt, running session,
-        pending slash-confirm, held-draft approval) all pass through."""
+        pending slash-confirm, outbound-send approval) all pass through."""
         with suppress(Exception):
             _estop_cmd = event.get_command()
             if _estop_cmd:

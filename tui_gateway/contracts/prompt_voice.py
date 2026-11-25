@@ -349,7 +349,7 @@ class ApprovalRespondResult(Result):
 
 
 method("approval.respond", params=ApprovalRespondParams, result=ApprovalRespondResult,
-       doc="Deliver the user's decision on a held draft or consent (falls back to durable identity on a stale sid).")
+       doc="Deliver the user's decision on an outbound send or consent (falls back to durable identity on a stale sid).")
 
 
 # ── voice ─────────────────────────────────────────────────────────────────────────────────────

@@ -958,7 +958,7 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
 
     def _run_conversation_with_approval(self, agent, agent_history, observed_group_context,
                                         persist_user_message_override, persist_user_timestamp_override):
-        """Run the turn with the per-session gateway approval callback registered: a held-draft or
+        """Run the turn with the per-session gateway approval callback registered: an outbound-send or
         consent approval blocks the agent thread; the callback bridges sync→async."""
         from gateway.run import _wrap_current_message_with_observed_context
         from tools.approval import register_gateway_notify, unregister_gateway_notify

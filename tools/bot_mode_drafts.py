@@ -1,9 +1,8 @@
-import contextlib
-import contextvars
 import hashlib
 import json
 import logging
 import re
+import shutil
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
@@ -31,17 +30,6 @@ _ATTACHMENT_BULK_KEYS = frozenset({"content", "data", "bytes", "base64", "blob",
 _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 _MCP_PREFIX = "mcp__"
 _CONNECTOR_PREFIX = "connectors__"
-
-_approved_send: contextvars.ContextVar[bool] = contextvars.ContextVar("bot_mode_approved_send", default=False)
-
-
-@contextlib.contextmanager
-def approved_send():
-    token = _approved_send.set(True)
-    try:
-        yield
-    finally:
-        _approved_send.reset(token)
 
 
 @dataclass(frozen=True)
@@ -301,30 +289,28 @@ def validate_edit(outbound: Outbound, args: dict, edited_text) -> tuple[dict | N
     return new_args, ""
 
 
-HELD_WHERE = ("Open this bot's chat in the Pal app: the draft is waiting under Approvals, where the owner can "
-              "approve, edit or cancel it.")
+NOT_SENT_NOBODY_TO_ASK = (
+    "BLOCKED: This message was NOT sent: the owner could not be asked about it right now, and nothing is stored. "
+    "Do NOT retry it, do NOT rephrase it, and do NOT deliver it through another tool or route. In your next turn "
+    "with the owner, offer it through the clarify form (a question with a `send` field) so one tap sends it.")
+
+OWN_AGENT, PERSON = "own_agent", "person"
+_OWN_AGENT_TOOLS = {"t3code": frozenset({"t3_thread_send", "t3_thread_send_attachments"})}
 
 
-def _held_message(draft_id: str, reason: str) -> str:
-    return (f"BLOCKED: {reason} The message was NOT sent. It is saved as a draft (state: pending, draft {draft_id}) "
-            f"and nothing is sent until the owner approves it. {HELD_WHERE} Do NOT retry it, do NOT rephrase it, "
-            "and do NOT deliver the same message through another tool or route.")
+def purge_retired_hold_store(home: str | Path) -> None:
+    shutil.rmtree(Path(home) / "bot_mode" / "drafts", ignore_errors=True)
 
 
-def _hold(outbound: Outbound, args: dict, origin: str, reason: str) -> tuple[str, None]:
-    from tools import bot_mode_draft_store
-    try:
-        record = bot_mode_draft_store.hold(outbound, args, origin=origin)
-    except bot_mode_draft_store.DraftError as exc:
-        if exc.code != "limit":
-            raise
-        return (f"BLOCKED: {exc.message} The message was NOT sent. Do NOT retry it or deliver it through "
-                "another route."), None
-    except (OSError, ValueError, TypeError):
-        logger.exception("could not hold outbound draft for %s", outbound.tool)
-        return ("BLOCKED: The draft could not be saved, so the message was NOT sent. Do NOT retry it or "
-                "deliver it through another route."), None
-    return _held_message(record["id"], reason), None
+def recipient_class(outbound: Outbound) -> str:
+    split = _split_tool(outbound.tool)
+    if split is not None and split[2] in _OWN_AGENT_TOOLS.get(re.sub(r"[^a-z0-9]", "", split[1].lower()), ()):
+        return OWN_AGENT
+    from hermes_cli.config import load_config_readonly
+    owned = (load_config_readonly().get("bot_mode") or {}).get("owner_recipients")
+    if outbound.recipient and isinstance(owned, list) and outbound.recipient in owned:
+        return OWN_AGENT
+    return PERSON
 
 
 def _inline_capable(approval) -> bool:
@@ -359,7 +345,7 @@ def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]
         attachments=_attachment_names(outbound))
     if not result.get("approved"):
         if result.get("outcome") == "timeout":
-            return _hold(outbound, args, "timeout", "The owner did not answer in time.")
+            return NOT_SENT_NOBODY_TO_ASK, None
         return str(result.get("message") or "BLOCKED: the draft was not approved; it was NOT sent."), None
     edited = result.get("edited_text")
     if edited is None or edited == outbound.text:
@@ -374,8 +360,8 @@ def content_block(outbound: Outbound, args: dict) -> str | None:
     if len(outbound.text) > MAX_TEXT_CHARS or sum(len(part) for part in _strings(args)) > MAX_ARGS_CHARS:
         return "BLOCKED: This message is too long to send. It was NOT sent. Shorten it."
     if _carries_secret(*_strings(args), outbound.text, outbound.subject):
-        return ("BLOCKED: This message contains what looks like a credential, so it was NOT sent and no "
-                "draft was made. Remove the secret and do not retry with it.")
+        return ("BLOCKED: This message contains what looks like a credential, so it was NOT sent and nothing "
+                "is stored. Remove the secret and do not retry with it.")
     return None
 
 
@@ -412,16 +398,16 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
         return None, None
     if (blocked := content_block(outbound, args)) is not None:
         return blocked, None
+    if recipient_class(outbound) == OWN_AGENT:
+        logger.info("outbound send to an own agent went through: tool=%s class=%s", outbound.tool, OWN_AGENT)
+        return None, None
     from tools import approval, approval_context
     if approval_context._no_user_can_answer():
-        return _hold(outbound, args, "unattended", "Nobody is present to approve outbound messages in this run.")
+        return NOT_SENT_NOBODY_TO_ASK, None
     if not policy.ask:
         return None, None
-    if not outbound.viewable:
-        return _hold(outbound, args, "unviewable",
-                     "Part of this message cannot be shown in full, so it can only be cancelled.")
-    if not _inline_capable(approval):
-        return _hold(outbound, args, "elsewhere", "No Pal app is connected to this chat to show the approval right now.")
+    if not outbound.viewable or not _inline_capable(approval):
+        return NOT_SENT_NOBODY_TO_ASK, None
     from tools import outbound_send_grant
     if outbound_send_grant.redeem(outbound.tool, args):
         return None, None
@@ -460,8 +446,6 @@ def review_after_hooks(tool_name: str, args, load_details, resolve_block) -> tup
 
 
 def review_outbound(tool_name: str, args) -> tuple[str | None, dict | None]:
-    if _approved_send.get():
-        return None, None
     if not isinstance(args, dict):
         return blocked_on_failure(tool_name), None
     try:

@@ -4,8 +4,8 @@ import types
 import pytest
 
 import hermes_cli.config as hc
-from tools import approval, bot_mode_draft_store
-from tools.bot_mode_drafts import review_outbound
+from tools import approval
+from tools.bot_mode_drafts import NOT_SENT_NOBODY_TO_ASK, review_outbound
 from tui_gateway import server
 
 TOOL = "mcp__fakeconn__fakeconn__send_message"
@@ -85,28 +85,19 @@ def test_a_turn_of_an_ordinary_chat_with_an_answering_client_asks_inline(turn, m
     assert outcome["review"] == (None, None)
     assert len(cards) == 1 and cards[0]["draft"]["recipient"] == "client-1"
     assert cards[0]["command"] == ARGS["message"]
-    assert bot_mode_draft_store.list_pending() == []
+    assert not (turn / "bot_mode" / "drafts").exists()
 
 
-def test_a_turn_with_no_answering_client_holds_and_the_draft_is_listed_for_every_chat(turn, monkeypatch):
+def test_a_turn_with_no_answering_client_is_refused_and_stores_nothing(turn, monkeypatch):
     cards = []
     approval.register_gateway_notify(KEY, cards.append)
     outcome = _run_turn("Some other chat", [], monkeypatch)
-    block, new_args = outcome["review"]
-    assert new_args is None and cards == []
-    assert "state: pending" in block and "Approvals" in block and "Bot Chat" not in block
-    (record,) = bot_mode_draft_store.list_pending()
-    assert record["origin"] == "elsewhere"
-    server._sessions["sid-bot-chat"] = {"session_key": "bot-chat-key", "history": [],
-                                        "agent": types.SimpleNamespace(_session_title_hint="Bot Chat")}
-    try:
-        reply = server.handle_request({"id": 1, "method": "approval.pending", "params": {"session_id": "sid-bot-chat"}})
-    finally:
-        server._sessions.pop("sid-bot-chat", None)
-    assert [card["request_id"] for card in reply["result"]["approvals"]] == [f"draft:{record['id']}"]
+    assert outcome["review"] == (NOT_SENT_NOBODY_TO_ASK, None)
+    assert cards == [] and not (turn / "bot_mode" / "drafts").exists()
 
 
-def test_the_canonical_bot_chat_turn_without_a_client_holds_too(turn, monkeypatch):
+def test_the_canonical_bot_chat_turn_without_a_client_is_refused_too(turn, monkeypatch):
     approval.register_gateway_notify(KEY, lambda data: None)
     outcome = _run_turn("Bot Chat", [], monkeypatch)
-    assert outcome["review"][0] is not None and len(bot_mode_draft_store.list_pending()) == 1
+    assert outcome["review"] == (NOT_SENT_NOBODY_TO_ASK, None)
+    assert not (turn / "bot_mode" / "drafts").exists()

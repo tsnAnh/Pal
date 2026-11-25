@@ -1,4 +1,4 @@
-"""ACP permission bridging for Hermes owner-decision consents (held drafts, payments, spend limits)."""
+"""ACP permission bridging for Hermes owner-decision consents (outbound sends, payments, spend limits)."""
 
 from __future__ import annotations
 

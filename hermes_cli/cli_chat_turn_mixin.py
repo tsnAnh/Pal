@@ -304,7 +304,7 @@ class CLIChatTurnMixin:
         set_unlock_prompt_callback(self._vault_unlock_callback)
         set_save_login_prompt_callback(self._vault_save_login_callback)
         set_code_prompt_callback(self._vault_code_callback)
-        # Bind the session key owner consents (held drafts, payments, spend limits) resolve against.
+        # Bind the session key owner consents (outbound sends, payments, spend limits) resolve against.
         try:
             from tools.approval_context import reset_current_session_key, set_current_session_key
             _approval_session_token = set_current_session_key(self.session_id or "default")

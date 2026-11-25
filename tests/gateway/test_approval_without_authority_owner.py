@@ -25,7 +25,7 @@ def test_plain_chat_turn_has_no_authority_owner_to_notify(plain_chat_turn):
         plain_chat_turn._approval_notify_sync({"request_id": "r1", "command": "x"})
 
 
-def test_held_draft_in_a_plain_chat_turn_is_blocked_without_waiting(plain_chat_turn):
+def test_outbound_draft_in_a_plain_chat_turn_is_blocked_without_waiting(plain_chat_turn):
     result = approval.request_draft_approval(
         text="Hello", description="Send to Ana", pattern_key="draft:1",
         draft={"kind": "outbound_message", "text": "Hello"})

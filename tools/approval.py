@@ -6,7 +6,7 @@ self-delete, ``sudo -S`` password piping, the operator's ``approvals.deny`` rule
 profile create) and, in a context nobody can answer (``-q``, cron, an unattended platform), apply
 ``approvals.single_query_mode`` / ``cron_mode`` / ``unattended_mode``. Everything else runs.
 
-What still asks the owner is content that sends out or spends money: held drafts
+What still asks the owner is content that sends out or spends money: outbound sends
 (``request_draft_approval``) and ``approval_prompt.request_elicitation_consent``. Both ride the gateway
 queue below, one operation at a time (once or deny). Leaves: ``approval_detection`` (hardline and
 dangerous-pattern detection), ``approval_context`` (contextvars, config readers), ``approval_floors``
@@ -406,7 +406,7 @@ def unattended_write_refusal(subject: str) -> str | None:
     return None
 
 
-# --- Owner decisions (held drafts) ----------------------------------------------------------------------------------
+# --- Owner decisions (outbound sends) ----------------------------------------------------------------------------------
 # A draft that would send content out reaches its owner one way: gateway round-trip -> pending fallback -> CLI
 # prompt. Silence is not consent, deny is a hard halt, and the answer covers that one operation.
 
