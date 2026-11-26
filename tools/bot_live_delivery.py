@@ -277,17 +277,18 @@ def _write(path: Path, record: dict[str, Any]) -> None:
 def deliver_to_live_owner(
     profile_home: Path | str, owner: dict[str, Any], message: str,
     *, delivery_id: str | None = None, author: dict[str, Any] | None = None,
-    notification_category: str = "result", routine: dict[str, Any] | None = None,
+    notification_category: str = "result", cron_delivery: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return durable admission immediately, without waiting for the owner.
 
     Retry with the same id AND pinned owner/message to inspect the existing
     state. Reusing an id with a different payload is an error, never an overwrite.
-    ``routine`` (``job_name``, ``status``, ``finished_at``, ``text``) is a cron job's card for the
-    row: presentation only, so the first admission's card stands for a replay of the id.
+    ``cron_delivery`` (``job_id``, ``execution_id``, ``name``, ``text``) makes the delivery a finished
+    scheduled message the owner writes as its own reply instead of running a turn; the first admission's
+    text stands for a replay of the id.
     """
     return _door(authority_delivery, profile_home, owner, message, delivery_id=delivery_id, author=author,
-                 notification_category=notification_category, routine=routine)
+                 notification_category=notification_category, cron_delivery=cron_delivery)
 
 
 def settle_held_delivery(profile_home: Path | str, owner: dict[str, Any], message: str, *, delivery_id: str,
@@ -298,7 +299,7 @@ def settle_held_delivery(profile_home: Path | str, owner: dict[str, Any], messag
 
 
 def _door(call: Callable[[Path, dict], dict], profile_home, owner, message, *, delivery_id=None, author=None,
-          notification_category="result", routine=None):
+          notification_category="result", cron_delivery=None):
     pinned = _owner(profile_home, owner)
     if not isinstance(message, str):
         raise ValueError("message must be a string")
@@ -311,7 +312,8 @@ def _door(call: Callable[[Path, dict], dict], profile_home, owner, message, *, d
     return {**call(home, dict(id=_delivery_id(delivery_id if delivery_id is not None else uuid.uuid4().hex),
         profile=home.name if home.parent.name == "profiles" else "default",
         message=message, **({"session_id": pinned["session_id"]} if pinned["session_id"] else {}),
-        **({"author": dict(author)} if author else {}), **({"routine": dict(routine)} if routine else {}),
+        **({"author": dict(author)} if author else {}),
+        **({"cron_delivery": dict(cron_delivery)} if cron_delivery else {}),
         **category)), **category}
 
 

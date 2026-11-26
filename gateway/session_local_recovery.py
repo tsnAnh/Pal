@@ -5,6 +5,7 @@ import json
 import logging
 
 from gateway.config import Platform
+from gateway.display_markers import legacy_routine_row
 from gateway.session import SessionEntry, SessionSource
 from gateway.session_contract import SessionRef
 from gateway.session_persistence import authority_persistence
@@ -374,7 +375,8 @@ def local_history(authority, ref, prepared=None):
         # Rows appended since the prepare count against the archive budget too (no lineage re-read).
         display, cut = _fit_archive(live, display)
         truncated = truncated or cut
-    rows = [_with_authored_text({**{k: v for k, v in row.items() if k != '_row_id'}, 'row_id': row['_row_id']})
+    rows = [legacy_routine_row(_with_authored_text(
+                {**{k: v for k, v in row.items() if k != '_row_id'}, 'row_id': row['_row_id']}))
             for row in _merge_live_in_stored_order(display, live)]
     if truncated and rows:
         rows[0]['archived_truncated'] = True  # earlier archived history was left out (the byte budget)

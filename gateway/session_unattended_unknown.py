@@ -34,6 +34,21 @@ def is_unattended(row) -> bool:
             or 'automation' in native or 'webhook_delivery' in native)
 
 
+def _lost_notice(store, row):
+    from agent.turn_failure_copy import AUTOMATION_INTERRUPTED_NOTICE
+    from gateway.session_cron_post import cron_post, write_cron_post
+    from persistence.core.errors import STORE_FAILURES, AuthorityRefusal
+    post = cron_post(row.get('payload'))
+    if post is None:
+        return AUTOMATION_INTERRUPTED_NOTICE
+    try:
+        write_cron_post(store, store.lineage.tip(row['target_session_id']), post)
+    except (OSError, AuthorityRefusal, *STORE_FAILURES):
+        logger.warning('Scheduled delivery of lost admission %s not written', row['admission_id'], exc_info=True)
+        return AUTOMATION_INTERRUPTED_NOTICE
+    return None
+
+
 def _unattended_unknown(records):
     from gateway.session_authority import admission_row
     return [row for row in map(admission_row, records) if row['status'] == 'unknown' and is_unattended(row)]
@@ -43,14 +58,13 @@ def settle_recovered_unattended(store, epoch) -> int:
     """Boot recovery, right after ``admissions.recover`` fenced lost turns ``unknown`` and before
     any FIFO is scheduled: settle every unattended one. Synchronous; runs off the owner loop.
     *store* is the profile's storage interface handle."""
-    from agent.turn_failure_copy import AUTOMATION_INTERRUPTED_NOTICE
     from gateway.session_ingress_media import release_admission_media
     from persistence.core.errors import AuthorityRefusal
     settled = 0
     for row in _unattended_unknown(store.admissions.list_unknown()):
         try:
             store.admissions.resolve_unknown(epoch=epoch, admission_id=row['admission_id'],
-                                             generation=row['generation'], notice=AUTOMATION_INTERRUPTED_NOTICE)
+                                             generation=row['generation'], notice=_lost_notice(store, row))
         except AuthorityRefusal as exc:
             logger.warning('Lost automation admission %s left unknown: %s', row['admission_id'], exc.reason)
             continue
@@ -67,15 +81,15 @@ async def settle_unattended_unknown(authority, ref) -> bool:
     drain re-reads its FIFO instead of pausing; a person's ``unknown`` row still pauses it."""
     import asyncio
 
-    from agent.turn_failure_copy import AUTOMATION_INTERRUPTED_NOTICE
     from gateway.session_persistence import authority_persistence
     from persistence.core.errors import AuthorityRefusal
-    rows = await asyncio.to_thread(authority_persistence(authority).admissions.list, session_id=ref.session_id)
+    store = authority_persistence(authority)
+    rows = await asyncio.to_thread(store.admissions.list, session_id=ref.session_id)
     settled = False
     for row in _unattended_unknown(rows):
         try:
             await authority.resolve_unknown_as_owner(ref, row['admission_id'], row['generation'],
-                                                     notice=AUTOMATION_INTERRUPTED_NOTICE)
+                                                     notice=await asyncio.to_thread(_lost_notice, store, row))
         except AuthorityRefusal as exc:
             logger.warning('Lost automation admission %s left unknown: %s', row['admission_id'], exc.reason)
             continue

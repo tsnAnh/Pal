@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Literal, Optional
 
 from agent.error_surface import PREVIEW_COPY_BY_CODE
-from gateway.response_filters import is_intentional_silence_response, strip_trailing_silence_marker
+from gateway.response_filters import (ROUTINE_OUTPUT_DISPLAY_KIND, is_intentional_silence_response,
+                                      strip_trailing_silence_marker)
 from session_rules.turns import FAILED_TURN_DISPLAY_KIND
 from tools.bot_dm_wire import BOT_REPLY_RULE
 from tools.bot_mode_probe import NO_REPLY_MARKER
@@ -71,6 +72,22 @@ def _surface_preview_copy(display_metadata: Any) -> Optional[str]:
     surface = display_metadata.get("error_surface") if isinstance(display_metadata, dict) else None
     code = surface.get("code") if isinstance(surface, dict) else None
     return PREVIEW_COPY_BY_CODE.get(code) if isinstance(code, str) else None
+
+
+def legacy_routine_row(row: dict) -> dict:
+    if row.get("role") != "user" or row.get("display_kind") != ROUTINE_OUTPUT_DISPLAY_KIND:
+        return row
+    metadata = row.get("display_metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = json.loads(metadata)
+        except ValueError:
+            return row
+    text = metadata.get("display_text") if isinstance(metadata, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        return row
+    dropped = ("display_kind", "display_metadata", "text")
+    return {**{key: value for key, value in row.items() if key not in dropped}, "role": "assistant", "content": text}
 
 
 def owner_display_text(role: Any, content: Any, display_kind: Any = None, display_metadata: Any = None) -> Optional[str]:

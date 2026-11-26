@@ -43,6 +43,7 @@ from cron.worker_bootstrap import WORKER_MARKER, finish_worker_boot
 from hermes_constants import get_hermes_home, hermes_home_key
 from hermes_cli.observability.shared_metrics_gateway import note_cron_execution, note_cron_skipped
 from cron.env_settings import cron_env_setting
+from cron.job_title import job_title
 from hermes_cli._subprocess_compat import windows_hide_flags
 from hermes_cli.config import (
     load_config, load_config_readonly)
@@ -268,7 +269,7 @@ def _summarize_cron_failure_for_delivery(job: dict, error: str | None) -> str:
         classify_cron_failure_reason, generic_failure_notice, inactivity_notice,
         provider_failure_notice, script_timeout_notice)
 
-    job_name = job.get("name") or job.get("id") or "cron job"
+    job_name = job_title(job)
     job_id = job.get("id") or job_name
     text = (error or "unknown error").strip()
     lower = text.lower()
@@ -2905,7 +2906,7 @@ def _compose_run_delivery(
         # Bypass the generic failure summarizer (its auth/timeout heuristics would mislabel this).
         _pf_text = re.sub(r"\[blocked_config[^\]]*\]\s*", "", err).strip()
         from cron.scheduler_failure_copy import blocked_config_notice
-        deliver_content = blocked_config_notice(job.get("name") or job["id"], _pf_text)
+        deliver_content = blocked_config_notice(job_title(job), _pf_text)
     elif success:
         deliver_content = final_response
         _resolve_incidents_for_recovered_job(job)
@@ -2923,9 +2924,8 @@ def _compose_run_delivery(
             # heuristics would re-diagnose it ("timed out" -> blame the model service, "401" ->
             # "sign in again") and attach the wrong remediation. Deliver the evidence as-is.
             from cron.scheduler_failure_copy import generic_failure_notice
-            deliver_content = generic_failure_notice(
-                job.get("name") or job["id"], job["id"], err.strip().rstrip("."),
-            ) + _failure_streak_nudge(job)
+            deliver_content = (generic_failure_notice(job_title(job), job["id"], err.strip().rstrip("."))
+                               + _failure_streak_nudge(job))
         else:
             from cron.quota_hold import hold_notice
             deliver_content = (

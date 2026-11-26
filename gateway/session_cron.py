@@ -55,23 +55,25 @@ async def _admit_local_delivery(authority, chat_id, text, metadata):
         elif live is None or live.source is None or live.source.platform == Platform.LOCAL:
             restore_local_session(authority, chat_id)  # a chat closed before this fire, as for completions
         source = authority.sessions[chat_id].source
-        # Off the chat its app viewers take it (as a note); back on the chat (its /resume) it is that
+        # Off the chat its app viewers take it; back on the chat (its /resume) it is that
         # conversation's own turn there.
         adapter = (local_adapter_map(authority)[Platform.LOCAL] if source.platform == Platform.LOCAL
                    else authority.runner._adapter_for_source(source))
         return await admit_route_wake(authority.runner, adapter, source, text, 'cron', metadata)
 
 
-def deliver_to_local_chat(home, chat_id, text, *, diagnostic=False):
-    """Admit a cron result into local chat *chat_id*'s FIFO; at the head it is written into the chat's
-    history as a note, never a turn (``session_completion_notes``). A local chat has no push transport
+def deliver_to_local_chat(home, chat_id, text, *, diagnostic=False, cron_delivery=None):
+    """Admit a result into local chat *chat_id*'s FIFO; at the head a ``cron_delivery`` is written as the
+    chat's assistant message (``session_cron_post``) and any other text as a note
+    (``session_completion_notes``), neither ever a turn. A local chat has no push transport
     (``LocalSessionAdapter.send`` only acknowledges a turn's own output), so only the owner in this
     process can deliver. Called off the owner loop; None once admitted, else the error."""
     owner = owner_for_home(home)
     if owner is None:
         return f"local chat {chat_id}: no gateway in this process owns its session"
     authority, loop = owner
-    metadata = {'notification_category': 'diagnostic'} if diagnostic else {}
+    metadata = {**({'notification_category': 'diagnostic'} if diagnostic else {}),
+                **({'cron_delivery': cron_delivery} if cron_delivery else {})}
     try:
         admitted = asyncio.run_coroutine_threadsafe(
             _admit_local_delivery(authority, chat_id, text, metadata), loop).result(timeout=60)

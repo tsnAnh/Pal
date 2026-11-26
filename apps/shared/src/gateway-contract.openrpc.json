@@ -12580,7 +12580,7 @@
             "default": null,
             "title": "Notification Category"
           },
-          "routine": {
+          "cron_delivery": {
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -12591,7 +12591,7 @@
               }
             ],
             "default": null,
-            "title": "Routine"
+            "title": "Cron Delivery"
           }
         },
         "required": [

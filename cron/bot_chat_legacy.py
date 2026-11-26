@@ -24,12 +24,14 @@ _warned: set[Path] = set()
 def defer(key: str, job: dict, content: str, home: Path, *, for_failure: bool) -> None:
     """Park one never-admitted output under its delivery id; a later tick hands it to the owner."""
     import time
+    from cron.scheduler_delivery_routine import cron_delivery
     root = get_hermes_home().resolve() / "cron" / "bot_chat_pending"
     make_user_dir(root, parents=True, exist_ok=True, mode=0o700)
     path = root / f"{key}.json"
     if not path.exists():  # an existing record (queued or already transferred) keeps its status
         atomic_json_write(path, dict(
             id=key, status="queued", job={k: job[k] for k in ("id", "name") if k in job}, content=content,
+            cron_delivery=cron_delivery(job, content),
             home=str(home), for_failure=for_failure, sequence=time.time_ns()), fsync_dir=True, mode=0o600)
 
 
@@ -64,7 +66,7 @@ def _malformed(record: dict) -> str:
 def _dispose(path: Path, record: dict) -> bool:
     """Decide one queued record in place; False leaves it queued for a later tick."""
     from cron.scheduler_delivery import BOT_CHAT_POLICY_PLATFORM, bot_chat_message
-    from cron.scheduler_delivery_routine import bot_chat_routine
+    from cron.scheduler_delivery_routine import cron_delivery
     from gateway.warning_notifications import warning_notifications_enabled
     from hermes_cli.config_effective import load_user_config_effective
     from tools.bot_live_delivery import deliver_to_live_owner, find_canonical_live_owner
@@ -91,8 +93,8 @@ def _dispose(path: Path, record: dict) -> bool:
             receipt = deliver_to_live_owner(
                 home, owner, bot_chat_message(job, record["content"]), delivery_id=record["id"],
                 notification_category="diagnostic" if for_failure else "result",
-                routine=bot_chat_routine(job, record["content"], for_failure=for_failure,
-                                         finished_at=record.get("sequence", 0) / 1e9))
+                cron_delivery=record.get("cron_delivery") or cron_delivery(
+                    {**job, "execution_id": record["id"]}, record["content"]))
         except Exception as exc:
             # The door is idempotent per id (a replay returns the existing receipt), so the
             # record stays queued for the next tick; log loudly once, quietly after.

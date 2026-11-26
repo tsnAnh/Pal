@@ -298,6 +298,10 @@ def row_turn_author(policy, row):
 
 async def execute_admission(authority, ref, row):
     busy_turn_started(row['admission_id'])
+    from gateway.session_cron_post import post_cron_delivery
+    posted = await post_cron_delivery(authority, ref, row)
+    if posted is not None:
+        return posted
     from gateway.session_completion_notes import note_if_unviewed
     noted = await note_if_unviewed(authority, ref, row)  # #134889 LC-7: no viewer, no turn
     if noted is not None:
