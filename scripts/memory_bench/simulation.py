@@ -6,8 +6,10 @@ import statistics
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
+from scripts.memory_bench.audit import Exposure, NoteIndex, exposure, index_notes
 from scripts.memory_bench.model import (
     BRIEF_TOKEN_CAP,
+    TOTAL_TOKEN_CAP,
     CandidateSpec,
     History,
     ItemKind,
@@ -21,6 +23,7 @@ from scripts.memory_bench.model import (
 )
 from scripts.memory_bench.runner import Replay, attributed, session
 from scripts.memory_bench.scorer import (
+    TIERS,
     BriefDrop,
     Miss,
     Observation,
@@ -30,6 +33,7 @@ from scripts.memory_bench.scorer import (
     item_outcome,
     percentile,
     tally_causes,
+    total_exposure,
 )
 
 AGE_BUCKETS: tuple[tuple[str, float], ...] = (
@@ -60,6 +64,9 @@ class Answer:
     slot_skip: bool
     injected_text: str
     same_language: bool
+    tier: str | None
+    exposure: Exposure
+    recall_exposure: Exposure
 
 
 @dataclass(frozen=True)
@@ -88,7 +95,9 @@ def note_text(history: History, markers: tuple[str, ...]) -> str:
     )
 
 
-def answer(replay: Replay, question: Question, history: History, count_tokens: TokenCounter) -> Answer:
+def answer(
+    replay: Replay, question: Question, history: History, written: NoteIndex, count_tokens: TokenCounter
+) -> Answer:
     injection = replay.inject(question.probe)
     recall = replay.recall(question.probe)
     candidate = replay.candidate
@@ -115,6 +124,9 @@ def answer(replay: Replay, question: Question, history: History, count_tokens: T
         SkipReason.SLOTS in reasons,
         injection.text,
         vietnamese(question.probe.text) == vietnamese(note_text(history, question.item.markers)),
+        outcome.tier,
+        exposure(written, injection.text, question.probe, injected=True),
+        exposure(written, recall, question.probe, injected=False),
     )
 
 
@@ -131,9 +143,10 @@ def run_history(
             replay.feed(turn)
         replay.close_days_before(history.last_day + 1)
         answers = []
+        written = index_notes(history.turns)
         for question in history.questions:
             with attributed(spec.name, f"question {question.item.id}"):
-                answers.append(answer(replay, question, history, count_tokens))
+                answers.append(answer(replay, question, history, written, count_tokens))
         rewrites = replay.candidate.brief_rewrites()
         return SeedRun(
             seed,
@@ -199,6 +212,17 @@ def summarize_mode(runs: Sequence[SeedRun]) -> dict:
         "buckets": bucket_table(runs, jokes=False),
         "joke_buckets": bucket_table(runs, jokes=True),
         "language": language_split(answers),
+        "via": {
+            tier: sum(entry.tier == tier for entry in answers if entry.kind is not ItemKind.JOKE)
+            for tier in TIERS
+        },
+        "needed_within_cap": sum(
+            entry.injected and entry.tokens.total <= TOTAL_TOKEN_CAP
+            for entry in answers
+            if entry.kind is not ItemKind.JOKE
+        ),
+        "exposures": total_exposure(entry.exposure for entry in answers),
+        "recall_exposures": total_exposure(entry.recall_exposure for entry in answers),
         "causes": tally_causes(
             entry.miss for entry in answers if entry.miss and entry.kind is not ItemKind.JOKE
         ),

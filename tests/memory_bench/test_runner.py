@@ -213,7 +213,10 @@ def test_fake_candidate_runs_end_to_end():
         "count": 2, "total": 2, "pct": 100.0, "median_pct": 100.0, "min_pct": 100.0, "max_pct": 100.0,
     }
     assert simulated["buckets"]["8-14"]["recalled"]["count"] == 2
-    assert simulated["causes"] == {"store": {"evicted_store_cap": 2}}
+    assert simulated["causes"] == {"store_cap": {"evicted_store_cap": 2}}
+    assert simulated["via"] == {"brief": 0, "notes": 4, "snapshot": 0}
+    assert simulated["needed_within_cap"] == 4
+    assert set(simulated["exposures"]) == {"audience", "sensitive"}
     assert simulated["brief_drops"] == 2
     assert simulated["stored_notes"]["median"] == 2
     assert payload["simulation"]["plain"]["typical/flat"]["brief_drops"] is None

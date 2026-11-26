@@ -8,7 +8,7 @@ from scripts.memory_bench.candidates import mem0_vector, memory_md
 from scripts.memory_bench.candidates.fts import FtsRetriever
 from scripts.memory_bench.candidates.isolation import missing_modules
 from scripts.memory_bench.candidates.note_store import NoteStore
-from scripts.memory_bench.candidates.tiers import PolicyCandidate, Retriever
+from scripts.memory_bench.candidates.tiers import NoRetriever, PolicyCandidate, Retriever
 from scripts.memory_bench.model import CandidateSpec, TokenCounter
 
 FTS_THRESHOLDS = (0.0, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0, 15.0, 20.0)
@@ -19,6 +19,11 @@ hermes_unavailable = partial(missing_modules, "ruamel")
 
 def _policy(root: Path, retriever: Retriever, count_tokens: TokenCounter, threshold: float | None) -> PolicyCandidate:
     return PolicyCandidate(NoteStore(root / "notes.db"), retriever, count_tokens, threshold)
+
+
+def build_brief_only(workdir: Path, count_tokens: TokenCounter, threshold: float | None) -> PolicyCandidate:
+    root = Path(tempfile.mkdtemp(prefix="brief-only-", dir=workdir))
+    return _policy(root, NoRetriever(), count_tokens, threshold)
 
 
 def build_own_fts(workdir: Path, count_tokens: TokenCounter, threshold: float | None) -> PolicyCandidate:
@@ -45,6 +50,11 @@ REGISTRY: tuple[CandidateSpec, ...] = (
         "Built-in MEMORY.md/USER.md; less salient entries are removed to make room",
         memory_md.build_pruning,
         hermes_unavailable,
+    ),
+    CandidateSpec(
+        "brief_only",
+        "Control: the shared note policy and daily brief with no retrieval at all",
+        build_brief_only,
     ),
     CandidateSpec(
         "own_fts",

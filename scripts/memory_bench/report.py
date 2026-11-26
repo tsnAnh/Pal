@@ -46,17 +46,22 @@ def causes_text(causes: dict, group: str) -> str:
     return f"{sum(found.values())} ({detail})"
 
 
-def recall_leaks_text(summary: dict) -> str:
-    return ", ".join(f"{reason} {count}" for reason, count in summary["recall_leaks"].items())
+def counts_text(counts: dict) -> str:
+    return ", ".join(f"{name} {count}" for name, count in counts.items()) or "0"
 
 
 SUMMARY_ROWS: tuple[tuple[str, Callable[[dict], object]], ...] = (
     ("**needed hit rate** (jokes excluded)", lambda s: share(s["needed_hits"], s["needed_total"])),
+    ("needed hit rate, counting only injections within the caps", lambda s: share(s["needed_within_cap"], s["needed_total"])),
+    ("needed hits carried by brief / notes / snapshot", lambda s: " / ".join(map(str, s["via"].values()))),
     ("**leaks** (leaked items / failed cases)", lambda s: f"{s['leaks']} / {s['leak_cases']}"),
+    ("leaks by reason", lambda s: counts_text(s["leaks_by_reason"])),
+    ("audit: notes injected outside audience, or sensitive", lambda s: counts_text(s["exposures"])),
     ("cases passed", lambda s: share(s["passed"], s["cases"])),
     ("joke sub-score", lambda s: share(s["joke_hits"], s["joke_total"])),
     ("recall tool: needed reachable", lambda s: share(s["recall_hits"], s["needed_total"])),
-    ("recall tool: leaks", recall_leaks_text),
+    ("recall tool: forbidden items returned", lambda s: counts_text(s["recall_leaks"])),
+    ("audit: recall outside audience, or sensitive outside origin", lambda s: counts_text(s["recall_exposures"])),
     ("needed lost to a cap", lambda s: s["cap_evicted"]),
     *(
         (f"misses: {group}", lambda s, group=group: causes_text(s["causes"], group))
@@ -73,7 +78,7 @@ SUMMARY_ROWS: tuple[tuple[str, Callable[[dict], object]], ...] = (
 def summary_tables(payload: dict) -> str:
     names = list(payload["scenarios"])
     splits = list(payload["scenarios"][names[0]]["summary"])
-    ordered = sorted(splits, key=lambda split: ("all", "test", "dev").index(split))
+    ordered = sorted(splits, key=lambda split: ("test", "dev", "all").index(split))
     parts = []
     for split in ordered:
         summaries = [payload["scenarios"][name]["summary"][split] for name in names]
@@ -194,6 +199,9 @@ def simulation_table(payload: dict) -> str:
                 share(caps["skipped_for_budget"], probes),
                 share(caps["skipped_for_slots"], probes),
                 f"{result['leaks']} / {result['leak_probes']}",
+                counts_text(result["exposures"]),
+                " / ".join(map(str, result["via"].values())),
+                share(result["needed_within_cap"], sum(pair["total"] for pair in result["language"].values())),
                 result["brief_drops"],
                 *(share(pair["injected"], pair["total"]) for pair in result["language"].values()),
                 "; ".join(
@@ -211,7 +219,10 @@ def simulation_table(payload: dict) -> str:
         "brief >= 90% cap",
         "budget skip",
         "slot skip",
-        "leaks / probes",
+        "stale facts injected / probes",
+        "audit: injected outside audience, or sensitive",
+        "needed via brief / notes / snapshot",
+        "needed injected within caps",
         "brief drops",
         "injected, same language",
         "injected, cross language",

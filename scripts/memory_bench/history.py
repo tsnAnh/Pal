@@ -349,7 +349,7 @@ RECENT: tuple[Need, ...] = (
          "event-venue", ("đến 17 giờ",), ("ev", "Dung", "By what time must the booths come down according to the permit?")),
     need("h66", C, 28, "ds", "Thảo", "empty states with the paper heron mascot, shipping by 11/4",
          "Thảo committed on {d} to shipping the empty-state illustrations featuring the paper heron mascot by 11/4.",
-         "empty-state-art", ("paper heron",), ("ds", "Noor", "Hình minh họa con cò giấy cho màn hình trống khi nào xong?")),
+         "empty-state-heron", ("paper heron",), ("ds", "Noor", "Hình minh họa con cò giấy cho màn hình trống khi nào xong?")),
     need("h67", P, 28, "pal", OWNER, "nhắc việc thì nhắc mình lúc 8 giờ 15 tối, đừng chen giữa giờ làm",
          "Ngày {d}, Vy dặn khi nhắc việc hãy nhắc lúc 8 giờ 15 tối, đừng nhắc giữa giờ làm.",
          "vy-reminder-time", ("8 giờ 15 tối",), ("pal", OWNER, "What time do I like my nudges to arrive?")),
@@ -475,7 +475,11 @@ def _question(index: int, item: Need, said_at: float) -> Question:
 
 def _lengthened(rng: random.Random, turn: Turn, sentences: int) -> Turn:
     proposals = tuple(
-        replace(proposal, text=" ".join((proposal.text, *context(rng, vietnamese(proposal.text), sentences))))
+        replace(
+            proposal,
+            text=" ".join((proposal.text, *context(rng, vietnamese(proposal.text), sentences))),
+            topic=f"{proposal.topic}-{proposal.key}" if proposal.key.startswith("f-") else proposal.topic,
+        )
         for proposal in turn.proposals
     )
     return replace(turn, proposals=proposals)
@@ -496,7 +500,7 @@ def build_history(seed: int, salience: SalienceMode, load: Load = Load.TYPICAL) 
         padding = random.Random(f"context:{seed}")
         turns = tuple(_lengthened(padding, turn, volume.context_sentences) for turn in turns)
     questions = tuple(
-        _question(index, item, min(slot.at for slot in needed[item.fact.key]))
+        _question(index, item, max(slot.at for slot in needed[item.fact.key]))
         for index, item in enumerate(NEEDS)
     )
     return History(turns, questions, LAST_DAY)

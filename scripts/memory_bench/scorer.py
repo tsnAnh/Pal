@@ -4,6 +4,7 @@ import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from scripts.memory_bench.audit import Exposure, exposure, index_notes
 from scripts.memory_bench.model import (
     BRIEF_TOKEN_CAP,
     NOTES_TOKEN_CAP,
@@ -26,10 +27,12 @@ from scripts.memory_bench.model import (
 
 NO_MATCH = "no_match"
 NEVER_OFFERED = "never_offered"
-GROUPS = ("store", "injection_cap", "retrieval", "never_offered")
-CAP_GROUPS = frozenset({"store", "injection_cap"})
+TIERS = ("brief", "notes", "snapshot")
+GROUPS = ("store_cap", "injection_cap", "write_rule", "retrieval", "never_offered")
+CAP_GROUPS = frozenset({"store_cap", "injection_cap"})
+CAP_LOSSES = (LossReason.REJECTED_FULL, LossReason.PRUNED, LossReason.EVICTED_CAP, LossReason.WRITE_LIMIT)
 CAUSE_GROUPS: dict[str, str] = {
-    **{reason.value: "store" for reason in LossReason},
+    **{reason.value: "store_cap" if reason in CAP_LOSSES else "write_rule" for reason in LossReason},
     SkipReason.SLOTS.value: "injection_cap",
     SkipReason.BUDGET.value: "injection_cap",
     SkipReason.BELOW_THRESHOLD.value: "retrieval",
@@ -41,7 +44,6 @@ CAUSE_GROUPS: dict[str, str] = {
 }
 RECALL_LEAK_REASONS = (
     ForbiddenReason.WRONG_AUDIENCE,
-    ForbiddenReason.SENSITIVE,
     ForbiddenReason.SUPERSEDED,
 )
 BRIEF_ITEM_KINDS = frozenset({ItemKind.DECISION, ItemKind.COMMITMENT})
@@ -72,6 +74,7 @@ class ItemOutcome:
     injected: bool
     recalled: bool
     miss: Miss | None
+    tier: str | None = None
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,8 @@ class CaseResult:
     earlier_injected_texts: tuple[str, ...]
     recall_text: str
     skipped: tuple[Skip, ...]
+    exposure: Exposure
+    recall_exposure: Exposure
 
     @property
     def injected_leaks(self) -> tuple[LeakOutcome, ...]:
@@ -157,6 +162,23 @@ class Summary:
     tokens_mean: float | None
     cap_violation_cases: int
     over_ceiling_cases: int
+    needed_within_cap: int
+    via: dict[str, int]
+    leaks_by_reason: dict[str, int]
+    exposures: dict[str, int]
+    recall_exposures: dict[str, int]
+
+
+def tier_of(injection: Injection, markers: tuple[str, ...]) -> str | None:
+    return next((tier for tier in TIERS if mentions(getattr(injection, tier), markers)), None)
+
+
+def total_exposure(found: Iterable[Exposure]) -> dict[str, int]:
+    entries = tuple(found)
+    return {
+        "audience": sum(entry.audience for entry in entries),
+        "sensitive": sum(entry.sensitive for entry in entries),
+    }
 
 
 def percentile(values: Sequence[float], q: float) -> float | None:
@@ -189,6 +211,7 @@ def item_outcome(item: Item, observation: Observation) -> ItemOutcome:
         injected,
         mentions(observation.recall, item.markers),
         None if injected else explain_miss(item.markers, observation),
+        tier_of(observation.injection, item.markers),
     )
 
 
@@ -227,6 +250,7 @@ def score_case(scenario: Scenario, observation: Observation, count_tokens: Token
     )
     tokens = count_tiers(observation.injection, count_tokens)
     violations = cap_violations(tokens)
+    written = index_notes(scenario.history)
     passed = (
         all(item.injected for item in items)
         and not any(leak.injected for leak in leaks)
@@ -250,6 +274,8 @@ def score_case(scenario: Scenario, observation: Observation, count_tokens: Token
         observation.earlier_texts,
         observation.recall,
         observation.injection.skipped,
+        exposure(written, observation.injection.text, scenario.probe, injected=True),
+        exposure(written, observation.recall, scenario.probe, injected=False),
     )
 
 
@@ -307,4 +333,19 @@ def summarize(results: Sequence[CaseResult]) -> Summary:
         tokens_mean=sum(totals) / len(totals) if totals else None,
         cap_violation_cases=sum(bool(result.violations) for result in results),
         over_ceiling_cases=sum(result.over_ceiling for result in results),
+        needed_within_cap=sum(
+            item.injected
+            for result in results
+            if not result.violations
+            for item in result.items
+            if item.kind is not ItemKind.JOKE
+        ),
+        via={tier: sum(item.tier == tier for item in needed) for tier in TIERS},
+        leaks_by_reason={
+            reason.value: count
+            for reason in ForbiddenReason
+            if (count := sum(leak.injected and leak.reason is reason for leak in leaks))
+        },
+        exposures=total_exposure(result.exposure for result in results),
+        recall_exposures=total_exposure(result.recall_exposure for result in results),
     )

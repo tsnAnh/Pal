@@ -553,3 +553,27 @@ def test_fts_forgets_removed_notes(fts) -> None:
 
     assert found(fts, "monday") == ""
     assert "release thursday" in found(fts, "thursday")
+
+
+def test_one_turn_probe_ranks_once_so_a_vector_retriever_embeds_the_query_once(tmp_path: Path) -> None:
+    class Counting(OverlapRetriever):
+        calls = 0
+
+        def rank(self, query: str, note_ids: Collection[int]) -> list[tuple[int, float]]:
+            Counting.calls += 1
+            return super().rank(query, note_ids)
+
+    candidate = PolicyCandidate(NoteStore(tmp_path / "once.db"), Counting(), count_words, None)
+    say(candidate, note("ship friday", topic="ship"), note("duck joke friday", topic="duck", kind=Kind.MOMENT))
+    candidate.inject(ask("friday", at=20.0))
+    assert Counting.calls == 1
+    candidate.close()
+
+
+def test_brief_only_control_injects_the_brief_and_no_retrieved_notes(tmp_path: Path) -> None:
+    candidate = build_spec("brief_only", tmp_path)
+    say(candidate, note("ship friday"))
+    candidate.end_day(1)
+    injection = candidate.inject(ask("ship friday", at=2.0))
+    assert "ship friday" in injection.brief and injection.notes == ""
+    candidate.close()

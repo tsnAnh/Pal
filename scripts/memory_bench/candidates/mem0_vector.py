@@ -91,6 +91,8 @@ class Mem0Retriever:
         )
         self._memory.embedding_model = runtime.embedder
         self._memory.llm = ForbiddenLlm()
+        if hybrid and self._memory.vector_store._get_bm25_encoder() is None:
+            raise RuntimeError("mem0 hybrid ranking requested but its BM25 encoder did not load")
         self._memory_ids: dict[int, str] = {}
 
     def add(self, note_id: int, text: str) -> None:

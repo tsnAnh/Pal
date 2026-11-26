@@ -50,6 +50,20 @@ class Retriever(Protocol):
     def close(self) -> None: ...
 
 
+class NoRetriever:
+    def add(self, note_id: int, text: str) -> None:
+        return None
+
+    def remove(self, note_id: int) -> None:
+        return None
+
+    def rank(self, query: str, note_ids: Collection[int]) -> list[tuple[int, float]]:
+        return []
+
+    def close(self) -> None:
+        return None
+
+
 class PolicyCandidate:
     def __init__(
         self, store: NoteStore, retriever: Retriever, count_tokens: TokenCounter, threshold: float | None
@@ -125,13 +139,12 @@ class PolicyCandidate:
             elif note not in briefed:
                 eligible.append(note)
         block = NotesBlock(brief, self._count_tokens)
-        facts = [note for note in eligible if note.kind is not Kind.MOMENT]
-        for note, score in self._ranked(probe.text, facts):
+        ranked = self._ranked(probe.text, eligible)
+        for note, score in [pair for pair in ranked if pair[0].kind is not Kind.MOMENT]:
             reason = SkipReason.BELOW_THRESHOLD if self._too_weak(score) else block.offer(note)
             if reason:
                 skipped.append(Skip(note.text, reason, score))
-        moments = [note for note in eligible if note.kind is Kind.MOMENT]
-        for note, score in self._ranked(probe.text, moments):
+        for note, score in [pair for pair in ranked if pair[0].kind is Kind.MOMENT]:
             reason = self._offer_joke(block, note, score, probe)
             if reason:
                 skipped.append(Skip(note.text, reason, score))

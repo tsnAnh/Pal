@@ -73,6 +73,7 @@ class Background:
         moments: bool = True,
         chatter_share: float = 0.2,
         salience: tuple[float, float] = (0.5, 0.85),
+        distinct_topics: bool = False,
     ) -> list[Turn]:
         result = []
         for _ in range(count):
@@ -86,7 +87,8 @@ class Background:
                 score = self.rng.uniform(*salience)
             self.serial += 1
             kind = draft.kind if moments else Kind.WORK
-            proposal = note(f"{self.scenario_id}-bg{self.serial}", draft.note, draft.topic, round(score, 3), kind)
+            topic = f"{draft.topic}-{self.serial}" if distinct_topics else draft.topic
+            proposal = note(f"{self.scenario_id}-bg{self.serial}", draft.note, topic, round(score, 3), kind)
             result.append(say(self._moment(day), room.place, speaker, draft.said, proposal))
         return result
 
@@ -369,7 +371,7 @@ def near_store_cap() -> Scenario:
     ]
     spread = (0.32, 0.86)
     for room, count in ((MOBILE, 230), (APP_ROOM, 60), (BILLING, 90), (DESIGN, 80), (INFRA, 90), (EVENTS, 70)):
-        turns.extend(bg.turns(room, (0, 12), count, chatter_share=0.0, salience=spread))
+        turns.extend(bg.turns(room, (0, 12), count, chatter_share=0.0, salience=spread, distinct_topics=True))
     turns.extend(bg.silent(MOBILE.place, MOBILE.members, (0, 12), 60))
     turns = [turns[0], *(turn for turn in turns[1:] if turn.at > turns[0].at)]
     probe = ask(13.4, MOBILE.place, "Quân", "Muốn ký bản Android để phát hành thì cần cái token nào, đang cất ở đâu?")

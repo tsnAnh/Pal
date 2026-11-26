@@ -415,7 +415,7 @@ def test_history_questions_are_answerable(seed):
     pal_asked_in_slack = owners = others = restated = 0
     for question in run.questions:
         carriers = keyed(run.turns, question.item.id)
-        assert math.isclose(question.said_at, carriers[0][0].at), question.item.id
+        assert math.isclose(question.said_at, carriers[-1][0].at), question.item.id
         restated += len(carriers) > 1
         for turn, p in carriers:
             assert visible(turn, question.probe), question.item.id
@@ -511,3 +511,27 @@ def test_at_cap_markers_never_match_another_fact(seed):
 def test_vietnamese_is_told_apart_from_english_with_vietnamese_names(text, expected):
     assert vietnamese(text) is expected
 
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_question_age_counts_from_the_last_time_the_fact_was_said(seed):
+    run = history(seed)
+    for question in run.questions:
+        assert question.said_at == max(turn.at for turn, _ in keyed(run.turns, question.item.id))
+
+
+@pytest.mark.parametrize("load", list(Load))
+def test_history_filler_never_reuses_a_needed_topic(load):
+    run = build_history(0, SalienceMode.INFORMATIVE, load)
+    needed = {p.topic for _, p in notes_of(run.turns) if not p.key.startswith("f-")}
+    filler = {p.topic for _, p in notes_of(run.turns) if p.key.startswith("f-")}
+    assert not needed & filler
+
+
+def test_near_cap_scenario_really_pushes_the_store_past_its_cap():
+    (case,) = [s for s in SCENARIOS if "past its cap" in s.covers]
+    slots = {
+        ("anywhere" if turn.owner and turn.place.source is Source.PAL_APP else turn.place.channel, p.topic)
+        for turn, p in notes_of(turns_of(case))
+        if p.salience >= ADMIT_MIN_SALIENCE
+    }
+    assert len(slots) >= STORE_NOTE_CAP + 40

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from scripts.memory_bench import scorer
@@ -12,15 +14,18 @@ from scripts.memory_bench.model import (
     Injection,
     Item,
     ItemKind,
+    Kind,
     Loss,
     LossReason,
     Place,
     Probe,
+    Proposal,
     Scenario,
     Skip,
     SkipReason,
     Source,
     Split,
+    Turn,
 )
 
 PLACE = Place(Source.SLACK, "ops")
@@ -91,13 +96,14 @@ def test_superseded_old_value_beside_new_fails():
 @pytest.mark.parametrize(
     ("stored", "skipped", "losses", "cause", "group"),
     [
-        ((), (), (Loss("postgres note", LossReason.EVICTED_CAP, 1.0, "cap 500"),), "evicted_store_cap", "store"),
+        ((), (), (Loss("postgres note", LossReason.EVICTED_CAP, 1.0, "cap 500"),), "evicted_store_cap", "store_cap"),
+        ((), (), (Loss("postgres", LossReason.OVERWRITTEN, 1.0),), "topic_overwrite", "write_rule"),
         (
             (),
             (),
             (Loss("postgres a", LossReason.MERGED, 1.0), Loss("postgres b", LossReason.EXPIRED, 2.0)),
             "expired",
-            "store",
+            "write_rule",
         ),
         ((), (), (Loss("unrelated", LossReason.EXPIRED, 1.0),), "never_offered", "never_offered"),
         (("postgres",), (), (Loss("postgres", LossReason.MERGED, 1.0),), "no_match", "retrieval"),
@@ -115,8 +121,8 @@ def test_every_miss_gets_exactly_one_cause(stored, skipped, losses, cause, group
     assert (lost.cause, lost.group) == (cause, group)
     summary = scorer.summarize([result])
     assert summary.causes == {group: {cause: 1}}
-    assert summary.cap_evicted == int(group in ("store", "injection_cap"))
-    assert lost.evicted_by_cap == (group in ("store", "injection_cap"))
+    assert summary.cap_evicted == int(group in ("store_cap", "injection_cap"))
+    assert lost.evicted_by_cap == (group in ("store_cap", "injection_cap"))
 
 
 def test_loss_detail_is_listed():
@@ -164,7 +170,7 @@ def test_recall_column_and_recall_leaks_by_reason():
     )
     summary = scorer.summarize([result])
     assert (summary.recall_hits, summary.needed_hits, summary.leaks) == (1, 0, 0)
-    assert summary.recall_leaks == {"wrong_audience": 1, "sensitive": 1, "superseded": 0}
+    assert summary.recall_leaks == {"wrong_audience": 1, "superseded": 0}
 
 
 def test_tokens_use_the_given_counter_per_tier():
@@ -230,3 +236,57 @@ def test_percentiles_are_nearest_rank_and_none_when_empty():
     assert scorer.percentile([7], 95) == 7
     empty = scorer.summarize([])
     assert (empty.tokens_p50, empty.tokens_p95, empty.tokens_mean) == (None, None, None)
+
+
+def written(text, channel="ops", source=Source.SLACK, owner=False, sensitive=False) -> Turn:
+    proposal = Proposal(text, Kind.WORK, text, text, 0.8, sensitive)
+    return Turn(1.0, Place(source, channel), "mai", text, owner, (proposal,))
+
+
+def audited(turns, injection=Injection(), recall=""):
+    case = replace(scenario(), history=tuple(turns))
+    return scorer.summarize([score(case, observe(injection, recall))])
+
+
+def test_audit_counts_any_injected_note_outside_its_audience_even_when_not_listed_forbidden():
+    turns = [
+        written("note from here"),
+        written("note from elsewhere", channel="other"),
+        written("owner words from the app", channel="app", source=Source.PAL_APP, owner=True),
+        written("owner words from another slack room", channel="other", owner=True),
+    ]
+    summary = audited(turns, Injection(snapshot="\n".join(turn.text for turn in turns)))
+    assert summary.exposures == {"audience": 2, "sensitive": 0}
+    assert summary.leaks == 0
+
+
+def test_audit_counts_sensitive_injected_anywhere_but_recalled_only_outside_origin():
+    here = written("private note here", sensitive=True)
+    there = written("private note there", channel="other", sensitive=True)
+    summary = audited([here, there], Injection(notes=here.text), recall=f"{here.text}\n{there.text}")
+    assert summary.exposures == {"audience": 0, "sensitive": 1}
+    assert summary.recall_exposures == {"audience": 1, "sensitive": 1}
+
+
+@pytest.mark.parametrize("tier", ["brief", "notes", "snapshot"])
+def test_hit_is_attributed_to_the_tier_that_carried_it(tier):
+    result = score(scenario([fact("postgres")]), observe(Injection(**{tier: "postgres"})))
+    assert result.items[0].tier == tier
+    assert scorer.summarize([result]).via == {name: int(name == tier) for name in ("brief", "notes", "snapshot")}
+
+
+def test_hit_inside_an_injection_over_the_cap_is_not_a_hit_within_caps():
+    over = score(scenario([fact("postgres")]), observe(Injection(snapshot="postgres " + "w " * 800)))
+    under = score(scenario([fact("postgres")], ident="s2"), observe(Injection(snapshot="postgres")))
+    summary = scorer.summarize([over, under])
+    assert (summary.needed_hits, summary.needed_within_cap) == (2, 1)
+
+
+def test_leaks_are_broken_out_by_reason():
+    forbidden = [
+        Forbidden("a", ForbiddenReason.SUPERSEDED, ("alpha",)),
+        Forbidden("b", ForbiddenReason.EXPIRED, ("bravo",)),
+        Forbidden("c", ForbiddenReason.EXPIRED, ("charlie",)),
+    ]
+    summary = scorer.summarize([score(scenario(forbidden=forbidden), observe(Injection(notes="alpha bravo charlie")))])
+    assert summary.leaks_by_reason == {"superseded": 1, "expired": 2}
