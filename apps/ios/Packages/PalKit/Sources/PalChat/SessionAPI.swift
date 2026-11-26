@@ -85,6 +85,7 @@ public struct SessionAPI: Sendable {
     public let connection: GatewayConnection
     public let profile: String
     private let answersServerRequests: Bool
+    let stuckRelease = StuckAdmissionRelease()
 
     public init(connection: GatewayConnection, profile: String, answersServerRequests: Bool = false) {
         self.connection = connection
@@ -124,7 +125,9 @@ public struct SessionAPI: Sendable {
         var params: [String: JSONValue] = ["session_id": .string(sessionID)]
         if omitMessages, supportsTimeline { params["omit_messages"] = .bool(true) }
         let result = try await call("session.resume", params)
-        return try decode(SessionSnapshot.self, result, "session.resume")
+        let snapshot = try decode(SessionSnapshot.self, result, "session.resume")
+        releaseStuck(snapshot.pending, sessionID: snapshot.sessionID)
+        return snapshot
     }
 
     public func eventsSince(sessionID: String, lastSequence: Int, replayEpoch: String) async throws -> EventsSinceResult {
@@ -282,6 +285,15 @@ public struct SessionAPI: Sendable {
             "session_id": .string(sessionID),
             "execution_generation": .int(executionGeneration),
         ])
+    }
+
+    public func resolveUnknown(sessionID: String, admissionID: String, executionGeneration: Int) async throws -> AdmissionStatus {
+        let result = try await call("prompt.resolve_unknown", [
+            "session_id": .string(sessionID),
+            "admission_id": .string(admissionID),
+            "execution_generation": .int(executionGeneration),
+        ])
+        return try decode(AdmissionStatus.self, result, "prompt.resolve_unknown")
     }
 
     public func steer(sessionID: String, text: String, executionGeneration: Int) async throws -> SteerStatus {
