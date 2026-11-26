@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 OPT_OUT = "glass-lint: ok"
-SKIP_DIRS = {"Tests", "UITests", "Fixtures", ".build"}
+SKIP_DIRS = {"Tests", "UITests", "Fixtures", ".build", "build"}
 BASELINE_NAME = ".glass-lint-baseline.json"
 PAL_DESIGN = ("Packages", "PalDesign")
 CLOSERS = {"(": ")", "{": "}", "[": "]"}

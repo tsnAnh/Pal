@@ -69,6 +69,9 @@ extension ChatSession {
     }
 
     func noteFrame(_ outcome: ApplyOutcome, _ frame: SessionEventFrame) {
+        if case .sessionInfo(let info) = frame.event, let pending = info.pending, let api, let sessionID = transcript.sessionID {
+            api.releaseStuck(pending, sessionID: sessionID, diagnostics: diagnostics)
+        }
         switch outcome {
         case .applied:
             counters.applied += 1
