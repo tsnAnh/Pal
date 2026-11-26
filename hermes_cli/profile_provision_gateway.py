@@ -53,6 +53,8 @@ def _wire(request: ProfileCreateRequest, profile: Optional[str]) -> dict[str, An
             "clone_channels": request.clone_channels, "no_skills": request.no_skills,
             "no_alias": True, "sync_imports": request.sync_imports,
             "mirror_credentials": request.mirror_credentials, "share_auth": request.share_auth, "report": True}
+    if request.soul is not None:
+        wire["soul"] = request.soul
     return {**wire, "profile": profile} if profile else wire
 
 

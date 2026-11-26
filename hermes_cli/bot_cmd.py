@@ -146,6 +146,7 @@ def _pin_creating_session_model(profile_dir: Path) -> None:
 
 def create_bot(name: str, *, display_name: str | None = None, description: str | None = None,
                soul: str | None = None) -> tuple[str, Path]:
+    from hermes_cli.app_bot import mark_app_bot
     from hermes_cli.bot_onboarding import mark_onboarding_pending
     from hermes_cli.profiles import create_profile, set_profile_display_name  # profile-create: ok — Pal bot creation: a bare profile, then this module applies its own skills, model and onboarding steps
 
@@ -162,6 +163,7 @@ def create_bot(name: str, *, display_name: str | None = None, description: str |
             set_profile_display_name(canon, cleaned_display)
         _pin_creating_session_model(profile_dir)
         _disable_all_skills(profile_dir)
+        mark_app_bot(profile_dir, cleaned_display or canon)
         mark_onboarding_pending(profile_dir)
     except BaseException:
         _discard_profile(canon)
