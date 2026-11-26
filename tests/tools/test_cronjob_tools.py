@@ -283,7 +283,7 @@ class TestUnifiedCronjobTool:
         listing = json.loads(cronjob(action="list"))
 
         assert listing["success"] is True
-        assert listing["jobs"][0]["name"] == "abc123deadbe"
+        assert listing["jobs"][0]["name"] == "Scheduled task"
         assert listing["jobs"][0]["prompt_preview"] == ""
         assert listing["jobs"][0]["schedule"] == "every 60m"
 
@@ -798,16 +798,16 @@ class TestScheduleKnobToolSurface:
         a pinned schedule is read in; ``0 9 * * 1-5`` alone reads as the user's 09:00."""
         from hermes_cli.cli_cron_lines import cron_list_lines
 
-        cronjob(action="create", prompt="pinned", schedule="0 9 * * 1-5", name="pinned",
+        cronjob(action="create", prompt="pinned", schedule="0 9 * * 1-5", name="Pinned",
                 timezone="America/New_York")
-        cronjob(action="create", prompt="local", schedule="0 7 * * *", name="local")
+        cronjob(action="create", prompt="local", schedule="0 7 * * *", name="Local")
         listed = {j["name"]: j for j in json.loads(cronjob(action="list"))["jobs"]}
-        assert listed["pinned"]["timezone"] == "America/New_York"
-        assert "timezone" not in listed["local"]
+        assert listed["Pinned"]["timezone"] == "America/New_York"
+        assert "timezone" not in listed["Local"]
         text = "\n".join(cron_list_lines())
         pinned, local = (block for block in text.split("ID: ")[1:]
-                         if "Name: pinned" in block or "Name: local" in block)
-        if "Name: local" in pinned:
+                         if "Name: Pinned" in block or "Name: Local" in block)
+        if "Name: Local" in pinned:
             pinned, local = local, pinned
         assert "America/New_York" in pinned, pinned
         assert "America/New_York" not in local, local

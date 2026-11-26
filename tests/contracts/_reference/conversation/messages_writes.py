@@ -12,6 +12,7 @@ from persistence.conversation.messages import (
     BatchAppendProgress,
     BatchAppendResult,
     CooldownSnapshot,
+    CronDeliveryRow,
     DelegationDelivery,
     MarkerPurgeReport,
     NewMessage,
@@ -203,16 +204,31 @@ class MessageWritesMixin(MessageBase):
         inserted = iter(insert_rows(self._ns(scope), transcript, fresh))
         return [outcome if outcome is not None else _row_outcome(next(inserted), RowDisposition.APPENDED) for outcome in resolved]
 
-    def _append_detached(self, scope: ProfileScope, session_id: SessionId, content: str, display_kind: str, metadata: Mapping[str, JsonValue],
-                         match: Callable[[NewMessage], bool]) -> MessageId:
-        """A result that arrived between turns recorded once as a user row (``SessionDetachedResultsMixin._append_detached_result``): a row ``match`` finds in the session or its compression ancestors, any visibility, is returned instead; a new insert refuses under a live turn lease or on a session closed by compression."""
+    def _append_detached(self, scope: ProfileScope, session_id: SessionId, messages: Sequence[NewMessage],
+                         match: Callable[[NewMessage], bool]) -> tuple[MessageId, Optional[str]]:
+        """Results that arrived between turns recorded once (``detached_results._append_detached_rows``): a row ``match`` finds in the session or its compression ancestors, any visibility, is returned with no uid instead; a new insert refuses under a live turn lease or on a session closed by compression."""
         for _sid, row in rows_of(self._backend, scope, compression_ancestors(self._backend, scope, str(session_id))):
             if match(row.message):
-                return MessageId(row.id)
-        message = NewMessage(role="user", content=content, timestamp=time.time(), display_kind=display_kind, display_metadata=dict(metadata))
+                return MessageId(row.id), None
         with self._write_transaction(scope):
             self._write_guards(scope, session_id, reject_live=("turn",))
-            return MessageId(insert_rows(self._ns(scope), self._created(scope, session_id), [message], keep_reasoning=True)[0].id)
+            last = insert_rows(self._ns(scope), self._created(scope, session_id), list(messages), keep_reasoning=True)[-1]
+        return MessageId(last.id), last.message.message_uid
+
+    def _append_note(self, scope: ProfileScope, session_id: SessionId, content: str, display_kind: str,
+                     metadata: Mapping[str, JsonValue], match: Callable[[NewMessage], bool]) -> MessageId:
+        message = NewMessage(role="user", content=content, timestamp=time.time(), display_kind=display_kind, display_metadata=dict(metadata))
+        return self._append_detached(scope, session_id, [message], match)[0]
+
+    def append_cron_delivery(self, session_id: SessionId, anchor: str, content: str,
+                             metadata: Mapping[str, JsonValue]) -> Optional[CronDeliveryRow]:
+        marker = metadata["cron_delivery"]
+        rows = [NewMessage(role="user", content=anchor, timestamp=time.time(), display_kind="hidden"),
+                NewMessage(role="assistant", content=content, timestamp=time.time(), display_metadata=dict(metadata))]
+        row_id, uid = self._append_detached(
+            self._backend.scope, session_id, rows,
+            lambda message: message.role == "assistant" and (message.display_metadata or {}).get("cron_delivery") == marker)
+        return None if uid is None else CronDeliveryRow(row_id, uid)
 
     def append_delegation_delivery(self, session_id: SessionId, delivery: DelegationDelivery) -> MessageId:
         scope = self._backend.scope
@@ -225,13 +241,13 @@ class MessageWritesMixin(MessageBase):
             return (message.display_kind in _DELIVERY_KINDS and meta.get("delegation_id") == delegation_id
                     and ("" if stored_notice is None else stored_notice) == notice)
 
-        return self._append_detached(scope, session_id, delivery.content, kind, delivery.metadata, match)
+        return self._append_note(scope, session_id, delivery.content, kind, delivery.metadata, match)
 
     def append_completion_note(self, session_id: SessionId, admission_id: str, content: str, display_kind: str,
                                metadata: Mapping[str, JsonValue]) -> MessageId:
         scope = self._backend.scope
-        return self._append_detached(scope, session_id, content, display_kind, {**metadata, "completion_admission": admission_id},
-                                     lambda message: (message.display_metadata or {}).get("completion_admission") == admission_id)
+        return self._append_note(scope, session_id, content, display_kind, {**metadata, "completion_admission": admission_id},
+                                 lambda message: (message.display_metadata or {}).get("completion_admission") == admission_id)
 
     def replace_transcript(self, session_id: SessionId, messages: Sequence[NewMessage], mode: ReplaceMode, *,
                            reject_active_turn_lease: bool = False) -> ReplaceResult:

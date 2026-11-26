@@ -699,8 +699,8 @@ class TestResolveJobRef:
         """pause/resume/trigger/remove must refuse to act on an ambiguous name."""
         from cron.jobs import AmbiguousJobReference, trigger_job
 
-        create_job(prompt="A", schedule="1h", name="dup")
-        create_job(prompt="B", schedule="1h", name="dup")
+        create_job(prompt="A", schedule="1h", name="Dup")
+        create_job(prompt="B", schedule="1h", name="Dup")
         for fn in (pause_job, resume_job, trigger_job):
             with pytest.raises(AmbiguousJobReference):
                 fn("dup")

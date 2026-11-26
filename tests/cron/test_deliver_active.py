@@ -84,10 +84,10 @@ def test_the_creator_decides_consent(monkeypatch):
                                  ("suggestion", "initiated"), ("bogus", "requested")):
         job = job_for(**({"created_by": created_by} if created_by else {}))
         job["execution_id"] = f"exec-{created_by}"
-        assert active.deliver_active(job, "raw", lane_text="lane", alert_text="alert") is None
+        assert active.deliver_active(job, "raw", alert_text="alert") is None
     assert [item.consent.value for item in seen] == ["requested", "requested", "initiated", "initiated", "requested"]
     assert seen[0].producer_key == "cron:job-1:exec-user" and seen[0].domain == "cron"
-    assert (seen[0].title, seen[0].body, seen[0].lane_text) == ("Morning digest", "alert", "lane")
+    assert (seen[0].title, seen[0].body) == ("Morning digest", "alert")
     assert seen[0].lane.session_id == "chat-1"
 
 
@@ -95,8 +95,8 @@ def test_a_failure_notice_gets_its_own_idempotency_key(monkeypatch):
     seen = []
     monkeypatch.setattr("gateway.reach.offer_threadsafe", lambda h, item, **kw: seen.append(item.producer_key))
     from cron import scheduler_delivery_reach as active
-    active.deliver_active(job_for(), "raw", lane_text="l", alert_text="a")
-    active.deliver_active(job_for(), "raw", lane_text="l", alert_text="a", for_failure=True)
+    active.deliver_active(job_for(), "raw", alert_text="a")
+    active.deliver_active(job_for(), "raw", alert_text="a", for_failure=True)
     assert seen == ["cron:job-1:exec-1", "cron:job-1:exec-1:failure"]
 
 
@@ -111,7 +111,7 @@ def test_the_active_lane_goes_through_the_redaction_gate_before_the_offer(home, 
         "id", reach.Disposition.ALERTED, None, (), ""))
     secret = "sk-" + "a1B2c3D4" * 6
     assert scheduler._deliver_result(job_for(), f"Key leaked: {secret} done", adapters=None, loop=None) is None
-    assert secret not in seen[0].body and secret not in seen[0].lane_text
+    assert secret not in seen[0].body and secret not in str((seen[0].lane.land.args, seen[0].lane.land.keywords))
 
 
 def test_active_inside_an_external_worker_becomes_a_queue_row_resolved_by_the_gateway_drain(
@@ -204,5 +204,5 @@ def test_a_failing_offer_is_reported_as_a_delivery_error(monkeypatch):
         raise TimeoutError("owner stalled")
     monkeypatch.setattr("gateway.reach.offer_threadsafe", boom)
     from cron import scheduler_delivery_reach as active
-    error = active.deliver_active(job_for(), "raw", lane_text="l", alert_text="a")
+    error = active.deliver_active(job_for(), "raw", alert_text="a")
     assert "TimeoutError" in error and "owner stalled" in error

@@ -109,7 +109,7 @@ def test_reply_to_a_later_chunk_of_a_cron_delivery_is_framed(lane):
 
     framed = _reply_to("102", LATER_CHUNK)
     assert framed.startswith("[Replying to an earlier scheduled cron delivery")
-    assert 'Cronjob Response: nightly-ops\n…\nstatus line ok' in framed
+    assert 'Cronjob Response: Nightly ops\n…\nstatus line ok' in framed
     # An ordinary message in the same chat is untouched.
     assert _reply_to("103", "Japan is great.").startswith('[Replying to: "Japan is great."]')
 
