@@ -34,6 +34,7 @@ final class ChatScrollController {
     @ObservationIgnored private var revealTask: Task<Void, Never>?
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
+    @ObservationIgnored private var passRepair: Task<Void, Never>?
     @ObservationIgnored let tracker = ChatOpenTracker()
     @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
@@ -195,6 +196,8 @@ final class ChatScrollController {
     }
 
     func repairInPass(_ command: ChatScrollMachine.Command) {
+        guard passRepair == nil else { return performNextTurn(command) }
+        passRepair = Task { @MainActor [weak self] in self?.passRepair = nil }
         deferredWrite?.cancel()
         deferredWrite = nil
         deferred = (.none, nil)
@@ -261,8 +264,10 @@ final class ChatScrollController {
         if showsJumpButton != machine.showsJumpButton { showsJumpButton = machine.showsJumpButton }
         if unseen != machine.unseen { unseen = machine.unseen }
     }
+}
 
-    private func topAnchor(visibleTop: Double) -> ChatRowAnchor? {
+private extension ChatScrollController {
+    func topAnchor(visibleTop: Double) -> ChatRowAnchor? {
         var below: (id: String, minY: Double)?
         for id in visibleIDs {
             guard let frame = frames[id] else { continue }

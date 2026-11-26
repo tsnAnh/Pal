@@ -35,6 +35,22 @@ struct ChatScrollRepairTimingTests {
         #expect(scroll.position.edge == .bottom)
     }
 
+    @Test("a list that stays short is written once in that pass, then repaired again on a later turn")
+    func stillShortInTheSamePassWaitsForTheNextTurn() async throws {
+        let scroll = try await pinnedAtBottom()
+        let short = geometry(inset: 119, offset: Self.content - (Self.window - 92))
+        scroll.observe(short)
+        try #require(scroll.position.edge == .bottom)
+        scroll.position = ScrollPosition(idType: String.self)
+        for _ in 0..<100 { scroll.observe(short) }
+        #expect(scroll.position.edge == nil)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(scroll.position.edge == .bottom)
+        scroll.position = ScrollPosition(idType: String.self)
+        scroll.observe(short)
+        #expect(scroll.position.edge == .bottom)
+    }
+
     @Test("the newest row growing under a pinned list is followed in the same pass")
     func newestRowGrowthIsFollowedAtOnce() async throws {
         let scroll = try await pinnedAtBottom()
