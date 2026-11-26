@@ -84,15 +84,7 @@ class LibraryPreviewReason(StrEnum):
     BUSY = "busy"
 
 
-class LibraryAssetParams(ProfileParams):
-    """Three call shapes. Whole file (old apps, unchanged): ``max_bytes`` defaults to 8 MB (max 16 MB);
-    images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false.
-    ``preview`` returns a JPEG or PNG of at most 512 px (video poster frame, first PDF page, still image)
-    capped by ``max_bytes``, or an empty ``data_base64`` with ``preview_reason``; sources up to 200 MB for
-    video and 32 MB for images and PDF. ``offset`` and/or ``length`` read one range of the file, up to
-    2 MB per call, for files up to 200 MB. ``preview`` and ranges do not combine."""
-
-    asset_ref: str
+class AssetReadParams(ProfileParams):
     max_bytes: int | None = None
     thumbnail: bool = True
     preview: bool = False
@@ -104,6 +96,17 @@ class LibraryAssetParams(ProfileParams):
         if self.preview and (self.offset is not None or self.length is not None):
             raise ValueError("preview and offset/length are separate modes")
         return self
+
+
+class LibraryAssetParams(AssetReadParams):
+    """Three call shapes. Whole file (old apps, unchanged): ``max_bytes`` defaults to 8 MB (max 16 MB);
+    images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false.
+    ``preview`` returns a JPEG or PNG of at most 512 px (video poster frame, first PDF page, still image)
+    capped by ``max_bytes``, or an empty ``data_base64`` with ``preview_reason``; sources up to 200 MB for
+    video and 32 MB for images and PDF. ``offset`` and/or ``length`` read one range of the file, up to
+    2 MB per call, for files up to 200 MB. ``preview`` and ranges do not combine."""
+
+    asset_ref: str
 
 
 class LibraryAssetResult(Result):

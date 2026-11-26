@@ -163,6 +163,13 @@ class ToolLabel(Payload):
     preview: str = ""
 
 
+class WorkspaceFileRef(Result):
+    ref: str
+    name: str
+    mime: str
+    size: int
+
+
 class TranscriptMessage(OpenModel):
     """One transcript row as the gateway PROJECTS it for renderers (``session_history._project_history``):
     ``text``, display-only ``timestamp`` / ``display_kind`` / ``display_metadata``, the durable ``row_id``
@@ -182,6 +189,7 @@ class TranscriptMessage(OpenModel):
     args: dict[str, JsonValue] | None = None
     labels: list[ToolLabel] | None = None
     reasoning: str | None = None
+    file_refs: list[WorkspaceFileRef] | None = None
 
 
 class SubagentStatus(WireEnum):

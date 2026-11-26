@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import Field, RootModel
 
 from .base import JsonValue, Params, Result
-from .common import ProfileParams, TranscriptMessage
+from .common import ProfileParams, TranscriptMessage, WorkspaceFileRef
 from .connectors_operation import ConnectionRequestPayload
 from .sessions import OpenRequestEntry, TodoState
 from .canonical import (AdmissionStatus, CanonicalClientLabel, CanonicalSessionRef, PromptResponseResult,
@@ -109,6 +109,7 @@ class CanonicalTimelineEntry(Result):
     display_metadata: JsonValue = None
     reasoning: str | None = None
     tools: list[CanonicalTimelineTool] | None = None
+    file_refs: list[WorkspaceFileRef] | None = None
 
 
 class CanonicalTimelinePage(Result):
