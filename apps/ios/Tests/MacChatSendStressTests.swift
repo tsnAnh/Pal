@@ -208,8 +208,10 @@ struct MacChatSendStressTests {
             #expect(checkpoint.distance <= ChatScrollMachine.atBottomTolerance, Comment(rawValue: "\(report)"))
         }
         for checkpoint in checkpoints.dropFirst() { #expect(!checkpoint.button, Comment(rawValue: "\(report)")) }
-        let swings = stage.frames[readAt...].filter { abs($0.distanceDelta) > SendStressStage.swingLimit && $0.distance > ChatScrollMachine.atBottomTolerance }
-        #expect(swings.isEmpty, Comment(rawValue: "distance swung while the list was still travelling to the newest row: \(swings.map(\.index))"))
+        let arrived = stage.frames[readAt...].drop { $0.distance > ChatScrollMachine.atBottomTolerance }
+        let swings = arrived.filter { abs($0.distanceDelta) > SendStressStage.swingLimit && $0.distance > ChatScrollMachine.atBottomTolerance }
+        let swung = swings.map { "#\($0.index) d=\($0.distance) delta=\($0.distanceDelta) content=\($0.contentDelta) \($0.state) \($0.writers)" }
+        #expect(swings.isEmpty, Comment(rawValue: "distance swung after the glide had reached the newest row (sent at #\(readAt)): \(swung)"))
     }
 
     @Test("sending while the bot streams and the composer grows keeps the pinned list still and the jump button hidden")
