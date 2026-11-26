@@ -1,2 +1,1 @@
-CREATE_REFUSED_MESSAGE = "Bots are created from the Create Bot form in the app."
-CREATING_ACTIONS = frozenset({"create", "import", "install"})
+CREATE_REFUSED_MESSAGE = "A bot can only be created in a turn the owner typed in the app, or from the Create Bot form."

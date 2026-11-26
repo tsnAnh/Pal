@@ -3,8 +3,9 @@
 A command or script the agent runs is never put to a prompt. ``check_all_command_guards``,
 ``check_dangerous_command`` and ``check_execute_code_guard`` refuse (hardline commands, runtime
 self-delete, ``sudo -S`` password piping, the operator's ``approvals.deny`` rules, an agent-run bot or
-profile create) and, in a context nobody can answer (``-q``, cron, an unattended platform), apply
-``approvals.single_query_mode`` / ``cron_mode`` / ``unattended_mode``. Everything else runs.
+profile create outside a turn the owner typed in the app) and, in a context nobody can answer (``-q``,
+cron, an unattended platform), apply ``approvals.single_query_mode`` / ``cron_mode`` /
+``unattended_mode``. Everything else runs.
 
 What still asks the owner is content that sends out or spends money: outbound sends
 (``request_draft_approval``) and ``approval_prompt.request_elicitation_consent``. Both ride the gateway
@@ -40,6 +41,8 @@ from tools.approval_floors import (
 )
 from tools.approval_gateway_wait import _await_gateway_decision
 from tools.approval_prompt import prompt_dangerous_approval
+from tools.mcp_action_gate import approver_present
+from tools.skill_provenance import is_background_review
 
 logger = logging.getLogger(__name__)
 
@@ -623,6 +626,9 @@ def _profile_creation_refusal(source: str, *, is_code: bool = False) -> dict | N
     from hermes_cli.profile_admin_guard import CREATE_REFUSED_MESSAGE
     if not creates_bot_or_profile(source, code=is_code):
         return None
+    if approver_present() and not is_background_review():
+        logger.info("bot creation approved by the owner turn")
+        return None
     logger.warning("Refused an agent-run bot or profile creation")
     return _blocked(CREATE_REFUSED_MESSAGE, pattern_key="human_required:create", description=CREATE_REFUSED_MESSAGE)
 
@@ -715,10 +721,10 @@ def check_execute_code_guard(code: str, env_type: str, has_host_access: bool = F
     """Check an execute_code script before its child process is spawned.
 
     The script can call ``subprocess``/``os.system``/``ctypes`` directly, none of which pass
-    through ``terminal()`` / ``DANGEROUS_PATTERNS``. It runs unless it creates a bot or profile, or
-    the first active unattended context (-q, cron, unattended platform) is in deny mode. The
-    hardline floor still blocks catastrophic ``terminal()`` commands the script issues. Same dict
-    contract as ``check_all_command_guards``.
+    through ``terminal()`` / ``DANGEROUS_PATTERNS``. It runs unless it creates a bot or profile outside
+    the owner's own turn, or the first active unattended context (-q, cron, unattended platform) is in
+    deny mode. The hardline floor still blocks catastrophic ``terminal()`` commands the script issues.
+    Same dict contract as ``check_all_command_guards``.
     """
     # Isolated backends already sandbox the child.
     if _should_skip_container_guards(env_type, has_host_access=has_host_access):

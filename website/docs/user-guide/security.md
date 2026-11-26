@@ -32,7 +32,7 @@ What still protects you:
 - credential and secret paths are never writable (see [File Write Safety](#file-write-safety));
 - unattended runs apply the rules below to dangerous-command patterns;
 - owner decisions below still ask, because they send something out or spend money;
-- an agent cannot create a bot or profile: it is refused with "Bots are created from the Create Bot form in the app."
+- an agent creates, imports or installs a bot or profile only in a turn the owner typed in the app, without a card; in any other context it is refused with "A bot can only be created in a turn the owner typed in the app, or from the Create Bot form."
 
 ### Unattended Rules
 

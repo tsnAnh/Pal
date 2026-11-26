@@ -24,6 +24,8 @@ def _coerce_float(value: str):
     return f
 
 
+STRING_KEYS = frozenset({"approvals.mode"})
+
 _SCALAR_WORDS = {
     'true': True, 'yes': True, 'on': True,
     'false': False, 'no': False, 'off': False,
