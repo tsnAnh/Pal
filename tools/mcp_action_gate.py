@@ -261,6 +261,14 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional
     from tools.tainted_turn_gate import spend_call_grant
     if spend_call_grant("mcp_", prefix=True):
         return None, ActionGrant(call_digest(server_name, tool_name, dict(args or {})))
+    from tools import routine_send
+    from tools.bot_mode_drafts import policy_for_profile
+    from tools.mcp_tool_schema import mcp_prefixed_tool_name
+    prefixed = mcp_prefixed_tool_name(server_name, tool_name)
+    if reason := routine_send.reason_for_tool(prefixed, args or {}):
+        if policy_for_profile() is None:
+            logger.info(reason)
+        return None, ActionGrant(call_digest(server_name, tool_name, dict(args or {})))
     if not approver_present():
         return tool_error(f"'{tool_name}' changes things on {display_name(server_name)}, so it needs the owner's approval in "
                           f"their app, and nobody can approve in this chat. It was NOT run.",
@@ -272,8 +280,7 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional
         logger.info("MCP action auto-approved: server=%s tool=%s", server_name, tool_name)
         return None, grant
     from tools import outbound_send_grant
-    from tools.mcp_tool_schema import mcp_prefixed_tool_name
-    if outbound_send_grant.redeem(mcp_prefixed_tool_name(server_name, tool_name), args, gate=outbound_send_grant.MCP_GATE):
+    if outbound_send_grant.redeem(prefixed, args, gate=outbound_send_grant.MCP_GATE):
         logger.info("MCP action approved by the owner's pick on a clarify form: server=%s tool=%s", server_name, tool_name)
         return None, grant
     refusal = _approve(server_name, tool_name, args)
