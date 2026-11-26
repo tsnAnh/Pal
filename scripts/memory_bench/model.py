@@ -18,6 +18,7 @@ EXPIRE_BELOW_SALIENCE = 0.5
 EXPIRE_AFTER_DAYS = 14
 JOKE_NOTE_COOLDOWN_DAYS = 7
 JOKE_CONVERSATION_COOLDOWN_DAYS = 1
+VIETNAMESE_WORD_SHARE = 0.4
 
 TokenCounter = Callable[[str], int]
 
@@ -70,6 +71,11 @@ class SalienceMode(Enum):
     INFORMATIVE = "informative"
     NOISY = "noisy"
     FLAT = "flat"
+
+
+class Load(Enum):
+    TYPICAL = "typical"
+    AT_CAP = "at_cap"
 
 
 class LossReason(Enum):
@@ -242,6 +248,12 @@ class CandidateSpec:
 
 def fold(text: str) -> str:
     return " ".join(unicodedata.normalize("NFC", text).casefold().split())
+
+
+def vietnamese(text: str) -> bool:
+    words = text.casefold().split()
+    marked = sum("đ" in word or any(map(unicodedata.combining, unicodedata.normalize("NFD", word))) for word in words)
+    return marked >= VIETNAMESE_WORD_SHARE * len(words)
 
 
 def mentions(text: str, markers: Iterable[str]) -> bool:
