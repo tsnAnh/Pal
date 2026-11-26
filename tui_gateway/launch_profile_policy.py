@@ -202,6 +202,10 @@ def launch_terminal_env() -> dict[str, str]:
     return {k: v for k, v in capture_launch_env().items() if k.startswith("TERMINAL_")}
 
 
+def launch_terminal_backend() -> str:
+    return _launch_env().get("TERMINAL_ENV", "")
+
+
 def launch_secret_scope(launch_home: str | Path) -> dict[str, str]:
     """The launch profile's secret mapping: its ``.env`` + external sources over the launch env
     (systemd / ``op run`` injection survives the fail-closed flip; a secondary never sees it because
