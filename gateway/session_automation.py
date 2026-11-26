@@ -12,6 +12,7 @@ import re
 from gateway.config import Platform
 from gateway.platforms.event import MessageEvent, MessageType
 from gateway.session_contract import SessionRef
+from gateway.session_cron_post import CRON_DELIVERY_KEY, cron_delivery_metadata, cron_post
 from gateway.session_persistence import authority_persistence
 from persistence.core.errors import AuthorityRefusal
 from session_rules.automation import automation_descriptor as _descriptor
@@ -363,42 +364,21 @@ def automation_notification_metadata(metadata):
 
 
 _DISPLAY_TEXT_LIMIT = 2000
-_ROUTINE_TEXT_LIMIT = 1024 * 1024
-_ROUTINE_STATUSES = frozenset({'ok', 'failed'})
-_ROUTINE_FIELDS = frozenset({'job_name', 'status', 'finished_at'})
-
-
-def _valid_routine(routine):
-    return (isinstance(routine, dict) and set(routine) == _ROUTINE_FIELDS
-            and isinstance(routine['job_name'], str) and 0 < len(routine['job_name'].strip()) <= 200
-            and routine['status'] in _ROUTINE_STATUSES
-            and type(routine['finished_at']) in (int, float) and routine['finished_at'] > 0)
 
 
 def automation_display_metadata(metadata):
     """Validate a producer's card (an async result, or a liveness tick's one-line receipt): both keys
-    or neither, kind from the closed producer set. A routine's card also names its job, status and
-    finish time, and holds the job's whole output (bounded as the door bounds the model text)."""
+    or neither, kind from the closed producer set."""
     if 'display_kind' not in metadata and 'display_text' not in metadata:
         return {}
     from gateway.response_filters import PRODUCER_CARD_KINDS, ROUTINE_OUTPUT_DISPLAY_KIND
     kind, text = metadata.get('display_kind'), metadata.get('display_text')
-    routine = kind == ROUTINE_OUTPUT_DISPLAY_KIND
-    if (kind not in PRODUCER_CARD_KINDS or not isinstance(text, str) or not text.strip()
-            or len(text) > (_ROUTINE_TEXT_LIMIT if routine else _DISPLAY_TEXT_LIMIT)
-            or routine != ('routine' in metadata) or (routine and not _valid_routine(metadata['routine']))):
-        raise AuthorityRefusal('invalid_params')
-    return {'display_kind': kind, 'display_text': text, **({'routine': dict(metadata['routine'])} if routine else {})}
-
-
-def routine_display_metadata(routine):
-    if routine is None:
+    if kind == ROUTINE_OUTPUT_DISPLAY_KIND:
         return {}
-    from gateway.response_filters import ROUTINE_OUTPUT_DISPLAY_KIND
-    if not isinstance(routine, dict) or set(routine) != _ROUTINE_FIELDS | {'text'}:
+    if (kind not in PRODUCER_CARD_KINDS or not isinstance(text, str) or not text.strip()
+            or len(text) > _DISPLAY_TEXT_LIMIT):
         raise AuthorityRefusal('invalid_params')
-    return automation_display_metadata({'display_kind': ROUTINE_OUTPUT_DISPLAY_KIND, 'display_text': routine['text'],
-                                        'routine': {key: routine[key] for key in _ROUTINE_FIELDS}})
+    return {'display_kind': kind, 'display_text': text}
 
 # notification_origin / original_trigger_message_id are producer debug context (#52694) and are not
 # persisted; notification_category="diagnostic" rides the snapshot so the replayed wake still mutes,
@@ -410,7 +390,7 @@ def routine_display_metadata(routine):
 # proof at execution from the target the pre-claim check validated, and the turn's resolver reads it.
 _AUTOMATION_METADATA = frozenset({'gateway_session_key', 'gateway_session_id', 'automation_identities',
     'turn_author', 'notification_origin', 'original_trigger_message_id', 'notification_category',
-    'display_kind', 'display_text', 'routine', 'gateway_proven_session_id', 'gateway_completion_ids', 'heartbeat_tick',
+    'display_kind', 'display_text', 'cron_delivery', 'gateway_proven_session_id', 'gateway_completion_ids', 'heartbeat_tick',
     'completion_wakes_parent', 'completion_resumes_parent', 'requester_user_id'})
 
 
@@ -421,9 +401,7 @@ def admission_display(payload):
     surface would. ``{}`` for every other input."""
     descriptor = payload.get('local_automation_v1') or (payload.get('native_text_v1') or {}).get('automation') or {}
     kind, text = descriptor.get('display_kind'), descriptor.get('display_text')
-    from gateway.response_filters import ROUTINE_OUTPUT_DISPLAY_KIND
-    # A routine's whole output stays out of the live frame: its row carries it.
-    if not kind or kind == ROUTINE_OUTPUT_DISPLAY_KIND or not isinstance(text, str) or not text.strip():
+    if cron_post(payload) or not kind or not isinstance(text, str) or not text.strip():
         return {}
     card = {'display_kind': kind, 'display_text': text, 'text': str(payload.get('text') or '')}
     if descriptor.get('notification_category') == 'diagnostic':
@@ -434,7 +412,7 @@ def admission_display(payload):
 def pending_display_kind(payload):
     from gateway.response_filters import INTERNAL_NOTIFICATION_DISPLAY_KIND, PRODUCER_CARD_KINDS
     from gateway.session_display import HIDDEN
-    if (payload.get('display_v1') or {}).get('kind') == HIDDEN:
+    if (payload.get('display_v1') or {}).get('kind') == HIDDEN or cron_post(payload):
         return HIDDEN
     descriptor = _descriptor(payload)
     if not descriptor:
@@ -632,6 +610,7 @@ def snapshot_local_automation(authority, adapter, event, identity, entry):
                   'route': entry.session_key, 'target': entry.session_id}
     descriptor.update(automation_notification_metadata(event.metadata))
     descriptor.update(automation_display_metadata(event.metadata))
+    descriptor.update(cron_delivery_metadata(event.metadata.get(CRON_DELIVERY_KEY)))
     descriptor.update(_tick_metadata(event.metadata))
     if 'completion_wakes_parent' in event.metadata:
         # A failed async delegation: the parent must act on it, so it runs as a turn even when no viewer

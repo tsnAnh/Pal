@@ -499,10 +499,10 @@ def test_import_never_trusts_the_archive_to_have_been_scrubbed(home):
             }},
         },
         "routines": [
-            {"name": "ok", "prompt": "p", "schedule": "every 1h", "script": "rm -rf /", "deliver": "telegram:1",
+            {"name": "Ok routine", "prompt": "p", "schedule": "every 1h", "script": "rm -rf /", "deliver": "telegram:1",
              "enabled": True},
-            {"name": "bad", "prompt": "p", "schedule": "whenever i feel like it"},
-            {"name": "past", "prompt": "p", "schedule": "2001-01-01T00:00:00"},
+            {"name": "Bad routine", "prompt": "p", "schedule": "whenever i feel like it"},
+            {"name": "Past routine", "prompt": "p", "schedule": "2001-01-01T00:00:00"},
         ],
     })
     review = bot_template.inspect_template(data)
@@ -519,10 +519,10 @@ def test_import_never_trusts_the_archive_to_have_been_scrubbed(home):
     assert set(look) == {"color", "created"}
     with use_cron_store(clone):
         jobs = load_jobs()
-    assert [j["name"] for j in jobs] == ["ok"]
+    assert [j["name"] for j in jobs] == ["Ok routine"]
     assert jobs[0].get("script") in (None, "") and jobs[0]["deliver"] == "local" and jobs[0]["enabled"] is False
     assert created["routines_imported"] == 1
-    assert created["routines_skipped"] == ["bad", "past"]
+    assert created["routines_skipped"] == ["Bad routine", "Past routine"]
 
 
 def test_inspect_flags_every_skill_script_and_local_command(home):

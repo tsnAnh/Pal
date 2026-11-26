@@ -253,11 +253,11 @@ def test_notify_cron_provider_failure_is_best_effort(
         "create_job",
         prompt="survives provider failure",
         schedule="every 1h",
-        name="best-effort-notify",
+        name="Best effort notify",
     )
 
     assert created["profile"] == "worker_alpha"
-    assert created["name"] == "best-effort-notify"
+    assert created["name"] == "Best effort notify"
 
 
 def test_external_provider_reconcile_fails_closed_with_multiple_profiles(
@@ -1133,12 +1133,12 @@ async def test_cron_job_mutations_resolve_the_owner_when_the_hint_is_another_pro
     hint as the run lookup. A hint that does not hold the job must resolve to the owner instead of
     404ing (or acting on the wrong profile's store); a hint that does hold it still wins."""
     worker_job = _web_server_cron._call_cron_for_profile(
-        "worker_alpha", "create_job", prompt="owned by worker", schedule="every 1h", name="worker-mutations",
+        "worker_alpha", "create_job", prompt="owned by worker", schedule="every 1h", name="Worker mutations",
     )
     job_id = worker_job["id"]
 
     got = await _rt_cron.get_cron_job(job_id, profile="default")
-    assert got["id"] == job_id and got["name"] == "worker-mutations"
+    assert got["id"] == job_id and got["name"] == "Worker mutations"
 
     paused = await _rt_cron.pause_cron_job(job_id, profile="default")
     assert paused["id"] == job_id and paused.get("enabled") is False
@@ -1678,17 +1678,17 @@ async def test_update_cron_job_rechecks_stored_base_url_on_unrelated_edit(isolat
 
     with pytest.raises(HTTPException) as exc:
         await _rt_cron.update_cron_job(
-            job["id"], _web_models.CronJobUpdate(updates={"name": "renamed"}),
+            job["id"], _web_models.CronJobUpdate(updates={"name": "Renamed"}),
             profile="worker_alpha",
         )
     assert exc.value.status_code == 400
     assert "base_url" in exc.value.detail
 
     updated = await _rt_cron.update_cron_job(
-        job["id"], _web_models.CronJobUpdate(updates={"name": "renamed", "base_url": ""}),
+        job["id"], _web_models.CronJobUpdate(updates={"name": "Renamed", "base_url": ""}),
         profile="worker_alpha",
     )
-    assert updated["name"] == "renamed"
+    assert updated["name"] == "Renamed"
     assert not updated.get("base_url")
 
 

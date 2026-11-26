@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Union
 
+from cron.job_title import job_title
 from cron.jobs import effective_job_state
 
 import hermes_time
@@ -170,8 +171,6 @@ def _mode_guidance_notes(job: dict[str, Any], user_deliver: Optional[str]) -> li
                 "deliver='all' resolves at fire time and never includes "
                 "bot-chat targets — channels connected later are picked up "
                 "automatically.")
-        if _deliver.startswith("bot-chat:"):
-            notes.append("Targeting another profile's Bot Chat costs that bot an agent turn per run.")
         # platform:chat_id with no thread segment loses topic targeting.
         for target in _deliver.split(","):
             parts = target.strip().split(":")
@@ -479,7 +478,7 @@ def _format_job(job: dict[str, Any]) -> dict[str, Any]:
     prompt = str(job.get("prompt") or "")
     skills = _canonical_skills(job.get("skill"), job.get("skills"))
     job_id = str(job.get("id") or "unknown")
-    name = str(job.get("name") or prompt[:50] or (skills[0] if skills else "") or job_id or "cron job")
+    name = job_title(job)
     result = {
         "job_id": job_id,
         "name": name,

@@ -10,6 +10,7 @@ import re
 from fastapi import HTTPException
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from cron.job_title import job_title
 from hermes_cli.config import cfg_get
 from hermes_cli.web_models import CronJobCreate
 
@@ -191,6 +192,7 @@ def _annotate_cron_job(
 ) -> dict[str, Any]:
     return {
         **job,
+        "name": job_title(job),
         "profile": profile,
         "profile_name": profile,
         "hermes_home": str(home),

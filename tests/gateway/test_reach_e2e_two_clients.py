@@ -349,7 +349,7 @@ async def scenario(stack: ReachStack, report: Report, nonce: str) -> None:
         await ios.turn(PROFILE, session_id, marks[5])
         check_origin_notes(stack, report, marks, session_id, hash_after_first_turn)
 
-        job_one = f"reach-one-{nonce}"
+        job_one = f"Reach one {nonce}"
         await ios.attention("foreground")
         await roster.attention("foreground")
         create_active_job(gateway, PROFILE, job_one, f"JOB-ONE-{nonce} write the report")
@@ -370,7 +370,7 @@ async def scenario(stack: ReachStack, report: Report, nonce: str) -> None:
         await ios.close()
         await roster.close()
         await desktop.attention("background")
-        job_two = f"reach-two-{nonce}"
+        job_two = f"Reach two {nonce}"
         create_active_job(gateway, PROFILE, job_two, f"JOB-TWO-{nonce} write the report")
         offer_two = await settle_offer(report, "offer-to-attached-desktop", desktop, job_two)
         await desktop.outcome(offer_two["offer_id"], "shown")
@@ -382,7 +382,7 @@ async def scenario(stack: ReachStack, report: Report, nonce: str) -> None:
         report.offers["after_job_two"] = stack.offer_rows(PROFILE)
 
         await desktop.close()
-        job_three = f"reach-three-{nonce}"
+        job_three = f"Reach three {nonce}"
         create_active_job(gateway, PROFILE, job_three, f"JOB-THREE-{nonce} write the report")
         row_three = await await_row(stack, report, "offer-with-nobody-attached", job_three,
                                     lambda r: r["status"] != "routing", timeout=CRON_FIRE_TIMEOUT)

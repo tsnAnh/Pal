@@ -19,6 +19,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
+from cron.job_title import job_title
+
 if TYPE_CHECKING:
     from persistence_assembly import Persistence
 
@@ -124,7 +126,7 @@ def deliver_to_room(job: dict, content: str, address: str, *, for_failure: bool 
         with _handle(store) as handle:
             event = post_scheduled_message(
                 handle, placement=store[1], room_id=room_id, job_id=job_id,
-                job_name=_redact_cron_payload(str(job.get("name") or job_id), "job name"),
+                job_name=_redact_cron_payload(job_title(job), "job name"),
                 run_key=run_key, text=_redact_cron_payload(content, "room payload"), notice=for_failure)
         logger.info("Job '%s': %s Group Chat %s (seq %s)", job_id,
                     "already posted this run to" if event.get("idempotent") else "posted to", room_id, event.get("seq"))

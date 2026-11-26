@@ -137,7 +137,7 @@ async def test_a_classic_cli_resume_with_no_heartbeat_leaves_the_tick_to_the_pol
 @pytest.mark.asyncio
 @pytest.mark.parametrize('live_adapters', [False, True], ids=['no-local-adapter-yet', 'in-gateway-ticker'])
 @pytest.mark.parametrize('viewer', [False, True], ids=['unviewed', 'viewed'])
-async def test_cron_result_for_a_local_origin_is_a_note_not_a_turn(tmp_path, monkeypatch, live_adapters, viewer):
+async def test_cron_result_for_a_local_origin_is_a_message_not_a_turn(tmp_path, monkeypatch, live_adapters, viewer):
     from cron import scheduler_delivery as sd
     from tests.gateway.test_session_end_delegations import _record_turns
     from tests.gateway.test_unviewed_completion_notes import _target
@@ -156,10 +156,10 @@ async def test_cron_result_for_a_local_origin_is_a_note_not_a_turn(tmp_path, mon
     assert turns == [], 'the finished result must not cost a model turn'
     [row] = _admissions(authority, ref, 'CRON_RESULT_j1')
     assert row.outcome == 'completed'
-    [note] = [m for m in transcript_rows(authority.persistence, _target(runner, authority, ref))
-              if 'CRON_RESULT_j1' in str(m.get('content'))]
-    assert note['role'] == 'user' and note['display_metadata']['completion_admission'] == row.admission_id
-    assert 'summarize for the chat' not in note['content'], 'no model framing on a note'
+    [message] = [m for m in transcript_rows(authority.persistence, _target(runner, authority, ref))
+                 if 'CRON_RESULT_j1' in str(m.get('content'))]
+    assert (message['role'], message['content']) == ('assistant', 'CRON_RESULT_j1')
+    assert message['display_metadata']['cron_delivery']['job_id'] == 'j1'
 
 
 @pytest.mark.asyncio

@@ -42,7 +42,7 @@ def test_per_job_wrap_response_true_overrides_global_false():
     """A per-job wrap_response=True forces wrapping even when the global config disables it."""
     sent = _deliver({"name": "noisy-job", "wrap_response": True}, "Output.", False)
 
-    assert "Cronjob Response: noisy-job" in sent
+    assert "Cronjob Response: Noisy job" in sent
     assert "To stop or manage this job" in sent
 
 

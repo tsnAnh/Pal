@@ -57,7 +57,6 @@ class Offer:
     title: str
     body: str
     lane: DurableLane | None = None
-    lane_text: str | None = None
     chat: Messaging | None = None
 
 
@@ -160,7 +159,7 @@ def _land(authority, home: Path, item: Offer) -> str | None:
             return lane.land()
         if lane.session_id:
             from gateway.session_cron import deliver_to_local_chat
-            return deliver_to_local_chat(home, lane.session_id, item.lane_text or item.body)
+            return deliver_to_local_chat(home, lane.session_id, item.body)
     return None
 
 

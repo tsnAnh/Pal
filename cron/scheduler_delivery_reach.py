@@ -6,6 +6,8 @@ from functools import partial
 from typing import Optional
 
 from cron.job_provenance import CREATED_BY_USER, created_by_of
+from cron.job_title import job_title
+from cron.scheduler_delivery_routine import cron_delivery
 
 logger = logging.getLogger("cron.scheduler")
 
@@ -28,12 +30,17 @@ def _execution_key(job: dict, *, for_failure: bool) -> str:
     return f"cron:{job.get('id', '?')}:{execution}" + (":failure" if for_failure else "")
 
 
-def _lane(job: dict, content: str, *, for_failure: bool):
+def _lane(job: dict, content: str, *, text: str, for_failure: bool):
     from gateway.reach import DurableLane
     from cron.scheduler_delivery import _deliver_to_bot_chat, _resolve_origin
     origin = _resolve_origin(job) or {}
     if str(origin.get("platform", "")).lower() == "local" and origin.get("chat_id"):
-        return DurableLane(session_id=str(origin["chat_id"]))
+        from gateway.session_cron import deliver_to_local_chat
+        from hermes_constants import get_hermes_home
+        chat = str(origin["chat_id"])
+        return DurableLane(session_id=chat, land=partial(
+            deliver_to_local_chat, get_hermes_home(), chat, text, diagnostic=for_failure,
+            cron_delivery=cron_delivery(job, content)))
     return DurableLane(land=partial(_deliver_to_bot_chat, job, content, "", for_failure=for_failure))
 
 
@@ -42,7 +49,7 @@ def _bot_chat_lane_is_queued(job: dict) -> bool:
     return bool(receipt) and receipt.get("status") in QUEUED_RECEIPT_STATUSES
 
 
-def deliver_active(job: dict, content: str, *, lane_text: str, alert_text: str,
+def deliver_active(job: dict, content: str, *, alert_text: str,
                    for_failure: bool = False) -> Optional[str]:
     from gateway import reach
     from hermes_constants import get_hermes_home
@@ -50,8 +57,8 @@ def deliver_active(job: dict, content: str, *, lane_text: str, alert_text: str,
     item = reach.Offer(
         producer_key=_execution_key(job, for_failure=for_failure), domain=REACH_DOMAIN,
         kind=reach.OfferKind.NOTIFY, consent=consent,
-        title=str(job.get("name") or job.get("id") or "Scheduled job"), body=alert_text,
-        lane=_lane(job, content, for_failure=for_failure), lane_text=lane_text)
+        title=job_title(job), body=alert_text,
+        lane=_lane(job, content, text=alert_text, for_failure=for_failure))
     try:
         delivery = reach.offer_threadsafe(get_hermes_home(), item)
     except Exception as exc:

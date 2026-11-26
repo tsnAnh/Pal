@@ -34,6 +34,7 @@ __all__ = [
     "ConversationRequest",
     "ConversationRevision",
     "CooldownSnapshot",
+    "CronDeliveryRow",
     "DelegationDelivery",
     "HeldCoverage",
     "HeldMessage",
@@ -765,6 +766,12 @@ class DelegationDelivery:
 
 
 @dataclass(frozen=True, slots=True)
+class CronDeliveryRow:
+    row_id: MessageId
+    message_uid: str
+
+
+@dataclass(frozen=True, slots=True)
 class MarkerPurgeReport:
     """Outcome of ``purge_stale_tool_call_markers``: the matching rows (cleared unless ``dry_run``), each once in the store's unordered SELECT order, and the path of the snapshot taken before the write, ``None`` when none was taken."""
 
@@ -988,6 +995,9 @@ class MessageRepository(Protocol):
 
     def append_completion_note(self, session_id: SessionId, admission_id: str, content: str, display_kind: str, metadata: Mapping[str, JsonValue]) -> MessageId:
         """Record an unviewed completion's note once as a ``user`` row, keyed by ``admission_id`` (stored as ``metadata.completion_admission``) over the compression lineage, with the guards of ``append_delegation_delivery``."""
+        ...
+
+    def append_cron_delivery(self, session_id: SessionId, anchor: str, content: str, metadata: Mapping[str, JsonValue]) -> Optional[CronDeliveryRow]:
         ...
 
     def replace_transcript(self, session_id: SessionId, messages: Sequence[NewMessage], mode: ReplaceMode, *, reject_active_turn_lease: bool = False) -> ReplaceResult:

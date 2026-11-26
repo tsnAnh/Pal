@@ -34,7 +34,7 @@ INTERNAL_NOTIFICATION_DISPLAY_KIND = "internal_notification"
 # Async-result cards the in-process TUI persisted: a producer's internal event naming one (with a
 # display_text) persists as that row kind instead of internal_notification.
 ROUTINE_OUTPUT_DISPLAY_KIND = "routine_output"
-PRODUCER_NOTICE_DISPLAY_KINDS = frozenset({"process_complete", "async_delegation_complete", ROUTINE_OUTPUT_DISPLAY_KIND})
+PRODUCER_NOTICE_DISPLAY_KINDS = frozenset({"process_complete", "async_delegation_complete"})
 MACHINERY_DISPLAY_KINDS = frozenset({INTERNAL_NOTIFICATION_DISPLAY_KIND, *PRODUCER_NOTICE_DISPLAY_KINDS})
 # Loop exit the agent stamps when a machinery turn ends with the model adding nothing
 # (agent/turn_empty_response.py NOTIFICATION_NO_REPLY_EXIT mirrors this; agent/ cannot import gateway/).
@@ -211,7 +211,7 @@ def _producer_card(event: Any) -> dict:
     text = metadata.get("display_text")
     if (getattr(event, "internal", False) and metadata.get("display_kind") in PRODUCER_NOTICE_DISPLAY_KINDS
             and isinstance(text, str) and text.strip()):
-        return {"display_text": text, **(metadata.get("routine") or {})}
+        return {"display_text": text}
     return {}
 
 

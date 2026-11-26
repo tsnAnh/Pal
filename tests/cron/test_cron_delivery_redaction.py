@@ -60,8 +60,8 @@ def _deliver_bot_chat(job: dict, content: str) -> str:
 
     captured = {}
 
-    def _fake_deliver(home, owner, message, *, delivery_id, notification_category="result", routine=None):
-        captured["message"] = message
+    def _fake_deliver(home, owner, message, *, delivery_id, notification_category="result", cron_delivery=None):
+        captured["admitted"] = (message, cron_delivery["name"], cron_delivery["text"])
         return {"status": "settled", "message": message, "delivery_id": delivery_id}
 
     # The canonical lane admits the turn to the target profile's live Bot Chat owner; the
@@ -70,7 +70,7 @@ def _deliver_bot_chat(job: dict, content: str) -> str:
             patch("tools.bot_live_delivery.deliver_to_live_owner", side_effect=_fake_deliver):
         err = _deliver_to_bot_chat(dict(job, execution_id="r1"), content, "")
     assert err is None, err
-    return captured["message"]
+    return "\n".join(captured["admitted"])
 
 
 @pytest.mark.parametrize("lane", ["platform_send", "session_mirror", "bot_chat"])

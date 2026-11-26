@@ -106,7 +106,7 @@ async def test_tui_cron_is_the_classic_overview_with_the_profile_jobs(owner):
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     token = set_hermes_home_override(str(owner.home))
     try:
-        create_job('Summarize the news', '0 9 * * *', name='daily-digest')
+        create_job('Summarize the news', '0 9 * * *', name='Daily digest')
     finally:
         reset_hermes_home_override(token)
     sid = (await owner.call('session.create', request_id='t', source='tui', cwd=str(owner.workdir)))['session_id']
@@ -114,7 +114,7 @@ async def test_tui_cron_is_the_classic_overview_with_the_profile_jobs(owner):
     assert '(^_^) Scheduled Tasks' in out and '/cron list' in out, out
     assert '0 9 * * *' in out and 'Summarize the news' in out, out
     listed = await _exec(owner, sid, 'cron list')
-    assert 'Scheduled Jobs:' in listed and 'daily-digest' in listed, listed
+    assert 'Scheduled Jobs:' in listed and 'Daily digest' in listed, listed
 
 
 @pytest.mark.asyncio
@@ -134,13 +134,13 @@ async def test_cron_writes_run_on_the_classic_cli_command_socket_whatever_surfac
                                                'params': {'session_id': sid, 'command': command}})
         assert 'result' in reply, (command, reply)
         return reply['result']['output']
-    added = await run('cron add "every 2h" "ping CRONPROBE" --name probe')
+    added = await run('cron add "every 2h" "ping CRONPROBE" --name Probe')
     assert 'Created job:' in added and 'every 120m' in added, added
-    paused = await run('cron pause probe')
-    assert 'Paused job: probe' in paused, paused
-    assert [j['enabled'] for j in json.loads(jobs.read_text())['jobs'] if j['name'] == 'probe'] == [False]
+    paused = await run('cron pause Probe')
+    assert 'Paused job: Probe' in paused, paused
+    assert [j['enabled'] for j in json.loads(jobs.read_text())['jobs'] if j['name'] == 'Probe'] == [False]
     assert 'State: paused' in await run('cron list --all')
-    assert 'Removed job: probe' in await run('cron remove probe')
+    assert 'Removed job: Probe' in await run('cron remove Probe')
     assert json.loads(jobs.read_text())['jobs'] == []
     assert 'Unknown cron command: bogus' in await run('cron bogus')
 
@@ -155,16 +155,16 @@ async def test_cron_writes_stay_refused_on_a_viewer_connection_and_reads_list_al
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     token = set_hermes_home_override(str(owner.home))
     try:
-        pause_job(create_job('ping', 'every 2h', name='parked')['id'])
+        pause_job(create_job('ping', 'every 2h', name='Parked')['id'])
     finally:
         reset_hermes_home_override(token)
     for source in ('cli', 'tui', 'gui', 'acp'):
         sid = (await owner.call('session.create', request_id=source, source=source,
                                 cwd=str(owner.workdir)))['session_id']
-        assert 'parked' in await _exec(owner, sid, 'cron list -a'), source
-        assert 'parked' not in await _exec(owner, sid, 'cron list'), source
+        assert 'Parked' in await _exec(owner, sid, 'cron list -a'), source
+        assert 'Parked' not in await _exec(owner, sid, 'cron list'), source
         reply = await owner.connection.dispatch({'id': 9, 'method': 'slash.exec',
-                                                 'params': {'session_id': sid, 'command': 'cron resume parked'}})
+                                                 'params': {'session_id': sid, 'command': 'cron resume Parked'}})
         assert reply.get('error', {}).get('message') == 'unsupported_command', (source, reply)
     assert 'State: paused' in await _exec(owner, sid, 'cron list --all')  # nothing resumed it
 

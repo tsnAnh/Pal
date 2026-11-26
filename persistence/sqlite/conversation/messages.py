@@ -12,7 +12,7 @@ from persistence import (
 )
 from persistence.conversation.messages import (
     AnchoredView, AnchoredWindow, BatchAppendProgress, BatchAppendResult, CompactionResult, CompressionCooldown, ConversationMessage,
-    ConversationPeer, ConversationRequest, ConversationRevision, CooldownSnapshot, DelegationDelivery,
+    ConversationPeer, ConversationRequest, ConversationRevision, CooldownSnapshot, CronDeliveryRow, DelegationDelivery,
     HeldCoverage, HeldMessage, MarkerPurgeReport, MessageRecord, MessageStorageState, NewMessage, PagedMessage, PromptPage,
     PrUrlHit, PrunedRowChange, PruneRewriteResult, Reaction, ReadCheck, ReplaceMode, ReplaceResult, ResumeConversations,
     RewindPlan, RowDisposition, RowOutcome, RowStamp, RowUids, ScannedMessage, SegmentPage, SessionTimeline, TimelineEntry, TranscriptRead, TranscriptRow,
@@ -31,7 +31,7 @@ from ._store.compression import (
     clear_compression_failure_cooldown, get_compression_failure_cooldown_row, record_compression_failure_cooldown,
     restore_compression_failure_cooldown_row,
 )
-from ._store.detached_results import append_completion_note, append_delegation_delivery
+from ._store.detached_results import append_completion_note, append_cron_delivery, append_delegation_delivery
 from ._store.identity import _restore_row_identity
 from ._store.messages import (
     _append_messages_in_transaction, _ensure_display_order, _execute_transcript_write,
@@ -338,6 +338,13 @@ class SQLiteMessageRepository:
         with _refusals(holder, session_id):
             return MessageId(append_completion_note(holder, session_id, admission_id, content, display_kind,
                                                        dict(metadata)))
+
+    def append_cron_delivery(self, session_id: SessionId, anchor: str, content: str,
+                             metadata: Mapping[str, JsonValue]) -> Optional[CronDeliveryRow]:
+        holder = self._store.holder()
+        with _refusals(holder, session_id):
+            written = append_cron_delivery(holder, session_id, anchor, content, dict(metadata))
+        return None if written is None else CronDeliveryRow(MessageId(written[0]), written[1])
 
     def replace_transcript(self, session_id: SessionId, messages: Sequence[NewMessage], mode: ReplaceMode, *,
                            reject_active_turn_lease: bool = False) -> ReplaceResult:
