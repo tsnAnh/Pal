@@ -43,8 +43,6 @@ struct MacSidebar: View {
                         MacHiddenBots(roster: roster, router: router)
                             .padding(.top, 6)
                     }
-                    MacApprovalsRow(roster: roster, router: router)
-                        .padding(.top, 6)
                 }
                 .boundedToColumn()
                 .padding(.horizontal, 11)

@@ -28,7 +28,6 @@ enum AppSheet: String, Identifiable {
     case createBot
     case connectApps
     case kanban
-    case approvals
 
     var id: String { rawValue }
 }
@@ -58,7 +57,6 @@ final class AppRouter {
     let searchScopes: [SearchScope] = [.all, .messages, .bots]
     private(set) var capabilities: Set<AppCapability>
     private(set) var connectAppsProfile: String?
-    private(set) var approvalsProfile: String?
     private(set) var settingsRoute: SettingsRoute?
     @ObservationIgnored private var shareAsTemplateHandler: ((String) -> Void)?
 
@@ -83,11 +81,6 @@ final class AppRouter {
     func presentConnectApps(profile: String? = nil) {
         connectAppsProfile = profile
         sheet = .connectApps
-    }
-
-    func presentApprovals(profile: String? = nil) {
-        approvalsProfile = profile
-        sheet = .approvals
     }
 
     func presentKanban() {
