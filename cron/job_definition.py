@@ -6,6 +6,7 @@ into a live one (profile distributions) import this rather than duplicating the 
 """
 from typing import Any, Dict
 
+from cron.job_provenance import AGENT_EDITED_FIELDS, changed_owner_fields, with_agent_edits
 from cron.jobs import _apply_schedule_update, _jobs_lock, is_job_runnable, load_jobs, parse_schedule, save_jobs
 from cron.jobs_time import normalize_timezone, prune_inherited_knobs
 from cron.quota_hold import clear_state as _clear_quota_hold
@@ -27,6 +28,8 @@ def merge_job_definition(local: dict[str, Any], authored: dict[str, Any]) -> dic
     past one-shot for a live job)."""
     merged = {key: value for key, value in local.items() if key not in JOB_DEFINITION_FIELDS}
     merged.update((key, authored[key]) for key in JOB_DEFINITION_FIELDS if key in authored)
+    if imported := changed_owner_fields(local, merged):
+        merged[AGENT_EDITED_FIELDS] = with_agent_edits(local, imported)
     merged["repeat"] = {
         "completed": (local.get("repeat") or {}).get("completed", 0),
         "times": (authored.get("repeat") or {}).get("times"),

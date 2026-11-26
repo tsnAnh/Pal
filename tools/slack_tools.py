@@ -218,7 +218,8 @@ def _post_message(call: Callable[..., dict], args: dict, install: SlackInstall) 
     if wait.requested and not reply_from:
         return tool_error("Say who should answer: pass their Slack user id as reply_from.", code="reply_from_missing")
     info = call("conversations.info", {"channel": channel}).get("channel") or {}
-    shown = {"channel": f"#{info['name']}" if info.get("name") else channel, "text": text}
+    hashed = f"#{info['name']}" if info.get("name") else ""
+    shown = {"channel": hashed or channel, "text": text}
     data = {"channel": channel, "text": text}
     if args.get("thread_ts"):
         shown["thread_ts"] = data["thread_ts"] = str(args["thread_ts"])
@@ -231,7 +232,8 @@ def _post_message(call: Callable[..., dict], args: dict, install: SlackInstall) 
     to = Recipient("slack", install.team_id, reply_from or None, channel, data.get("thread_ts"), False)
     return slack_outbound.deliver(POST_TOOL, args, to=to, text=text, label=shown["channel"],
                                   shown={"channel": shown["channel"]}, wait=wait, post=post,
-                                  legacy=lambda: _approved_once(POST_TOOL, shown, send))
+                                  legacy=lambda: _approved_once(POST_TOOL, shown, send),
+                                  spellings=(channel, str(info.get("id") or ""), hashed))
 
 
 def _recipient_refusal(user: dict, team_id: str) -> str | None:
@@ -294,7 +296,8 @@ def _send_dm(call: Callable[..., dict], args: dict, install: SlackInstall) -> di
     to = Recipient("slack", install.team_id, user["id"], open_channel() if wait.requested else None, None, True)
     return slack_outbound.deliver(DM_TOOL, args, to=to, text=text, label=name or user["id"],
                                   shown={"recipient": shown["recipient"]}, wait=wait, post=post,
-                                  legacy=lambda: _approved_once(DM_TOOL, shown, send))
+                                  legacy=lambda: _approved_once(DM_TOOL, shown, send),
+                                  spellings=(user["id"], f"@{user['name']}" if user.get("name") else ""))
 
 
 @dataclass(frozen=True)

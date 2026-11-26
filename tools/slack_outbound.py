@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -7,6 +8,8 @@ from datetime import UTC, datetime
 from typing import Any, Optional
 
 from tools.registry import tool_error
+
+logger = logging.getLogger(__name__)
 
 REPORT_ALIAS = "report"
 _UNCERTAIN_SLACK_ERRORS = frozenset({"network_failure"})
@@ -89,14 +92,25 @@ def _send_tracked(desk: Any, contact: Any, to: Any, text: str, wait: WaitRequest
 
 def deliver(
     tool: str, args: dict, *, to: Any, text: str, label: str, shown: dict, wait: WaitRequest,
-    post: Callable[[], dict], legacy: Callable[[], dict | str],
+    post: Callable[[], dict], legacy: Callable[[], dict | str], spellings: tuple[str, ...],
 ) -> dict | str:
     from gateway.desk import Outbound, outbound_decision
     from gateway.desk.service import Desk
     from gateway.desk.owner import owner_contact, turn_facts
+    from tools import routine_send
+    call = routine_send.SendCall("slack", (frozenset(filter(None, spellings)),), to.thread_ts or "", (text,))
+
+    def routine_approves() -> bool:
+        # A waiting post opens a reply path to ``reply_from``, which no routine names.
+        job = None if wait.requested else routine_send.current_routine()
+        reason = routine_send.routine_send_allowed(call, job)
+        if reason:
+            logger.info(reason)
+        return reason is not None
+
     facts = turn_facts("slack")
     if facts is None:
-        result = legacy()
+        result = {"sent": True, **shown, **post()} if routine_approves() else legacy()
         if wait.requested and isinstance(result, dict):
             return {**result, "waiting": False, "note": "Replies to this message will not wake this conversation."}
         return result
@@ -105,7 +119,8 @@ def deliver(
         return _owner_only_refusal()
     desk = Desk.in_turn()
     judged = to if to.direct else replace(to, user_id=None)
-    if not _spent_grant(tool, args) and outbound_decision(facts, judged) is Outbound.ASK_OWNER:
+    if (not _spent_grant(tool, args) and outbound_decision(facts, judged) is Outbound.ASK_OWNER
+            and not routine_approves()):
         return _request_owner(desk, contact, to, text, label, wait)
     if wait.requested:
         return _send_tracked(desk, contact, to, text, wait, post, shown)

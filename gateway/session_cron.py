@@ -309,7 +309,8 @@ def _run_identified(run_job, job, execution_id, **kwargs):
     the caller entered (so the row and the profile name are this profile's)."""
     from cron.execution_identity import enter_cron_execution, exit_cron_execution
     from cron.executions import get_execution
-    token = enter_cron_execution(job, execution_id, get_execution(execution_id) or {})
+    token = enter_cron_execution(job, execution_id, get_execution(execution_id) or {},
+                                 transient_prompt=bool(kwargs.get("extra_prompt")))
     try:
         return run_job(job, execution_id=execution_id, **kwargs)
     finally:

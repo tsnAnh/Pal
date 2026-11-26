@@ -456,7 +456,10 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
     if recipient_class(outbound) == OWN_AGENT:
         logger.info("outbound send to an own agent went through: tool=%s class=%s", outbound.tool, OWN_AGENT)
         return None, None
-    from tools import approval, approval_context
+    from tools import approval, approval_context, routine_send
+    if reason := routine_send.reason_for_tool(outbound.tool, args):
+        logger.info(reason)
+        return None, None
     if approval_context._no_user_can_answer():
         return NOT_SENT_NOBODY_TO_ASK, None
     if not policy.ask:
