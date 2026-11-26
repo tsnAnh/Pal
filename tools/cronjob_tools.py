@@ -28,6 +28,7 @@ _CRON_RUN_HEARTBEAT_INTERVAL = 10.0
 # mask the gateway watchdog forever — pre-#76502 the parent was at least reaped at ~1800s.
 _CRON_RUN_HEARTBEAT_CEILING = 6 * 3600.0
 
+from cron.job_provenance import AGENT_EDITED_FIELDS, OWNER_TEXT_FIELDS, TARGET_FIELDS, with_agent_edits
 from cron.jobs import (
     AmbiguousJobReference,
     claim_job_for_fire,
@@ -769,6 +770,8 @@ def _action_create(a: dict[str, Any]) -> str:
     context_from = a["context_from"]
     if a["continuity"] is not None:
         context_from = _apply_continuity(context_from, a["continuity"])
+    written = {**a, "skills": canonical_skills, "context_from": context_from}
+    agent_edits = with_agent_edits({}, {"prompt", *TARGET_FIELDS, *(f for f in OWNER_TEXT_FIELDS if written.get(f))})
 
     from cron.scheduler import CronSchedulerRegistrationError, create_job_with_scheduler_registration
     try:
@@ -793,7 +796,7 @@ def _action_create(a: dict[str, Any]) -> str:
             pinned=bool(a["pinned"]),
             failure_deliver=_resolve_cron_context_deliver(_normalize_deliver_param(a["failure_deliver"])),
             catch_up=a["catch_up"], wrap_response=_wrap_response_override(a["wrap_response"]),
-            created_by=a["created_by"] or "user",
+            created_by=a["created_by"] or "user", agent_edited_fields=agent_edits if a["edited_by_agent"] else None,
             **({"paused": a["paused"], "paused_reason": a["paused_reason"]}
                if a["paused"] is not False or a["paused_reason"] is not None else {}))
     except CronSchedulerRegistrationError as exc:
@@ -1071,6 +1074,8 @@ def _action_update(job: dict[str, Any], a: dict[str, Any]) -> str:
             return tool_error(error, success=False)
     if not updates:
         return tool_error("No updates provided.", success=False)
+    if a["edited_by_agent"] and OWNER_TEXT_FIELDS & updates.keys():
+        updates[AGENT_EDITED_FIELDS] = with_agent_edits(job, updates)
     updated = update_job(job["id"], updates)
     _notify_provider_jobs_changed_safe()
     # An update can switch modes or delivery — echo the same guidance as create.
@@ -1153,7 +1158,7 @@ def cronjob(
     interpreter: Optional[str] = None,
     timezone: Optional[str] = None,
     grace_minutes: Optional[int | str] = None,
-    created_by: Optional[str] = None) -> str:
+    created_by: Optional[str] = None, edited_by_agent: bool = False) -> str:
     """Unified cron job management tool."""
     a = dict(locals())
     try:
@@ -1328,6 +1333,16 @@ def _tool_created_by() -> str:
     return "agent" if is_truthy_value(get_session_env("HERMES_CRON_SESSION", "")) else "user"
 
 
+def _outside_owner_turn() -> bool:
+    from agent.turn_author import is_owner_turn
+    from gateway.audience import Audience, audience_of_key
+    from gateway.session_context import bound_session_key, current_turn_event
+    event = current_turn_event()
+    # Goal and heartbeat prompts run as non-internal turns; only the missing message id tells them apart.
+    unsent = event is not None and (event.internal or not event.message_id)
+    return not is_owner_turn() or unsent or audience_of_key(bound_session_key()) is Audience.MEMBER
+
+
 def _cronjob_handler(args, **kw):
     """Model-tool dispatch: resolves the one model-facing ``monitor`` field into the stored
     ``monitor_script``/``monitor_url`` pair (legacy field names still accepted)."""
@@ -1340,6 +1355,7 @@ def _cronjob_handler(args, **kw):
         session_id=kw.get("session_id"),
         paused=args.get("paused", False),
         created_by=_tool_created_by(),
+        edited_by_agent=_outside_owner_turn(),
         **{key: args.get(key) for key in _HANDLER_FORWARDED_ARGS},
     )
 

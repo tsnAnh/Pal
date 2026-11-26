@@ -1,9 +1,3 @@
-"""A routine the owner wrote sends to the destination it names without asking; every other send still asks.
-
-Drives the real gates (the Slack tools' owner desk, the outbound draft review, the MCP action gate) inside the
-real cron identity and cron run scope.
-"""
-
 import json
 import logging
 import os
@@ -22,13 +16,16 @@ from cron.job_definition import merge_job_definition
 from cron.jobs import get_job, update_job
 from cron.scheduler import _CronRunScope
 from gateway.chat_slack.api import SlackApi
+from gateway.config import Platform
 from gateway.desk import ItemKind, ItemState
 from gateway.desk.service import Desk
+from gateway.platforms.event import MessageEvent
+from gateway.session import SessionSource
 from gateway.session_context import clear_session_vars, set_session_vars
 from gateway.session_cron import _run_identified
 from tests.fakes.fake_llm_provider import FakeLLMServer, Text, ToolCall, write_hermes_home
-from tests.tools.test_bot_mode_drafts import _owner, bot_home
-from tests.tools.test_mcp_action_gate import server
+from tests.tools import test_bot_mode_drafts as drafts
+from tests.tools import test_mcp_action_gate as action_gate
 from tools import approval, approval_context, mcp_action_gate, slack_tools
 from tools import mcp_tool_handlers as handlers
 from tools import mcp_tool_registration as registration
@@ -39,6 +36,8 @@ TEAM, OWNER = "T0TEAM", "U0OWNER"
 NAMED, NAMED_ID, OTHER_ID = "app-revenue-notifications", "C0APPREV1", "C0OTHER99"
 POST = "connectors__slack__POST_MESSAGE"
 APPROVED = "routine send approved by job job-1"
+bot_home = drafts.bot_home
+server = action_gate.server
 
 
 def _job(**fields):
@@ -125,7 +124,7 @@ def test_an_owner_routine_posts_to_the_channel_it_names_with_no_ask(slack, caplo
     (_job(created_by="agent"), NAMED_ID),
     (_job(created_by="suggestion"), NAMED_ID),
     ({k: v for k, v in _job().items() if k != "created_by"}, NAMED_ID),
-    (_job(prompt_edited_by_agent=True), NAMED_ID),
+    (_job(agent_edited_fields=["prompt"]), NAMED_ID),
 ], ids=["unnamed-channel", "agent-job", "suggestion-job", "no-provenance", "agent-edited"])
 def test_every_other_routine_post_still_waits_for_the_owner(slack, caplog, job, channel):
     caplog.set_level(logging.INFO)
@@ -146,6 +145,12 @@ def test_a_fire_with_extra_text_and_a_delegated_child_still_wait_for_the_owner(s
     assert extra["pending_owner_approval"] is True
     assert _in_routine(_job(), child)["pending_owner_approval"] is True
     assert slack == []
+
+
+def test_a_post_that_waits_for_a_reply_still_waits_for_the_owner(slack):
+    args = {"channel": NAMED_ID, "text": "numbers?", "wait_for_reply": True, "reply_from": "U0MALLORY"}
+    result = _in_routine(_job(), lambda: _slack_run("slack_post_message", args))
+    assert result["pending_owner_approval"] is True and slack == []
 
 
 def test_a_message_carrying_a_credential_is_not_posted_without_the_owner(slack):
@@ -183,7 +188,7 @@ def test_an_interactive_owner_turn_is_unchanged_after_a_routine_ran(slack, monke
 @pytest.mark.parametrize("attached", [True, False], ids=["owner-app-attached", "unattended"])
 def test_the_draft_gate_lets_the_named_send_through_and_refuses_the_rest(bot_home, caplog, attached):
     caplog.set_level(logging.INFO)
-    owner = _owner()
+    owner = drafts._owner()
     probe = approval_context.set_approval_client_probe(lambda: attached)
 
     def body():
@@ -228,9 +233,14 @@ def test_destinations_the_owner_wrote_match(bot_home, prompt, deliver, args):
     ("Post the update.", f"slack:{NAMED_ID}:171.5", {"channel": NAMED_ID, "text": "up"}),
     ("Post the update.", f"telegram:{NAMED_ID}", {"channel": NAMED_ID, "text": "up"}),
     ("Run 10 times a day, 100 words.", "local", {"channel": "100", "text": "up"}),
+    ("Send a follow-up to #sales.", "local", {"channel": "#follow-up", "text": "up"}),
+    ("Write the end-of-day report.", "local", {"channel": "#end-of-day", "text": "up"}),
+    ("Report to @ana.lee.", "local", {"recipient_name": "ana.lee", "text": "up"}),
+    (f"Post to #{NAMED}.", "local", {"room_title": f"#{NAMED}", "text": "up"}),
 ], ids=["prose-word", "runtime-destination", "longer-name", "second-address-key", "unknown-key", "second-channel",
         "no-destination", "wrong-kind", "hidden-bcc", "address-with-brackets", "deliver-thread-only",
-        "deliver-other-platform", "short-number"])
+        "deliver-other-platform", "short-number", "hyphenated-prose", "long-hyphenated-prose-short",
+        "display-name", "room-title"])
 def test_destinations_the_owner_did_not_write_do_not_match(bot_home, prompt, deliver, args):
     job = _job(prompt=prompt, deliver=deliver)
     assert _in_routine(job, lambda: review_outbound(POST, args)) == (NOT_SENT_NOBODY_TO_ASK, None)
@@ -281,30 +291,72 @@ def _tool(args, *, owner):
 @pytest.mark.parametrize("owner", [True, False], ids=["owner-turn", "agent-turn"])
 def test_a_job_the_bot_writes_outside_an_owner_turn_is_marked(owner):
     job_id = _tool({"action": "create", "prompt": "Post to #ops", "schedule": "every 1h"}, owner=owner)["job_id"]
-    assert bool(get_job(job_id).get("prompt_edited_by_agent")) is not owner
+    assert bool(get_job(job_id).get("agent_edited_fields")) is not owner
 
 
-def test_an_agent_edit_marks_the_job_until_the_owner_edits_the_prompt():
-    job_id = _tool({"action": "create", "prompt": "Post to #ops", "schedule": "every 1h"}, owner=True)["job_id"]
+@pytest.mark.parametrize("message_id,internal,marked", [("171.5", False, False), (None, False, True), ("w1", True, True)],
+                         ids=["typed-message", "goal-continuation", "internal-wake"])
+def test_only_a_message_someone_sent_counts_as_the_owner(message_id, internal, marked):
+    event = MessageEvent(text="go", source=SessionSource(platform=Platform.SLACK, chat_id="D1"),
+                         message_id=message_id, internal=internal)
+    tokens = set_session_vars(platform="slack", turn_event=event)
+    try:
+        job_id = _tool({"action": "create", "prompt": "Post to #ops", "schedule": "every 1h"}, owner=True)["job_id"]
+    finally:
+        clear_session_vars(tokens)
+    assert bool(get_job(job_id).get("agent_edited_fields")) is marked
+
+
+def _owned(job_id):
+    job = get_job(job_id)
+    return _in_routine(job, lambda: review_outbound(POST, {"channel": "#ops-alerts-feed", "text": "up"}))[0] is None
+
+
+def test_an_agent_edited_prompt_is_distrusted_until_the_owner_changes_it(bot_home):
+    prompt = "Post to #ops-alerts-feed"
+    job_id = _tool({"action": "create", "prompt": prompt, "schedule": "every 1h"}, owner=True)["job_id"]
     _tool({"action": "update", "job_id": job_id, "name": "renamed", "schedule": "every 2h"}, owner=False)
-    assert not get_job(job_id).get("prompt_edited_by_agent")
-    for edit in ({"prompt": "Post to #elsewhere"}, {"deliver": "local"}):
-        _tool({"action": "update", "job_id": job_id, **edit}, owner=False)
-        assert get_job(job_id)["prompt_edited_by_agent"] is True
-        update_job(job_id, {"name": "still marked"})
-        assert get_job(job_id)["prompt_edited_by_agent"] is True
-        update_job(job_id, {"prompt": "Post to #ops"})
-        assert not get_job(job_id).get("prompt_edited_by_agent")
-    _tool({"action": "update", "job_id": job_id, "prompt": "Post to #x"}, owner=False)
-    _tool({"action": "update", "job_id": job_id, "prompt": "Post to #ops"}, owner=True)
-    assert not get_job(job_id).get("prompt_edited_by_agent")
+    assert _owned(job_id)
+    _tool({"action": "update", "job_id": job_id, "prompt": f"{prompt} now"}, owner=False)
+    assert not _owned(job_id)
+    update_job(job_id, {"name": "saved again", "prompt": f"{prompt} now"})
+    assert not _owned(job_id)
+    update_job(job_id, {"prompt": prompt})
+    assert _owned(job_id)
+    _tool({"action": "update", "job_id": job_id, "prompt": "Post elsewhere"}, owner=False)
+    _tool({"action": "update", "job_id": job_id, "prompt": prompt}, owner=True)
+    assert _owned(job_id)
 
 
-def test_an_imported_definition_that_changes_the_prompt_is_not_the_owners():
-    local = {**_job(), "schedule": {"kind": "interval", "minutes": 60}, "enabled": False, "state": "paused"}
-    assert not merge_job_definition(local, dict(local)).get("prompt_edited_by_agent")
-    shipped = {**local, "prompt": "Post to #theirs"}
-    assert merge_job_definition(local, shipped)["prompt_edited_by_agent"] is True
+def test_an_agent_set_target_stays_distrusted_when_the_owner_edits_only_the_prompt(bot_home):
+    job_id = _tool({"action": "create", "prompt": "Post the update", "schedule": "every 1h"}, owner=True)["job_id"]
+    _tool({"action": "update", "job_id": job_id, "deliver": "slack:C0EVIL0001"}, owner=False)
+    update_job(job_id, {"prompt": "Post the daily update", "deliver": "slack:C0EVIL0001"})
+    send = {"channel": "C0EVIL0001", "text": "up"}
+    assert _in_routine(get_job(job_id), lambda: review_outbound(POST, send)) == (NOT_SENT_NOBODY_TO_ASK, None)
+    update_job(job_id, {"deliver": "slack:C0OPS00001"})
+    send = {"channel": "C0OPS00001", "text": "up"}
+    assert _in_routine(get_job(job_id), lambda: review_outbound(POST, send)) == (None, None)
+
+
+def test_the_owner_can_set_the_target_of_a_job_the_bot_created(bot_home):
+    job_id = _tool({"action": "create", "prompt": "Post the update", "schedule": "every 1h"}, owner=False)["job_id"]
+    update_job(job_id, {"prompt": "Post the daily update", "deliver": "slack:C0OPS00001"})
+    send = {"channel": "C0OPS00001", "text": "up"}
+    assert _in_routine(get_job(job_id), lambda: review_outbound(POST, send)) == (None, None)
+
+
+@pytest.mark.parametrize("change", [
+    {"prompt": "Post to #theirs-by-import"},
+    {"origin": {"platform": "slack", "chat_id": "C0EVIL0001"}},
+], ids=["prompt", "origin"])
+def test_an_imported_definition_is_not_trusted_for_what_it_changed(bot_home, change):
+    local = _job(deliver="origin", origin={"platform": "slack", "chat_id": "C0OPS00001"},
+                 schedule={"kind": "interval", "minutes": 60}, enabled=False, state="paused")
+    assert not merge_job_definition(local, dict(local)).get("agent_edited_fields")
+    imported = merge_job_definition(local, {**local, **change})
+    send = {"channel": "#theirs-by-import" if "prompt" in change else "C0EVIL0001", "text": "up"}
+    assert _in_routine(imported, lambda: review_outbound(POST, send)) == (NOT_SENT_NOBODY_TO_ASK, None)
 
 
 _PLUGIN = '''
