@@ -80,7 +80,7 @@ def test_a_dangerous_command_runs_without_asking_whatever_mode_the_profile_store
 @pytest.mark.parametrize("command", CREATE_COMMANDS + ["hermes bot create evo --display-name 'Evo Bot'"],
                          ids=[*CREATE_IDS, "bot-create-named"])
 @pytest.mark.parametrize("mode", list(STORED_MODES))
-def test_an_agent_cannot_create_a_bot_in_any_mode_and_no_human_is_asked(attached, mode: str, command: str) -> None:
+def test_an_agent_outside_the_owners_app_turn_cannot_create_a_bot_and_no_human_is_asked(attached, mode: str, command: str) -> None:
     w, srv = attached(STORED_MODES[mode])
     human = Human()
     tool_results = run_attached_turn(w, srv, command, human)
