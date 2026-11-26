@@ -21,6 +21,7 @@ from scripts.memory_bench.model import (
     Turn,
     vietnamese,
 )
+from scripts.memory_bench.twins import OTHER_LANGUAGE_ASK
 
 OWNER = "Vy"
 LAST_DAY = 30
@@ -459,12 +460,12 @@ def _turn(slot: Slot, scores: random.Random, mode: SalienceMode) -> Turn:
     return Turn(slot.at, slot.place, slot.speaker, slot.said, slot.speaker == OWNER, proposals)
 
 
-def _question(index: int, item: Need, said_at: float) -> Question:
+def _question(index: int, item: Need, said_at: float, ask: str) -> Question:
     probe = Probe(
         QUESTION_START + index * QUESTION_STEP,
         _place(item.ask_home),
         item.asker,
-        item.ask,
+        ask,
         item.asker == OWNER,
     )
     forbidden = ()
@@ -499,8 +500,9 @@ def build_history(seed: int, salience: SalienceMode, load: Load = Load.TYPICAL) 
     if volume.context_sentences:
         padding = random.Random(f"context:{seed}")
         turns = tuple(_lengthened(padding, turn, volume.context_sentences) for turn in turns)
+    asks = tuple((item, ask) for item in NEEDS for ask in (item.ask, OTHER_LANGUAGE_ASK[item.fact.key]))
     questions = tuple(
-        _question(index, item, max(slot.at for slot in needed[item.fact.key]))
-        for index, item in enumerate(NEEDS)
+        _question(index, item, max(slot.at for slot in needed[item.fact.key]), ask)
+        for index, (item, ask) in enumerate(asks)
     )
     return History(turns, questions, LAST_DAY)

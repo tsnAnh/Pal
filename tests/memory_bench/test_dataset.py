@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import unicodedata
 from collections import Counter
+from dataclasses import replace
 from functools import cache
 
 import pytest
@@ -358,8 +359,8 @@ def needed_keys(run: History) -> set[str]:
 def test_history_has_the_fixed_needed_set_in_every_age_bucket():
     run = history()
     assert run.last_day == 30
-    assert len({q.item.id for q in run.questions}) == len(run.questions) >= 66
-    ages = [run.last_day - math.floor(q.said_at) for q in run.questions]
+    assert len({q.item.id for q in run.questions}) >= 66
+    ages = [run.last_day - math.floor(said_at) for said_at in {q.item.id: q.said_at for q in run.questions}.values()]
     for low, high in ((0, 7), (8, 14), (15, 30)):
         assert sum(low <= age <= high for age in ages) >= 20
     assert {q.item.kind for q in run.questions} >= {
@@ -535,3 +536,19 @@ def test_near_cap_scenario_really_pushes_the_store_past_its_cap():
         if p.salience >= ADMIT_MIN_SALIENCE
     }
     assert len(slots) >= STORE_NOTE_CAP + 40
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_every_needed_item_is_asked_once_in_each_language_under_the_same_conditions(seed):
+    run = history(seed)
+    asked: dict[str, list] = {}
+    for question in run.questions:
+        asked.setdefault(question.item.id, []).append(question)
+    for item_id, pair in asked.items():
+        assert len(pair) == 2, item_id
+        assert {vietnamese(q.probe.text) for q in pair} == {True, False}, [q.probe.text for q in pair]
+        first, second = pair
+        assert (first.item, first.said_at, first.forbidden) == (second.item, second.said_at, second.forbidden)
+        assert replace(first.probe, at=0.0, text="") == replace(second.probe, at=0.0, text="")
+    assert len({q.probe.at for q in run.questions}) == len(run.questions)
+
