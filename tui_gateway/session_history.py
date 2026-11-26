@@ -302,6 +302,7 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
     from agent.history_commentary import project_history_commentary
     from session_rules.turns import withheld_prompt_text
     from gateway.display_markers import display_text
+    from tui_gateway.workspace_files import annotate_file_refs
 
     messages = []
     tool_call_args = {}
@@ -375,7 +376,7 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
         if m.get("display_metadata"):
             msg["display_metadata"] = m["display_metadata"]
         messages.append(msg)
-    return project_history_commentary(messages, home=profile_home)
+    return annotate_file_refs(project_history_commentary(messages, home=profile_home), profile_home)
 
 
 def _coerce_seed_history(value: Any) -> list[dict]:

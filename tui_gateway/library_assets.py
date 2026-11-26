@@ -84,6 +84,13 @@ class AssetPayload:
         return {key: value for key, value in fields.items() if value is not None}
 
 
+@dataclass(frozen=True, slots=True)
+class OpenedAsset:
+    path: Path
+    handle: BinaryIO
+    status: os.stat_result
+
+
 def serve_roots(home: Path) -> list[Path]:
     roots = []
     for name in _MEDIA_ROOT_NAMES:
@@ -177,72 +184,81 @@ def _read_capped(handle: BinaryIO, size: int, cap: int) -> bytes:
     return data
 
 
-def read_asset(
-    home: Path, item: IndexedItem, *, max_bytes: int, thumbnail: bool, assistant_produced: bool = False,
-) -> AssetPayload:
-    if item.kind == "link":
-        raise AssetUnavailable("This item is not available to download.")
-    path = resolve_servable(home, item.locator, assistant_produced=assistant_produced)
-    mime = _guess_mime(path)
+def asset_payload(opened: OpenedAsset, *, max_bytes: int, thumbnail: bool) -> AssetPayload:
+    mime = _guess_mime(opened.path)
     wants_thumbnail = thumbnail and mime in _THUMBNAIL_MIMES
-    try:
-        with _open_regular(path) as (handle, status):
-            data = _read_capped(handle, status.st_size, THUMBNAIL_SOURCE_MAX_BYTES if wants_thumbnail else max_bytes)
-    except OSError as exc:
-        raise AssetUnavailable("This item is no longer available.") from exc
-    sniffed = sniff(data[:HEAD_BYTES], path.name)
+    total = opened.status.st_size
+    data = _read_capped(opened.handle, total, THUMBNAIL_SOURCE_MAX_BYTES if wants_thumbnail else max_bytes)
+    sniffed = sniff(data[:HEAD_BYTES], opened.path.name)
     if wants_thumbnail and (thumb := make_thumbnail(BytesIO(data), THUMBNAIL_MAX_SIDE)) is not None and len(thumb.data) <= max_bytes:
         data, mime = thumb.data, thumb.mime
     elif len(data) > max_bytes:
         raise AssetTooLarge(len(data), max_bytes)
-    return AssetPayload(mime, base64.b64encode(data).decode("ascii"), len(data), status.st_size, sniffed)
+    return AssetPayload(mime, base64.b64encode(data).decode("ascii"), len(data), total, sniffed)
+
+
+def chunk_payload(opened: OpenedAsset, *, offset: int, length: int | None) -> AssetPayload:
+    total = opened.status.st_size
+    if total > DOWNLOAD_MAX_BYTES:
+        raise AssetTooLarge(total, DOWNLOAD_MAX_BYTES)
+    sniffed = sniff(opened.handle.read(HEAD_BYTES), opened.path.name)
+    want = min(length or CHUNK_MAX_BYTES, CHUNK_MAX_BYTES, max(total - offset, 0))
+    data = b""
+    if want:
+        opened.handle.seek(offset)
+        data = opened.handle.read(want)
+    return AssetPayload(
+        _guess_mime(opened.path), base64.b64encode(data).decode("ascii"), len(data), total, sniffed,
+        offset=offset, length=len(data))
+
+
+def preview_payload(home: Path, cache_key: str, opened: OpenedAsset, *, max_bytes: int) -> AssetPayload:
+    cache = PreviewCache(home / PREVIEW_CACHE_DIR)
+    status = opened.status
+    sniffed = sniff(opened.handle.read(HEAD_BYTES), opened.path.name)
+    opened.handle.seek(0)
+    result = cache.get(cache_key, status.st_mtime_ns, status.st_size)
+    if result is None:
+        result = render(opened.handle, str(opened.path), sniffed, status.st_size, max_bytes)
+        if result.cacheable:
+            cache.put(cache_key, status.st_mtime_ns, status.st_size, result)
+    return _rendered_payload(opened.path, status.st_size, sniffed, result, max_bytes)
+
+
+@contextlib.contextmanager
+def _open_item(home: Path, item: IndexedItem, assistant_produced: bool) -> Iterator[OpenedAsset]:
+    if item.kind == "link":
+        raise AssetUnavailable("This item is not available to download.")
+    path = resolve_servable(home, item.locator, assistant_produced=assistant_produced)
+    try:
+        with _open_regular(path) as (handle, status):
+            yield OpenedAsset(path, handle, status)
+    except OSError as exc:
+        raise AssetUnavailable("This item is no longer available.") from exc
+
+
+def read_asset(
+    home: Path, item: IndexedItem, *, max_bytes: int, thumbnail: bool, assistant_produced: bool = False,
+) -> AssetPayload:
+    with _open_item(home, item, assistant_produced) as opened:
+        return asset_payload(opened, max_bytes=max_bytes, thumbnail=thumbnail)
 
 
 def read_chunk(
     home: Path, item: IndexedItem, *, offset: int, length: int | None, assistant_produced: bool = False,
 ) -> AssetPayload:
-    if item.kind == "link":
-        raise AssetUnavailable("This item is not available to download.")
-    path = resolve_servable(home, item.locator, assistant_produced=assistant_produced)
-    try:
-        with _open_regular(path) as (handle, status):
-            if status.st_size > DOWNLOAD_MAX_BYTES:
-                raise AssetTooLarge(status.st_size, DOWNLOAD_MAX_BYTES)
-            sniffed = sniff(handle.read(HEAD_BYTES), path.name)
-            want = min(length or CHUNK_MAX_BYTES, CHUNK_MAX_BYTES, max(status.st_size - offset, 0))
-            data = b""
-            if want:
-                handle.seek(offset)
-                data = handle.read(want)
-    except OSError as exc:
-        raise AssetUnavailable("This item is no longer available.") from exc
-    return AssetPayload(
-        _guess_mime(path), base64.b64encode(data).decode("ascii"), len(data), status.st_size, sniffed,
-        offset=offset, length=len(data))
+    with _open_item(home, item, assistant_produced) as opened:
+        return chunk_payload(opened, offset=offset, length=length)
 
 
 def read_preview(
     home: Path, item: IndexedItem, *, max_bytes: int, assistant_produced: bool = False,
 ) -> AssetPayload:
-    if item.kind == "link":
-        raise AssetUnavailable("This item is not available to download.")
-    path = resolve_servable(home, item.locator, assistant_produced=assistant_produced)
-    cache = PreviewCache(home / PREVIEW_CACHE_DIR)
-    try:
-        with _open_regular(path) as (handle, status):
-            sniffed = sniff(handle.read(HEAD_BYTES), path.name)
-            handle.seek(0)
-            result = cache.get(item.id, status.st_mtime_ns, status.st_size)
-            if result is None:
-                result = render(handle, str(path), sniffed, status.st_size, max_bytes)
-                if result.cacheable:
-                    cache.put(item.id, status.st_mtime_ns, status.st_size, result)
-    except OSError as exc:
-        raise AssetUnavailable("This item is no longer available.") from exc
-    return _preview_payload(path, status.st_size, sniffed, result, max_bytes)
+    with _open_item(home, item, assistant_produced) as opened:
+        return preview_payload(home, item.id, opened, max_bytes=max_bytes)
 
 
-def _preview_payload(path: Path, total: int, sniffed: Sniffed, result: PreviewResult, max_bytes: int) -> AssetPayload:
+def _rendered_payload(path: Path, total: int, sniffed: Sniffed, result: PreviewResult, max_bytes: int) -> AssetPayload:
     reason = result.reason
     data = result.data
     if data is not None and len(data) > max_bytes:

@@ -5,7 +5,7 @@
    "undecided": 353
   },
   "rpc": {
-   "authority": 226,
+   "authority": 227,
    "keep-host-wide": 1,
    "undecided": 214
   },
@@ -826,6 +826,7 @@
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "webhook.routes.remove", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "worker.adopt", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "worker.persist", "kind": "rpc", "ref": ""},
-  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "worker.register", "kind": "rpc", "ref": ""}
+  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "worker.register", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "workspace.file", "kind": "rpc", "ref": ""}
  ]
 }

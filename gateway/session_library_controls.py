@@ -4,6 +4,7 @@ from gateway.session_legacy_bridge import Verb, bridged
 VERBS = {
     'library.list': Verb('session:read'),
     'library.asset': Verb('session:read'),
+    'workspace.file': Verb('session:read'),
 }
 
 

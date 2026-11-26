@@ -786,7 +786,8 @@ class AuthorityConnection:
         history, display = list(snapshot.history), {}
         if params.get('display_projection'):
             # A micro-compaction merge stays in ``messages`` (an undo target); its originals are what shows.
-            display['display_messages'] = visible_projection(history, self.authority.profile_id)
+            display['display_messages'] = await asyncio.to_thread(
+                visible_projection, history, self.authority.profile_id)
         if timeline_limit is not None:
             display['timeline'] = await read_page(self.authority, snapshot.handle.ref, None, timeline_limit)
         return {'session_id': ref.session_id, 'stored_session_id': ref.session_id,

@@ -157,7 +157,7 @@ def _extension_only(ext: str) -> Sniffed:
     return Sniffed(kind, mime, False)
 
 
-def _is_utf8_text(head: bytes) -> bool:
+def is_utf8_text(head: bytes) -> bool:
     if b"\0" in head:
         return False
     try:
@@ -191,4 +191,4 @@ def sniff(head: bytes, name: str) -> Sniffed:
             return found
     if not head:
         return _UNKNOWN
-    return _text(head, ext) if _is_utf8_text(head) else _extension_only(ext)
+    return _text(head, ext) if is_utf8_text(head) else _extension_only(ext)

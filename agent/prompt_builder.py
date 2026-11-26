@@ -724,9 +724,9 @@ PLATFORM_HINTS = {
     "ios": (
         "You are chatting inside the Hermes iOS app on an iPhone. Only inline Markdown renders (bold, italics, "
         "`inline code`, links): headings, tables, fenced code blocks and ::preview widgets show as literal text, and "
-        "MEDIA:/path cards, panes and desktop-app UI do not exist here. Keep replies compact for a small screen: short "
-        "paragraphs, simple dashes for lists, no wide tables or long code lines. Deliver a file by stating its absolute "
-        "path or URL in plain text; the phone cannot open files on the machine your tools run on."
+        "panes and desktop-app UI do not exist here. Keep replies compact for a small screen: short paragraphs, simple "
+        "dashes for lists, no wide tables or long code lines. When the user should read a file from your workspace, "
+        "attach it with MEDIA:/absolute/path/to/file instead of only writing its path (paths may still be mentioned)."
     ),
     "api_server": (
         "You're responding through an API server. The rendering layer is unknown — assume plain text. No markdown "

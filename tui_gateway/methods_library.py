@@ -6,8 +6,6 @@ _profile_scoped = _registry.profile_scoped
 
 _LIBRARY_KIND_FILTERS = {"all": None, "media": "media", "links": "link", "files": "file"}
 _LIBRARY_LIST_MAX = 200
-_LIBRARY_ASSET_DEFAULT_BYTES = 8_000_000
-_LIBRARY_ASSET_HARD_BYTES = 16_000_000
 
 
 def _library_home(params: dict):
@@ -44,6 +42,19 @@ def _library_close_db(db, owns: bool) -> None:
             db.close()
         except Exception:
             logger.debug("library store close failed", exc_info=True)
+
+
+def _asset_cap(max_bytes: int | None) -> int:
+    from tui_gateway.library_assets import DEFAULT_MAX_BYTES, HARD_MAX_BYTES
+    return max(1, min(max_bytes or DEFAULT_MAX_BYTES, HARD_MAX_BYTES))
+
+
+def _asset_refusal(rid, exc: Exception):
+    from tui_gateway.library_assets import AssetNotAllowed, AssetTooLarge
+    if isinstance(exc, AssetTooLarge):
+        return _err(rid, 4152, f"This item is larger than the {exc.limit // 1_000_000} MB download limit.",
+                    {"size": exc.size, "limit": exc.limit})
+    return _err(rid, 4154 if isinstance(exc, AssetNotAllowed) else 4151, str(exc))
 
 
 def _library_params(rid, model, params: dict):
@@ -105,7 +116,7 @@ def _(rid, params: dict) -> dict:
     ref = parsed.asset_ref.strip()
     if not ASSET_REF_RE.fullmatch(ref):
         return unknown
-    cap = max(1, min(parsed.max_bytes or _LIBRARY_ASSET_DEFAULT_BYTES, _LIBRARY_ASSET_HARD_BYTES))
+    cap = _asset_cap(parsed.max_bytes)
     home = _library_home(params)
     try:
         index = LibraryIndex(home)
@@ -132,15 +143,39 @@ def _(rid, params: dict) -> dict:
         else:
             payload = read_asset(
                 home, item, max_bytes=cap, thumbnail=parsed.thumbnail, assistant_produced=assistant_produced)
-    except AssetUnavailable as exc:
-        return _err(rid, 4151, str(exc))
-    except AssetNotAllowed as exc:
-        return _err(rid, 4154, str(exc))
-    except AssetTooLarge as exc:
-        return _err(rid, 4152, f"This item is larger than the {exc.limit // 1_000_000} MB download limit.",
-                    {"size": exc.size, "limit": exc.limit})
+    except (AssetUnavailable, AssetNotAllowed, AssetTooLarge) as exc:
+        return _asset_refusal(rid, exc)
     except Exception:
         logger.exception("library.asset failed for %s", home)
+        return _err(rid, 5151, "The item could not be loaded right now.")
+    return _ok(rid, payload.wire())
+
+
+@method("workspace.file")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    from tui_gateway.contracts.workspace import WorkspaceFileParams
+    from tui_gateway.library_assets import (
+        AssetNotAllowed, AssetTooLarge, AssetUnavailable, asset_payload, chunk_payload, preview_payload)
+    from tui_gateway.workspace_files import open_ref
+    parsed, problem = _library_params(rid, WorkspaceFileParams, params)
+    if problem is not None:
+        return problem
+    cap = _asset_cap(parsed.max_bytes)
+    home = _library_home(params)
+    ref = parsed.ref.strip()
+    try:
+        with open_ref(home, ref) as opened:
+            if parsed.offset is not None or parsed.length is not None:
+                payload = chunk_payload(opened, offset=parsed.offset or 0, length=parsed.length)
+            elif parsed.preview:
+                payload = preview_payload(home, ref, opened, max_bytes=cap)
+            else:
+                payload = asset_payload(opened, max_bytes=cap, thumbnail=parsed.thumbnail)
+    except (AssetUnavailable, AssetNotAllowed, AssetTooLarge) as exc:
+        return _asset_refusal(rid, exc)
+    except Exception:
+        logger.exception("workspace.file failed for %s", home)
         return _err(rid, 5151, "The item could not be loaded right now.")
     return _ok(rid, payload.wire())
 

@@ -17,7 +17,7 @@ from .preview import (
     render,
 )
 from .result import PreviewResult
-from .sniff import HEAD_BYTES, Sniffed, sniff
+from .sniff import HEAD_BYTES, Sniffed, is_utf8_text, sniff
 
 __all__ = [
     "HEAD_BYTES",
@@ -28,6 +28,7 @@ __all__ = [
     "PreviewResult",
     "Sniffed",
     "Thumbnail",
+    "is_utf8_text",
     "render",
     "sniff",
     "thumbnail",
