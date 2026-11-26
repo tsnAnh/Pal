@@ -1521,7 +1521,7 @@ class TestOnceOrDenyPrompt:
 
 
 class TestOwnerDecisionIsNotConsentOnSilence:
-    """A held draft's owner wait: silence is not consent, deny is a hard halt (#24912)."""
+    """An outbound draft's owner wait: silence is not consent, deny is a hard halt (#24912)."""
 
     SESSION_KEY = "test-no-consent-session"
 

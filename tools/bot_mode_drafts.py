@@ -1,9 +1,8 @@
-import contextlib
-import contextvars
 import hashlib
 import json
 import logging
 import re
+import shutil
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
@@ -22,26 +21,19 @@ _TEXT_KEYS = ("body", "message", "text", "content", "markdown_text", "html_body"
 _RECIPIENT_KEYS = ("to", "recipient", "recipients", "recipient_email", "email", "channel", "channel_id",
                    "chat_id", "target", "user", "user_id")
 _SUBJECT_KEYS = ("subject", "title")
+_NAME_KEYS = ("recipient_name", "room_title", "room_name", "to", "recipient", "room", "channel", "thread",
+              "freelancer", "client")
 _ATTACHMENT_KEYS = frozenset({
     "attachment", "attachments", "file", "files", "file_path", "file_paths", "filepath", "media", "media_files",
-    "image", "images", "document", "documents"})
+    "image", "images", "document", "documents", "file_attachments"})
 _ATTACHMENT_NAME_KEYS = ("filename", "file_name", "name", "title")
 _ATTACHMENT_SIZE_KEYS = ("size", "size_bytes", "file_size")
 _ATTACHMENT_BULK_KEYS = frozenset({"content", "data", "bytes", "base64", "blob", "b64", "body"})
 _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
+_NEST_DEPTH = 3
+TECHNICAL_DETAIL = "Details"
 _MCP_PREFIX = "mcp__"
 _CONNECTOR_PREFIX = "connectors__"
-
-_approved_send: contextvars.ContextVar[bool] = contextvars.ContextVar("bot_mode_approved_send", default=False)
-
-
-@contextlib.contextmanager
-def approved_send():
-    token = _approved_send.set(True)
-    try:
-        yield
-    finally:
-        _approved_send.reset(token)
 
 
 @dataclass(frozen=True)
@@ -220,15 +212,62 @@ def _detail_items(args: dict, hidden: set) -> tuple[tuple[tuple[str, str], ...],
     return tuple(items), viewable
 
 
+def flatten_args(args: dict, depth: int = _NEST_DEPTH, parent: str = "") -> dict:
+    """``args`` with the objects inside it merged into one level, outer keys first. A key two levels share with
+    different values keeps both: the inner one under its dotted path, so nothing the call carries goes unshown."""
+    flat = {key: value for key, value in args.items() if not (isinstance(value, dict) and depth > 0)}
+    for key, value in args.items():
+        if not (isinstance(value, dict) and depth > 0):
+            continue
+        for inner, item in flatten_args(value, depth - 1, f"{parent}{key}.").items():
+            name = inner if inner not in flat or flat[inner] == item else f"{parent}{key}.{inner}"
+            flat[name] = item
+    return flat
+
+
+def plain_lines(value, prefix: str = "") -> list[str]:
+    """``key: value`` lines for a call's leftover fields: text as typed, lists as comma-joined names, never JSON."""
+    if isinstance(value, dict):
+        return [line for key, item in value.items() for line in plain_lines(item, f"{prefix}{key}")]
+    if isinstance(value, (list, tuple)):
+        if all(isinstance(item, (str, int, float)) and not isinstance(item, bool) for item in value):
+            return [f"{prefix}: {', '.join(str(item) for item in value)}"] if value else []
+        return [line for index, item in enumerate(value) for line in plain_lines(item, f"{prefix}[{index}]")]
+    return [f"{prefix}: {value}" if prefix else str(value)]
+
+
+def _human_details(view: dict, hidden: set) -> tuple[tuple[tuple[str, str], ...], bool]:
+    items, viewable, rest = [], True, {}
+    for key, value in view.items():
+        if key in hidden:
+            continue
+        if _is_attachment_key(key):
+            rendered = _describe_attachments(value)
+            if rendered is None:
+                viewable, rendered = False, "(cannot be shown in full)"
+            if rendered:
+                items.append((str(key), rendered))
+        elif _json_text(value) is None:
+            viewable = False
+        else:
+            rest[key] = value
+    if rest:
+        items.append((TECHNICAL_DETAIL, "\n".join(plain_lines(rest))))
+    return tuple(items), viewable
+
+
 def _assemble(tool_name: str, channel: str, args: dict, *, text: str, text_field: str | None, recipient: str,
-              recipient_key: str | None, subject: str, subject_key: str | None) -> Outbound:
+              recipient_key: str | None, subject: str, subject_key: str | None, editable_field: str | None = None,
+              consolidate: bool = False) -> Outbound:
     if text_field is None:
         whole = _json_text(args, indent=2)
         details, viewable = _detail_items(args, {key for key in args if not _is_attachment_key(key)})
-        text = whole if whole is not None else json.dumps(args, ensure_ascii=False, indent=2, default=repr)
-        return Outbound(tool_name, channel, recipient, subject, text, None, details, viewable and whole is not None)
-    details, viewable = _detail_items(args, {text_field, recipient_key, subject_key} - {None})
-    return Outbound(tool_name, channel, recipient, subject, text, text_field, details, viewable)
+        shown = whole if whole is not None else json.dumps(args, ensure_ascii=False, indent=2, default=repr)
+        return Outbound(tool_name, channel, recipient, subject, f"```json\n{shown}\n```", None, details,
+                        viewable and whole is not None)
+    hidden = {text_field, recipient_key, subject_key} - {None}
+    details, viewable = (_human_details if consolidate else _detail_items)(args, hidden)
+    return Outbound(tool_name, channel, recipient, subject, text, editable_field, details, viewable)
 
 
 def _is_non_sending_send_message(args: dict) -> bool:
@@ -249,11 +288,15 @@ def classify_outbound(tool_name: str, args: dict) -> Outbound | None:
     split = _split_tool(tool_name)
     if split is None or not _sends_text(split[2]):
         return None
-    field, text = _first_text(args, _TEXT_KEYS)
-    recipient_key, recipient = _first_text(args, _RECIPIENT_KEYS)
-    subject_key, subject = _first_text(args, _SUBJECT_KEYS)
-    return _assemble(tool_name, _channel_label(split[1]), args, text=text, text_field=field, recipient=recipient,
-                     recipient_key=recipient_key, subject=subject, subject_key=subject_key)
+    view = flatten_args(args)
+    field, text = _first_text(view, _TEXT_KEYS)
+    recipient_key, recipient = _first_text(view, _RECIPIENT_KEYS)
+    if not recipient:
+        recipient_key, recipient = _first_text(view, _NAME_KEYS)
+    subject_key, subject = _first_text(view, _SUBJECT_KEYS)
+    return _assemble(tool_name, _channel_label(split[1]), view, text=text, text_field=field, recipient=recipient,
+                     recipient_key=recipient_key, subject=subject, subject_key=subject_key,
+                     editable_field=field if field in args else None, consolidate=split[0] == "mcp")
 
 
 def looks_outbound(tool_name) -> bool:
@@ -301,30 +344,28 @@ def validate_edit(outbound: Outbound, args: dict, edited_text) -> tuple[dict | N
     return new_args, ""
 
 
-HELD_WHERE = ("Open this bot's chat in the Pal app: the draft is waiting under Approvals, where the owner can "
-              "approve, edit or cancel it.")
+NOT_SENT_NOBODY_TO_ASK = (
+    "BLOCKED: This message was NOT sent: the owner could not be asked about it right now, and nothing is stored. "
+    "Do NOT retry it, do NOT rephrase it, and do NOT deliver it through another tool or route. In your next turn "
+    "with the owner, offer it through the clarify form (a question with a `send` field) so one tap sends it.")
+
+OWN_AGENT, PERSON = "own_agent", "person"
+_OWN_AGENT_TOOLS = {"t3code": frozenset({"t3_thread_send", "t3_thread_send_attachments"})}
 
 
-def _held_message(draft_id: str, reason: str) -> str:
-    return (f"BLOCKED: {reason} The message was NOT sent. It is saved as a draft (state: pending, draft {draft_id}) "
-            f"and nothing is sent until the owner approves it. {HELD_WHERE} Do NOT retry it, do NOT rephrase it, "
-            "and do NOT deliver the same message through another tool or route.")
+def purge_retired_hold_store(home: str | Path) -> None:
+    shutil.rmtree(Path(home) / "bot_mode" / "drafts", ignore_errors=True)
 
 
-def _hold(outbound: Outbound, args: dict, origin: str, reason: str) -> tuple[str, None]:
-    from tools import bot_mode_draft_store
-    try:
-        record = bot_mode_draft_store.hold(outbound, args, origin=origin)
-    except bot_mode_draft_store.DraftError as exc:
-        if exc.code != "limit":
-            raise
-        return (f"BLOCKED: {exc.message} The message was NOT sent. Do NOT retry it or deliver it through "
-                "another route."), None
-    except (OSError, ValueError, TypeError):
-        logger.exception("could not hold outbound draft for %s", outbound.tool)
-        return ("BLOCKED: The draft could not be saved, so the message was NOT sent. Do NOT retry it or "
-                "deliver it through another route."), None
-    return _held_message(record["id"], reason), None
+def recipient_class(outbound: Outbound) -> str:
+    split = _split_tool(outbound.tool)
+    if split is not None and split[2] in _OWN_AGENT_TOOLS.get(re.sub(r"[^a-z0-9]", "", split[1].lower()), ()):
+        return OWN_AGENT
+    from hermes_cli.config import load_config_readonly
+    owned = (load_config_readonly().get("bot_mode") or {}).get("owner_recipients")
+    if outbound.recipient and isinstance(owned, list) and outbound.recipient in owned:
+        return OWN_AGENT
+    return PERSON
 
 
 def _inline_capable(approval) -> bool:
@@ -348,7 +389,7 @@ def details_payload(outbound: Outbound) -> list[dict]:
 
 def card_description(outbound: Outbound) -> str:
     header = f"Send to {outbound.recipient or outbound.channel} via {outbound.channel}"
-    return "\n".join([header, *(f"{name}: {value}" for name, value in outbound.details)])
+    return "\n".join([header, *(f"{name}: {value}" for name, value in outbound.details if name != TECHNICAL_DETAIL)])
 
 
 def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
@@ -359,7 +400,7 @@ def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]
         attachments=_attachment_names(outbound))
     if not result.get("approved"):
         if result.get("outcome") == "timeout":
-            return _hold(outbound, args, "timeout", "The owner did not answer in time.")
+            return NOT_SENT_NOBODY_TO_ASK, None
         return str(result.get("message") or "BLOCKED: the draft was not approved; it was NOT sent."), None
     edited = result.get("edited_text")
     if edited is None or edited == outbound.text:
@@ -374,8 +415,8 @@ def content_block(outbound: Outbound, args: dict) -> str | None:
     if len(outbound.text) > MAX_TEXT_CHARS or sum(len(part) for part in _strings(args)) > MAX_ARGS_CHARS:
         return "BLOCKED: This message is too long to send. It was NOT sent. Shorten it."
     if _carries_secret(*_strings(args), outbound.text, outbound.subject):
-        return ("BLOCKED: This message contains what looks like a credential, so it was NOT sent and no "
-                "draft was made. Remove the secret and do not retry with it.")
+        return ("BLOCKED: This message contains what looks like a credential, so it was NOT sent and nothing "
+                "is stored. Remove the secret and do not retry with it.")
     return None
 
 
@@ -412,18 +453,18 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
         return None, None
     if (blocked := content_block(outbound, args)) is not None:
         return blocked, None
+    if recipient_class(outbound) == OWN_AGENT:
+        logger.info("outbound send to an own agent went through: tool=%s class=%s", outbound.tool, OWN_AGENT)
+        return None, None
     from tools import approval, approval_context
     if approval_context._no_user_can_answer():
-        return _hold(outbound, args, "unattended", "Nobody is present to approve outbound messages in this run.")
+        return NOT_SENT_NOBODY_TO_ASK, None
     if not policy.ask:
         return None, None
-    if not outbound.viewable:
-        return _hold(outbound, args, "unviewable",
-                     "Part of this message cannot be shown in full, so it can only be cancelled.")
-    if not _inline_capable(approval):
-        return _hold(outbound, args, "elsewhere", "No Pal app is connected to this chat to show the approval right now.")
+    if not outbound.viewable or not _inline_capable(approval):
+        return NOT_SENT_NOBODY_TO_ASK, None
     from tools import outbound_send_grant
-    if outbound_send_grant.redeem(outbound.tool, args):
+    if outbound_send_grant.redeem(outbound.tool, args, gate=outbound_send_grant.DRAFT_GATE):
         return None, None
     return _ask_owner(outbound, args)
 
@@ -460,8 +501,6 @@ def review_after_hooks(tool_name: str, args, load_details, resolve_block) -> tup
 
 
 def review_outbound(tool_name: str, args) -> tuple[str | None, dict | None]:
-    if _approved_send.get():
-        return None, None
     if not isinstance(args, dict):
         return blocked_on_failure(tool_name), None
     try:

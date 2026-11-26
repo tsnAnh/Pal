@@ -1607,7 +1607,7 @@ DEFAULT_CONFIG = {
     #   what a cron job, a -q session, or an unattended platform (webhook, msgraph_webhook, api_server)
     #   does when it hits a dangerous-command pattern. deny blocks instantly so the agent finds another way.
     # deny: operator rules that block matching commands.
-    # timeout: seconds before an unanswered owner consent (held draft, payment, spend limit) fails closed.
+    # timeout: seconds before an unanswered owner consent (outbound send, payment, spend limit) fails closed.
     "approvals": {
         # single_query_mode — what to do when a single-query (-q) session hits a dangerous command. -q runs
         # export HERMES_INTERACTIVE=1 (for interactive sudo prompts) but have NO user waiting to answer

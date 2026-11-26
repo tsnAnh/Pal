@@ -1068,7 +1068,7 @@ class CLIModalMixin:
         return result
 
     def _approval_callback(self, command: str, description: str, *, title: str = "", **_scope) -> str:
-        """Owner-decision consent (held draft, payment, spend limit, sampling) through the
+        """Owner-decision consent (outbound send, payment, spend limit, sampling) through the
         prompt_toolkit UI (agent thread). Choices: once / deny, plus 'view' for long text.
         ``_approval_lock`` serializes concurrent requests (parallel delegation subtasks)
         so the shared ``_approval_state`` / ``_approval_deadline`` aren't clobbered.

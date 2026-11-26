@@ -186,7 +186,7 @@ def _await_coalesced_leader(session_key: str, leader, payload: dict):
 def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *, surface: str = "gateway",
                             identity: str | None = None) -> dict:
     """Enqueue *approval_data*, notify the user, and block until resolved or timed
-    out. Shared by held drafts and elicitation consent. Returns ``{"resolved", "choice",
+    out. Shared by outbound-send approvals and elicitation consent. Returns ``{"resolved", "choice",
     "reason"}`` or ``{"resolved": False, "choice": None, "notify_failed": True}``
     when the notify callback raised. Persisting the choice and building the
     tool-facing result stay with the caller.

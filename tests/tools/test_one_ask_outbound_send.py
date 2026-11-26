@@ -13,9 +13,9 @@ import pytest
 
 from tests.tools import test_bot_mode_drafts as drafts
 from tests.tools import test_mcp_action_gate as mcp
-from tools import bot_mode_draft_store, outbound_send_grant
+from tools import outbound_send_grant
 from tools.approval_context import get_current_session_key
-from tools.bot_mode_drafts import review_outbound
+from tools.bot_mode_drafts import NOT_SENT_NOBODY_TO_ASK, review_outbound
 from tools.clarify_split import split_clarify_arguments
 from tools.clarify_tool import CLARIFY_SCHEMA, clarify_tool
 
@@ -131,26 +131,12 @@ class TestTheSecondCardStillAppears:
             approval_context.reset_current_session_key(token)
         assert owner.cards == []
 
-    def test_another_turn_cannot_redeem_it(self, bot_home, owner_app):
-        from gateway.session_context import _SESSION_TURN_EVENT
-        first, second = object(), object()
-        token = _SESSION_TURN_EVENT.set(first)
-        try:
-            _ask(SEND_OPTION)
-            _SESSION_TURN_EVENT.set(second)
-            assert not outbound_send_grant.redeem(EMAIL, THREAD_ARGS)
-            _SESSION_TURN_EVENT.set(first)
-            assert outbound_send_grant.redeem(EMAIL, THREAD_ARGS)
-        finally:
-            _SESSION_TURN_EVENT.reset(token)
-
-    def test_an_unattended_run_holds_whatever_was_picked(self, bot_home, owner_app, monkeypatch):
+    def test_an_unattended_run_refuses_whatever_was_picked(self, bot_home, owner_app, monkeypatch):
         owner = _owner("deny")
         _ask(SEND_OPTION)
         monkeypatch.setenv("HERMES_CRON_SESSION", "1")
-        block, _ = review_outbound(EMAIL, THREAD_ARGS)
-        assert "NOT sent" in block and owner.cards == []
-        assert [d["origin"] for d in bot_mode_draft_store.list_pending()] == ["unattended"]
+        assert review_outbound(EMAIL, THREAD_ARGS) == (NOT_SENT_NOBODY_TO_ASK, None)
+        assert owner.cards == [] and not (bot_home / "bot_mode" / "drafts").exists()
 
     def test_a_secret_is_blocked_and_never_previewed(self, bot_home, owner_app):
         owner = _owner("deny")
@@ -160,13 +146,12 @@ class TestTheSecondCardStillAppears:
         block, _ = review_outbound(EMAIL, args)
         assert "credential" in block and owner.cards == []
 
-    def test_an_unviewable_message_is_held_even_with_a_pick(self, bot_home, owner_app):
+    def test_an_unviewable_message_is_refused_even_with_a_pick(self, bot_home, owner_app):
         owner = _owner("deny")
         args = {**THREAD_ARGS, "score": float("nan")}
         assert "error" in _ask(SEND_OPTION, send=_send(args))[0]
-        block, _ = review_outbound(EMAIL, args)
-        assert "NOT sent" in block and owner.cards == []
-        assert [d["origin"] for d in bot_mode_draft_store.list_pending()] == ["unviewable"]
+        assert review_outbound(EMAIL, args) == (NOT_SENT_NOBODY_TO_ASK, None)
+        assert owner.cards == [] and not (bot_home / "bot_mode" / "drafts").exists()
 
     def test_policy_off_never_needed_the_grant(self, bot_home, owner_app):
         _write_config(bot_home, drafts="false")

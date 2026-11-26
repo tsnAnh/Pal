@@ -1029,9 +1029,6 @@ class AuthorityConnection:
             logging.getLogger(__name__).debug('dropping response for %s id=%r', what, frame.get('id'))
 
     async def respond(self, ref, params):
-        from gateway.session_held_drafts import is_draft_prompt, respond as respond_draft
-        if is_draft_prompt(params.get("prompt_id")):
-            return await respond_draft(self, ref, params)
         if set(params) != {"session_id", "execution_generation", "prompt_id", "choice"}:
             raise AuthorityRefusal("invalid_params")
         return await self.authority.respond(self.actor, ref, params["execution_generation"],

@@ -1372,7 +1372,7 @@ def _(rid, params: dict) -> dict:
         return err
     return _approval_reply(
         rid, "approvals",
-        lambda a: [*a.list_gateway_approvals(session["session_key"]), *_held_draft_cards(session)])
+        lambda a: a.list_gateway_approvals(session["session_key"]))
 
 
 @method("approval.received")
@@ -1396,8 +1396,6 @@ def _(rid, params: dict) -> dict:
         session = _approval_respond_session_fallback(params)
         if session is None:
             return err
-    if str(params.get("request_id") or "").startswith("draft:"):
-        return _respond_held_draft(rid, session, params)
     choice = params.get("choice", "deny")
     if choice not in _APPROVAL_CHOICES:
         return _err(rid, 4133, "an approval is answered once or deny")
@@ -1585,29 +1583,6 @@ def _approval_reply(rid, result_key, call):
         return _ok(rid, {result_key: call(approval)})
     except Exception as e:
         return _err(rid, 5004, str(e))
-
-
-def _held_draft_cards(session: dict) -> list[dict]:
-    from tools import bot_mode_draft_store
-    from tools.bot_mode_drafts import profile_is_bot_managed
-    with _session_profile_runtime_scope(session, hydrate_secrets=False):
-        return bot_mode_draft_store.pending_cards() if profile_is_bot_managed() else []
-
-
-def _respond_held_draft(rid, session: dict, params: dict) -> dict:
-    from tools import bot_mode_draft_store
-    from tools.bot_mode_drafts import profile_is_bot_managed
-    choice, draft_id = params.get("choice"), str(params.get("request_id"))[len("draft:"):]
-    if choice not in _APPROVAL_CHOICES:
-        return _err(rid, 4133, "a draft is either sent or discarded")
-    edited = params.get("edited_text")
-    try:
-        with _session_profile_runtime_scope(session):
-            if not profile_is_bot_managed():
-                return _err(rid, 4132, "drafts are answered in the bot's own chat")
-            return _ok(rid, bot_mode_draft_store.answer(draft_id, choice, edited if isinstance(edited, str) else None))
-    except bot_mode_draft_store.DraftError as e:
-        return _err(rid, 4134, e.message, data={"reason": e.code, "state": e.state})
 
 
 def _approval_respond_session_fallback(params: dict):

@@ -1,4 +1,4 @@
-"""A held-draft ask posts the draft's exact content as a bubble before its card is raised."""
+"""An outbound-draft ask posts the draft's exact content as a bubble before its card is raised."""
 
 import pytest
 

@@ -138,6 +138,7 @@ _GUARDS = {
     "swift-input-writes": ["scripts/ci/check_swift_input_writes.py"],
     "swift-image-viewer": ["scripts/ci/check_swift_image_viewer.py"],
     "swift-media-preview": ["scripts/ci/check_swift_media_preview.py"],
+    "swift-force-binding": ["scripts/ci/check_swift_force_binding.py"],
     "swift-web-surface": ["scripts/ci/check_swift_web_surface.py"],
     "swift-connection-card": ["scripts/ci/check_swift_connection_card.py"],
     "swift-clarify-settled": ["scripts/ci/check_swift_clarify_settled.py"],
