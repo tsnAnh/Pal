@@ -1,10 +1,14 @@
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
-from gateway import send_stats, session_finite
+from agent.steer_absorb import deliver_steer_row
+from gateway import send_stats, session_finite, session_ingress
 from gateway.platforms.base import get_image_cache_dir
+from gateway.response_filters import persisted_user_metadata_for_event
 from gateway.session_queued_controls import steer_blocker
+from session_rules.turns import unwrap_steer_text
 from tests.gateway.test_owner_absorb import (
     RunningAgent, Turn, _drained, _owner_connection, _submit_as_owner, bot_chat, db_admissions,
 )
@@ -136,6 +140,66 @@ async def test_what_the_turn_never_drained_runs_as_one_follow_up_input_in_order(
         ('running', 'terminal', 'completed' if outcome == 'ends' else 'failed'),
         ('one', 'terminal', 'completed'),
         *[(name, 'terminal', 'steered') for name in names[1:]]]
+
+
+def _cut(text, lengths):
+    parts, start = [], 0
+    for length in lengths:
+        parts.append(text[start:start + length])
+        start += length + 1
+    assert text == '\n'.join(parts)
+    return parts
+
+
+SENDS = ['did you see \U0001f469\u200d\U0001f467\nthis jump', 'now it no longer scrolls up at all']
+
+
+@pytest.mark.asyncio
+async def test_the_row_of_a_follow_up_turn_names_every_send_it_folded_and_where_each_ends(bot_chat, monkeypatch):
+    db, authority = bot_chat
+    agent, claimed, release, stored = RunningAgent(), asyncio.Event(), asyncio.Event(), []
+
+    async def execute(owner, ref, row):
+        owner.adopt_agent(ref.session_id, row['generation'], agent)
+        event = SimpleNamespace(message_id=row['admission_id'])
+        stored.append((row['payload']['text'], persisted_user_metadata_for_event(event)))
+        if len(stored) == 1:
+            claimed.set()
+            await asyncio.wait_for(release.wait(), 30)
+        return 'done'
+    monkeypatch.setattr(session_ingress, 'execute_admission', execute)
+    with db:
+        conn = _owner_connection(authority)
+        await _pal_send(conn, 'running')
+        await asyncio.wait_for(claimed.wait(), 30)
+        for number, text in enumerate(SENDS):
+            await _pal_send(conn, f'send-{number}', text)
+        release.set()
+        await async_wait_until(lambda: len(stored) == 2, timeout=30, what='the one follow-up turn')
+        await _drained(authority)
+        admissions = [row.admission_id for row in db_admissions(db, ['send-0', 'send-1'])]
+    assert stored[0][1] == {'submission_id': 'running'}
+    text, metadata = stored[1]
+    assert metadata['submission_id'] == 'send-0' and metadata['admission_ids'] == admissions
+    assert _cut(text, metadata['part_lengths']) == SENDS
+
+
+def test_a_steer_row_names_every_send_it_carries_and_where_each_ends():
+    agent, messages = RunningAgent(), []
+    for number, text in enumerate(SENDS):
+        agent.steer(text, ticket=f'admission-{number}')
+    deliver_steer_row(agent, messages, agent._drain_pending_steer())
+    metadata = messages[0]['display_metadata']
+    assert metadata['admission_ids'] == ['admission-0', 'admission-1']
+    assert _cut(unwrap_steer_text(messages[0]['content']), metadata['part_lengths']) == SENDS
+
+
+def test_a_steer_row_mixed_with_an_unnamed_steer_records_no_boundaries():
+    agent, messages = RunningAgent(), []
+    agent.steer('from the app', ticket='admission-0')
+    agent.steer('from the terminal')
+    deliver_steer_row(agent, messages, agent._drain_pending_steer())
+    assert messages[0]['display_metadata'] == {'admission_ids': ['admission-0']}
 
 
 @pytest.mark.asyncio
