@@ -47,8 +47,8 @@ struct ChatModelRebuildGuardTests {
         #expect(fired.values.reduce(0, +) == 0, "\(fired)")
     }
 
-    @Test("phase updates that keep the connection never rebuild the rows")
-    func phaseUpdatesRebuildOnlyWhenTheConnectionChanges() throws {
+    @Test("phase updates never rebuild the rows")
+    func phaseUpdatesNeverRebuildTheRows() throws {
         let harness = try RebuildHarness(world: rebuildConversation())
         harness.push()
         harness.push()
@@ -58,15 +58,14 @@ struct ChatModelRebuildGuardTests {
         #expect(harness.model.rebuilds == settled)
         #expect(harness.model.connection == .live)
         harness.phase(.resyncing)
-        #expect(harness.model.rebuilds.full == settled.full + 1)
+        #expect(harness.model.connection == .reconnecting)
         for _ in 0..<50 { harness.model.applyPhase(.attaching) }
-        #expect(harness.model.rebuilds.full == settled.full + 1)
         harness.phase(.live(lastSequence: 300, replayEpoch: "e"))
-        #expect(harness.model.rebuilds.full == settled.full + 2)
+        #expect(harness.model.rebuilds == settled)
     }
 
-    @Test("sending bubbles follow the connection and the rows still match a full rebuild")
-    func connectionChangesRebuildSendingBubbles() throws {
+    @Test("an unconfirmed bubble reads the same offline and the rows still match a full rebuild")
+    func anUnconfirmedBubbleReadsTheSameOffline() throws {
         var world = rebuildConversation()
         world.rows.removeLast()
         world.append(rebuildUser("u3", "pending", delivery: .sending, at: rebuildAt(430)))
@@ -83,10 +82,10 @@ struct ChatModelRebuildGuardTests {
         }
         #expect(delivery() == .sending)
         harness.phase(.resyncing, "offline")
-        #expect(delivery() == .waitingForConnection)
+        #expect(delivery() == .sending)
         harness.world.editLast { $0.content = .assistant(text: "typing more", reasoning: "", isStreaming: true) }
         harness.push("grow offline")
-        #expect(delivery() == .waitingForConnection)
+        #expect(delivery() == .sending)
         harness.phase(.live(lastSequence: 9, replayEpoch: "e"), "live again")
         #expect(delivery() == .sending)
     }

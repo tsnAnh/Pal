@@ -19,7 +19,7 @@ extension ChatModel {
     }
 
     func streamingPatch(from previous: TimelineSnapshot, to next: TimelineSnapshot) -> StreamingRowPatch? {
-        guard builtWithBaseline, builtOffline == isOffline, let tail = rows.last,
+        guard builtWithBaseline, let tail = rows.last,
               let newest = next.rows.last, let oldest = previous.rows.last,
               next.rows.count == previous.rows.count,
               newest.id == oldest.id, newest.rowID == oldest.rowID, newest.entryID == oldest.entryID,

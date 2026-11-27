@@ -27,15 +27,21 @@ final class BotLinks {
     let drafts: DraftStore
     private let draftFlush: DraftFlushTriggers
     private let timelineStore: @MainActor (String) -> any TimelineStore
+    private let connector: any ChatConnector
+    private let outboxRoot: URL
     private(set) lazy var heights = ChatRowHeightStore(cache: connection.cache) { [unowned connection] in connection.accountKey }
 
     init(
         connection: ConnectionModel,
         drafts: DraftStore = DraftStore(directory: BotLinks.draftsDirectory, diagnostics: .osLog()),
-        timelineStore: (@MainActor (String) -> any TimelineStore)? = nil
+        timelineStore: (@MainActor (String) -> any TimelineStore)? = nil,
+        connector: (any ChatConnector)? = nil,
+        outboxRoot: URL = BotLinks.outboxDirectory
     ) {
         self.connection = connection
         self.drafts = drafts
+        self.connector = connector ?? LiveChatConnector(connection: connection)
+        self.outboxRoot = outboxRoot
         self.timelineStore = timelineStore ?? { [unowned connection] bot in
             ConversationTimelineStore(bot: bot) { (connection.cache, connection.accountKey) }
         }
@@ -46,14 +52,15 @@ final class BotLinks {
         URL.applicationSupportDirectory.appending(path: "drafts", directoryHint: .isDirectory)
     }
 
+    static var outboxDirectory: URL {
+        URL.applicationSupportDirectory.appending(path: "outbox", directoryHint: .isDirectory)
+    }
+
     func link(for bot: String) throws -> BotLink {
         if let existing = links[bot] { return existing }
-        let connection = self.connection
         let store = timelineStore(bot)
-        let hub = SessionHub(
-            profile: bot, connector: LiveChatConnector(connection: connection), store: store, pool: warm, diagnostics: .osLog()
-        )
-        let link = BotLink(outbox: try Outbox(directory: Self.outboxDirectory(for: bot), submitter: hub), sessions: hub)
+        let hub = SessionHub(profile: bot, connector: connector, store: store, pool: warm, diagnostics: .osLog())
+        let link = BotLink(outbox: try Outbox(directory: outboxDirectory(for: bot), submitter: hub), sessions: hub)
         links[bot] = link
         return link
     }
@@ -70,9 +77,8 @@ final class BotLinks {
         }
     }
 
-    private static func outboxDirectory(for name: String) -> URL {
-        let base = URL.applicationSupportDirectory.appending(path: "outbox", directoryHint: .isDirectory)
+    private func outboxDirectory(for name: String) -> URL {
         let safe = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "bot"
-        return base.appending(path: safe, directoryHint: .isDirectory)
+        return outboxRoot.appending(path: safe, directoryHint: .isDirectory)
     }
 }

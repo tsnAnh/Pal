@@ -10,13 +10,12 @@ struct ChatRowHeightsTests {
         ChatRow(id: "u1", kind: .user(text: "hello", delivery: delivery))
     }
 
-    @Test(arguments: [BubbleDelivery.sent, .waitingForConnection])
-    func aDeliveryStateChangeOfAUserRowKeepsItsMeasuredHeight(next: BubbleDelivery) {
+    @Test func aSentReceiptOfAUserRowKeepsItsMeasuredHeight() {
         let heights = ChatRowHeights()
         let sending = user(.sending)
         heights.measured(sending, height: 54, width: 600)
         #expect(heights.minHeight(for: sending, width: 600) == 54)
-        #expect(heights.minHeight(for: user(next), width: 600) == 54)
+        #expect(heights.minHeight(for: user(.sent), width: 600) == 54)
     }
 
     @Test func aFailedUserRowGrowsAStatusLineSoItsHeightIsMeasuredAgain() {

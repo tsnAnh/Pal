@@ -54,7 +54,8 @@ let rebuildBotName = "scout"
 
 @MainActor
 func rebuildChatModel(
-    lastSeen: Date? = nil, streamInterval: Duration = .zero, drafts: DraftStore? = nil, botName: String = rebuildBotName
+    lastSeen: Date? = nil, streamInterval: Duration = .zero, drafts: DraftStore? = nil, botName: String = rebuildBotName,
+    makeLinks: ((ConnectionModel) -> BotLinks)? = nil
 ) throws -> ChatModel {
     let roster = try rebuildRoster()
     let row = BotRow(
@@ -65,7 +66,9 @@ func rebuildChatModel(
     let defaults = try #require(UserDefaults(suiteName: "chat-model-rebuild-\(UUID().uuidString)"))
     let store = ChatLastSeenStore(defaults: defaults)
     if let lastSeen { store.record(lastSeen, for: botName) }
-    let links = drafts.map { BotLinks(connection: roster.connection, drafts: $0) } ?? BotLinks(connection: roster.connection)
+    let links = makeLinks?(roster.connection)
+        ?? drafts.map { BotLinks(connection: roster.connection, drafts: $0) }
+        ?? BotLinks(connection: roster.connection)
     let model = ChatModel(bot: row, links: links, roster: roster, lastSeenStore: store)
     model.streamPacer.interval = streamInterval
     return model

@@ -119,6 +119,7 @@ final class ChatScrollController {
             send(.userScrollBegan)
         } else {
             send(.userScrollEnded)
+            if isPinnedToBottom { releaseHeldRow() }
         }
     }
 
