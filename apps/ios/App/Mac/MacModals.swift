@@ -148,12 +148,6 @@ struct MacModalHost: View {
                     .id(router.connectAppsProfile ?? "")
                 }
             )
-        case .approvals:
-            MacModalPanel(
-                size: .full, identifier: "approvalsPanel", closeIdentifier: "approvals-close",
-                close: { router.dismissSheet() },
-                content: { ApprovalsView(bots: roster.heldDraftBots(for: router.approvalsProfile)) { router.dismissSheet() } }
-            )
         case .kanban:
             EmptyView()
         }

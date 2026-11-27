@@ -37,7 +37,6 @@ struct ChatBottomBar: View {
     @Binding var isVoiceModePresented: Bool
 
     @Environment(SettingsHub.self) private var hub
-    @Environment(\.heldDrafts) private var heldDrafts
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(macOS)
     @Environment(MacShell.self) private var shell
@@ -51,6 +50,10 @@ struct ChatBottomBar: View {
                 draft = pending
                 model.clearPendingDraft()
                 focused.wrappedValue = true
+            }
+            .onChange(of: model.restoredDraft, initial: true) { _, restored in
+                guard restored != nil, let text = model.consumeRestoredDraft(), draft.isEmpty else { return }
+                draft = text
             }
             .onChange(of: model.replyTarget) { _, target in
                 if target != nil { focused.wrappedValue = true }
@@ -71,12 +74,6 @@ struct ChatBottomBar: View {
                     .padding(.horizontal, ChatMetrics.edgeMargin)
                     .transition(.opacity)
                 }
-                let waiting = heldDrafts?.count(for: model.bot.name) ?? 0
-                if waiting > 0, !model.isAskingClarify {
-                    HeldDraftBanner(count: waiting) { router.presentApprovals(profile: model.bot.name) }
-                        .padding(.horizontal, ChatMetrics.edgeMargin)
-                        .transition(.opacity)
-                }
                 if let notice = hub.usageNotice {
                     UsageBanner(notice: notice) {
                         reviewUsage()
@@ -91,9 +88,6 @@ struct ChatBottomBar: View {
             .animation(.snappy(duration: 0.2), value: hub.usageNotice)
             .animation(.easeOut(duration: 0.2), value: dictation.failure ?? model.sendError)
             .task { await hub.refreshUsageIfStale() }
-            .task(id: model.bot.name) {
-                await heldDrafts?.load(bots: [HeldDraftBot(name: model.bot.name, displayName: model.bot.displayName)])
-            }
         }
     }
 
@@ -143,5 +137,6 @@ struct ChatBottomBar: View {
             attachCapture: { image in Task { await AttachmentStager.stage(image: image, into: model.attachmentSink) } },
             attach: model.attachIntake
         )
+        .onChange(of: draft) { _, text in model.noteDraft(text) }
     }
 }

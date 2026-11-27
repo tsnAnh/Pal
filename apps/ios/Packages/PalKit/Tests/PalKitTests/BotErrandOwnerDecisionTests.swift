@@ -5,14 +5,14 @@ import PalTransport
 import Testing
 
 extension BotErrandControlTests {
-    private var heldDraft: [String: JSONValue] {
-        ["question": "Send this message to Sam?", "command": "Running late.", "draft": ["channel": "messages"], "choices": ["once", "deny"]]
+    private var draftApproval: [String: JSONValue] {
+        ["question": "Send this message to Sam?", "command": "Running late.", "draft": ["channel": "messages", "held": false], "choices": ["once", "deny"]]
     }
 
     @Test func aDraftFormAnswerGoesToApprovalRespondAndNeverToClarify() async throws {
         let rig = try await rig()
         try await rig.running()
-        try await rig.raise("approval", id: "d1", seq: 3, extra: heldDraft)
+        try await rig.raise("approval", id: "d1", seq: 3, extra: draftApproval)
         let prompt = try #require(await rig.session.state.transcript.pendingPrompts.first)
         try await rig.session.answerOwnerForm(prompt, answers: [(qid: PendingPrompt.soleQuestionID, answer: .answered("Send"))])
         let sent = rig.script.calls("approval.respond")
@@ -28,7 +28,7 @@ extension BotErrandControlTests {
     @Test func cancellingADraftDeniesIt() async throws {
         let rig = try await rig()
         try await rig.running()
-        try await rig.raise("approval", id: "d1", seq: 3, extra: heldDraft)
+        try await rig.raise("approval", id: "d1", seq: 3, extra: draftApproval)
         let prompt = try #require(await rig.session.state.transcript.pendingPrompts.first)
         try await rig.session.answerOwnerForm(prompt, answers: [(qid: PendingPrompt.soleQuestionID, answer: .answered("Cancel"))])
         #expect(rig.script.calls("approval.respond").map { $0["choice"]?.stringValue } == ["deny"])
@@ -38,7 +38,7 @@ extension BotErrandControlTests {
     @Test func anEditedDraftSendsOnceWithTheEditedText() async throws {
         let rig = try await rig()
         try await rig.running()
-        try await rig.raise("approval", id: "d1", seq: 3, extra: heldDraft)
+        try await rig.raise("approval", id: "d1", seq: 3, extra: draftApproval)
         let prompt = try #require(await rig.session.state.transcript.pendingPrompts.first)
         try await rig.session.answerOwnerEdit(prompt, text: "  Running late, start without me.  ")
         try await rig.session.answerOwnerEdit(prompt, text: "Running late.")
@@ -67,11 +67,11 @@ extension BotErrandControlTests {
         await rig.finish()
     }
 
-    @Test func attachingToAHeldDraftShowsTheFormAndIgnoresALegacyCommandApproval() async throws {
+    @Test func attachingToADraftApprovalShowsTheFormAndIgnoresALegacyCommandApproval() async throws {
         let rig = try await rig { script in
-            script.override("session.resume") { _ in .result(BotScript().snapshotWithHeldDraft) }
+            script.override("session.resume") { _ in .result(BotScript().snapshotWithDraftApproval) }
         }
-        try await waitUntil("the held draft form", timeout: .seconds(10)) { await rig.session.state.transcript.pendingPrompts.count == 1 }
+        try await waitUntil("the draft approval form", timeout: .seconds(10)) { await rig.session.state.transcript.pendingPrompts.count == 1 }
         let pending = await rig.session.state.transcript.pendingPrompts
         #expect(pending.map(\.promptID) == ["d1"])
         #expect(pending.first?.questions.first?.choices == ["Send", "Edit", "Cancel"])

@@ -24,8 +24,8 @@ struct PalApp: App {
     @State private var hostPool: DeviceHostPool
     @State private var signIn: ServiceSignInCenter
     @State private var autoApprove: ActionAutoApprove
-    @State private var heldDrafts: HeldDraftsModel
     @State private var links: BotLinks
+    @State private var chatModels = ChatModelCache()
     @State private var bots: BotsKit
     @State private var templateImport: TemplateImportModel
     @State private var rooms: RoomsModel
@@ -62,10 +62,6 @@ struct PalApp: App {
         )
         _signIn = State(initialValue: signIn)
         _autoApprove = State(initialValue: ActionAutoApprove { method, params in try await model.rpc(method, params) })
-        _heldDrafts = State(initialValue: HeldDraftsModel(
-            source: HeldDraftFixture.source(arguments: ProcessInfo.processInfo.arguments)
-                ?? HeldDraftDesk(connector: LiveChatConnector(connection: model))
-        ))
         roster.gatewayEventSink = { event in
             Task { @MainActor in signIn.receive(event) }
         }
@@ -87,7 +83,7 @@ struct PalApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(
-                model: model, roster: roster, router: router, hostPool: hostPool, links: links,
+                model: model, roster: roster, router: router, hostPool: hostPool, links: links, chatModels: chatModels,
                 bots: bots, templateImport: templateImport, rooms: rooms, hub: hub
             )
                 .overlay { ReachOfferOverlay(model: offers) }
@@ -98,7 +94,6 @@ struct PalApp: App {
                 .environment(appearance)
                 .environment(signIn)
                 .environment(autoApprove)
-                .environment(\.heldDrafts, heldDrafts)
                 #if os(macOS)
                 .environment(shell)
                 .environment(shortcuts)
@@ -139,6 +134,7 @@ struct RootView: View {
     @Bindable var router: AppRouter
     let hostPool: DeviceHostPool
     let links: BotLinks
+    let chatModels: ChatModelCache
     let bots: BotsKit
     let rooms: RoomsModel
     let hub: SettingsHub
@@ -152,13 +148,14 @@ struct RootView: View {
 
     init(
         model: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, links: BotLinks,
-        bots: BotsKit, templateImport: TemplateImportModel, rooms: RoomsModel, hub: SettingsHub
+        chatModels: ChatModelCache, bots: BotsKit, templateImport: TemplateImportModel, rooms: RoomsModel, hub: SettingsHub
     ) {
         self.model = model
         self.roster = roster
         self.router = router
         self.hostPool = hostPool
         self.links = links
+        self.chatModels = chatModels
         self.bots = bots
         self.rooms = rooms
         self.hub = hub
@@ -237,6 +234,10 @@ struct RootView: View {
                 await hostPool.startHosts(botNames: roster.bots.map(\.name))
             }
             .task(id: roster.isLoaded) {
+                guard roster.isLoaded else { return }
+                await links.preload(roster.preloadCandidates)
+            }
+            .task(id: roster.isLoaded) {
                 guard roster.isLoaded, ProcessInfo.processInfo.arguments.contains(ConnectAppsLaunch.argument) else { return }
                 router.presentConnectApps()
             }
@@ -267,8 +268,6 @@ struct RootView: View {
                         } content: {
                             ConnectAppsScreen(model: $0) { router.dismissSheet() }
                         }
-                    case .approvals:
-                        ApprovalsView(bots: roster.heldDraftBots(for: router.approvalsProfile)) { router.dismissSheet() }
                     case .kanban:
                         EmptyView()
                     }

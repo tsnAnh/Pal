@@ -54,6 +54,14 @@ final class ChatOpenCoordinator {
         PalPerf.event("chat.open.retry.delay", count: Int(delay.components.seconds * 1000 + delay.components.attoseconds / 1_000_000_000_000_000))
     }
 
+    func reset() {
+        cancel()
+        gate = ChatOpenGate()
+        liveSeen = true
+        isWindowOpen = false
+        attempts = 0
+    }
+
     func cancel() {
         holdTimer?.cancel()
         settleTimer?.cancel()

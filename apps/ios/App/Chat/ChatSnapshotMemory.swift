@@ -2,7 +2,7 @@ import PalChat
 
 @MainActor
 final class ChatSnapshotMemory {
-    static let capacity = 4
+    static let capacity = 12
 
     private var recent: [(bot: String, snapshot: TimelineSnapshot)] = []
 

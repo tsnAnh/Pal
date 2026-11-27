@@ -191,6 +191,23 @@ struct SearchEngineTests {
         #expect(unnamed.first?.name == "ping" && unnamed.first?.isEnabled == false)
     }
 
+    @Test func routineHitsShowReadableNamesAndNeverAnID() async throws {
+        let (engine, gateway, connection, _) = try await engine { _, params in
+            guard params?["profile"]?.stringValue == "default" else { return .result(["jobs": []]) }
+            return .result(["jobs": [
+                ["job_id": "j1", "name": "tóm_tắt_tin_tức", "next_run_at": "2026-03-01T08:00:00+00:00"],
+                ["job_id": "abc123def456", "name": "abc123def456", "prompt_preview": "ping the server", "next_run_at": "2026-03-02T08:00:00+00:00"],
+                ["job_id": "def456abc123"],
+            ]])
+        }
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        let listed = try await engine.run(.routines, query: "", bots: bots)
+
+        let names = listed.items.compactMap { if case .routine(let hit) = $0 { hit.name } else { nil } }
+        #expect(names == ["Tóm tắt tin tức", "ping the server", "Untitled routine"])
+    }
+
     @Test func routinesErrorFromEveryBotFailsTheSource() async throws {
         let (engine, gateway, connection, _) = try await engine { _, _ in .result(["error": "nope"]) }
         defer { gateway.stop(); Task { await connection.close() } }

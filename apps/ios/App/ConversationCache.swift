@@ -46,6 +46,14 @@ extension RosterModel {
         return visibleBots.first
     }
 
+    var preloadCandidates: [String] {
+        var names: [String] = []
+        for bot in [launchBot, primaryBot].compactMap({ $0 }) + visibleBots.filter(\.isPinned) where !names.contains(bot.name) {
+            names.append(bot.name)
+        }
+        return Array(names.prefix(3))
+    }
+
     var launchBot: BotRow? {
         if let name = lastOpenedBot, let remembered = bot(named: name), !remembered.isHidden { return remembered }
         return primaryBot ?? visibleBots.first ?? bots.first

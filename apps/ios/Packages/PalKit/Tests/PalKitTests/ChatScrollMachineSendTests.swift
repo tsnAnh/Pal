@@ -90,6 +90,16 @@ struct ChatScrollMachineSendTests {
         #expect(list.machine.state == .pinnedToBottom)
     }
 
+    @Test func aWorkingRowThatLeavesTheListShortOfTheBottomIsRepairedWhileTheOffsetIsStill() {
+        var list = MeasuredList(rowCount: 160, content: 44_500)
+        #expect(list.feed(content: 44_565) == .scrollToBottom(animated: false))
+        #expect(list.distance == 65)
+        #expect(list.feed() == .scrollToBottom(animated: false))
+        #expect(list.machine.state == .pinnedToBottom)
+        #expect(!list.machine.showsJumpButton)
+        #expect(list.feed(distance: 0) == .none)
+    }
+
     @Test func sendWhileReadingHistoryEndsAtTheBottomWhileTheRowsReResolve() {
         var list = MeasuredList(rowCount: 160, content: 44_844, distance: 785)
         #expect(list.machine.state == .readingHistory)

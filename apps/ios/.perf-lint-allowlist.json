@@ -3,6 +3,7 @@
   {"file": "App/Mac/InputSafety.swift", "reason": "single-instance monitors, installed once (guarded by monitors.isEmpty)", "rule": "perf-monitor-per-view"},
   {"file": "App/Mac/MacMessageActions.swift", "reason": "one shared monitor for every message bubble: installed when the first bubble enters a window, removed when the last leaves", "rule": "perf-monitor-per-view"},
   {"file": "App/Mac/MacShortcutRecorder.swift", "reason": "single-instance monitor of the shortcut recorder (guarded by monitor == nil)", "rule": "perf-monitor-per-view"},
+  {"file": "App/Mac/MacTypeToFocus.swift", "reason": "single window-scoped key monitor of the open bot chat, started on appear and removed on disappear; it only acts when no text input holds focus", "rule": "perf-monitor-per-view"},
   {"file": "App/Mac/MacWindowChrome.swift", "reason": "single window-scoped monitor owned by the window chrome, removed in deinit", "rule": "perf-monitor-per-view"},
   {"file": "App/Chat/ChatWorkingRow.swift", "reason": "animation capped at 1/30 s and paused when not animated: working dots", "rule": "perf-timeline-unlisted"},
   {"file": "App/CreateBotSheet.swift", "reason": "animation capped at 1/30 s and paused under Reduce Motion: entering dot, removed from the tree once the avatar appears (900 ms)", "rule": "perf-timeline-unlisted"},

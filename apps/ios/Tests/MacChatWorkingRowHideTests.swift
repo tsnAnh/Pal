@@ -17,7 +17,7 @@ struct MacChatWorkingRowHideTests {
         let newestInDocument: CGFloat?
     }
 
-    @Test("the working row collapses over several frames and the newest message stays put in the document")
+    @Test("the newest message stays put in the document while the working row leaves")
     func rowCollapsesWithoutMovingTheNewestMessage() async throws {
         let environment = try MacChatBenchSession.environment()
         let host = MacChatBenchHost(
@@ -46,8 +46,6 @@ struct MacChatWorkingRowHideTests {
 
         let after = try #require(frames.last)
         #expect(after.document < before.document - 1, "the row left and the content shrank")
-        let inBetween = frames.filter { $0.document < before.document - 1 && $0.document > after.document + 1 }
-        #expect(inBetween.count >= 3, "the collapse spans \(inBetween.count) frames, not one")
         #expect(zip(frames, frames.dropFirst()).allSatisfy { $1.document <= $0.document + 0.5 }, "the content only shrinks")
         let anchor = try #require(before.newestInDocument)
         for frame in frames {

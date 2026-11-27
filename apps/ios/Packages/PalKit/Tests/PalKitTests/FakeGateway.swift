@@ -215,13 +215,13 @@ final class BotScript: Sendable {
         return .object(object)
     }
 
-    var snapshotWithHeldDraft: JSONValue {
+    var snapshotWithDraftApproval: JSONValue {
         var object = snapshot.objectValue ?? [:]
         object["running"] = true
         object["prompts"] = [
             [
                 "kind": "approval", "prompt_id": "d1", "execution_generation": 1, "question": "Send this message to Sam?",
-                "command": "Running late.", "draft": ["channel": "messages"], "choices": ["once", "deny"],
+                "command": "Running late.", "draft": ["channel": "messages", "held": false], "choices": ["once", "deny"],
             ],
             ["kind": "approval", "prompt_id": "old", "execution_generation": 1, "command": "rm -rf build", "choices": ["once", "deny"]],
         ]

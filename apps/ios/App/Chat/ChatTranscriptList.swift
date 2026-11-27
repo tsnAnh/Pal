@@ -31,7 +31,6 @@ struct ChatTranscriptList: View {
         }
         .scrollPosition($scroll.position)
         .defaultScrollAnchor(.bottom)
-        .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .safeAreaPadding(.bottom, ChatMetrics.composerClearance)
         .task(id: model.bot.name) { await desk.run() }
         .overlay { ChatOpeningOverlay(model: model, hidesIntro: !desk.desk.cards.isEmpty) }
@@ -40,6 +39,8 @@ struct ChatTranscriptList: View {
         .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
         .safeAreaInset(edge: .top, spacing: 0) { ChatAutoApproveBanner(model: model) }
         .teachPresentations(teach, surface: .chat)
+        .onAppear { scroll.heights = (model.links.heights, model.openedBot.name) }
+        .onDisappear { scroll.persistHeights() }
         .onScrollGeometryChange(for: ScrollGeometry.self, of: { $0 }, action: { _, new in scroll.observe(new) })
         .onScrollPhaseChange { _, phase in scroll.observe(phase) }
         .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { scroll.visibleRowsChanged($0) }
@@ -87,6 +88,7 @@ private struct ChatTranscriptRows: View {
     let desk: ChatDeskModel
     let connectionIsSlow: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     #if os(macOS)
     @Environment(MacShell.self) private var shell
     #endif
@@ -104,32 +106,37 @@ private struct ChatTranscriptRows: View {
         let _ = PalPerf.event("chat.list.body") // swiftlint:disable:this redundant_discardable_let
         let source = model.rowContextSource
         let ink = BubblePalette.ink(accent: source.accent)
-        LazyVStack(alignment: .leading, spacing: 0) {
-            if !model.rows.isEmpty {
+        let windowRows = model.windowRows
+        let plan = scroll.renderPlan(of: windowRows, persisted: model.persistedHeights, textScale: "\(dynamicTypeSize)")
+        VStack(alignment: .leading, spacing: 0) {
+            if !windowRows.isEmpty {
                 OlderHistoryRow(state: model.olderHistoryShown, ink: ink) { model.wantOlder() }
                     .chatListRow()
                     .padding(.top, 8)
             }
-            ForEach(model.windowRows) { row in
-                rowView(row, source: source)
-                    .equatable()
-                    .chatListRow()
-                    .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row), streaming: row.isStreaming) { scroll.rowLaidOut(row.id, frame: $0) })
-            }
-            VStack(spacing: 0) { footer(ink: ink) }
-                .animation(PalMotion.Pop(reduceMotion: reduceMotion).animation, value: showsWorkingRow)
-                .chatListRow()
-            ForEach(desk.cards) { card in
-                ChatDeskCardView(card: card, botName: model.bot.displayName) { choice in
-                    Task { await desk.decide(card.id, choice) }
+            ChatHiddenRowsSpacer(height: plan.hiddenHeight)
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(windowRows[plan.start...]) { row in
+                    rowView(row, source: source)
+                        .equatable()
+                        .chatListRow()
+                        .modifier(ChatRowHeightFloor(floor: scroll.minHeight(for: row), streaming: row.isStreaming) { scroll.rowLaidOut(row.id, frame: $0) })
                 }
-                .padding(.top, ChatMetrics.senderSwitchGap)
-                .frame(maxWidth: ChatDeskCardView.maxWidth)
-                .frame(maxWidth: .infinity)
-                .chatListRow()
+                VStack(spacing: 0) { footer(ink: ink) }
+                    .animation(PalMotion.Pop(reduceMotion: reduceMotion).animation, value: showsWorkingRow)
+                    .chatListRow()
+                ForEach(desk.cards) { card in
+                    ChatDeskCardView(card: card, botName: model.bot.displayName) { choice in
+                        Task { await desk.decide(card.id, choice) }
+                    }
+                    .padding(.top, ChatMetrics.senderSwitchGap)
+                    .frame(maxWidth: ChatDeskCardView.maxWidth)
+                    .frame(maxWidth: .infinity)
+                    .chatListRow()
+                }
             }
+            .scrollTargetLayout()
         }
-        .scrollTargetLayout()
         .coordinateSpace(.named(ChatScrollController.contentSpace))
         .paneOverflowProbe("chat.list")
         #if os(iOS)
@@ -176,6 +183,18 @@ private struct ChatTranscriptRows: View {
                 ChatStatusLine(text: String(localized: "Checking for new messages…"), symbol: "clock")
                     .accessibilityIdentifier("chatStatusLine")
             }
+        }
+    }
+}
+
+private struct ChatHiddenRowsSpacer: View {
+    let height: Double
+
+    var body: some View {
+        if height > 0 {
+            Color.clear
+                .frame(height: height)
+                .accessibilityHidden(true)
         }
     }
 }

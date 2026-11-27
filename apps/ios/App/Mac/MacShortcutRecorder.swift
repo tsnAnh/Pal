@@ -36,6 +36,7 @@ struct MacShortcutRecorder: NSViewRepresentable {
 
         func start() {
             guard monitor == nil else { return }
+            // key-steal: ok the recorder owns the keyboard while capturing a shortcut
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self else { return event }
                 return self.handle(event) ? nil : event

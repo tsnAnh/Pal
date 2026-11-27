@@ -12,27 +12,47 @@ final class ChatScrollController {
     static let restoreTolerance = 0.5
     static let measureBatchSize = 4
     static let measureTimeout = Duration.milliseconds(400)
+    static let resizeSettle = Duration.milliseconds(150)
+    static let tailLeadViewports = 2.0
+    static let holdWindow = Duration.milliseconds(400)
 
     var position = ScrollPosition(idType: String.self, edge: .bottom)
     private(set) var showsJumpButton = false
     private(set) var unseen = 0
     private(set) var wantsOlder = false
-    private(set) var measureTick = 0
+    var measureTick = 0
+    var planTick = 0
     @ObservationIgnored private(set) var machine = ChatScrollMachine()
     @ObservationIgnored private var isMoving = false
-    @ObservationIgnored private var lastGeometry: ChatScrollGeometry?
+    @ObservationIgnored private(set) var lastGeometry: ChatScrollGeometry?
     @ObservationIgnored private var visibleTop = 0.0
     @ObservationIgnored private var visibleIDs: [String] = []
     @ObservationIgnored private var frames: [String: CGRect] = [:]
     @ObservationIgnored private var pendingRestore: ChatRowAnchor?
-    @ObservationIgnored private let rowHeights = ChatRowHeights()
+    @ObservationIgnored let layout: ChatLayoutMemory
+    @ObservationIgnored var resizeSettleTask: Task<Void, Never>?
     @ObservationIgnored private var revealTask: Task<Void, Never>?
     @ObservationIgnored private var deferred: (command: ChatScrollMachine.Command, frame: CGRect?) = (.none, nil)
     @ObservationIgnored private var deferredWrite: Task<Void, Never>?
+    @ObservationIgnored private var passRepair: Task<Void, Never>?
+    @ObservationIgnored let tracker = ChatOpenTracker()
+    @ObservationIgnored var heights: (store: ChatRowHeightStore, bot: String)?
     @ObservationIgnored private var writers = ChatScrollWriterLedger()
+    @ObservationIgnored var edgeIsArmed = true
+    @ObservationIgnored var pinnedShort = ChatPinnedShortWatch()
+    @ObservationIgnored var pinnedShortCheck: Task<Void, Never>?
+    @ObservationIgnored var newestAnchor: ChatNewestAnchor?
+    @ObservationIgnored var holdsUntil = ContinuousClock.now
+    @ObservationIgnored private var wasRunning: Bool?
     @ObservationIgnored private var contentLedger = ChatContentLedger()
     @ObservationIgnored private var phaseName = "idle"
     @ObservationIgnored var sampleSink: ((ChatScrollSample) -> Void)?
+    @ObservationIgnored var rowSink: ((String, CGRect) -> Void)?
+
+    init(layout: ChatLayoutMemory = ChatLayoutMemory()) {
+        self.layout = layout
+        layout.planner.resumeOpen()
+    }
 
     var isPinnedToBottom: Bool { machine.state == .pinnedToBottom }
 
@@ -52,14 +72,15 @@ final class ChatScrollController {
         )
         let previousGeometry = lastGeometry
         lastGeometry = snapshot
-        if wantsOlder != snapshot.wantsOlder { wantsOlder = snapshot.wantsOlder }
+        let wantsOlderNow = observeTail(snapshot)
+        if wantsOlder != wantsOlderNow { wantsOlder = wantsOlderNow }
         if abs((previousGeometry?.containerWidth ?? 0) - snapshot.containerWidth) > Self.restoreTolerance {
-            rowHeights.widthChanged()
-            measureTick &+= 1
+            widthMoved()
         }
         let before = machine.state
         let command = machine.handle(.geometry(snapshot))
         publish()
+        watchPinnedShort(distance: snapshot.distanceFromBottom)
         if isRecording {
             let sample = ChatScrollSample(
                 geometry: snapshot, state: machine.state.name, showsButton: showsJumpButton,
@@ -75,7 +96,12 @@ final class ChatScrollController {
                 ChatScrollTrace.machine(event: "geometry", state: machine.state.name, command: command.name)
             }
         }
-        performNextTurn(command)
+        if case .scrollToBottom = command, machine.state == .pinnedToBottom {
+            repairInPass(command)
+        } else {
+            performNextTurn(command)
+        }
+        releaseEdgeOnceAtBottom()
     }
 
     func observe(_ phase: ScrollPhase) {
@@ -103,11 +129,14 @@ final class ChatScrollController {
         visibleIDs.removeAll { !live.contains($0) }
         if let pending = pendingRestore, !live.contains(pending.rowID) { pendingRestore = nil }
         if isRecording { contentLedger.noteRows() }
-        if ChatScrollTrace.isOn { ChatScrollTrace.rows(ids.count, state: machine.state.name) }
-        send(.rowsChanged(ids))
+        let rendered = noteRendered(planner.rendered(from: ids))
+        if ChatScrollTrace.isOn { ChatScrollTrace.rows(rendered.count, state: machine.state.name) }
+        send(.rowsChanged(rendered))
     }
 
     func streamingChanged(_ running: Bool) {
+        if wasRunning == true, !running { armDocumentHold() }
+        wasRunning = running
         contentLedger.noteStreaming(running)
     }
 
@@ -118,36 +147,14 @@ final class ChatScrollController {
 
     func rowLaidOut(_ id: String, frame: CGRect) {
         ChatOpenMetrics.rowLaidOut(id)
+        let grew = frames[id].map { abs($0.height - frame.height) > 0.5 } ?? false
         frames[id] = frame
-        if let width = lastGeometry?.containerWidth { rowHeights.laidOut(id, height: Double(frame.height), width: width) }
+        rowSink?(id, frame)
+        holdNewestRow(id, frame: frame)
+        followGrowingNewest(id, grew: grew)
+        if let width = lastGeometry?.containerWidth { noteLaidOut(id, height: Double(frame.height), width: width) }
         guard let pending = pendingRestore, pending.rowID == id else { return }
         performNextTurn(.restore(pending), frame: frame)
-    }
-
-    var measureWidth: CGFloat? {
-        guard let width = lastGeometry?.containerWidth, width > 0 else { return nil }
-        return CGFloat(width)
-    }
-
-    func measureBatch(of rows: [ChatRow]) -> [ChatRow] {
-        _ = measureTick
-        guard let width = lastGeometry?.containerWidth, width > 0 else { return [] }
-        return rowHeights.batch(of: rows, width: width)
-    }
-
-    func measured(_ row: ChatRow, height: CGFloat) {
-        guard let width = lastGeometry?.containerWidth, width > 0 else { return }
-        rowHeights.measured(row, height: Double(height), width: width)
-        measureTick &+= 1
-    }
-
-    func measureGaveUp(on ids: [String]) {
-        guard let width = lastGeometry?.containerWidth, rowHeights.giveUp(on: ids, width: width) else { return }
-        measureTick &+= 1
-    }
-
-    func minHeight(for row: ChatRow) -> CGFloat? {
-        rowHeights.minHeight(for: row, width: lastGeometry?.containerWidth)
     }
 
     func jumpToBottom(animated: Bool) {
@@ -162,6 +169,7 @@ final class ChatScrollController {
 
     func reveal(_ id: String) {
         revealTask?.cancel()
+        if planner.reveal(id) { tailMoved() }
         revealTask = Task { @MainActor [weak self] in
             await Task.yield()
             guard let self, !Task.isCancelled else { return }
@@ -187,6 +195,15 @@ final class ChatScrollController {
         }
     }
 
+    func repairInPass(_ command: ChatScrollMachine.Command) {
+        guard passRepair == nil else { return performNextTurn(command) }
+        passRepair = Task { @MainActor [weak self] in self?.passRepair = nil }
+        deferredWrite?.cancel()
+        deferredWrite = nil
+        deferred = (.none, nil)
+        perform(command)
+    }
+
     func perform(_ command: ChatScrollMachine.Command, frame: CGRect? = nil) {
         switch command {
         case .none:
@@ -203,11 +220,13 @@ final class ChatScrollController {
             var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
             transaction.disablesAnimations = !glides
             notePositionWrite(command)
+            edgeIsArmed = true
             withTransaction(transaction) { position.scrollTo(edge: .bottom) }
         case .clampToContent:
             var transaction = Transaction()
             transaction.disablesAnimations = true
             notePositionWrite(command)
+            edgeIsArmed = true
             withTransaction(transaction) { position.scrollTo(edge: .bottom) }
         case .scrollToRow(let id):
             notePositionWrite(command)
@@ -231,9 +250,10 @@ final class ChatScrollController {
         PalPerf.event("chat.scroll.write")
     }
 
-    private func send(_ event: ChatScrollMachine.Event) {
+    func send(_ event: ChatScrollMachine.Event) {
         let command = machine.handle(event)
         publish()
+        if let lastGeometry { watchPinnedShort(distance: lastGeometry.distanceFromBottom) }
         if ChatScrollTrace.isOn {
             ChatScrollTrace.machine(event: event.name, state: machine.state.name, command: command.name)
         }
@@ -244,8 +264,10 @@ final class ChatScrollController {
         if showsJumpButton != machine.showsJumpButton { showsJumpButton = machine.showsJumpButton }
         if unseen != machine.unseen { unseen = machine.unseen }
     }
+}
 
-    private func topAnchor(visibleTop: Double) -> ChatRowAnchor? {
+private extension ChatScrollController {
+    func topAnchor(visibleTop: Double) -> ChatRowAnchor? {
         var below: (id: String, minY: Double)?
         for id in visibleIDs {
             guard let frame = frames[id] else { continue }

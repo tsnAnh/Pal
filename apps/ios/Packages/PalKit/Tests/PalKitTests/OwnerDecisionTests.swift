@@ -22,7 +22,7 @@ struct OwnerDecisionTests {
     private let draft: JSONValue = [
         "kind": "approval", "prompt_id": "d1", "execution_generation": 1, "question": "Send this message to Sam?",
         "command": "Running late, start without me.", "description": "Message to Sam", "choices": ["once", "deny"],
-        "draft": ["channel": "messages"],
+        "draft": ["channel": "messages", "held": false],
     ]
 
     private let consent: JSONValue = [
@@ -39,7 +39,7 @@ struct OwnerDecisionTests {
         return nil
     }
 
-    @Test func aHeldDraftIsTheClarifyFormWithSendEditCancel() throws {
+    @Test func aDraftApprovalIsTheClarifyFormWithSendEditCancel() throws {
         var transcript = try opened()
         #expect(transcript.apply(frame("approval.request", draft, seq: 2)) == .applied)
         let shown = try #require(form(transcript, "d1"))
@@ -52,11 +52,11 @@ struct OwnerDecisionTests {
         #expect(transcript.ignoredPromptIDs.isEmpty)
     }
 
-    @Test func aHeldDraftShowsTheLabelsTheGatewayChoseForTheConversationLanguage() throws {
+    @Test func aDraftApprovalShowsTheLabelsTheGatewayChoseForTheConversationLanguage() throws {
         var transcript = try opened()
         let vietnamese: JSONValue = [
             "kind": "approval", "prompt_id": "d2", "execution_generation": 1, "question": "Gửi tin nhắn này?",
-            "command": "Tôi đến trễ.", "choices": ["once", "deny"], "draft": ["channel": "messages", "editable": true],
+            "command": "Tôi đến trễ.", "choices": ["once", "deny"], "draft": ["channel": "messages", "editable": true, "held": false],
             "labels": ["send": "Gửi", "edit": "Sửa", "cancel": "Hủy"],
         ]
         #expect(transcript.apply(frame("approval.request", vietnamese, seq: 2)) == .applied)

@@ -22,6 +22,15 @@ final class ChatRowHeights {
         recorded.insert(id)
     }
 
+    func height(of id: String, width: Double) -> Double? {
+        cache.height(for: id, width: width)
+    }
+
+    func adopt(_ id: String, height: Double, width: Double, layout: ChatRow) {
+        laidOut(id, height: height, width: width)
+        lastLayouts[id] = layout
+    }
+
     func minHeight(for row: ChatRow, width: Double?) -> CGFloat? {
         if lastLayouts[row.id] != row.layoutKey {
             forget(row.id)
@@ -77,6 +86,43 @@ extension ChatRow {
         return ChatRow(
             id: id, kind: .user(text: text, delivery: .sent), separator: separator, showsUnreadDivider: showsUnreadDivider,
             gap: gap, images: images, files: files, isStreaming: isStreaming, storedRowID: storedRowID
+        )
+    }
+}
+
+extension ChatRow {
+    var heightShape: ChatRowShape {
+        switch kind {
+        case .user(let text, _): shape(.user, text)
+        case .assistant(let parsed): shape(.assistant, parsed.source)
+        default: shape(.card, "")
+        }
+    }
+
+    var heightFingerprint: UInt64? {
+        let text: String
+        switch kind {
+        case .user(let body, _): text = "u" + body
+        case .assistant(let parsed): text = "a" + parsed.source
+        default: return nil
+        }
+        return ChatRowFingerprint.hash([
+            text, gapTag, separator == nil ? "-" : "s", showsUnreadDivider ? "d" : "-", images.map(\.id).joined(separator: ","),
+            files.map(\.id).joined(separator: ","),
+        ])
+    }
+
+    private var gapTag: String {
+        switch gap {
+        case .none: "n"
+        case .sameSender: "s"
+        case .senderSwitch: "w"
+        }
+    }
+
+    private func shape(_ kind: ChatRowShapeKind, _ text: String) -> ChatRowShape {
+        ChatRowShape(
+            kind: kind, characters: text.utf8.count, lineBreaks: text.utf8.count { $0 == 10 }, images: images.count, files: files.count
         )
     }
 }

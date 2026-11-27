@@ -9,20 +9,29 @@ public struct Routine: Identifiable, Sendable, Equatable, Codable {
     public var isEnabled: Bool
 
     init?(_ wire: CronJobWire) {
-        let title = (wire.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        id = wire.jobID
-        self.title = title.isEmpty ? String(localized: "Untitled routine") : title
-        scheduleText = wire.scheduleText
-        timeZoneID = wire.scheduleTimezone
-        isEnabled = wire.enabled ?? true
+        self.init(
+            id: wire.jobID, title: wire.name ?? "", scheduleText: wire.scheduleText,
+            timeZoneID: wire.scheduleTimezone, isEnabled: wire.enabled ?? true
+        )
     }
 
     public init(id: String, title: String, scheduleText: String?, timeZoneID: String?, isEnabled: Bool) {
         self.id = id
-        self.title = title
+        self.title = RoutineName.readable(title, jobID: id) ?? RoutineName.untitled
         self.scheduleText = scheduleText
         self.timeZoneID = timeZoneID
         self.isEnabled = isEnabled
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            id: values.decode(String.self, forKey: .id),
+            title: values.decode(String.self, forKey: .title),
+            scheduleText: values.decodeIfPresent(String.self, forKey: .scheduleText),
+            timeZoneID: values.decodeIfPresent(String.self, forKey: .timeZoneID),
+            isEnabled: values.decode(Bool.self, forKey: .isEnabled)
+        )
     }
 
     public func caption(locale: Locale = .current) -> String {
