@@ -71,19 +71,6 @@ struct ChatRow: Identifiable, Equatable {
     }
 }
 
-extension ChatRow.Kind {
-    static func reply(
-        _ text: String, isStreaming: Bool, generated: Set<String>, previous: ChatRow.Kind?
-    ) -> (ChatRow.Kind, [ImageReference], [FileReference]) {
-        let content = MessageImages.extract(from: text, role: .assistant, isStreaming: isStreaming)
-        let images = content.images.filter { !generated.contains($0.id) }
-        if case .assistant(let parsed)? = previous, parsed.source == content.text {
-            return (.assistant(parsed), images, content.files)
-        }
-        return (.assistant(.deferringWarm(content.text, isStreaming: isStreaming)), images, content.files)
-    }
-}
-
 enum ChatConnectionState: Equatable {
     case connecting
     case live

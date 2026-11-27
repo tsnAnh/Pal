@@ -774,7 +774,7 @@ final class ChatModel {
     }
 
     private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, previous: BuiltRow?) -> (ChatRow.Kind, [ImageReference], [FileReference])? {
-        switch item.content {
+        switch item.shownContent {
         case .user(let text, let delivery):
             switch item.inbound {
             case .person:
@@ -793,12 +793,15 @@ final class ChatModel {
                 return (.user(text: content.text, delivery: state), content.images, [])
             case .botMessage(let sender, let body):
                 return (.notice(.botMessage(senderName: sender.name, body: body)), [], [])
-            case .routineOutput(let body):
-                return ChatRow.Kind.reply(body, isStreaming: false, generated: generated, previous: previous?.kind)
-            case .internalNotice: return nil
+            case .internalNotice, .routineOutput: return nil
             }
         case .assistant(let text, _, let streaming):
-            return ChatRow.Kind.reply(text, isStreaming: streaming, generated: generated, previous: previous?.kind)
+            let content = MessageImages.extract(from: text, role: .assistant, isStreaming: streaming)
+            let images = content.images.filter { !generated.contains($0.id) }
+            if case .assistant(let parsed)? = previous?.kind, parsed.source == content.text {
+                return (.assistant(parsed), images, content.files)
+            }
+            return (.assistant(.deferringWarm(content.text, isStreaming: streaming)), images, content.files)
         case .tool(let call):
             let generation = call.imageGeneration
             return generation.map { (.imageGeneration($0), [], []) }

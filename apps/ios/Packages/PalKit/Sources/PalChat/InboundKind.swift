@@ -20,6 +20,13 @@ public enum InboundKind: Sendable, Hashable {
     public var isPerson: Bool { self == .person }
 }
 
+extension TranscriptItem {
+    public var shownContent: Content {
+        if case .routineOutput(let body) = inbound { return .assistant(text: body, reasoning: "", isStreaming: false) }
+        return content
+    }
+}
+
 extension InboundKind {
     private static let internalKinds: Set<String> = ["process_complete", "async_delegation_complete"]
     private static let personKinds: Set<String> = ["steer", "skill_invocation"]
