@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import unicodedata
@@ -9,7 +10,7 @@ from typing import Any, Optional
 
 from gateway.outbound.targets import _parse_target_ref
 from tools import routine_send
-from tools.bot_mode_drafts import flatten_args
+from tools.bot_mode_drafts import _carries_secret, flatten_args
 
 _LIST_SEPARATORS = (",", ";")
 _HANDLE_OR_ID = re.compile(
@@ -21,6 +22,10 @@ _EVERYONE = frozenset({"all", "channel", "everyone", "here"})
 class Destination:
     signature: str
     shown: str
+    platform: str
+    places: frozenset[str]
+    thread: str
+    call_digest: str
 
 
 def _exact_address(value: Any) -> Optional[str]:
@@ -45,7 +50,7 @@ def destination_of(tool_name: str, args: Mapping, identity: Optional[Mapping] = 
     """Fails closed on a field nobody classified: it could add a recipient or switch the account. ``identity``
     holds the stable ids behind a destination shown by a reusable name."""
     call = routine_send.send_call(tool_name, dict(args))
-    if call is None:
+    if call is None or _carries_secret(*call.texts):
         return None
     places = set().union(*call.destinations)
     if len(places) != 1 or not all(places):
@@ -62,4 +67,6 @@ def destination_of(tool_name: str, args: Mapping, identity: Optional[Mapping] = 
         return None
     signature = json.dumps({"address": address, "identity": dict(identity or {})}, sort_keys=True,
                            ensure_ascii=False, separators=(",", ":"))
-    return Destination(signature, address["target"] if tool_name == "send_message" else place)
+    shown = address["target"] if tool_name == "send_message" else place
+    digest = hashlib.sha256(json.dumps(flat, sort_keys=True, default=repr).encode()).hexdigest()
+    return Destination(signature, shown, call.platform, frozenset({place}), call.thread, digest)

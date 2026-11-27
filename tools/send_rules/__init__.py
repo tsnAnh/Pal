@@ -1,11 +1,19 @@
-"""The owner's "always allow" rules: one bot, one send tool, one exact destination.
+"""What lets a send go out with no card: a saved "always allow" rule, or the owner's order in this turn.
 
-``destination`` turns a send call into the destination a rule is keyed by, ``store`` keeps one profile's rules on
-disk, and ``gate`` is what the send gates and the approval card call.
+``destination`` turns a send call into the destination both are matched on, ``store`` keeps one profile's rules on
+disk, ``order_text`` reads an order out of the owner's words, ``turn_order`` holds it for one turn, and ``gate``
+is what the send gates, the approval card and the clarify tool call.
 """
 
 from tools.send_rules.destination import Destination, destination_of
-from tools.send_rules.gate import allows, answered_on_card, offer, owner_turn_destination
+from tools.send_rules.gate import (
+    allows,
+    already_allowed,
+    answered_on_card,
+    cleared,
+    offer,
+    owner_turn_destination,
+)
 from tools.send_rules.store import SendRule, SendRuleCandidate, list_rules, remember, revoke
 
 __all__ = [
@@ -13,7 +21,9 @@ __all__ = [
     "SendRule",
     "SendRuleCandidate",
     "allows",
+    "already_allowed",
     "answered_on_card",
+    "cleared",
     "destination_of",
     "list_rules",
     "offer",

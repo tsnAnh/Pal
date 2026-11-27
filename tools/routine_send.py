@@ -117,12 +117,12 @@ def _split_sigil(value: str) -> tuple[str, str]:
     return (folded[0], folded[1:]) if folded.startswith(_SIGILS) else ("", folded)
 
 
-def _same(written: str, spelled: str) -> bool:
+def same_address(written: str, spelled: str) -> bool:
     (written_sigil, written_body), (sigil, body) = _split_sigil(written), _split_sigil(spelled)
     return written_body == body and (not written_sigil or not sigil or written_sigil == sigil)
 
 
-def _reads_as_address(token: str) -> bool:
+def reads_as_address(token: str) -> bool:
     # Prose holds words like ``general`` and ``follow-up``, so a bare one never names a channel.
     sigil, body = _split_sigil(token)
     if sigil or "@" in body:
@@ -147,10 +147,10 @@ def _deliver_targets(job: Mapping) -> Iterator[tuple[str, str, str]]:
 
 def _job_names(job: Mapping, call: SendCall, spellings: frozenset[str]) -> bool:
     tokens = (token.rstrip(".!?…") for token in _PROMPT_SEPARATORS.split(str(job.get("prompt") or "")))
-    if any(_reads_as_address(token) and _same(token, spelled) for token in tokens for spelled in spellings):
+    if any(reads_as_address(token) and same_address(token, spelled) for token in tokens for spelled in spellings):
         return True
     return any(
-        platform == call.platform and thread in ("", call.thread) and any(_same(chat, spelled) for spelled in spellings)
+        platform == call.platform and thread in ("", call.thread) and any(same_address(chat, spelled) for spelled in spellings)
         for platform, chat, thread in _deliver_targets(job))
 
 

@@ -293,7 +293,9 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional
         return None, grant
     from tools import send_rules
     destination = send_rules.owner_turn_destination(prefixed, args, identity)
-    if destination and send_rules.allows(prefixed, destination.signature, gate=outbound_send_grant.MCP_GATE):
+    draft = build_card(server_name, tool_name, args)["draft"]
+    if send_rules.cleared(prefixed, destination, draft["recipient"], draft["channel"],
+                          gate=outbound_send_grant.MCP_GATE):
         return None, grant
     refusal = _approve(server_name, tool_name, args, prefixed, destination)
     return (refusal, None) if refusal else (None, grant)

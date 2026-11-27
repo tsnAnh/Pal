@@ -84,6 +84,7 @@ class LiveSession:
     # A viewer attached while a guarded deferred pick awaits consent: the next boundary asks again.
     reask_pick: bool = False
     iphone_toolset: bool | None = None
+    send_order: object = None
     # (principal, effort) of a ``/reasoning`` command that arrived while a turn ran: applied in memory at
     # once, committed to the policy at the next boundary (gateway/session_setting_commands.py).
     pending_reasoning: tuple | None = None
@@ -1056,7 +1057,9 @@ class SessionAuthority:
         latched for the agent this generation adopts (adopt_agent, under the same lock):
         ``(None, True)``. A claim with no steer seam (cron, managed worker) latches nothing."""
         from gateway.run_plugin_injection import wake_background_wait
+        from tools.send_rules import turn_order
         wake_background_wait(self, ref, person_input=True)  # a steer/redirect ends a plugin turn's grace
+        turn_order.void(self.sessions.get(ref.session_id))
         adopted_generation, agent = self.adopted.get(ref.session_id, (None, None))
         if adopted_generation != generation:
             agent = self.agent(ref) if self._runs_own_agent(ref) else None
@@ -1085,6 +1088,9 @@ class SessionAuthority:
                 from agent.interrupt_compat import request_hard_interrupt
                 request_hard_interrupt(agent)
             latched, steers = self.pending_steers.pop(session_id, (None, ()))
+            if latched == generation and steers:
+                from tools.send_rules import turn_order
+                turn_order.void(live)
             for text in steers if latched == generation else ():
                 agent.steer(text)
             from gateway.session_queued_controls import deliver_latched
@@ -1144,6 +1150,8 @@ class SessionAuthority:
             self.check_approval_generation(ref.session_id, generation)
             if not isinstance(prompt_id, str) or not prompt_id:
                 raise AuthorityRefusal("invalid_params")
+            from tools.send_rules import turn_order
+            turn_order.void(live)
             return live.controls.respond(ref.session_id, generation, prompt_id, response, kind=kind)
 
     async def _claim_next(self, ref, live):

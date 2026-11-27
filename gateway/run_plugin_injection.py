@@ -109,7 +109,11 @@ def person_input_joined_turn(runner, session_key):
     path accepted it): the person's text went into the running turn and is never queued, so no
     arrival signal reports it."""
     from gateway.session_authorities import active_authority
+    from tools.send_rules import turn_order
     authority = active_authority(runner)
+    for live in list(authority.sessions.values()) if authority is not None else ():
+        if getattr(live, "route", None) == session_key:
+            turn_order.void(live)
     # Every steer, /stop and /new lands here on the loop: with no plugin turn waiting (the common
     # case) nothing touches SessionDB; the owner lookup otherwise runs in a worker, never on the loop.
     if authority is None or not any(_wait_pending(live) for live in list(authority.sessions.values())):

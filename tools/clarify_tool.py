@@ -182,6 +182,38 @@ def _result(responses: list[dict], reply: dict) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
+ALREADY_ORDERED = ("No question was shown: your owner already allowed this send. Make the send call now with exactly "
+                   "the arguments you passed in `send`.")
+
+
+_SEND_CHOICES = frozenset({"send", "send it", "send now", "send as written", "yes", "post", "post it", "gửi",
+                           "gửi đi", "gửi ngay", "đăng"})
+_OTHER_CHOICES = frozenset({"cancel", "don't send", "do not send", "edit", "edit then send", "edit first", "not now",
+                            "no", "stop", "hủy", "huỷ", "sửa", "sửa rồi gửi", "không gửi", "đừng gửi", "thôi"})
+
+
+def _only_confirms_a_send(entry: dict) -> bool:
+    """A form offering a real alternative (another version, another place) is a question, not a confirmation."""
+    if not entry["send"]:
+        return False
+    send = entry["send"]["choice"]
+    others = [choice for choice in entry["choices_offered"] if choice != send]
+    return send.casefold() in _SEND_CHOICES and all(choice.casefold() in _OTHER_CHOICES for choice in others)
+
+
+def _needs_no_form(entry: dict) -> bool:
+    if not _only_confirms_a_send(entry):
+        return False
+    from tools import send_rules
+    from tools.bot_mode_drafts import send_preview
+    outbound = send_preview(entry["send"])
+    if outbound is None:
+        return False
+    destination = send_rules.owner_turn_destination(outbound.tool, entry["send"]["arguments"])
+    candidate = send_rules.offer(outbound.tool, destination, outbound.recipient, outbound.channel)
+    return send_rules.already_allowed(destination, candidate)
+
+
 def _issue_send_grants(normalized: list[dict], responses: list[dict]) -> None:
     from tools import outbound_send_grant
     for entry, response in zip(normalized, responses):
@@ -197,6 +229,8 @@ def clarify_tool(questions, callback: Optional[Callable] = None) -> str:
         return tool_error(error)
     if callback is None:
         return tool_error(_UNAVAILABLE)
+    if len(normalized) == 1 and _needs_no_form(normalized[0]):
+        return json.dumps({"responses": [], "outcome": "not_asked", "notice": ALREADY_ORDERED}, ensure_ascii=False)
     bare = sum(1 for q in normalized if not q["choices_offered"] and not q["default"])
     if bare:
         logger.info("clarify.bare_question count=%d of=%d", bare, len(normalized))

@@ -662,13 +662,15 @@ def _pre_tool_block(agent, ref: _ToolCallRef):
     hook-modified args applied. Hook failures never block, except that an outbound send fails closed in a Bot Mode profile."""
     try:
         from hermes_cli.plugins import _dispatch_pre_tool_call_hooks
+        from tools.details_bubble import bound_line_sink
 
-        block_msg, modified_args = _dispatch_pre_tool_call_hooks(
-            ref.name,
-            ref.args,
-            **tool_hook_ids(agent, ref.task_id, ref.call_id),
-            middleware_trace=list(ref.trace),
-        )
+        with bound_line_sink(getattr(agent, "_deliver_details_bubble", None)):
+            block_msg, modified_args = _dispatch_pre_tool_call_hooks(
+                ref.name,
+                ref.args,
+                **tool_hook_ids(agent, ref.task_id, ref.call_id),
+                middleware_trace=list(ref.trace),
+            )
         return block_msg, (ref.args if modified_args is None else modified_args)
     except Exception:
         from tools.bot_mode_drafts import blocked_on_failure

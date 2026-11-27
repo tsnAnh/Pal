@@ -444,8 +444,11 @@ async def _admission_scope(authority, ref, home, row, event, captured):
     """The execution scope, inside the adapter lifecycle the executor owns for a producer-admitted
     turn (``session_producer_lifecycle``; a no-op for every other admission)."""
     from agent.runtime_scope import bind_turn, claim_fence
+    from gateway.session_operator import typed_words
+    from tools.send_rules import turn_order
     async with producer_turn(authority, row, event, captured):
-        with await _execution_scope(authority, home), bind_turn(ref.session_id, row['admission_id'], claim_fence(row)):
+        with await _execution_scope(authority, home), bind_turn(ref.session_id, row['admission_id'], claim_fence(row)), \
+                turn_order.opened(authority.sessions[ref.session_id], typed_words(row)):
             yield
 
 

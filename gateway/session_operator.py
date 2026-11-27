@@ -21,6 +21,20 @@ def is_viewer_input(row):
             and {'text'} <= set(row['payload']) <= LOCAL_INPUT_FIELDS | {'local_operator_v1'})
 
 
+_PLAIN_MESSAGE_FIELDS = frozenset({'text', 'attachments_v1', 'surface_v1', 'local_operator_v1'})
+
+
+def typed_words(row):
+    """The text of a plain message a viewer typed, ``None`` for any other admission: only such words can order a
+    send (hidden, spoken, command-line, card, unattended and finite submits cannot)."""
+    if not is_viewer_input(row) or not set(row['payload']) <= _PLAIN_MESSAGE_FIELDS:
+        return None
+    surface = row['payload'].get('surface_v1') or {}
+    if surface.get('surface') == 'voice-live' or surface.get('voice_turn'):
+        return None
+    return row['payload']['text'] if isinstance(row['payload']['text'], str) else None
+
+
 def check_local_input(authority, ref, row, *, source=None):
     payload = row['payload']
     allowed = set(LOCAL_INPUT_FIELDS)
