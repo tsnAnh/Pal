@@ -216,14 +216,15 @@ extension SearchEngine {
     static func routineHits(in result: JSONValue, bot: SearchBot) -> [RoutineHit] {
         (result["jobs"]?.arrayValue ?? []).compactMap { row in
             guard let id = row["job_id"]?.stringValue else { return nil }
-            let name = row["name"]?.stringValue ?? ""
+            let preview = row["prompt_preview"]?.stringValue ?? ""
+            let name = RoutineName.readable(row["name"]?.stringValue, jobID: id)
             return RoutineHit(
                 botName: bot.name,
                 botDisplayName: bot.displayName,
                 jobID: id,
-                name: name.isEmpty ? (row["prompt_preview"]?.stringValue ?? id) : name,
+                name: name ?? (preview.isEmpty ? RoutineName.untitled : preview),
                 schedule: row["schedule_text"]?.stringValue ?? row["schedule"]?.stringValue ?? "",
-                promptPreview: row["prompt_preview"]?.stringValue ?? "",
+                promptPreview: preview,
                 isEnabled: row["enabled"]?.boolValue ?? true,
                 nextRunAt: row["next_run_at"].flatMap(SearchDates.date(from:))
             )

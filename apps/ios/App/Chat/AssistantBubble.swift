@@ -8,7 +8,6 @@ struct AssistantBubble: View {
     var images: [ImageReference] = []
     var files: [FileReference] = []
     var filesPending = false
-    var failureLead: String?
     let highlight: String
     let isCurrentMatch: Bool
     var isStreaming: Bool = false
@@ -20,19 +19,12 @@ struct AssistantBubble: View {
     var body: some View {
         let segments = parsed.segments
         let (media, otherFiles) = MediaReference.split(files)
-        let leadsAlone = failureLead != nil && !startsWithText(segments)
-        let carrier = leadsAlone ? nil : (segments.first(where: isText) ?? segments.first)?.id
+        let carrier = (segments.first(where: isText) ?? segments.first)?.id
         VStack(alignment: .leading, spacing: ChatMetrics.sameSenderGap) {
             if !images.isEmpty { ChatImageGrid(images: images).bubbleWidth(.leading) }
             if !text.isEmpty {
-                if leadsAlone, let failureLead {
-                    textBubble(nil, lead: failureLead, carries: true, label: text)
-                }
                 ForEach(segments) { segment in
-                    segmentView(
-                        segment, leadsMessage: segment.id == segments.first?.id,
-                        carries: segment.id == carrier, single: segments.count == 1
-                    )
+                    segmentView(segment, carries: segment.id == carrier, single: segments.count == 1)
                 }
             }
             if !media.isEmpty { MediaGrid(media: media).bubbleWidth(.leading) }
@@ -46,15 +38,11 @@ struct AssistantBubble: View {
         if case .text = segment { true } else { false }
     }
 
-    private func startsWithText(_ segments: [MessageSegment]) -> Bool {
-        segments.first.map(isText) ?? false
-    }
-
     @ViewBuilder
-    private func segmentView(_ segment: MessageSegment, leadsMessage: Bool, carries: Bool, single: Bool) -> some View {
+    private func segmentView(_ segment: MessageSegment, carries: Bool, single: Bool) -> some View {
         switch segment {
         case .text(let textSegment):
-            textBubble(textSegment, lead: leadsMessage ? failureLead : nil, carries: carries, label: single ? text : textSegment.spoken)
+            textBubble(textSegment, carries: carries, label: single ? text : textSegment.spoken)
         case .table(_, let table):
             withActions(TableBubbleView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch), carries, placement: .insideBubble)
         }
@@ -65,21 +53,12 @@ struct AssistantBubble: View {
         if carries { bubble.messageActions(side: .assistant, placement: placement) } else { bubble }
     }
 
-    private func leadView(_ lead: String) -> some View {
-        FailureLead(text: lead, highlight: highlight, isCurrentMatch: isCurrentMatch).bubbleTextSelection()
-    }
-
-    private func textBubble(_ segment: TextSegment?, lead: String?, carries: Bool, label: String) -> some View {
+    private func textBubble(_ segment: TextSegment, carries: Bool, label: String) -> some View {
         let bubble = ChatBubble(style: BubblePalette.agentBubble) {
-            VStack(alignment: .leading, spacing: 8) {
-                if let lead { leadView(lead) }
-                if let segment {
-                    MarkdownView(
-                        segment: segment, wholeBubbleSelection: wholeBubbleSelection,
-                        highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming
-                    )
-                }
-            }
+            MarkdownView(
+                segment: segment, wholeBubbleSelection: wholeBubbleSelection,
+                highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming
+            )
         }
         .bubbleAccessibility(text: label, identifier: "assistantBubble")
         return withActions(bubble, carries).bubbleWidth(.leading)

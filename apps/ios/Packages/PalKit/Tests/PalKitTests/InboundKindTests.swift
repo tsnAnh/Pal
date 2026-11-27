@@ -32,6 +32,32 @@ struct InboundKindTests {
         transcript.items.first.map(\.inbound)
     }
 
+    private static func wrapped(_ job: String, _ body: String) -> String {
+        "[Cronjob \"\(job)\" output — scheduled job, not the user. Review it and summarize for the chat.]\n\n\(body)"
+    }
+
+    @Test(arguments: ["routine_output", "cron_output", "internal_notification", nil])
+    func aRoutineResultKeepsOnlyItsOwnText(kind: String?) throws {
+        let body = String(repeating: "line one\n\nline two ", count: 1_500) + "end"
+        let row = userRow(Self.wrapped("Báo cáo \"sáng\" 🌅", body), kind: kind)
+        #expect(firstInbound(try transcript([row])) == .routineOutput(body: body))
+    }
+
+    @Test func aRoutineKindWithoutAWrapperUsesTheWholeText() throws {
+        let row = userRow("#201 merged.\n\nNo pull request is open.", kind: "routine_output")
+        #expect(firstInbound(try transcript([row])) == .routineOutput(body: "#201 merged.\n\nNo pull request is open."))
+    }
+
+    @Test func aRoutineResultWithoutTextIsInternal() throws {
+        #expect(firstInbound(try transcript([userRow(" ", kind: "routine_output")])) == .internalNotice)
+        #expect(firstInbound(try transcript([userRow(Self.wrapped("j", ""), kind: "internal_notification")])) == .internalNotice)
+    }
+
+    @Test func aPersonQuotingOrSteeringWithTheWrapperStaysAPerson() throws {
+        #expect(firstInbound(try transcript([userRow("my [Cronjob \"x\" output — y] note\n\nz")])) == .person)
+        #expect(firstInbound(try transcript([userRow(Self.wrapped("j", "body"), kind: "steer")])) == .person)
+    }
+
     @Test func plainUserTextIsAPerson() throws {
         #expect(firstInbound(try transcript([userRow("hello there")])) == .person)
     }

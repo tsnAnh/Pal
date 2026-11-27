@@ -170,7 +170,7 @@ struct TemplateImportWire: Decodable {
                 model: pinned,
                 skills: skills?.elements.map(\.name) ?? [],
                 connections: mcpServers?.elements.map(\.name) ?? [],
-                routines: routines?.elements.map(\.name) ?? [],
+                routines: routines?.elements.map { RoutineName.readable($0.name) ?? RoutineName.untitled } ?? [],
                 skippedRoutines: skippedRoutines?.elements.count ?? 0,
                 toolsets: toolsets,
                 hasPersona: ReasoningEffort.clean(soul) != nil,

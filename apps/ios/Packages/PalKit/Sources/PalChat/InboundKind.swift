@@ -15,7 +15,7 @@ public enum InboundKind: Sendable, Hashable {
     case person
     case botMessage(BotSender, body: String)
     case internalNotice
-    case routineOutput(jobName: String, body: String, failed: Bool)
+    case routineOutput(body: String)
 
     public var isPerson: Bool { self == .person }
 }
@@ -29,8 +29,6 @@ extension InboundKind {
         pattern: "\\A\\[IMPORTANT: \\d+ background process results arrived "
     )
     private static let routineKinds: Set<String> = ["routine_output", "cron_output"]
-    private static let routineJobKeys = ["job_name", "name", "job"]
-    private static let routineFailedStatuses: Set<String> = ["failed", "failure", "error"]
     private static let routineOpening = "[Cronjob \""
     private static let routineJobEnd = "\" output — "
     private static let routineHeaderEnd = "]\n\n"
@@ -43,7 +41,7 @@ extension InboundKind {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let displayKind = row.displayKind
         if displayKind.map(internalKinds.contains) == true || isInternalNotice(trimmed) { return .internalNotice }
-        if let routine = routineOutput(trimmed, displayKind: displayKind, metadata: row.displayMetadata) { return routine }
+        if let body = routineBody(trimmed, displayKind: displayKind) { return .routineOutput(body: body) }
         let range = NSRange(trimmed.startIndex..., in: trimmed)
         if let match = botStamp.firstMatch(in: trimmed, range: range),
            let name = Range(match.range(at: 1), in: trimmed),
@@ -56,42 +54,22 @@ extension InboundKind {
         return .person
     }
 
-    public static func splitFirstSentence(of body: String) -> (lead: String, rest: String) {
-        let lineEnd = body.firstIndex(where: \.isNewline) ?? body.endIndex
-        var index = body.startIndex
-        while index < lineEnd {
-            let next = body.index(after: index)
-            if ".!?".contains(body[index]), next == body.endIndex || body[next].isWhitespace {
-                return (String(body[..<next]), String(body[next...].drop(while: \.isWhitespace)))
-            }
-            index = next
-        }
-        return (String(body[..<lineEnd]), String(body[lineEnd...].drop(while: \.isWhitespace)))
-    }
-
-    private static func routineWrapper(in trimmed: String) -> (job: String, body: String)? {
+    private static func unwrappedRoutineBody(_ trimmed: String) -> String? {
         guard trimmed.hasPrefix(routineOpening),
               let jobEnd = trimmed.range(of: routineJobEnd),
               let headerEnd = trimmed.range(of: routineHeaderEnd, range: jobEnd.upperBound..<trimmed.endIndex)
         else { return nil }
         let job = trimmed[trimmed.index(trimmed.startIndex, offsetBy: routineOpening.count)..<jobEnd.lowerBound]
         guard !job.contains(where: \.isNewline), !trimmed[jobEnd.upperBound..<headerEnd.lowerBound].contains(where: \.isNewline) else { return nil }
-        return (String(job), String(trimmed[headerEnd.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines))
+        return String(trimmed[headerEnd.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func routineOutput(_ trimmed: String, displayKind: String?, metadata: JSONValue?) -> InboundKind? {
+    private static func routineBody(_ trimmed: String, displayKind: String?) -> String? {
         if let displayKind, personKinds.contains(displayKind) { return nil }
-        let wrapped = routineWrapper(in: trimmed)
-        guard wrapped != nil || displayKind.map(routineKinds.contains) == true else { return nil }
-        let body = wrapped?.body ?? trimmed
-        guard !body.isEmpty else { return nil }
-        let sentJob = routineJobKeys.lazy.compactMap { metadata?[$0]?.stringValue }.first { !$0.isEmpty }
-        return .routineOutput(jobName: sentJob ?? wrapped?.job ?? "", body: body, failed: runFailed(metadata))
-    }
-
-    private static func runFailed(_ metadata: JSONValue?) -> Bool {
-        if metadata?["failed"]?.boolValue == true || metadata?["ok"]?.boolValue == false { return true }
-        return metadata?["status"]?.stringValue.map { routineFailedStatuses.contains($0.lowercased()) } ?? false
+        let unwrapped = unwrappedRoutineBody(trimmed)
+        guard unwrapped != nil || displayKind.map(routineKinds.contains) == true else { return nil }
+        let body = unwrapped ?? trimmed
+        return body.isEmpty ? nil : body
     }
 
     private static func isInternalNotice(_ trimmed: String) -> Bool {

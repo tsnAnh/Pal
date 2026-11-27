@@ -47,7 +47,6 @@ struct ChatRow: Identifiable, Equatable {
         case clarify(PendingPrompt)
         case connection(ConnectionCard), noProvider
         case notice(ChatNotice)
-        case routine(RoutineMessage)
         case botThread(BotThreadLink)
         case imageGeneration(ImageGeneration)
     }
@@ -67,9 +66,21 @@ struct ChatRow: Identifiable, Equatable {
         case .user(let text, _): text
         case .assistant(let parsed): parsed.source
         case .notice(.botMessage(_, let body)): body
-        case .routine(let routine): routine.text
         default: nil
         }
+    }
+}
+
+extension ChatRow.Kind {
+    static func reply(
+        _ text: String, isStreaming: Bool, generated: Set<String>, previous: ChatRow.Kind?
+    ) -> (ChatRow.Kind, [ImageReference], [FileReference]) {
+        let content = MessageImages.extract(from: text, role: .assistant, isStreaming: isStreaming)
+        let images = content.images.filter { !generated.contains($0.id) }
+        if case .assistant(let parsed)? = previous, parsed.source == content.text {
+            return (.assistant(parsed), images, content.files)
+        }
+        return (.assistant(.deferringWarm(content.text, isStreaming: isStreaming)), images, content.files)
     }
 }
 

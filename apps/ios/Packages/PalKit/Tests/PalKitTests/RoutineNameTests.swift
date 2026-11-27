@@ -17,6 +17,7 @@ struct RoutineNameTests {
         ("Morning digest", "Morning digest"),
         ("Check Wi-Fi status", "Check Wi-Fi status"),
         ("iPhone backup", "iPhone backup"),
+        ("PR", "PR"),
     ])
     func englishName(stored: String, expected: String) {
         #expect(shown(stored) == expected)
