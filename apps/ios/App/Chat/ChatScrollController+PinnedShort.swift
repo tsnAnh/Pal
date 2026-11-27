@@ -29,8 +29,12 @@ extension ChatScrollController {
         edgeIsArmed = false
         Task { @MainActor [weak self] in
             guard let self, !edgeIsArmed else { return }
-            position = ScrollPosition(idType: String.self)
+            releaseHeldRow()
         }
+    }
+
+    func releaseHeldRow() {
+        position = ScrollPosition(idType: String.self)
     }
 
     private static var nowMilliseconds: Double { Double(LaunchClock.elapsedMilliseconds) }
