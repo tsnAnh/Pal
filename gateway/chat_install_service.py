@@ -75,6 +75,8 @@ class AdapterControl(Protocol):
 
     def seed_config(self, profile: str, defaults: dict[str, Any]) -> None: ...
 
+    def is_live(self, profile: str, platform_id: str) -> bool: ...
+
 
 class GatewayReason(Enum):
     owner_only = "owner_only"
@@ -235,6 +237,8 @@ class ChatInstallService:
             return placed
         if state.step is SetupStep.needs_allow and (state.next_action.link is None or state.next_action.kind is not NextActionKind.open_link):
             state = self._issue_link(provider, state, app_scheme)
+        if state.step is SetupStep.needs_owner:
+            state = self._confirm_known_owner(provider, state)
         if state.step is SetupStep.installing:
             state = self._finish(provider, state)
         return state
@@ -245,12 +249,28 @@ class ChatInstallService:
     def status(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation | None]:
         provider = self._provider(provider_id)
         state = self._current(bot, provider_id, workspace)
+        if (connected := self._as_connected(provider, state)) is not None:
+            return connected, None
         try:
             state = self._renew_dead_allow_link(self._reopen_unmet(provider, state))
         except StaleRevision:
             state = self._current(bot, provider_id, workspace)
         state = self._with_manual_action(provider, state)
         return state, self._installation_of(state)
+
+    def _as_connected(self, provider: ChatProvider, state: SetupState) -> SetupState | None:
+        if state.step is SetupStep.ready or not provider.per_bot_adapter:
+            return None
+        try:
+            live = self.control.is_live(state.bot, state.provider_id)
+        except Exception as exc:  # health: allow BLE001 -- adapter errors carry provider text, so only the exception type is logged
+            logger.warning("chat install live check failed provider=%s error=%s", state.provider_id, type(exc).__name__)
+            return None
+        if not live:
+            return None
+        return state.model_copy(update={
+            "step": SetupStep.ready, "next_action": NextAction(kind=NextActionKind.none, action_id="none"),
+            "error": None, "resume_step": None})
 
     def _installation_of(self, state: SetupState) -> Installation | None:
         if state.installation_id is None or state.step is not SetupStep.ready:
@@ -263,6 +283,8 @@ class ChatInstallService:
         state = self._current(bot, provider_id, workspace)
         if state.step is SetupStep.ready:
             return state, self._installation_of(state)
+        if (connected := self._as_connected(provider, state)) is not None:
+            return connected, None
         if provider.needs_public_url and not (self.public_url() or "").startswith("https://"):
             raise ChatServiceError(GatewayReason.needs_public_url, state, SET_PUBLIC_URL_ACTION)
         try:
@@ -376,6 +398,17 @@ class ChatInstallService:
         self.store.set_owner(state.installation_id, owner)
         state = self._apply(provider, state, SetupEvent(kind=SetupEventKind.owner_confirmed))
         return self._finish(provider, state)
+
+    def _confirm_known_owner(self, provider: ChatProvider, state: SetupState) -> SetupState:
+        installation = self.store.installation(state.installation_id) if state.installation_id else None
+        if installation is None:
+            return state
+        try:
+            owner = provider.authorizing_identity(installation)
+        except Exception as exc:  # health: allow BLE001 -- provider errors carry provider text, so only the exception type is logged
+            logger.warning("chat install owner lookup failed provider=%s error=%s", state.provider_id, type(exc).__name__)
+            return state
+        return self._confirm_owner(provider, state, owner)
 
     def _complete(self, provider: ChatProvider, state: SetupState, installation: Installation,
                   owner_optional: bool = False) -> SetupState:

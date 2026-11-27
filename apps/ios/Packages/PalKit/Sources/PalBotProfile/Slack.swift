@@ -188,14 +188,21 @@ public struct SlackService: Sendable {
     static let invalidTokensCode = 4101
 
     private let gateway: BotsGateway
+    private let callLimit: Duration
 
-    public init(gateway: BotsGateway) {
+    public init(gateway: BotsGateway, callLimit: Duration = SetupLimits().call) {
         self.gateway = gateway
+        self.callLimit = callLimit
+    }
+
+    private func scoped(_ method: String, profile: String, _ params: [String: JSONValue] = [:]) async throws -> JSONValue {
+        let gateway = gateway
+        return try await Deadline.run(callLimit) { try await gateway.scoped(method, profile: profile, params) }
     }
 
     public func status(profile: String) async throws -> SlackStatus {
         do {
-            let result = try await gateway.scoped("messaging.slack.status", profile: profile)
+            let result = try await scoped("messaging.slack.status", profile: profile)
             return SlackStatus(try gateway.decoded(SlackStatusWire.self, result))
         } catch {
             throw BotsError.surface(error)
@@ -204,7 +211,7 @@ public struct SlackService: Sendable {
 
     public func manifest(profile: String, displayName: String) async throws -> SlackManifest {
         do {
-            let result = try await gateway.scoped("messaging.slack.manifest", profile: profile, ["display_name": .string(displayName)])
+            let result = try await scoped("messaging.slack.manifest", profile: profile, ["display_name": .string(displayName)])
             let wire = try gateway.decoded(SlackManifestWire.self, result)
             guard let url = URL(string: wire.createURL), url.scheme == "https", url.host() == "api.slack.com" else {
                 throw BotsError.invalidResponse
@@ -220,7 +227,7 @@ public struct SlackService: Sendable {
         if let bot = tokens.bot { params["bot_token"] = .string(bot.reveal()) }
         if let app = tokens.app { params["app_token"] = .string(app.reveal()) }
         do {
-            let result = try await gateway.scoped("messaging.slack.connect", profile: profile, params)
+            let result = try await scoped("messaging.slack.connect", profile: profile, params)
             return SlackStatus(try gateway.decoded(SlackStatusWire.self, result))
         } catch GatewayTransportError.rpc(let rpc) where rpc.code == Self.invalidTokensCode {
             throw BotsError.rejected(reason: Self.invalidTokensReason)
@@ -231,7 +238,7 @@ public struct SlackService: Sendable {
 
     public func disconnect(profile: String) async throws -> SlackStatus {
         do {
-            let result = try await gateway.scoped("messaging.slack.disconnect", profile: profile)
+            let result = try await scoped("messaging.slack.disconnect", profile: profile)
             return SlackStatus(try gateway.decoded(SlackStatusWire.self, result))
         } catch {
             throw BotsError.surface(error)

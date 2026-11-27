@@ -119,6 +119,13 @@ public struct SetupStatus: Sendable, Equatable {
         }
     }
 
+    public static var tookTooLong: SetupStatus {
+        SetupStatus(
+            title: String(localized: "This is taking too long"), reason: String(localized: "Nothing happened in time. Try again."),
+            actionTitle: String(localized: "Retry"), code: "timed_out"
+        )
+    }
+
     private struct ServerCopy {
         var title: String
         var reason: String

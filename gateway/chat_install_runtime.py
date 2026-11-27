@@ -37,6 +37,12 @@ class MessagingAdapterControl:
         with bot_profile_scope(profile):
             seed_missing(defaults)
 
+    def is_live(self, profile: str, platform_id: str) -> bool:
+        from hermes_cli.web_routers import messaging
+        entry = messaging._require_platform(platform_id)
+        with messaging._profile_scope(_scope_name(profile)) as scoped_dir:
+            return messaging._platform_payloads(scoped_dir, [entry])[0]["state"] == "connected"
+
     def reload(self, profile: str) -> ReloadOutcome:
         from tui_gateway.methods_messaging_slack import _slack_reload
         result = _slack_reload(_scope_name(profile))

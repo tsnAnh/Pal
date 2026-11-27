@@ -54,12 +54,12 @@ extension DiscordSetupPlan {
         default:
             let unreachable = error.code == .providerUnreachable
             status.title = unreachable ? String(localized: "Pal could not reach Discord") : String(localized: "Discord stopped the setup")
-            status.reason = Self.describe(reason: reason, code: error.code, server: name)
+            status.reason = Self.describe(reason: reason, server: name)
         }
         return status
     }
 
-    private static func describe(reason: String, code: ChatSetupErrorCode, server: String) -> String {
+    private static func describe(reason: String, server: String) -> String {
         switch reason {
         case "choose_server": String(localized: "Pal is in more than one server. Go back and pick the one for this bot.")
         case "bad_server_id": String(localized: "Discord did not recognise that server. Go back and pick it again.")
@@ -68,8 +68,7 @@ extension DiscordSetupPlan {
         case "network": String(localized: "Pal could not reach Discord. Check your connection, then retry.")
         case let value where value.hasPrefix("http_"):
             String(localized: "Discord answered with an error (\(String(value.dropFirst(5)))). Retry in a moment.")
-        case let value where !value.isEmpty: String(localized: "Discord reported: \(value.replacingOccurrences(of: "_", with: " ")).")
-        default: String(localized: "Discord reported \(code.rawValue.replacingOccurrences(of: "_", with: " ")).")
+        default: String(localized: "Discord did not finish the setup. Retry in a moment.")
         }
     }
 }

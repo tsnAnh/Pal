@@ -322,6 +322,14 @@ class GatewaySecondaryReconnectMixin:
             self._disown_secondary_platform(profile_name, platform)
         return final
 
+    def _record_platform_connected(self, status_key: str, adapter) -> None:
+        degraded = adapter.send_path_degraded
+        self._update_platform_runtime_status(
+            status_key, platform_state="retrying" if degraded else "connected", error_code=None,
+            error_message=adapter.DEGRADED_STATUS_MESSAGE if degraded else None,
+            needs_attention=False, retrying_since=None,
+        )
+
     async def _run_secondary_profile_reconnect(
         self, profile_name: str, platform: Platform, predecessor=None
     ) -> None:
@@ -347,6 +355,7 @@ class GatewaySecondaryReconnectMixin:
                         profile_map = self._profile_adapters.setdefault(profile_name, {})
                         if platform not in profile_map:
                             profile_map[platform] = adapter
+                            self._record_platform_connected(f"{profile_name}:{platform.value}", adapter)
                             hand_over_held_inbound(predecessor, adapter)
                             self._sync_voice_mode_state_to_adapter(adapter)
                             logger.info("✓ %s reconnected (profile: %s)", platform.value, profile_name)

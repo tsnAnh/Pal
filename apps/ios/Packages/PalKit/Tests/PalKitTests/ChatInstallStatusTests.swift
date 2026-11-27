@@ -54,6 +54,20 @@ struct ChatInstallStatusTests {
         #expect(model.noticeError == nil)
     }
 
+    @Test func aReadyEventReadsTheInstallationRecordBeforeShowingReady() async throws {
+        let client = try FakeChatInstallClient([try chatProvider()], try chatState("installing", 4))
+        let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
+        await model.load()
+        let record = #"{"id":"slack-T1-pal","provider_id":"slack","bot":"pal","workspace_id":"T1","workspace_name":"Studio","#
+            + #""status":"active","created_at":1,"updated_at":1,"vault_item_ids":[]}"#
+        let installation = try JSONDecoder().decode(ChatInstallationWire.self, from: Data(record.utf8))
+        await client.set(try chatState("ready", 5))
+        await client.setInstallation(installation)
+        await model.receive(try chatInstallChanged("ready", 5))
+        #expect(model.screen == .ready)
+        #expect(model.snapshot?.installation == installation)
+    }
+
     private func readyModel() async throws -> (ChatInstallModel, FakeChatInstallClient) {
         let client = try FakeChatInstallClient([try chatProvider()], try chatState("ready", 7))
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)

@@ -9,7 +9,7 @@ usage() {
 usage: run-ui-e2e [--platform ios|macos]
 Runs the UI tests against a sandbox gateway (stub LLM, temp HERMES_HOME).
   ios    (default) the iOS Simulator; artifacts in Artifacts/ui-e2e
-  macos  the native Mac app on this Mac: SignInFlowTests, BotChatE2ETests, ComputerE2ETests, MacShellE2ETests, MacModalsE2ETests, MacModalVisibleE2ETests, MacChatDetailsE2ETests, MacPinnedHeroE2ETests, MacBotManagementE2ETests, MacRoomSheetE2ETests, KanbanE2ETests, KanbanCardDetailE2ETests against the
+  macos  the native Mac app on this Mac: SignInFlowTests, BotChatE2ETests, ComputerE2ETests, MacShellE2ETests, MacModalsE2ETests, MacModalVisibleE2ETests, MacChatDetailsE2ETests, MacPinnedHeroE2ETests, MacBotManagementE2ETests, MacRoomSheetE2ETests, KanbanE2ETests, KanbanCardDetailE2ETests, DiscordOwnerE2ETests against the
          sandbox gateway and an rfb-test-server on bot-alpha; artifacts in Artifacts/mac-e2e/<timestamp>
          (HERMES_UI_E2E_ARTIFACTS overrides it). MacPerfTourTests runs only when selected with HERMES_UI_E2E_ONLY; its phases.jsonl
          and the app's pal-frames.csv land in <artifacts>/perf. HERMES_UI_E2E_MAC_DERIVED overrides the Mac DerivedData path.
@@ -68,7 +68,7 @@ BOOTED_BY_US=0
 MAC_DERIVED="${HERMES_UI_E2E_MAC_DERIVED:-$IOS_DIR/build/DerivedDataMac}"
 MAC_APP_BINARY="$MAC_DERIVED/Build/Products/Debug/Pal.app/Contents/MacOS/Pal"
 RFB_STATE="$CTL_DIR/rfb"
-MAC_TESTS=(SignInFlowTests BotChatE2ETests ComputerE2ETests MacShellE2ETests MacModalsE2ETests MacModalVisibleE2ETests MacChatDetailsE2ETests MacPinnedHeroE2ETests MacBotManagementE2ETests MacRoomSheetE2ETests KanbanE2ETests KanbanCardDetailE2ETests ConnectAppsE2ETests ConnectorDetailsE2ETests)
+MAC_TESTS=(SignInFlowTests BotChatE2ETests ComputerE2ETests MacShellE2ETests MacModalsE2ETests MacModalVisibleE2ETests MacChatDetailsE2ETests MacPinnedHeroE2ETests MacBotManagementE2ETests MacRoomSheetE2ETests KanbanE2ETests KanbanCardDetailE2ETests ConnectAppsE2ETests ConnectorDetailsE2ETests DiscordOwnerE2ETests)
 
 disk_report() {
   du -sh "$HOME/.android/avd" "$HOME/Library/Developer/CoreSimulator/Devices" "$HOME/Library/Developer/XCTestDevices" 2>&1

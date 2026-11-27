@@ -60,6 +60,8 @@ class FakeDiscord:
     hidden_guilds: set[str] = field(default_factory=set)
     forbidden_guilds: set[str] = field(default_factory=set)
     sequence: int = 0
+    application_extra: dict = field(default_factory=dict)
+    later_application_response: httpx.Response | None = None
 
     def __post_init__(self) -> None:
         self.transport = httpx.MockTransport(self.handler)
@@ -117,7 +119,10 @@ class FakeDiscord:
         return httpx.Response(200, json=[{"id": g, "name": f"Server {g[-3:]}"} for g in self.guild_ids])
 
     def route_application(self, body):
-        return httpx.Response(200, json={"id": BOT_ID, "flags": MESSAGE_CONTENT_INTENT if self.intent_enabled else 0})
+        if self.later_application_response is not None and len(self.calls("GET", "/applications/@me")) > 1:
+            return self.later_application_response
+        return httpx.Response(200, json={
+            "id": BOT_ID, "flags": MESSAGE_CONTENT_INTENT if self.intent_enabled else 0, **self.application_extra})
 
     def guild_error(self, guild: str):
         if guild in self.forbidden_guilds:

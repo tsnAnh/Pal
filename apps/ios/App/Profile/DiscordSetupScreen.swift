@@ -22,7 +22,10 @@ struct DiscordEntryView: View {
         }
         return DiscordSetupModel(
             displayName: displayName,
-            gateway: ScriptedDiscordSetup(appReady: arguments.contains(ScriptedDiscordSetup.appReadyArgument), channel: botName),
+            gateway: ScriptedDiscordSetup(
+                appReady: arguments.contains(ScriptedDiscordSetup.appReadyArgument),
+                needsOwner: arguments.contains(ScriptedDiscordSetup.needsOwnerArgument), channel: botName
+            ),
             timing: ScriptedDiscordSetup.timing
         )
     }

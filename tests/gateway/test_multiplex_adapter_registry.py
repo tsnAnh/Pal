@@ -14,10 +14,12 @@ import gateway.run as gateway_run
 from gateway.config import GatewayConfig, Platform, PlatformConfig
 from gateway.platforms.helpers import MessageDeduplicator
 from gateway.run import GatewayRunner
-from gateway.status import flush_runtime_status
+from gateway.status import flush_runtime_status, read_runtime_status
 
 
 class _FakeAdapter:
+    send_path_degraded = False
+
     def __init__(self, token=None, config=None):
         self.token = token
         self.config = config
@@ -190,6 +192,7 @@ class TestProfileRuntimeStatus:
 
 
 class _SecondaryRecoveryAdapter:
+    send_path_degraded = False
     platform = Platform.DISCORD
 
     def __init__(self, *, retryable=True):
@@ -504,6 +507,28 @@ class TestSecondaryProfileFatalRecovery:
         assert runner._profile_adapters == {}
         assert replacement.disconnected is True
         assert runner._profile_failed_platforms == {}
+
+
+class TestSecondaryConnectedStatus:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("entry", ["startup", "reconnect"])
+    @pytest.mark.parametrize(("degraded", "recorded"), [(False, "connected"), (True, "retrying")])
+    async def test_a_connected_secondary_bot_is_recorded_under_its_profile(self, monkeypatch, entry, degraded, recorded):
+        runner = _secondary_recovery_runner()
+        adapter = _SecondaryRecoveryAdapter()
+        adapter.send_path_degraded = degraded
+        adapter.DEGRADED_STATUS_MESSAGE = "waiting for the first receive"
+        _install_secondary_reconnect_context(monkeypatch, runner, adapter)
+        _stub_secondary_start(monkeypatch, runner)
+        monkeypatch.setattr(runner, "_connect_adapter_with_timeout", AsyncMock(return_value=True))
+
+        if entry == "startup":
+            await runner._start_one_profile_adapters("reviewer", Path("/profiles/reviewer"), {})
+        else:
+            await runner._run_secondary_profile_reconnect("reviewer", Platform.DISCORD)
+        flush_runtime_status()
+
+        assert read_runtime_status()["platforms"]["reviewer:discord"]["state"] == recorded
 
 
 class TestSecondaryStartupFailureRecovery:
@@ -1003,6 +1028,8 @@ class TestSecondaryProfileConfigHandling:
         from gateway.config import GatewayConfig, Platform, PlatformConfig
 
         class _PhotonAdapter:
+            send_path_degraded = False
+
             def __init__(self, secret, port):
                 self._project_secret = secret
                 self._sidecar_bind = "127.0.0.1"
@@ -1063,6 +1090,8 @@ class TestSecondaryProfileConfigHandling:
         from gateway.config import GatewayConfig, Platform, PlatformConfig
 
         class _PhotonAdapter:
+            send_path_degraded = False
+
             def __init__(self, secret, should_connect):
                 self._project_secret = secret
                 self._sidecar_bind = "127.0.0.1"
@@ -1161,8 +1190,8 @@ class TestSecondaryProfileConfigHandling:
         assert connected == (2 if paired else 1)
         assert factory_calls == ([Platform.WHATSAPP, Platform.DISCORD] if paired else [Platform.DISCORD])
         if not paired:
-            assert statuses[-1][1]["error_code"] == "whatsapp_unpaired"
-            assert "hermes -p clientbot whatsapp" in statuses[-1][1]["error_message"]
+            [unpaired] = [kw for _, kw in statuses if kw.get("error_code") == "whatsapp_unpaired"]
+            assert "hermes -p clientbot whatsapp" in unpaired["error_message"]
 
 
 class TestSecondaryProfileHookRegistration:

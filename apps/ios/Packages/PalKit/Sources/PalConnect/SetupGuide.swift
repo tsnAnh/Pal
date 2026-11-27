@@ -53,14 +53,19 @@ public struct SetupField: Decodable, Sendable, Hashable, Identifiable {
     public var prefixes: [String]
     public var suffix: String?
     public var dottedParts: Int?
+    public var digits: ClosedRange<Int>?
 
-    public init(id: String, label: String, secret: Bool = false, prefixes: [String] = [], suffix: String? = nil, dottedParts: Int? = nil) {
+    public init(
+        id: String, label: String, secret: Bool = false, prefixes: [String] = [], suffix: String? = nil, dottedParts: Int? = nil,
+        digits: ClosedRange<Int>? = nil
+    ) {
         self.id = id
         self.label = label
         self.secret = secret
         self.prefixes = prefixes
         self.suffix = suffix
         self.dottedParts = dottedParts
+        self.digits = digits
     }
 
     enum CodingKeys: String, CodingKey { case id, label, secret, prefixes, suffix }
@@ -73,6 +78,7 @@ public struct SetupField: Decodable, Sendable, Hashable, Identifiable {
         prefixes = try container.decodeIfPresent([String].self, forKey: .prefixes) ?? []
         suffix = try container.decodeIfPresent(String.self, forKey: .suffix).flatMap { $0.isEmpty ? nil : $0 }
         dottedParts = nil
+        digits = nil
     }
 }
 
@@ -83,6 +89,7 @@ public enum SetupFieldShape: Sendable, Equatable {
     case wrongStart([String])
     case wrongEnd(String)
     case wrongParts(Int)
+    case wrongDigits(ClosedRange<Int>)
 
     public var isValid: Bool { self == .valid }
 
@@ -93,6 +100,7 @@ public enum SetupFieldShape: Sendable, Equatable {
         case .wrongStart(let prefixes): String(localized: "Should start with \(prefixes.joined(separator: String(localized: " or ")))")
         case .wrongEnd(let suffix): String(localized: "Should end with \(suffix)")
         case .wrongParts(let count): String(localized: "Should be \(count) parts joined by dots")
+        case .wrongDigits(let count): String(localized: "Should be \(count.lowerBound) to \(count.upperBound) digits")
         }
     }
 }
@@ -106,6 +114,9 @@ extension SetupField {
     public func shape(of raw: String) -> SetupFieldShape {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.isEmpty { return .empty }
+        if let digits {
+            return digits.contains(value.count) && value.allSatisfy({ ("0"..."9").contains($0) }) ? .valid : .wrongDigits(digits)
+        }
         if value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil { return .hasSpaces }
         if !prefixes.isEmpty, !prefixes.contains(where: { value.hasPrefix($0) }) { return .wrongStart(prefixes) }
         if let suffix, !value.hasSuffix(suffix) { return .wrongEnd(suffix) }

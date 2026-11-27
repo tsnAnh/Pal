@@ -8,9 +8,11 @@ public struct DiscordSetupPlan: Sendable, Equatable {
     public static let serverID = "server"
     public static let inviteID = "invite"
     public static let creatingID = "creating"
+    public static let ownerID = "owner"
     public static let doneID = "done"
 
     public static let tokenField = "token"
+    public static let ownerField = "owner_member_id"
     public static let anotherServerID = "new"
     public static let guildPrefix = "guild."
 
@@ -21,16 +23,18 @@ public struct DiscordSetupPlan: Sendable, Equatable {
         public var pickedGuildID: String?
         public var inviteURL: URL?
         public var creatingStartsItself: Bool
+        public var asksOwner: Bool
         public var installed: DiscordInstalled?
 
         public init(
             guilds: [DiscordGuild] = [], pickedGuildID: String? = nil, inviteURL: URL? = nil, creatingStartsItself: Bool = false,
-            installed: DiscordInstalled? = nil
+            asksOwner: Bool = false, installed: DiscordInstalled? = nil
         ) {
             self.guilds = guilds
             self.pickedGuildID = pickedGuildID
             self.inviteURL = inviteURL
             self.creatingStartsItself = creatingStartsItself
+            self.asksOwner = asksOwner
             self.installed = installed
         }
     }
@@ -38,14 +42,16 @@ public struct DiscordSetupPlan: Sendable, Equatable {
     public let steps: [FlowStep]
 
     public init(displayName name: String, _ inputs: Inputs = Inputs()) {
-        steps = [
+        var steps = [
             Self.start(name),
             Self.token(),
             Self.server(inputs),
             Self.invite(name, inputs.inviteURL),
             Self.creating(name, inputs),
-            Self.done(name, inputs.installed),
         ]
+        if inputs.asksOwner { steps.append(Self.owner(name)) }
+        steps.append(Self.done(name, inputs.installed))
+        self.steps = steps
     }
 
     public func engine(finished: Bool = false, at stepID: String = startID) -> StepFlowEngine? {
@@ -169,6 +175,20 @@ public struct DiscordSetupPlan: Sendable, Equatable {
             id: creatingID, title: String(localized: "Create this bot's channel"), body: body,
             kind: inputs.creatingStartsItself ? .automatic : .action(waitingTitle: working, waitingBody: ""),
             primaryTitle: create, heading: inputs.creatingStartsItself ? working : create
+        )
+    }
+
+    private static func owner(_ name: String) -> FlowStep {
+        FlowStep(
+            id: ownerID, title: String(localized: "Your Discord user id"),
+            body: String(
+                localized: """
+                \(name) only answers you. In Discord open **Settings**, then **Advanced**, and switch on **Developer Mode**. \
+                Then right-click your name and choose **Copy User ID**.
+                """
+            ),
+            kind: .paste(fields: [SetupField(id: ownerField, label: String(localized: "Your Discord user id"), digits: 17...20)]),
+            primaryTitle: String(localized: "Continue"), allowsBack: false
         )
     }
 

@@ -7,15 +7,18 @@ private actor FakeDiscord: DiscordSetupGateway {
     var app: Bool
     var lists: [[DiscordGuild]]
     var existing: DiscordInstalled?
-    var installResult: Result<DiscordInstalled, SetupStatusError>
+    var installResult: Result<DiscordInstallOutcome, SetupStatusError>
+    var ownerResult: Result<DiscordInstallOutcome, SetupStatusError> = .success(.installed(wizardInstalled))
     var tokenResult: Result<Void, SetupStatusError> = .success(())
     private(set) var savedTokens: [String] = []
     private(set) var installs: [String] = []
+    private(set) var confirmedOwners: [[String]] = []
+    private var silent: Set<String> = []
     private var polls = 0
 
     init(
         app: Bool, lists: [[DiscordGuild]] = [[]], existing: DiscordInstalled? = nil,
-        installResult: Result<DiscordInstalled, SetupStatusError> = .success(wizardInstalled)
+        installResult: Result<DiscordInstallOutcome, SetupStatusError> = .success(.installed(wizardInstalled))
     ) {
         self.app = app
         self.lists = lists
@@ -23,11 +26,22 @@ private actor FakeDiscord: DiscordSetupGateway {
         self.installResult = installResult
     }
 
-    func setInstall(_ result: Result<DiscordInstalled, SetupStatusError>) { installResult = result }
+    func setInstall(_ result: Result<DiscordInstallOutcome, SetupStatusError>) { installResult = result }
+
+    func setOwner(_ result: Result<DiscordInstallOutcome, SetupStatusError>) { ownerResult = result }
 
     func setToken(_ result: Result<Void, SetupStatusError>) { tokenResult = result }
 
-    func appExists() -> Bool { app }
+    func silence(_ calls: Set<String>) { silent = calls }
+
+    private func hush(_ call: String) async {
+        if silent.contains(call) { await neverAnswers() }
+    }
+
+    func appExists() async -> Bool {
+        await hush("appExists")
+        return app
+    }
 
     func saveToken(_ token: String) throws {
         try tokenResult.get()
@@ -44,9 +58,15 @@ private actor FakeDiscord: DiscordSetupGateway {
 
     func existingInstall(in guilds: [DiscordGuild]) -> DiscordInstalled? { existing }
 
-    func install(in guild: DiscordGuild) throws -> DiscordInstalled {
+    func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
         installs.append(guild.id)
+        await hush("install")
         return try installResult.get()
+    }
+
+    func confirmOwner(_ userID: String, in guild: DiscordGuild) throws -> DiscordInstallOutcome {
+        confirmedOwners.append([userID, guild.id])
+        return try ownerResult.get()
     }
 }
 
@@ -61,7 +81,7 @@ private func missingWebhooks() -> SetupStatusError {
 
 @MainActor
 private func model(_ fake: FakeDiscord, attempts: Int = 4) -> DiscordSetupModel {
-    DiscordSetupModel(displayName: "Ada", gateway: fake, timing: .init(interval: .milliseconds(1), attempts: attempts))
+    DiscordSetupModel(displayName: "Ada", gateway: fake, timing: .init(interval: .milliseconds(1), attempts: attempts, limits: quickLimits))
 }
 
 @Suite("Discord setup wizard")
@@ -173,7 +193,7 @@ struct DiscordSetupWizardTests {
         let failure = try #require(wizard.flow.engine.failure)
         #expect(failure.reason == "Pal is missing the Manage Webhooks permission in Studio. Give the Pal role that permission in Server Settings, then retry.")
         #expect(failure.link?.label == "Open server settings")
-        await fake.setInstall(.success(wizardInstalled))
+        await fake.setInstall(.success(.installed(wizardInstalled)))
         await wizard.flow.recover(from: failure)
         #expect(wizard.flow.engine.isFinished)
     }
@@ -187,8 +207,93 @@ struct DiscordSetupWizardTests {
         #expect(reason("rate_limited", retry: 7).contains("7 s"))
         #expect(reason("route_conflict").contains("Studio"))
         #expect(reason("missing_intent").contains("Message Content"))
-        #expect(reason("weird_thing") == "Discord reported: weird thing.")
         #expect(reason("missing_permission", permissions: ["Manage Channels", "Manage Webhooks"]).contains("Manage Channels, Manage Webhooks"))
+    }
+
+    @Test(arguments: ["needs_owner", "weird_thing", ""])
+    func aReasonPalDoesNotKnowNeverShowsAsAnError(code: String) {
+        let error = ChatSetupErrorWire(code: .installFailed, fix: .retry, reason: code)
+        let status = DiscordSetupPlan.failure(error, server: studio, invite: nil)
+        #expect(status.title == "Discord stopped the setup")
+        #expect(status.reason == "Discord did not finish the setup. Retry in a moment.")
+        #expect(status.actionTitle == "Retry")
+    }
+
+    private func waitingForTheOwner(_ fake: FakeDiscord) async -> DiscordSetupModel {
+        let wizard = model(fake)
+        await wizard.load()
+        await wizard.flow.performPrimary()
+        return wizard
+    }
+
+    @Test func aSetupThatNeedsTheOwnerAsksForTheDiscordUserIdInPlainWords() async throws {
+        let wizard = await waitingForTheOwner(FakeDiscord(app: true, lists: [[studio]], installResult: .success(.needsOwner)))
+        let step = wizard.flow.engine.current
+        #expect(step.id == DiscordSetupPlan.ownerID)
+        #expect(step.screenTitle == "Your Discord user id")
+        #expect(step.body.contains("Developer Mode") && step.body.contains("Copy User ID"))
+        #expect(step.primaryTitle == "Continue")
+        #expect(step.fields.map(\.id) == ["owner_member_id"])
+        #expect(step.fields.map(\.label) == ["Your Discord user id"])
+        #expect(wizard.flow.engine.failure == nil && wizard.flow.engine.phase == .ready)
+        #expect(!wizard.flow.engine.canGoBack && !wizard.flow.engine.isPrimaryEnabled)
+    }
+
+    @Test(arguments: [
+        "abc", "1234567890123456", "123456789012345678901", "12345678 9012345678", "1234567890123456a8",
+        "<@123456789012345678>", "１２３４５６７８９０１２３４５６７８",
+    ])
+    func anIdThatIsNotSeventeenToTwentyDigitsIsRefusedInline(text: String) async throws {
+        let wizard = await waitingForTheOwner(FakeDiscord(app: true, lists: [[studio]], installResult: .success(.needsOwner)))
+        wizard.flow.setValue(text, for: DiscordSetupPlan.ownerField)
+        #expect(!wizard.flow.engine.isPrimaryEnabled)
+        let shape = wizard.flow.engine.shape(of: DiscordSetupPlan.ownerField)
+        #expect(shape.message(label: "Your Discord user id") == "That is not a user id. It has 17 to 20 digits. Copy it again.")
+    }
+
+    @Test(arguments: ["12345678901234567", "123456789012345678", "12345678901234567890", "  123456789012345678\n"])
+    func anIdOfSeventeenToTwentyDigitsEnablesContinue(text: String) async throws {
+        let wizard = await waitingForTheOwner(FakeDiscord(app: true, lists: [[studio]], installResult: .success(.needsOwner)))
+        wizard.flow.setValue(text, for: DiscordSetupPlan.ownerField)
+        #expect(wizard.flow.engine.isPrimaryEnabled)
+        #expect(wizard.flow.engine.shape(of: DiscordSetupPlan.ownerField) == .valid)
+    }
+
+    @Test func continueSendsTheTrimmedIdForThePickedServerAndFinishes() async throws {
+        let fake = FakeDiscord(app: true, lists: [[studio, garage]], installResult: .success(.needsOwner))
+        let wizard = model(fake)
+        await wizard.load()
+        wizard.flow.setSwitch("guild.333", true)
+        await wizard.flow.performPrimary()
+        #expect(wizard.flow.engine.current.id == DiscordSetupPlan.ownerID)
+        wizard.flow.setValue(" 123456789012345678 ", for: DiscordSetupPlan.ownerField)
+        await wizard.flow.performPrimary()
+        #expect(await fake.confirmedOwners == [["123456789012345678", "333"]])
+        #expect(wizard.flow.engine.isFinished && wizard.installed == wizardInstalled)
+    }
+
+    @Test func aFailedConfirmShowsItsReasonAndRetrySendsTheIdAgain() async throws {
+        let fake = FakeDiscord(app: true, lists: [[studio]], installResult: .success(.needsOwner))
+        await fake.setOwner(.failure(missingWebhooks()))
+        let wizard = await waitingForTheOwner(fake)
+        wizard.flow.setValue("123456789012345678", for: DiscordSetupPlan.ownerField)
+        await wizard.flow.performPrimary()
+        let failure = try #require(wizard.flow.engine.failure)
+        #expect(wizard.flow.engine.current.id == DiscordSetupPlan.ownerID)
+        await fake.setOwner(.success(.installed(wizardInstalled)))
+        await wizard.flow.recover(from: failure)
+        #expect(await fake.confirmedOwners.count == 2)
+        #expect(wizard.flow.engine.isFinished)
+    }
+
+    @Test func aGatewayThatStillWaitsForTheOwnerKeepsTheField() async throws {
+        let fake = FakeDiscord(app: true, lists: [[studio]], installResult: .success(.needsOwner))
+        await fake.setOwner(.success(.needsOwner))
+        let wizard = await waitingForTheOwner(fake)
+        wizard.flow.setValue("123456789012345678", for: DiscordSetupPlan.ownerField)
+        await wizard.flow.performPrimary()
+        #expect(wizard.flow.engine.current.id == DiscordSetupPlan.ownerID)
+        #expect(wizard.flow.engine.failure == nil && wizard.flow.engine.phase == .ready)
     }
 
     @Test func theSecondBotGoesStraightToTheChannelStepAndOneTapFinishes() async throws {
@@ -226,7 +331,8 @@ struct DiscordSetupWizardTests {
             func servers() async throws -> [DiscordGuild] { [] }
             func inviteURL() async throws -> URL { URL(string: "https://discord.com")! }
             func existingInstall(in guilds: [DiscordGuild]) async throws -> DiscordInstalled? { nil }
-            func install(in guild: DiscordGuild) async throws -> DiscordInstalled { wizardInstalled }
+            func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome { .installed(wizardInstalled) }
+            func confirmOwner(_ userID: String, in guild: DiscordGuild) async throws -> DiscordInstallOutcome { .needsOwner }
         }
         let wizard = DiscordSetupModel(displayName: "Ada", gateway: Down())
         await wizard.load()
@@ -243,5 +349,32 @@ struct DiscordSetupWizardTests {
         #expect(error.reason == "missing_permission" && error.permissions == ["Manage Webhooks"] && error.retryAfterSeconds == 3)
         let legacy = try JSONDecoder().decode(ChatSetupErrorWire.self, from: Data(#"{"code":"install_failed","fix":"retry"}"#.utf8))
         #expect(legacy.reason == nil && legacy.permissions.isEmpty)
+    }
+}
+
+extension DiscordSetupWizardTests {
+    @Test func aSilentGatewayEndsTheFirstLoadInAPlainError() async {
+        let fake = FakeDiscord(app: true, lists: [[studio]])
+        await fake.silence(["appExists"])
+        let wizard = model(fake)
+        await wizard.load()
+        #expect(wizard.stage == .status(.tookTooLong))
+        await fake.silence([])
+        await wizard.load()
+        #expect(wizard.stage == .flow)
+    }
+
+    @Test func aSilentInstallFailsInPlainWordsAndRetryFinishes() async throws {
+        let fake = FakeDiscord(app: true, lists: [[studio]])
+        await fake.silence(["install"])
+        let wizard = model(fake)
+        await wizard.load()
+        await wizard.flow.performPrimary()
+        let failure = try #require(wizard.flow.engine.failure)
+        #expect(failure == .tookTooLong)
+        #expect(!wizard.flow.engine.isFinished)
+        await fake.silence([])
+        await wizard.flow.recover(from: failure)
+        #expect(wizard.flow.engine.isFinished)
     }
 }
