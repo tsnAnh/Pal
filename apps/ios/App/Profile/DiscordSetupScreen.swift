@@ -82,16 +82,17 @@ struct DiscordSetupScreen: View {
         _ status: SetupStatus, identifierPrefix: String, isBusy: Bool = false, warnings: [String] = [], perform: @escaping () -> Void
     ) -> some View {
         SetupChrome(title: title, accessibilityIdentifier: "discordSetupFrame", close: close) {
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                StatusBlock(status: status, isBusy: isBusy, identifierPrefix: identifierPrefix, perform: perform)
-                if !warnings.isEmpty {
-                    DiscordChannelWarnings(sentences: warnings)
-                        .padding(.top, PalMetrics.captionToCardGap)
-                        .padding(.horizontal, PalMetrics.screenMargin)
+            OverflowScroll {
+                VStack(spacing: PalMetrics.captionToCardGap) {
+                    StatusBlock(status: status, isBusy: isBusy, identifierPrefix: identifierPrefix, perform: perform)
+                    if !warnings.isEmpty {
+                        DiscordChannelWarnings(sentences: warnings)
+                            .padding(.horizontal, PalMetrics.screenMargin)
+                    }
                 }
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 

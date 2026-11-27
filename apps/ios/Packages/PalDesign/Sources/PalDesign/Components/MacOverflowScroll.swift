@@ -11,11 +11,7 @@ public struct MacOverflowScroll<Content: View>: View {
 
     public var body: some View {
         #if os(macOS)
-        ViewThatFits(in: axes) {
-            content
-            ScrollView(axes) { content }
-                .scrollBounceBehavior(.basedOnSize, axes: axes)
-        }
+        OverflowScroll(axes) { content }
         #else
         content
         #endif

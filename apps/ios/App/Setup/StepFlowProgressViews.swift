@@ -184,7 +184,7 @@ struct StepFlowCalmScreen<Accessory: View>: View {
 
     var body: some View {
         if copy.mark == .success {
-            MacOverflowScroll {
+            OverflowScroll {
                 VStack(spacing: 0) {
                     StepFlowCalmView(copy: copy)
                     VStack(spacing: PalMetrics.captionToCardGap) { accessory() }

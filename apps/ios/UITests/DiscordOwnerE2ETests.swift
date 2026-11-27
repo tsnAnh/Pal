@@ -54,6 +54,31 @@ final class DiscordOwnerE2ETests: BotProfileTestCase {
         shot(app, "discord-page-channel-fixed")
     }
 
+    #if os(iOS)
+    func testTheLargestTextSizeKeepsTheConnectedPageBetweenItsHeaderAndFooter() throws {
+        let app = signedInApp(extraArguments: [
+            "-hermes-test-discord-wizard", "-hermes-test-discord-muted",
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL",
+        ])
+        openProfile(app, Self.primarySlug)
+        element(app, "profileDiscordRow").hit()
+        waitFor(element(app, "discordChannelWarning"), timeout: 30, "the channel warning")
+        let open = element(app, "discordOpen")
+        waitFor(open, timeout: 10, "Open in Discord")
+        shot(app, "discord-page-large-text-top")
+        let header = app.navigationBars.firstMatch
+        XCTAssertGreaterThanOrEqual(
+            element(app, "stepFlowCalmTitle").frame.minY, header.frame.maxY, "the title starts below the header"
+        )
+        let footer = primary(app)
+        XCTAssertTrue(app.windows.firstMatch.frame.contains(footer.frame), "the footer button stays on screen")
+        for _ in 0..<4 where !open.isHittable || open.frame.maxY > footer.frame.minY { app.swipeUp() }
+        shot(app, "discord-page-large-text-bottom")
+        XCTAssertTrue(open.isHittable, "Open in Discord can be reached")
+        XCTAssertLessThanOrEqual(open.frame.maxY, footer.frame.minY, "Open in Discord sits above the footer")
+    }
+    #endif
+
     func testAnUnknownOwnerIsAskedForTheirDiscordUserIdAndTheWizardFinishes() throws {
         let app = signedInApp(extraArguments: [
             "-hermes-test-discord-wizard", "-hermes-test-discord-app-ready", "-hermes-test-discord-needs-owner",
