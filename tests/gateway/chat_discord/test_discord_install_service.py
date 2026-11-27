@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import contextlib
 
+import httpx
 import pytest
 
+from gateway.chat_discord.runtime import DiscordBots
 from gateway.chat_install_service import ChatInstallService, ChatServiceError
 from gateway.chat_install_store import ChatInstallStore
 from tests.gateway.chat_discord.discord_kit import BOT, Kit, route_for
@@ -15,6 +17,15 @@ from tui_gateway.contracts import chat_provider as wire
 
 STEP = wire.SetupStep
 EVENT = wire.SetupEventKind
+APP_OWNER = "223456789012345678"
+TEAM_OWNER = "323456789012345678"
+TEAM_USER = "423456789012345678"
+USER_APP = {"owner": {"id": APP_OWNER, "username": "maker"}}
+TEAM_APP = {"owner": {"id": TEAM_USER, "username": "team1"}, "team": {"id": "1", "owner_user_id": TEAM_OWNER}}
+
+
+def pal_command_owners(kit: Kit) -> frozenset[str]:
+    return DiscordBots(records=kit.provider.records).owner_ids()
 
 
 def begin(kit: Kit):
@@ -84,6 +95,64 @@ def test_a_malformed_owner_keeps_waiting(kit):
     with pytest.raises(ChatServiceError):
         service.advance(BOT, "discord", GUILD_ID, EVENT.owner_confirmed, waiting.revision, owner_member_id="abc")
     assert service.status(BOT, "discord", GUILD_ID)[0].step is STEP.needs_owner
+
+
+@pytest.mark.parametrize(("application", "owner"), [(USER_APP, APP_OWNER), (TEAM_APP, TEAM_OWNER)])
+def test_install_finishes_with_the_discord_application_owner(kit, application, owner):
+    kit.fake.application_extra = application
+    state, installation = begin(kit)
+    assert state.step is STEP.ready
+    assert ChatInstallStore(kit.home).owner_id(installation.id) == owner
+    assert kit.provider.allowlist.users() == [owner] and pal_command_owners(kit) == {owner}
+
+
+@pytest.mark.parametrize("application", [
+    {}, {"owner": None}, {"owner": {}}, {"owner": {"id": "not-a-snowflake"}}, {"owner": {"id": 223456789012345678}},
+    {"owner": {"id": TEAM_USER}, "team": {"id": "1"}}, {"owner": {"id": TEAM_USER}, "team": {"owner_user_id": None}},
+])
+def test_install_asks_for_the_owner_when_discord_names_none(kit, application):
+    kit.fake.application_extra = application
+    assert begin(kit)[0].step is STEP.needs_owner
+    assert kit.provider.allowlist.users() == []
+
+
+@pytest.mark.parametrize("response", [
+    httpx.Response(500, json={}), httpx.Response(200, content=b""), httpx.Response(200, json=[]),
+    httpx.Response(404, json={"code": 10003}), httpx.Response(401, json={"code": 0}),
+])
+def test_a_failed_owner_lookup_asks_for_the_owner_instead_of_failing(kit, response):
+    kit.fake.application_extra = USER_APP
+    kit.fake.later_application_response = response
+    state, _ = begin(kit)
+    assert state.step is STEP.needs_owner and state.error is None
+
+
+def test_an_allowlisted_owner_wins_over_the_application_owner(kit):
+    kit.fake.application_extra = USER_APP
+    kit.allow_owner()
+    assert begin(kit)[0].step is STEP.ready
+    assert kit.provider.allowlist.users() == [OWNER_ID]
+
+
+def test_a_waiting_setup_finishes_on_the_next_begin_once_discord_names_the_owner(kit):
+    assert begin(kit)[0].step is STEP.needs_owner
+    kit.fake.application_extra = USER_APP
+    state, installation = begin(kit)
+    assert state.step is STEP.ready and installation is not None
+    assert kit.provider.allowlist.users() == [APP_OWNER]
+
+
+def test_a_waiting_setup_keeps_waiting_while_discord_names_no_owner(kit):
+    waiting, _ = begin(kit)
+    again, _ = begin(kit)
+    assert (again.step, again.revision) == (STEP.needs_owner, waiting.revision)
+
+
+def test_a_typed_owner_may_use_the_pal_command(kit):
+    service = kit.service()
+    waiting, _ = service.begin(BOT, "discord", GUILD_ID)
+    service.advance(BOT, "discord", GUILD_ID, EVENT.owner_confirmed, waiting.revision, owner_member_id=OWNER_ID)
+    assert pal_command_owners(kit) == {OWNER_ID}
 
 
 def test_revoke_through_the_service_reaches_revoked_and_keeps_the_channel(kit):
