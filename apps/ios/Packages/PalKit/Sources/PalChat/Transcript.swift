@@ -60,7 +60,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var inbound: InboundKind = .person
     var liveSegment: LiveSegment?
     var carriesImage = false
-    var submissionID: String?
+    var submissionID: String?, admissionIDs: [String] = []
     var receipt: TurnReceipt?
 
     public init(
@@ -125,7 +125,7 @@ public struct Transcript: Sendable, Equatable {
     private var streamingID: String?
     private var openTurnID: String?
     private var turnOpenings: [String: String] = [:]
-    private var admissionInputs: [String: String] = [:]
+    private(set) var admissionInputs: [String: String] = [:]
     private var absorbedAdmissions: Set<String> = []
     private(set) var absorbedItemIDs: Set<String> = []
 

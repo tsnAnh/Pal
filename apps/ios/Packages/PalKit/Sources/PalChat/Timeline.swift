@@ -67,7 +67,7 @@ enum TimelineRef: Sendable, Hashable {
     case segment(LiveSegment)
     case tool(String)
     case connection(String)
-    case submission(String)
+    case submission(String), admission(String)
 }
 
 enum NewestMerge: Sendable, Equatable {
@@ -376,7 +376,7 @@ struct Timeline: Sendable {
         }
         let aliases = alias
         for item in live.items where !Self.isStreaming(item) && settledKeys[item.id] == nil {
-            settledKeys[item.id] = Self.liveRefs(item).lazy.compactMap { aliases[$0] }.first
+            settledKeys[item.id] = liveRefs(item).lazy.compactMap { aliases[$0] }.first
         }
         let settledItems = Set(live.items.map(\.id)).intersection(settledKeys.keys)
         for id in settledItems {
@@ -432,7 +432,7 @@ struct Timeline: Sendable {
         _ item: TranscriptItem, refs: [TimelineRef], rowID: Int?, receipted: String?, textMatch: Bool, excluding bound: Set<String>
     ) -> String? {
         let candidates = live.items.filter { !bound.contains($0.id) && !Self.isStreaming($0) }
-        if let byRef = candidates.first(where: { !Set(Self.liveRefs($0)).isDisjoint(with: refs) }) { return byRef.id }
+        if let byRef = candidates.first(where: { !Set(liveRefs($0)).isDisjoint(with: refs) }) { return byRef.id }
         if let receipted, candidates.contains(where: { $0.id == receipted }) { return receipted }
         guard textMatch else { return nil }
         return candidates.first { candidate in
@@ -458,15 +458,15 @@ struct Timeline: Sendable {
         return false
     }
 
-    private static func liveRefs(_ item: TranscriptItem) -> [TimelineRef] {
-        var refs: [TimelineRef] = []
+    private func liveRefs(_ item: TranscriptItem) -> [TimelineRef] {
+        var refs: [TimelineRef] = live.admissionID(ofEcho: item.id).map { [.admission($0)] } ?? []
         if let uid = item.uid { refs.append(.uid(uid)) }
         if let submission = Transcript.submissionID(ofEcho: item.id) { refs.append(.submission(submission)) }
         if let segment = item.liveSegment { refs.append(.segment(segment)) }
         switch item.content {
         case .tool(let call): refs.append(.tool(call.toolID))
         case .connection(let card): refs.append(.connection(card.operation.opID))
-        case .clarifyAnswered where item.id.hasPrefix(toolPrefix): refs.append(.tool(String(item.id.dropFirst(toolPrefix.count))))
+        case .clarifyAnswered where item.id.hasPrefix(Self.toolPrefix): refs.append(.tool(String(item.id.dropFirst(Self.toolPrefix.count))))
         default: break
         }
         return refs
@@ -505,7 +505,7 @@ struct Timeline: Sendable {
                 id: wire.id, content: .user(text: wire.text, delivery: .sent), timestamp: date, inbound: inbound, uid: uid
             )
             item.submissionID = submission
-            parts.append((item, mainRefs))
+            parts += BatchedSend.rows((item, mainRefs), from: wire)
         case .assistant:
             if !wire.text.isEmpty {
                 parts.append((TranscriptItem(

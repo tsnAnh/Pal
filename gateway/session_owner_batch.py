@@ -3,6 +3,7 @@ import logging
 from functools import partial
 from itertools import takewhile
 
+from agent.steer_absorb import batched_input_metadata
 from gateway.session_persistence import authority_persistence
 from gateway.session_queued_controls import _register, _unregister, steer_blocker
 from persistence.core.errors import AuthorityRefusal
@@ -54,9 +55,10 @@ async def fold_queued_owner_input(authority, ref, live, row):
         logger.exception('Session %s: queued owner input was not folded into the claimed turn', sid)
         return row
     authority._publish_pending(ref)
-    payload = {**row['payload'], 'text': '\n'.join(item['payload']['text'] for item in (row, *folded))}
+    parts = [(item['admission_id'], item['payload']['text']) for item in (row, *folded)]
+    payload = {**row['payload'], 'text': '\n'.join(text for _, text in parts)}
     attached = [item['payload']['attachments_v1'] for item in (row, *folded) if 'attachments_v1' in item['payload']]
     if len(attached) > (1 if 'attachments_v1' in row['payload'] else 0):
         payload['attachments_v1'] = {'media': [media for part in attached for media in part['media']],
                                      'media_types': [kind for part in attached for kind in part['media_types']]}
-    return {**row, 'payload': payload}
+    return {**row, 'payload': payload, 'batch_metadata': batched_input_metadata(parts)}
