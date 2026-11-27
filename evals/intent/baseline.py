@@ -7,7 +7,7 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -149,12 +149,12 @@ def _read(turn: Turn) -> Reading:
         frozenset(index for index, text in enumerate(spoken) if restates(text)))
 
 
-def _fraction(count: int, n: int) -> dict:
+def fraction(count: int, n: int) -> dict:
     return {"count": count, "n": n, "share": round(count / n, 4) if n else None}
 
 
 def _fractions(n: int, counts: dict[str, int]) -> dict:
-    return {name: _fraction(count, n) for name, count in counts.items()}
+    return {name: fraction(count, n) for name, count in counts.items()}
 
 
 def _asking(turns: Sequence[Reading]) -> dict:
@@ -163,7 +163,7 @@ def _asking(turns: Sequence[Reading]) -> dict:
     either = [turn for turn in turns if turn.signals or turn.asked_forms]
     return {
         **_fractions(len(turns), {"plain_text": len(plain), "clarify": len(formed), "either": len(either)}),
-        "started_by_machine": _fraction(sum(t.author is Author.MACHINE for t in either), len(either)),
+        "started_by_machine": fraction(sum(t.author is Author.MACHINE for t in either), len(either)),
         "plain_signals": _fractions(len(plain), {s.value: sum(s in t.signals for t in plain) for s in Signal}),
     }
 
@@ -254,13 +254,13 @@ def _corrections(conversations: Sequence[Sequence[Reading]]) -> dict:
                 if before.author is not Author.BOT and (before.changes or before.restated_steps)]
     shapes = [correction_shapes(turn.text) for turn in eligible]
     return {
-        "after_action_or_restatement": _fraction(sum(map(bool, shapes)), len(eligible)),
-        "again_only": _fraction(sum(says_again(turn.text) and not found for turn, found in zip(eligible, shapes)),
+        "after_action_or_restatement": fraction(sum(map(bool, shapes)), len(eligible)),
+        "again_only": fraction(sum(says_again(turn.text) and not found for turn, found in zip(eligible, shapes)),
                                 len(eligible)),
         "by_shape": dict(sorted(Counter(name for found in shapes for name in found).items())),
         "asking_behaviour": dict(sorted(Counter(
             name for turn in eligible for name in correction_classes(turn.text)).items())),
-        "any_follow_up": _fraction(sum(bool(correction_shapes(turn.text)) for _, turn in followups), len(followups)),
+        "any_follow_up": fraction(sum(bool(correction_shapes(turn.text)) for _, turn in followups), len(followups)),
     }
 
 
@@ -289,12 +289,12 @@ def _work(conversations: Sequence[Sequence[Reading]]) -> dict:
             covered.update(asked_first=asked, restated_first=restated, answering_a_question=answering,
                            no_question_or_restatement=not (asked or restated or answering))
     return {
-        "changing_turns": _fraction(changing, owner),
+        "changing_turns": fraction(changing, owner),
         "by_category": _fractions(changing, {change.value: categories[change] for change in TRIGGER_CHANGES}),
         **_fractions(changing, {name: covered[name] for name in (
             "asked_first", "restated_first", "answering_a_question", "no_question_or_restatement")}),
-        "unclassified_only_turns": _fraction(unclassified_only, owner),
-        "machine_changing_turns": _fraction(machine_changing, machine),
+        "unclassified_only_turns": fraction(unclassified_only, owner),
+        "machine_changing_turns": fraction(machine_changing, machine),
     }
 
 
@@ -338,18 +338,17 @@ def _owned_by_this_user(database: Path) -> bool:
 
 
 @contextmanager
-def _scratch_home() -> Iterator[None]:
+def scratch_home() -> Iterator[Path]:
     # Loading the current home's config creates its folders and SOUL.md, so no measured home may be current.
-    with tempfile.TemporaryDirectory(prefix="intent-baseline-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="hermes-eval-") as scratch:
         token = set_hermes_home_override(scratch)
         try:
-            yield
+            yield Path(scratch)
         finally:
             reset_hermes_home_override(token)
 
 
-def measure(targets: Sequence[tuple[str, Path]], *, days: int, now: float, shapes: bool = True) -> dict:
-    since = now - days * DAY
+def bot_reports(targets: Sequence[tuple[str, Path]], read: Callable[[Path, Path], dict]) -> dict:
     bots = {}
     for name, home in targets:
         if not (home / "state.db").is_file():
@@ -359,12 +358,21 @@ def measure(targets: Sequence[tuple[str, Path]], *, days: int, now: float, shape
             if not _owned_by_this_user(home / "state.db"):
                 bots[name] = {"status": "not_store_owner"}
                 continue
-            with _scratch_home():
-                bots[name] = _profile(home, since, shapes)
+            with scratch_home() as scratch:
+                bots[name] = read(home, scratch)
         except Exception as exc:  # health: allow BLE001 -- a store error can quote stored text, so only its type leaves the process
             bots[name] = {"status": "error", "error": type(exc).__name__}
-    return {"schema": SCHEMA, "stem_cap": STEM_CAP,
-            "window": {"days": days, "since": _iso(since), "until": _iso(now)}, "bots": bots}
+    return bots
+
+
+def window(days: int, now: float) -> dict:
+    return {"days": days, "since": _iso(now - days * DAY), "until": _iso(now)}
+
+
+def measure(targets: Sequence[tuple[str, Path]], *, days: int, now: float, shapes: bool = True) -> dict:
+    since = now - days * DAY
+    bots = bot_reports(targets, lambda home, _: _profile(home, since, shapes))
+    return {"schema": SCHEMA, "stem_cap": STEM_CAP, "window": window(days, now), "bots": bots}
 
 
 def _iso(moment: float) -> str:
@@ -422,11 +430,26 @@ def render(report: dict, *, json_only: bool = False) -> str:
     return "\n".join([document, "", f"window: last {report['window']['days']} days", *tables])
 
 
-def _days(value: str) -> int:
+def window_days(value: str) -> int:
     days = int(value)
     if days < 1:
         raise argparse.ArgumentTypeError("--days must be at least 1")
     return days
+
+
+def profile_targets(profile: str | None) -> list[tuple[str, Path]] | None:
+    if profile and not profile_exists(profile):
+        print(f"unknown profile: {profile}", file=sys.stderr)
+        return None
+    names = (profile,) if profile else served_profiles()
+    if not names:
+        print("no served profile found; pass --profile", file=sys.stderr)
+        return None
+    return [(name, get_profile_dir(name)) for name in names]
+
+
+def exit_status(report: dict) -> int:
+    return int(any(bot["status"] in ("error", "not_store_owner") for bot in report["bots"].values()))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -435,21 +458,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Read-only counts of how bots ask the owner questions. Prints aggregates and redacted "
                     f"question shapes of at most {STEM_CAP} characters.")
     parser.add_argument("--profile", help="measure one profile (default: every served profile)")
-    parser.add_argument("--days", type=_days, default=14, help="window in days (default: 14)")
+    parser.add_argument("--days", type=window_days, default=14, help="window in days (default: 14)")
     parser.add_argument("--json", action="store_true", help="print the JSON report without the table")
     parser.add_argument("--no-shapes", action="store_true", help="print counts only, no question shapes")
     args = parser.parse_args(argv)
-    if args.profile and not profile_exists(args.profile):
-        print(f"unknown profile: {args.profile}", file=sys.stderr)
+    targets = profile_targets(args.profile)
+    if targets is None:
         return 2
-    names = (args.profile,) if args.profile else served_profiles()
-    if not names:
-        print("no served profile found; pass --profile", file=sys.stderr)
-        return 2
-    report = measure([(name, get_profile_dir(name)) for name in names], days=args.days, now=time.time(),
-                     shapes=not args.no_shapes)
+    report = measure(targets, days=args.days, now=time.time(), shapes=not args.no_shapes)
     print(render(report, json_only=args.json))
-    return int(any(bot["status"] in ("error", "not_store_owner") for bot in report["bots"].values()))
+    return exit_status(report)
 
 
 if __name__ == "__main__":

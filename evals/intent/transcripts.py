@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -16,6 +16,7 @@ from gateway.proactive_scorecard.mining import DEFAULT_EXCLUDED_SOURCES, _calls,
 from hermes_state_session_search import is_compression_edge
 from persistence.authority.vocabulary import LEGACY_LOCAL_SOURCES, NOT_CLIENT_LABELS
 from persistence.conversation.messages import TranscriptRead, TranscriptRow, TranscriptView
+from persistence.core.conventions import RowVisibility
 from persistence.conversation.sessions import SessionLineageKind, SessionRecord, SessionWindow
 from persistence_assembly import open_persistence_reader
 from session_rules.turns import (
@@ -63,6 +64,19 @@ class Turn:
     at: float
     steps: list[Step] = field(default_factory=list)
     results: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class Conversation:
+    source: str
+    rows: tuple[TranscriptRow, ...]
+    live_ids: frozenset[int]
+
+
+@dataclass(frozen=True, slots=True)
+class Conversations:
+    conversations: tuple[Conversation, ...]
+    skipped: Mapping[str, Mapping[str, int]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +170,7 @@ def _calls_of(row: TranscriptRow) -> Iterator[Call]:
                 yield Call(call_id, entry["name"], entry["arguments"])
 
 
-def _turns(rows: list[TranscriptRow]) -> tuple[Turn, ...]:
+def _turns(rows: Sequence[TranscriptRow]) -> tuple[Turn, ...]:
     turns: list[Turn] = []
     for row in rows:
         if row.role == "user":
@@ -177,9 +191,8 @@ def _identities(row: TranscriptRow) -> tuple[object, ...]:
     return (copied, row.message_uid) if row.message_uid else (copied,)
 
 
-def read_transcripts(home: Path, since: float) -> Transcripts:
+def read_conversations(home: Path, since: float) -> Conversations:
     skipped: dict[str, Counter] = {}
-    counted: Counter = Counter()
     with open_persistence_reader(home) as store:
         entries = store.sessions.search_sessions(window=SessionWindow(limit=None))
         records = {entry.session.session_id: entry.session for entry in entries}
@@ -194,16 +207,29 @@ def read_transcripts(home: Path, since: float) -> Transcripts:
         seen: set[object] = set()
         conversations = []
         for root in sorted(segments, key=lambda session_id: (records[session_id].started_at, session_id)):
-            rows = []
-            for record in sorted(segments[root], key=lambda item: (item.started_at, item.session_id)):
+            ordered = sorted(segments[root], key=lambda item: (item.started_at, item.session_id))
+            rows: list[tuple[TranscriptRow, tuple[object, ...]]] = []
+            live: set[object] = set()
+            for record in ordered:
                 for row in store.messages.read_transcript(record.session_id,
                                                           TranscriptRead(view=TranscriptView.DISPLAY)):
                     identities = _identities(row)
+                    if record is ordered[-1] and row.visibility is RowVisibility.ACTIVE:
+                        live.update(identities)
                     if row.timestamp >= since and not seen.intersection(identities):
-                        rows.append(row)
+                        rows.append((row, identities))
                     seen.update(identities)
-            if turns := _turns(rows):
-                conversations.append(turns)
-                counted[_label(records[root].source)] += 1
-    return Transcripts(tuple(conversations), dict(sorted(counted.items())),
-                       {reason: dict(sorted(by_source.items())) for reason, by_source in sorted(skipped.items())})
+            if rows:
+                conversations.append(Conversation(
+                    _label(records[root].source), tuple(row for row, _ in rows),
+                    frozenset(int(row.id) for row, identities in rows if live.intersection(identities))))
+    return Conversations(tuple(conversations),
+                         {reason: dict(sorted(by_source.items())) for reason, by_source in sorted(skipped.items())})
+
+
+def read_transcripts(home: Path, since: float) -> Transcripts:
+    read = read_conversations(home, since)
+    spoken = [(conversation.source, turns) for conversation in read.conversations
+              if (turns := _turns(conversation.rows))]
+    return Transcripts(tuple(turns for _, turns in spoken),
+                       dict(sorted(Counter(source for source, _ in spoken).items())), read.skipped)
