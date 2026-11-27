@@ -65,8 +65,8 @@ struct ChatModelRebuildGuardTests {
         #expect(harness.model.rebuilds.full == settled.full + 2)
     }
 
-    @Test("sending bubbles follow the connection and the rows still match a full rebuild")
-    func connectionChangesRebuildSendingBubbles() throws {
+    @Test("an unconfirmed bubble reads the same offline and the rows still match a full rebuild")
+    func anUnconfirmedBubbleReadsTheSameOffline() throws {
         var world = rebuildConversation()
         world.rows.removeLast()
         world.append(rebuildUser("u3", "pending", delivery: .sending, at: rebuildAt(430)))
@@ -83,10 +83,10 @@ struct ChatModelRebuildGuardTests {
         }
         #expect(delivery() == .sending)
         harness.phase(.resyncing, "offline")
-        #expect(delivery() == .waitingForConnection)
+        #expect(delivery() == .sending)
         harness.world.editLast { $0.content = .assistant(text: "typing more", reasoning: "", isStreaming: true) }
         harness.push("grow offline")
-        #expect(delivery() == .waitingForConnection)
+        #expect(delivery() == .sending)
         harness.phase(.live(lastSequence: 9, replayEpoch: "e"), "live again")
         #expect(delivery() == .sending)
     }
