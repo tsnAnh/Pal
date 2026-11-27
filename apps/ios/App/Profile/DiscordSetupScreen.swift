@@ -24,7 +24,8 @@ struct DiscordEntryView: View {
             displayName: displayName,
             gateway: ScriptedDiscordSetup(
                 appReady: arguments.contains(ScriptedDiscordSetup.appReadyArgument),
-                needsOwner: arguments.contains(ScriptedDiscordSetup.needsOwnerArgument), channel: botName
+                needsOwner: arguments.contains(ScriptedDiscordSetup.needsOwnerArgument),
+                offline: arguments.contains(ScriptedDiscordSetup.offlineArgument), channel: botName
             ),
             timing: ScriptedDiscordSetup.timing
         )
@@ -68,12 +69,20 @@ struct DiscordSetupScreen: View {
         case .flow:
             StepFlowView(model: model.flow, title: title, close: close) { step in accessory(step) }
         case .status(let status):
-            SetupChrome(title: title, accessibilityIdentifier: "discordSetupFrame", close: close) {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    StatusBlock(status: status, identifierPrefix: "discordSetupStatus") { Task { await model.load() } }
-                    Spacer(minLength: 0)
-                }
+            statusPage(status, identifierPrefix: "discordSetupStatus") { Task { await model.load() } }
+        case .notConnected(let status):
+            statusPage(status, identifierPrefix: "discordOffline", isBusy: model.isReconnecting) { Task { await model.reconnect() } }
+        }
+    }
+
+    private func statusPage(
+        _ status: SetupStatus, identifierPrefix: String, isBusy: Bool = false, perform: @escaping () -> Void
+    ) -> some View {
+        SetupChrome(title: title, accessibilityIdentifier: "discordSetupFrame", close: close) {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                StatusBlock(status: status, isBusy: isBusy, identifierPrefix: identifierPrefix, perform: perform)
+                Spacer(minLength: 0)
             }
         }
     }

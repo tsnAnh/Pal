@@ -55,6 +55,7 @@ private actor ScriptedInstall: ChatInstallClient {
     func revoke(_ scope: ChatInstallScope) {}
     func updateIdentity(_ scope: ChatInstallScope) throws -> ChatIdentityUpdateResult { throw ChatInstallClientError.unsupported }
     func setIcon(_ scope: ChatInstallScope, png: Data) {}
+    func reconnect(_ scope: ChatInstallScope) throws -> ChatInstallStatusResult { try status(scope) }
     func storeSecret(label: String, value: String) throws -> String { throw ChatInstallClientError.unsupported }
 }
 

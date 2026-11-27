@@ -196,11 +196,11 @@ public struct DiscordSetupPlan: Sendable, Equatable {
         let channel = installed?.channelName.map { "#\($0)" } ?? String(localized: "its channel")
         let server = installed?.guildName ?? String(localized: "your server")
         return FlowStep(
-            id: doneID, title: String(localized: "\(name) is in Discord"),
+            id: doneID, title: String(localized: "Discord is connected"),
             kind: .success(
-                title: String(localized: "\(name) is in Discord"),
+                title: String(localized: "Discord is connected"),
                 body: String(
-                    localized: "Write in \(channel) in \(server). Send /pal in a direct message to talk to any bot."
+                    localized: "\(name) answers in \(channel) in \(server). Send /pal in a direct message to talk to any bot."
                 )
             )
         )

@@ -53,6 +53,7 @@ private actor SlackGateway: ChatInstallClient {
     func updateIdentity(_ scope: ChatInstallScope) throws -> ChatIdentityUpdateResult { throw ChatInstallClientError.unsupported }
     func setIcon(_ scope: ChatInstallScope, png: Data) {}
     func storeSecret(label: String, value: String) throws -> String { throw ChatInstallClientError.unsupported }
+    func reconnect(_ scope: ChatInstallScope) throws -> ChatInstallStatusResult { throw ChatInstallClientError.unsupported }
 }
 
 private struct NoMembers: ChatMemberClient {

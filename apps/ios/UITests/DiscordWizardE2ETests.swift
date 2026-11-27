@@ -19,7 +19,7 @@ final class DiscordWizardE2ETests: BotProfileTestCase {
     private func expectReady(_ app: XCUIApplication) {
         let title = element(app, "stepFlowCalmTitle")
         waitFor(title, timeout: 60, "the ready screen")
-        waitUntil(30, "the ready screen names the bot in Discord") { title.label.hasSuffix("is in Discord") }
+        waitUntil(30, "the ready screen says Discord is connected") { title.label == "Discord is connected" }
         XCTAssertTrue(element(app, "discordOpen").exists, "Open in Discord is offered")
     }
 

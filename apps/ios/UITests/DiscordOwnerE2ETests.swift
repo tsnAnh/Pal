@@ -13,6 +13,22 @@ final class DiscordOwnerE2ETests: BotProfileTestCase {
         waitUntil(30, "the screen reads \(prefix)") { text(of: heading).hasPrefix(prefix) }
     }
 
+    func testABotThatIsSetUpButOfflineSaysSoAndReconnects() throws {
+        let app = signedInApp(extraArguments: ["-hermes-test-discord-wizard", "-hermes-test-discord-offline"])
+        openProfile(app, Self.primarySlug)
+        element(app, "profileDiscordRow").hit()
+        let title = element(app, "discordOfflineTitle")
+        waitFor(title, timeout: 30, "the not connected page")
+        waitUntil(10, "it says Discord is not connected") { text(of: title) == "Discord is not connected" }
+        XCTAssertFalse(element(app, "stepFlowCalmTitle").exists, "the page does not claim a connection")
+        shot(app, "discord-page-offline")
+        element(app, "discordOfflineAction").hit()
+        let ready = element(app, "stepFlowCalmTitle")
+        waitFor(ready, timeout: 60, "the connected page")
+        waitUntil(30, "it says Discord is connected") { text(of: ready) == "Discord is connected" }
+        shot(app, "discord-page-connected")
+    }
+
     func testAnUnknownOwnerIsAskedForTheirDiscordUserIdAndTheWizardFinishes() throws {
         let app = signedInApp(extraArguments: [
             "-hermes-test-discord-wizard", "-hermes-test-discord-app-ready", "-hermes-test-discord-needs-owner",
@@ -42,7 +58,7 @@ final class DiscordOwnerE2ETests: BotProfileTestCase {
 
         let ready = element(app, "stepFlowCalmTitle")
         waitFor(ready, timeout: 60, "the ready screen")
-        waitUntil(30, "the ready screen names the bot in Discord") { text(of: ready).hasSuffix("is in Discord") }
+        waitUntil(30, "the ready screen says Discord is connected") { text(of: ready) == "Discord is connected" }
         shot(app, "discord-wizard-ready")
     }
 }

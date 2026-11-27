@@ -43,6 +43,7 @@ public protocol ChatInstallClient: Sendable {
     func join(_ scope: ChatInstallScope, spaceId: String) async throws -> ChatSpaceJoinResult
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire]
     func revoke(_ scope: ChatInstallScope) async throws
+    func reconnect(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult
     func setIcon(_ scope: ChatInstallScope, png: Data) async throws
     func storeSecret(label: String, value: String) async throws -> String

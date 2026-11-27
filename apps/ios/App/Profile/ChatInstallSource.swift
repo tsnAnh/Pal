@@ -18,7 +18,9 @@ struct ChatInstallSource: Sendable {
         if ProcessInfo.processInfo.arguments.contains(scriptedArgument) {
             return ScriptedChatInstallGateway.shared.source
         }
-        let call: @Sendable (String, JSONValue?) async throws -> JSONValue = { method, params in try await connection.rpc(method, params) }
+        let call: @Sendable (String, JSONValue?) async throws -> JSONValue = { method, params in
+            try await connection.rpc(method, params, timeout: ChatInstallTimeout.rpc(method))
+        }
         let client = GatewayChatInstallClient(bot: botName, call: call, vault: SettingsAPI(profile: botName, call: call))
         let connect = connection.client
         return ChatInstallSource(
@@ -116,6 +118,10 @@ struct GatewayChatInstallClient: ChatInstallClient {
 
     func revoke(_ scope: ChatInstallScope) async throws {
         _ = try await perform("chat.install.revoke", scope)
+    }
+
+    func reconnect(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult {
+        try decode(ChatInstallStatusResult.self, await perform("chat.install.reconnect", scope), "chat.install.reconnect")
     }
 
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
