@@ -75,7 +75,7 @@ final class SendFollowStage {
         scroll.rowSink = { [weak self] id, _ in
             if self?.laidOut[id] == nil { self?.laidOut[id] = .now }
         }
-        NSApplication.shared.accessibilitySetValue(true as NSNumber, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface"))
+        Self.exposeComposerToAccessibility(true)
         try await open(running: shape.running)
         if shape.scrollsFirst { try await trackpadScrollAtNewest() }
     }
@@ -129,6 +129,13 @@ final class SendFollowStage {
         host.close()
         gateway.stop()
         try? FileManager.default.removeItem(at: root)
+        Self.exposeComposerToAccessibility(false)
+    }
+
+    private static func exposeComposerToAccessibility(_ exposed: Bool) {
+        NSApplication.shared.accessibilitySetValue(
+            exposed as NSNumber, forAttribute: NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+        )
     }
 
     private func element(_ identifier: String) throws -> NSObject {
