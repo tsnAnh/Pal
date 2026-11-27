@@ -9,18 +9,20 @@ cron, an unattended platform), apply ``approvals.single_query_mode`` / ``cron_mo
 
 What still asks the owner is content that sends out or spends money: outbound sends
 (``request_draft_approval``) and ``approval_prompt.request_elicitation_consent``. Both ride the gateway
-queue below, one operation at a time (once or deny). Leaves: ``approval_detection`` (hardline and
+queue below, one operation at a time (once or deny); an outbound send to one shown destination may also be answered
+always, which saves a rule (``tools.send_rules``). Leaves: ``approval_detection`` (hardline and
 dangerous-pattern detection), ``approval_context`` (contextvars, config readers), ``approval_floors``
 (refusal results, deny rules), ``approval_prompt`` (CLI prompt, elicitation consent),
 ``approval_gateway_wait`` (blocking gateway round-trip), ``approval_human_wait``. Leaves read facade-owned
 state (``_lock``, queues) back through ``tools.approval`` at call time.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import importlib
 import logging
 import threading
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from utils import env_var_enabled
 from agent.i18n import t
@@ -43,6 +45,9 @@ from tools.approval_gateway_wait import _await_gateway_decision
 from tools.approval_prompt import prompt_dangerous_approval
 from tools.mcp_action_gate import approver_present
 from tools.skill_provenance import is_background_review
+
+if TYPE_CHECKING:
+    from tools.send_rules import SendRuleCandidate
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +99,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
     # Canonicalize where the answer is stored, not only in ``grant``: coalesced followers
     # (``choice == "once"`` covers only the leader) and the protected-write and elicitation
     # gates read ``entry.result`` directly, so an alias of "once" must already be "once" here.
+    asks_to_remember = isinstance(choice, str) and choice.strip().lower() == "always"
     choice = canonical_approval_choice(choice)
     with _lock:
         queue = _gateway_queues.get(session_key)
@@ -121,6 +127,7 @@ def resolve_gateway_approval(session_key: str, choice: str,
                 entry.reason = reason
             if edited_text is not None and choice == "once" and request_id and len(targets) == 1:
                 entry.edited_text = edited_text
+            entry.remember = bool(asks_to_remember and request_id and offered_choices(entry.data) == SEND_RULE_CHOICES)
             entry.event.set()
     return len(targets)
 
@@ -131,6 +138,12 @@ def _entry_for_request(session_key: str, request_id: Optional[str]):
     if not request_id:
         return None
     return next((e for e in _gateway_queues.get(session_key) or [] if e.data.get("request_id") == request_id), None)
+
+
+def choices_for_request(session_key: str, request_id: Optional[str]) -> list[str]:
+    with _lock:
+        entry = _entry_for_request(session_key, request_id)
+        return offered_choices(entry.data if entry is not None else {})
 
 
 def withdraw_gateway_approval(session_key: str, request_id: str, cause: str) -> bool:
@@ -414,6 +427,11 @@ def unattended_write_refusal(subject: str) -> str | None:
 # prompt. Silence is not consent, deny is a hard halt, and the answer covers that one operation.
 
 GATEWAY_CHOICES = ["once", "deny"]
+SEND_RULE_CHOICES = ["once", "always", "deny"]
+
+
+def offered_choices(data: Mapping) -> list[str]:
+    return list(SEND_RULE_CHOICES if data.get("choices") == SEND_RULE_CHOICES else GATEWAY_CHOICES)
 
 
 @dataclass(frozen=True)
@@ -434,7 +452,7 @@ CONSENT_ANSWERS = frozenset({"once"})
 # Platform adapters do not all speak the canonical vocabulary, so normalize BEFORE the allow-list rather than
 # widening it: case and surrounding whitespace, and affirmative aliases. The WhatsApp Cloud adapter's Approve
 # button emits a literal "approve". A client built before approvals became one operation at a time may still
-# answer "session" or "always"; that is one operation too.
+# answer "session" or "always"; that is one operation too. "always" also saves a rule, only on a card that offered it.
 _CHOICE_ALIASES = {"approve": "once", "approved": "once", "allow": "once", "session": "once", "always": "once"}
 
 
@@ -490,7 +508,7 @@ def _with_edit(spec: _GateSpec, decision: dict, result: dict) -> dict:
 
 def _human_decision(spec: _GateSpec, *, command: str, description: str, pattern_key: str,
                     session_key: str, approval_callback, is_cli: bool, is_gateway: bool, is_ask: bool,
-                    extra_data: dict | None = None) -> dict:
+                    extra_data: dict | None = None, rule: "SendRuleCandidate | None" = None) -> dict:
     """Ask the owner and turn the answer into the gate result. Consent is once or deny."""
     from agent.redact import redact_approval_display
 
@@ -520,7 +538,7 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str, pattern_
             data = {
                 "command": redact_approval_display(command), "pattern_key": pattern_key,
                 "pattern_keys": [pattern_key], "description": redact_approval_display(description),
-                "choices": GATEWAY_CHOICES, **(extra_data or {}),
+                "choices": SEND_RULE_CHOICES if rule else GATEWAY_CHOICES, **(extra_data or {}),
             }
             decision = _await_gateway_decision(session_key, notify_cb, data, surface="gateway",
                                               identity=f"{pattern_key}\n{description}\n{command}")
@@ -548,7 +566,10 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str, pattern_
                 return deny(spec.gateway_refused, "denied", reason="denied by user",
                             reason_addendum=(f' Reason given by the user: "{deny_reason}".' if deny_reason else ""),
                             timeout_addendum="", deny_reason=deny_reason)
-            return _with_edit(spec, decision, grant(choice))
+            result = grant(choice)
+            if rule is not None and result["approved"] and decision.get("remember"):
+                _save_send_rule(rule)
+            return _with_edit(spec, decision, result)
 
         # No gateway callback (cron, batch, or a gateway marker leaked into an interactive CLI, historically via
         # `import gateway.run`): paint the local panel when possible instead of a result that makes the agent
@@ -579,6 +600,14 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str, pattern_
     return grant(choice)
 
 
+def _save_send_rule(rule: "SendRuleCandidate") -> None:
+    from tools import send_rules
+    try:
+        send_rules.remember(rule)
+    except (OSError, ValueError) as exc:
+        logger.warning("send rule not saved (%s); this send is still approved", type(exc).__name__)
+
+
 def _presence(approval_callback=None) -> tuple:
     """``(approval_callback, is_cli, is_gateway, is_ask)`` for the current context.
 
@@ -605,7 +634,7 @@ def _presence(approval_callback=None) -> tuple:
 
 def request_draft_approval(*, text: str, description: str, pattern_key: str, draft: dict,
                            details: list[dict] | None = None, approval_callback=None, subject: str = "",
-                           attachments: tuple[str, ...] = ()) -> dict:
+                           attachments: tuple[str, ...] = (), rule: "SendRuleCandidate | None" = None) -> dict:
     from tools import approval_card_text
     from tools.details_bubble import post_details
     approval_callback, is_cli, is_gateway, is_ask = _presence(approval_callback)
@@ -616,7 +645,7 @@ def request_draft_approval(*, text: str, description: str, pattern_key: str, dra
         _DRAFT_GATE, command=text, description=description, pattern_key=pattern_key,
         session_key=get_current_session_key(), approval_callback=approval_callback,
         is_cli=is_cli, is_gateway=is_gateway, is_ask=is_ask,
-        extra_data={"draft": draft, "details": details or [], **card},
+        extra_data={"draft": draft, "details": details or [], **card}, rule=rule,
     )
 
 

@@ -26,7 +26,7 @@ logger = logging.getLogger("tools.approval")
 class _ApprovalEntry:
     """One pending owner decision inside a gateway session."""
     __slots__ = ("authority", "cancelled", "data", "edited_text", "event", "expired", "identity",
-                 "owner", "reason", "result", "settle")
+                 "owner", "reason", "remember", "result", "settle")
 
     def __init__(self, data: dict):
         self.owner = None
@@ -47,6 +47,8 @@ class _ApprovalEntry:
         self.reason: str | None = None
         # The owner's rewrite of an outbound draft, set with a ``once`` answer by the surface that edited it.
         self.edited_text: str | None = None
+        # ``always`` on a card that offered a send rule: ``result`` stays "once".
+        self.remember = False
         # Why the prompt was withdrawn with nobody answering (interrupt cause, session teardown);
         # followers and teardown read it so a withdrawn prompt never renders as a user deny.
         self.cancelled: str | None = None
@@ -327,4 +329,6 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         decision = _finish(payload, resolved, choice, entry.reason, **extra)
         if entry.edited_text is not None:
             decision["edited_text"] = entry.edited_text
+        if entry.remember:
+            decision["remember"] = True
         return decision

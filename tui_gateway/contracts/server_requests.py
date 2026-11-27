@@ -166,6 +166,7 @@ server_request("setup_beat", params=SetupBeatRequestParams, result=SetupBeatResu
 
 class ApprovalChoice(WireEnum):
     once = "once"
+    always = "always"
     deny = "deny"
 
 

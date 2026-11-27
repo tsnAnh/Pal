@@ -173,6 +173,8 @@ def _deliver(authority, session_id, generation, agent, admission_id, text, reaso
             or _receiving_agent(authority, session_id, generation) is not agent):
         return False
     if not entry[1][admission_id]:
+        from tools.send_rules import turn_order
+        turn_order.void(authority.sessions.get(session_id))
         # Ticketed by its admission id: settlement withdraws exactly it if no drain of the turn consumed it.
         ticketed = callable(getattr(agent, 'withdraw_steer', None))
         absorb = getattr(agent, 'absorb', None) if reason is not None and ticketed else None

@@ -640,8 +640,9 @@ def _broadcast_global_event(event: str, payload: dict | None = None, *, skip=fro
 
 def _approval_request_payload(data: dict | None) -> dict:
     """Build the client-safe representation of a pending approval."""
+    from tools.approval import offered_choices
     payload = dict(data or {})
-    payload["choices"] = ["once", "deny"]
+    payload["choices"] = offered_choices(payload)
     from gateway.run import _redact_approval_command  # description too: consent prompts carry MCP/vault text
     payload.update({k: _redact_approval_command(payload[k]) for k in ("command", "description") if k in payload})
     return payload

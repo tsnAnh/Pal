@@ -25,6 +25,7 @@ class _Role(Enum):
     DESTINATION = "destination"
     THREAD = "thread"
     CONTENT = "content"
+    ATTACHMENT = "attachment"
 
 
 _ARG_ROLES: dict[str, _Role] = {
@@ -34,9 +35,10 @@ _ARG_ROLES: dict[str, _Role] = {
     **dict.fromkeys(("thread", "threadid", "threadts", "messagethreadid"), _Role.THREAD),
     **dict.fromkeys((
         "body", "message", "text", "content", "markdowntext", "htmlbody", "plaintext", "html", "subject", "title",
-        "blocks", "mrkdwn", "parsemode", "unfurllinks", "unfurlmedia", "action", "attachment", "attachments",
-        "file", "files", "filepath", "filepaths", "fileattachments", "media", "mediafiles", "image", "images",
-        "document", "documents"), _Role.CONTENT),
+        "blocks", "mrkdwn", "parsemode", "unfurllinks", "unfurlmedia", "action"), _Role.CONTENT),
+    **dict.fromkeys((
+        "attachment", "attachments", "file", "files", "filepath", "filepaths", "fileattachments", "media",
+        "mediafiles", "image", "images", "document", "documents"), _Role.ATTACHMENT),
 }
 
 
@@ -60,14 +62,26 @@ def _values(value: Any) -> Optional[list[str]]:
     return [part.strip() for item in items for part in _LIST_SEPARATORS.split(str(item)) if part.strip()]
 
 
+def _role(key: object) -> Optional[_Role]:
+    return _ARG_ROLES.get(str(key).lower().replace("_", "").replace("-", ""))
+
+
+def is_text_arg(key: object) -> bool:
+    return _role(key) is _Role.CONTENT
+
+
+def is_attachment_arg(key: object) -> bool:
+    return _role(key) is _Role.ATTACHMENT
+
+
 def _addresses(args: Mapping) -> Optional[tuple[list[str], list[str]]]:
     destinations: list[str] = []
     threads: list[str] = []
     for key, value in args.items():
         if value is None or value == "" or value == []:
             continue
-        role = _ARG_ROLES.get(str(key).lower().replace("_", "").replace("-", ""))
-        if role is _Role.CONTENT:
+        role = _role(key)
+        if role is _Role.CONTENT or role is _Role.ATTACHMENT:
             continue
         values = _values(value)
         if role is None or values is None:
@@ -103,12 +117,12 @@ def _split_sigil(value: str) -> tuple[str, str]:
     return (folded[0], folded[1:]) if folded.startswith(_SIGILS) else ("", folded)
 
 
-def _same(written: str, spelled: str) -> bool:
+def same_address(written: str, spelled: str) -> bool:
     (written_sigil, written_body), (sigil, body) = _split_sigil(written), _split_sigil(spelled)
     return written_body == body and (not written_sigil or not sigil or written_sigil == sigil)
 
 
-def _reads_as_address(token: str) -> bool:
+def reads_as_address(token: str) -> bool:
     # Prose holds words like ``general`` and ``follow-up``, so a bare one never names a channel.
     sigil, body = _split_sigil(token)
     if sigil or "@" in body:
@@ -133,10 +147,10 @@ def _deliver_targets(job: Mapping) -> Iterator[tuple[str, str, str]]:
 
 def _job_names(job: Mapping, call: SendCall, spellings: frozenset[str]) -> bool:
     tokens = (token.rstrip(".!?…") for token in _PROMPT_SEPARATORS.split(str(job.get("prompt") or "")))
-    if any(_reads_as_address(token) and _same(token, spelled) for token in tokens for spelled in spellings):
+    if any(reads_as_address(token) and same_address(token, spelled) for token in tokens for spelled in spellings):
         return True
     return any(
-        platform == call.platform and thread in ("", call.thread) and any(_same(chat, spelled) for spelled in spellings)
+        platform == call.platform and thread in ("", call.thread) and any(same_address(chat, spelled) for spelled in spellings)
         for platform, chat, thread in _deliver_targets(job))
 
 

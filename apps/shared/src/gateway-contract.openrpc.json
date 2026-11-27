@@ -97,6 +97,42 @@
       }
     },
     {
+      "name": "approval.rules.list",
+      "summary": "The profile's saved send rules: sends it makes with no approval card.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ApprovalRulesListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ApprovalRulesListResult"
+        }
+      }
+    },
+    {
+      "name": "approval.rules.revoke",
+      "summary": "Delete one saved send rule, so that send asks again. Rules are only created by answering a card.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ApprovalRulesRevokeParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ApprovalRulesRevokeResult"
+        }
+      }
+    },
+    {
       "name": "auth.revoke_self",
       "summary": "Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record.",
       "params": [
@@ -7723,6 +7759,7 @@
       "ApprovalChoice": {
         "enum": [
           "once",
+          "always",
           "deny"
         ],
         "title": "ApprovalChoice",
@@ -7978,7 +8015,7 @@
       },
       "ApprovalRespondParams": {
         "additionalProperties": false,
-        "description": "``choice`` is one of the offered ``approval`` choices (once / deny); ``all``\nresolves every pending approval, ``request_id`` a specific one, neither the oldest.",
+        "description": "``choice`` is one of the offered ``approval`` choices (once / deny, plus always on a send card that offers\nit, which needs ``request_id`` and saves a send rule); ``all`` resolves every pending approval,\n``request_id`` a specific one, neither the oldest.",
         "properties": {
           "session_id": {
             "title": "Session Id",
@@ -8129,6 +8166,129 @@
           "choice"
         ],
         "title": "ApprovalResult",
+        "type": "object"
+      },
+      "ApprovalRule": {
+        "additionalProperties": false,
+        "description": "One of the owner's \"always allow\" send rules (``tools/send_rules``).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          },
+          "destination_label": {
+            "title": "Destination Label",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "number"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Last Used At"
+          },
+          "uses": {
+            "title": "Uses",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "tool",
+          "destination_label",
+          "created_at",
+          "uses"
+        ],
+        "title": "ApprovalRule",
+        "type": "object"
+      },
+      "ApprovalRulesListParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          }
+        },
+        "title": "ApprovalRulesListParams",
+        "type": "object"
+      },
+      "ApprovalRulesListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalRule"
+            },
+            "title": "Rules",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "title": "ApprovalRulesListResult",
+        "type": "object"
+      },
+      "ApprovalRulesRevokeParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ApprovalRulesRevokeParams",
+        "type": "object"
+      },
+      "ApprovalRulesRevokeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "ApprovalRulesRevokeResult",
         "type": "object"
       },
       "ArgumentMode": {
@@ -68696,6 +68856,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/PromptResponseResult"
+        }
+      }
+    },
+    {
+      "name": "approval.rules.list",
+      "summary": "The profile's saved send rules: sends it makes with no approval card.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ApprovalRulesListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ApprovalRulesListResult"
+        }
+      }
+    },
+    {
+      "name": "approval.rules.revoke",
+      "summary": "Delete one saved send rule, so that send asks again. Rules are only created by answering a card.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ApprovalRulesRevokeParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ApprovalRulesRevokeResult"
         }
       }
     },

@@ -2914,7 +2914,7 @@ export interface GroupsApproveParams {
   choice: ApprovalChoice
   request_id: string
 }
-export type ApprovalChoice = 'once' | 'deny'
+export type ApprovalChoice = 'once' | 'always' | 'deny'
 /** ``result`` is the local ``approval.respond`` answer or the peer's run-action receipt. */
 export interface GroupsApproveResult {
   approved?: boolean
@@ -4584,7 +4584,7 @@ export interface ApprovalReceivedParams {
 export interface ApprovalReceivedResult {
   acknowledged: boolean
 }
-/** ``choice`` is one of the offered ``approval`` choices (once / deny); ``all`` resolves every pending approval, ``request_id`` a specific one, neither the oldest. */
+/** ``choice`` is one of the offered ``approval`` choices (once / deny, plus always on a send card that offers it, which needs ``request_id`` and saves a send rule); ``all`` resolves every pending approval, ``request_id`` a specific one, neither the oldest. */
 export interface ApprovalRespondParams {
   session_id: string
   profile?: string | null
@@ -4597,6 +4597,28 @@ export interface ApprovalRespondResult {
   resolved: number
   status?: 'sent' | null
   state?: 'sent' | 'cancelled' | null
+}
+export interface ApprovalRulesListParams {
+  profile?: string | null
+}
+export interface ApprovalRulesListResult {
+  rules: ApprovalRule[]
+}
+/** One of the owner's "always allow" send rules (``tools/send_rules``). */
+export interface ApprovalRule {
+  id: string
+  tool: string
+  destination_label: string
+  created_at: number
+  last_used_at?: number | null
+  uses: number
+}
+export interface ApprovalRulesRevokeParams {
+  profile?: string | null
+  id: string
+}
+export interface ApprovalRulesRevokeResult {
+  ok: boolean
 }
 export interface VoiceToggleParams {
   action?: VoiceToggleAction
@@ -8697,6 +8719,10 @@ export interface RpcMethods {
   'approval.received': { params: ApprovalReceivedParams; result: ApprovalReceivedResult }
   /** Deliver the user's decision on an outbound send or consent (falls back to durable identity on a stale sid). */
   'approval.respond': { params: ApprovalRespondParams; result: ApprovalRespondResult }
+  /** The profile's saved send rules: sends it makes with no approval card. */
+  'approval.rules.list': { params: ApprovalRulesListParams; result: ApprovalRulesListResult }
+  /** Delete one saved send rule, so that send asks again. Rules are only created by answering a card. */
+  'approval.rules.revoke': { params: ApprovalRulesRevokeParams; result: ApprovalRulesRevokeResult }
   /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
   /** Enable/disable auto top-up with its threshold and reload amount (billing:manage). */
@@ -9459,6 +9485,8 @@ export const RPC_METHODS = [
   'approval.pending',
   'approval.received',
   'approval.respond',
+  'approval.rules.list',
+  'approval.rules.revoke',
   'auth.revoke_self',
   'billing.auto_reload',
   'billing.charge',
@@ -9845,6 +9873,10 @@ export interface CanonicalRpcMethods {
   /** Every model-provider credential the profile holds (credential pool plus standalone logins and keys), active provider first then subscriptions then API keys, each with its usage windows and recent spend. refresh=false answers from the usage cache with no network call; refresh=true fetches all accounts concurrently within a 10s bound. */
   'account.subscriptions': { params: AccountSubscriptionsParams; result: AccountSubscriptionsResult }
   'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
+  /** The profile's saved send rules: sends it makes with no approval card. */
+  'approval.rules.list': { params: ApprovalRulesListParams; result: ApprovalRulesListResult }
+  /** Delete one saved send rule, so that send asks again. Rules are only created by answering a card. */
+  'approval.rules.revoke': { params: ApprovalRulesRevokeParams; result: ApprovalRulesRevokeResult }
   /** The user chose to sign in to a model provider from Settings, before any call failed. The gateway opens the same auth.required request a failed call would (api_key or device_code) and returns its request_id; the answer then flows through auth.submit_credential / auth.signin / auth.decline and ends with auth.resolved. unsupported: the provider cannot be set up from an app (reason says why). refused: this connection may not change that credential. unavailable: no connected app can show the prompt. */
   'auth.begin': { params: AuthBeginParams; result: AuthBeginResult }
   /** The user chose Not now on an auth.required request; the waiting bots are told the user declined sign-in. */
@@ -10171,6 +10203,8 @@ export const CANONICAL_RPC_METHODS = [
   'a2a.forward',
   'account.subscriptions',
   'approval.respond',
+  'approval.rules.list',
+  'approval.rules.revoke',
   'auth.begin',
   'auth.decline',
   'auth.revoke_self',

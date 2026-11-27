@@ -363,9 +363,21 @@ def recipient_class(outbound: Outbound) -> str:
         return OWN_AGENT
     from hermes_cli.config import load_config_readonly
     owned = (load_config_readonly().get("bot_mode") or {}).get("owner_recipients")
-    if outbound.recipient and isinstance(owned, list) and outbound.recipient in owned:
+    if outbound.recipient and isinstance(owned, list) and _listed(outbound, owned):
         return OWN_AGENT
     return PERSON
+
+
+def _listed(outbound: Outbound, owned: list) -> bool:
+    """A Slack conversation is the same one with or without the ``slack:`` prefix and the ``#``; ``@`` stays."""
+    def spelled(value: str) -> str:
+        if outbound.channel != "Slack":
+            return value
+        return value.strip().removeprefix("slack:").removeprefix("#")
+
+    wanted = spelled(outbound.recipient)
+    return outbound.recipient in owned or any(
+        wanted and isinstance(entry, str) and spelled(entry) == wanted for entry in owned)
 
 
 def _inline_capable(approval) -> bool:
@@ -392,22 +404,26 @@ def card_description(outbound: Outbound) -> str:
     return "\n".join([header, *(f"{name}: {value}" for name, value in outbound.details if name != TECHNICAL_DETAIL)])
 
 
-def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
-    from tools import approval
+def _ask_owner(outbound: Outbound, args: dict, destination=None) -> tuple[str | None, dict | None]:
+    from tools import approval, send_rules
     result = approval.request_draft_approval(
         text=outbound.text, description=card_description(outbound), pattern_key=outbound.pattern_key,
         draft=_card(outbound), details=details_payload(outbound), subject=outbound.subject,
-        attachments=_attachment_names(outbound))
+        attachments=_attachment_names(outbound),
+        rule=send_rules.offer(outbound.tool, destination, outbound.recipient, outbound.channel))
     if not result.get("approved"):
         if result.get("outcome") == "timeout":
             return NOT_SENT_NOBODY_TO_ASK, None
         return str(result.get("message") or "BLOCKED: the draft was not approved; it was NOT sent."), None
     edited = result.get("edited_text")
     if edited is None or edited == outbound.text:
+        send_rules.answered_on_card(outbound.tool, destination)
         return None, None
     new_args, reason = validate_edit(outbound, args, edited)
     if new_args is None:
         return f"BLOCKED: {reason}. The message was NOT sent. Do NOT retry it.", None
+    if destination:
+        send_rules.answered_on_card(outbound.tool, send_rules.destination_of(outbound.tool, new_args))
     return None, new_args
 
 
@@ -466,10 +482,14 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
         return None, None
     if not outbound.viewable or not _inline_capable(approval):
         return NOT_SENT_NOBODY_TO_ASK, None
-    from tools import outbound_send_grant
+    from tools import outbound_send_grant, send_rules
     if outbound_send_grant.redeem(outbound.tool, args, gate=outbound_send_grant.DRAFT_GATE):
         return None, None
-    return _ask_owner(outbound, args)
+    destination = send_rules.owner_turn_destination(outbound.tool, args)
+    if send_rules.cleared(outbound.tool, destination, outbound.recipient, outbound.channel,
+                          gate=outbound_send_grant.DRAFT_GATE):
+        return None, None
+    return _ask_owner(outbound, args, destination)
 
 
 _REVIEW_FAILED = "BLOCKED: The outbound draft review failed, so the message was NOT sent. Do NOT retry it."

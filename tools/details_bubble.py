@@ -13,6 +13,22 @@ from typing import Callable, Iterator, Optional
 
 DetailsSink = Callable[[str], bool]
 _sink: contextvars.ContextVar[Optional[DetailsSink]] = contextvars.ContextVar("details_bubble_sink", default=None)
+_line_sink: contextvars.ContextVar[Optional[DetailsSink]] = contextvars.ContextVar("chat_line_sink", default=None)
+
+
+@contextlib.contextmanager
+def bound_line_sink(sink: Optional[DetailsSink]) -> Iterator[None]:
+    """Where a gate that runs before the tool body posts a line; binding it adds no details bubble to a card."""
+    token = _line_sink.set(sink)
+    try:
+        yield
+    finally:
+        _line_sink.reset(token)
+
+
+def post_line(text: str) -> bool:
+    sink = _line_sink.get() or _sink.get()
+    return bool(text.strip()) and sink is not None and sink(text)
 
 
 @contextlib.contextmanager

@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
-from .common import OpenModel, PendingApproval, SessionParams
+from .common import OpenModel, PendingApproval, ProfileParams, SessionParams
 from .registry import method
 
 # ── prompt.submit ─────────────────────────────────────────────────────────────────────────────
@@ -333,8 +333,9 @@ method("approval.received", params=ApprovalReceivedParams, result=ApprovalReceiv
 
 
 class ApprovalRespondParams(SessionParams):
-    """``choice`` is one of the offered ``approval`` choices (once / deny); ``all``
-    resolves every pending approval, ``request_id`` a specific one, neither the oldest."""
+    """``choice`` is one of the offered ``approval`` choices (once / deny, plus always on a send card that offers
+    it, which needs ``request_id`` and saves a send rule); ``all`` resolves every pending approval,
+    ``request_id`` a specific one, neither the oldest."""
 
     choice: str | None = None  # default "deny"
     all: bool | None = None
@@ -350,6 +351,41 @@ class ApprovalRespondResult(Result):
 
 method("approval.respond", params=ApprovalRespondParams, result=ApprovalRespondResult,
        doc="Deliver the user's decision on an outbound send or consent (falls back to durable identity on a stale sid).")
+
+
+class ApprovalRule(Result):
+    """One of the owner's "always allow" send rules (``tools/send_rules``)."""
+
+    id: str
+    tool: str
+    destination_label: str
+    created_at: float  # epoch seconds
+    last_used_at: float | None = None
+    uses: int
+
+
+class ApprovalRulesListParams(ProfileParams):
+    pass
+
+
+class ApprovalRulesListResult(Result):
+    rules: list[ApprovalRule]
+
+
+method("approval.rules.list", params=ApprovalRulesListParams, result=ApprovalRulesListResult,
+       doc="The profile's saved send rules: sends it makes with no approval card.")
+
+
+class ApprovalRulesRevokeParams(ProfileParams):
+    id: str
+
+
+class ApprovalRulesRevokeResult(Result):
+    ok: bool  # false when the profile has no rule with that id
+
+
+method("approval.rules.revoke", params=ApprovalRulesRevokeParams, result=ApprovalRulesRevokeResult,
+       doc="Delete one saved send rule, so that send asks again. Rules are only created by answering a card.")
 
 
 # ── voice ─────────────────────────────────────────────────────────────────────────────────────

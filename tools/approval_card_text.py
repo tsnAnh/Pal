@@ -13,10 +13,17 @@ from collections.abc import Iterable, Mapping
 _STRINGS: dict[str, dict[str, str]] = {
     "en": {"question": "Send this message?", "send": "Send", "edit": "Edit", "cancel": "Cancel",
            "note": "Nothing is sent until you choose Send.", "to": "To", "via": "via", "on": "on",
-           "subject": "Subject", "attachments": "Attachments", "message": "Message"},
+           "subject": "Subject", "attachments": "Attachments", "message": "Message",
+           "rule_saved": "From now on {bot} sends to {destination} via {channel} without asking. To undo this, remove "
+                         "it from {bot}'s always-allow list.",
+           "rule_failed": "{bot} could not save that, and will ask again before sending to {destination} via "
+                          "{channel}."},
     "vi": {"question": "Gửi tin nhắn này?", "send": "Gửi", "edit": "Sửa", "cancel": "Hủy",
            "note": "Chỉ gửi khi bạn chọn Gửi.", "to": "Gửi tới", "via": "qua", "on": "trên",
-           "subject": "Chủ đề", "attachments": "Tệp đính kèm", "message": "Tin nhắn"},
+           "subject": "Chủ đề", "attachments": "Tệp đính kèm", "message": "Tin nhắn",
+           "rule_saved": "Từ giờ {bot} gửi tới {destination} qua {channel} mà không hỏi lại. Muốn đổi, hãy xóa mục này "
+                         "trong danh sách luôn cho phép của {bot}.",
+           "rule_failed": "{bot} chưa lưu được, nên lần sau vẫn hỏi trước khi gửi tới {destination} qua {channel}."},
 }
 _LABEL_KEYS = ("send", "edit", "cancel", "note")
 _VIETNAMESE_ONLY = frozenset("đĐơƠưƯ")
@@ -53,6 +60,11 @@ def card_fields(language: str) -> dict:
     words = strings(language)
     return {"question": words["question"], "language": language if language in _STRINGS else "en",
             "labels": {key: words[key] for key in _LABEL_KEYS}}
+
+
+def rule_line(language: str, bot: str, destination: str, channel: str, *, saved: bool = True) -> str:
+    template = strings(language)["rule_saved" if saved else "rule_failed"]
+    return template.format(bot=bot, destination=destination, channel=channel)
 
 
 def attachment_names(lines: Iterable[str]) -> list[str]:
