@@ -25,6 +25,7 @@ from gateway.status import flush_runtime_status
 
 
 class _Adapter:
+    send_path_degraded = False
     platform = Platform.DISCORD
 
     def __init__(self, token):
@@ -524,7 +525,7 @@ async def test_transient_secret_hydrate_failure_retries_through_real_start_path(
     async def _noop_added(profiles):
         pass
 
-    runner._create_adapter = lambda platform, config: SimpleNamespace(platform=platform)
+    runner._create_adapter = lambda platform, config: SimpleNamespace(platform=platform, send_path_degraded=False)
     runner._connect_initial_adapter_with_timeout = _connect
     runner._after_profiles_added = _noop_added
 

@@ -18,6 +18,8 @@ class RecordingControl:
         self.reloads: list[str] = []
         self.fail_apply = False
         self.reload_outcome = ReloadOutcome.live
+        self.live: set[tuple[str, str]] = set()
+        self.fail_live = False
 
     def apply_env(self, profile, platform_id, env, clear) -> None:
         if self.fail_apply:
@@ -27,6 +29,11 @@ class RecordingControl:
     def reload(self, profile) -> ReloadOutcome:
         self.reloads.append(profile)
         return self.reload_outcome
+
+    def is_live(self, profile, platform_id) -> bool:
+        if self.fail_live:
+            raise RuntimeError("probe exploded: provider secret text")
+        return (profile, platform_id) in self.live
 
 
 def nonce_of(link: str) -> str:

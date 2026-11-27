@@ -530,3 +530,42 @@ def test_authorize_link_keeps_provider_query_and_replaces_a_state_param(env):
 def test_callback_is_public_at_the_sign_in_gate():
     from hermes_cli.dashboard_auth.middleware import _path_is_public
     assert _path_is_public(ci.REDIRECT_PATH)
+
+
+def install_status(method: str, provider_id: str, **params) -> tuple[wire.SetupState, object]:
+    response = call(method, provider_id=provider_id, **params)
+    return state_of(response), response["result"].get("installation")
+
+
+@pytest.mark.parametrize("method", ["chat.install.status", "chat.install.begin"])
+def test_a_live_connector_without_an_install_record_reads_as_ready(env, provider_id, method):
+    env.control.live = {(BOT, provider_id)}
+    state, installation = install_status(method, provider_id)
+    assert (state.step, state.revision, installation, state.error) == (wire.SetupStep.ready, 0, None, None)
+    assert state.next_action.kind is wire.NextActionKind.none
+    assert ChatInstallStore(env.home).load((BOT, provider_id, "w1")) is None
+    assert env.control.applied == [] and env.control.reloads == []
+
+
+def test_a_half_finished_setup_with_a_live_connector_reads_as_ready_and_is_left_alone(env, provider_id):
+    waiting = drive_to_allow(provider_id)
+    env.control.live = {(BOT, provider_id)}
+    state, _ = install_status("chat.install.status", provider_id)
+    assert state.step is wire.SetupStep.ready
+    env.control.live = set()
+    again, _ = install_status("chat.install.status", provider_id)
+    assert (again.step, again.revision) == (wire.SetupStep.needs_allow, waiting.revision)
+
+
+def test_another_bots_live_connector_does_not_finish_this_setup(env, provider_id):
+    env.control.live = {("scout", provider_id)}
+    state, _ = install_status("chat.install.status", provider_id)
+    assert state.step is wire.SetupStep.not_started
+
+
+def test_a_failed_live_probe_keeps_the_stored_state_without_leaking_its_text(env, provider_id, caplog):
+    caplog.set_level(logging.DEBUG)
+    env.control.fail_live = True
+    state, _ = install_status("chat.install.status", provider_id)
+    assert state.step is wire.SetupStep.not_started
+    assert "provider secret text" not in own_log(caplog) and "RuntimeError" in own_log(caplog)

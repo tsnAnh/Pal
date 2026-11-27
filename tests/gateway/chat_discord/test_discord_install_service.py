@@ -245,3 +245,8 @@ def test_setup_error_defaults_are_empty():
 def test_setup_error_rejects_a_negative_retry_after():
     with pytest.raises(ValueError):
         wire.SetupError.model_validate({"code": "provider_unreachable", "fix": "retry", "retry_after_seconds": -1})
+
+
+def test_the_shared_discord_connector_being_live_does_not_finish_a_bots_setup(kit):
+    kit.control.live = {(BOT, "discord")}
+    assert kit.service().status(BOT, "discord", GUILD_ID)[0].step is STEP.not_started

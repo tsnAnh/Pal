@@ -4,10 +4,12 @@ restarts the adapter through the same reload the Slack connect method uses."""
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from gateway import chat_install_runtime as runtime
+from gateway import status as gateway_status
 from hermes_cli.profiles import create_profile, get_profile_dir
 
 TOKEN = "xoxb-fake-token-do-not-use"
@@ -59,3 +61,16 @@ def test_reload_uses_the_slack_reload_with_the_bot_name(monkeypatch):
 def test_reload_reports_whether_the_adapter_came_up(monkeypatch, answer, expected):
     monkeypatch.setattr("tui_gateway.methods_messaging_slack._slack_reload", lambda profile: answer)
     assert runtime.MessagingAdapterControl().reload("scout") is expected
+
+
+def test_a_bot_is_live_only_while_its_own_connector_reports_connected(bots, monkeypatch):
+    monkeypatch.setattr("hermes_cli.web_routers.messaging.resolve_gateway_liveness", lambda **_: SimpleNamespace(running=True))
+    monkeypatch.setattr(gateway_status, "multiplexer_liveness_for_profile",
+                        lambda _home: (1, gateway_status.read_runtime_status(bots / "gateway_state.json") or {}))
+    control = runtime.MessagingAdapterControl()
+    gateway_status.write_runtime_status(platform="scout:slack", platform_state="connected")
+    assert control.is_live("scout", "slack") is False
+    control.apply_env("scout", "slack", {"SLACK_BOT_TOKEN": TOKEN, "SLACK_APP_TOKEN": "xapp-fake-token-do-not-use"}, [])
+    assert control.is_live("scout", "slack") is True
+    gateway_status.write_runtime_status(platform="scout:slack", platform_state="retrying")
+    assert control.is_live("scout", "slack") is False
