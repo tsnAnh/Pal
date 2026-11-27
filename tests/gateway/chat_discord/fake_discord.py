@@ -13,6 +13,8 @@ BOT_ROLE_ID = "300000000000000003"
 OWNER_ID = "123456789012345678"
 ADMINISTRATOR = 1 << 3
 MANAGE_CHANNELS = 1 << 4
+VIEW_CHANNEL = 1 << 10
+SEND_MESSAGES = 1 << 11
 MANAGE_WEBHOOKS = 1 << 29
 MESSAGE_CONTENT_INTENT = 1 << 18
 API_PREFIX = "/api/v10"
@@ -46,7 +48,7 @@ class Recorded:
 @dataclass
 class FakeDiscord:
     guild_ids: list[str] = field(default_factory=lambda: [GUILD_ID])
-    permissions: int = MANAGE_CHANNELS | MANAGE_WEBHOOKS
+    permissions: int = MANAGE_CHANNELS | MANAGE_WEBHOOKS | VIEW_CHANNEL | SEND_MESSAGES
     intent_enabled: bool = True
     reject_auth: bool = False
     rate_limits: int = 0

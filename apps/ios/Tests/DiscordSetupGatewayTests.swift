@@ -2,6 +2,8 @@ import Foundation
 import PalBotProfile
 import PalConnect
 import PalProtocol
+import PalSettings
+import Synchronization
 import Testing
 
 @testable import Pal
@@ -56,6 +58,7 @@ private actor ScriptedInstall: ChatInstallClient {
     func updateIdentity(_ scope: ChatInstallScope) throws -> ChatIdentityUpdateResult { throw ChatInstallClientError.unsupported }
     func setIcon(_ scope: ChatInstallScope, png: Data) {}
     func reconnect(_ scope: ChatInstallScope) throws -> ChatInstallStatusResult { try status(scope) }
+    func channelAccess(_ scope: ChatInstallScope) -> [ChatChannelAccessWire] { [] }
     func storeSecret(label: String, value: String) throws -> String { throw ChatInstallClientError.unsupported }
 }
 
@@ -90,6 +93,34 @@ struct DiscordSetupGatewayTests {
         let outcome = try await gateway(install).confirmOwner(ownerID, in: studio)
         #expect(await install.advances == [ChatInstallAdvance(event: .retry, expectedRevision: 0)])
         #expect(outcome == .installed(DiscordInstalled(guildID: "222", guildName: "Studio")))
+    }
+
+    @Test(arguments: [true, false])
+    func theChannelCheckReadsTheLiveStatusAndNeedsItsAnswer(answers: Bool) async throws {
+        let asked = Mutex<[JSONValue]>([])
+        let vault = SettingsAPI(profile: "ada") { _, _ in .null }
+        let client = GatewayChatInstallClient(bot: "ada", call: { method, params in
+            asked.withLock { $0.append(.array([.string(method), params ?? .null])) }
+            let state: JSONValue = [
+                "bot": "ada", "provider_id": "discord", "workspace": "222", "step": "ready", "revision": 1,
+                "next_action": ["kind": "none", "action_id": "none"], "updated_at": 0, "manual_steps_done": [],
+            ]
+            let channels: JSONValue = answers ? [["channel_id": "900", "name": "ada", "access": "cannot_send"]] : .null
+            return ["state": state, "channels": channels]
+        }, vault: vault)
+        let live = DiscordSetupLiveGateway(
+            service: ConnectAppsService(rpc: DeadConnectRPC(), profile: nil, browser: UnavailableAuthorizationBrowser()),
+            client: client, spec: nil
+        )
+        if answers {
+            let found = try await live.channelAccess(in: studio)
+            #expect(found == [ChatChannelAccessWire(channelId: "900", name: "ada", access: .cannotSend)])
+        } else {
+            await #expect(throws: SetupStatusError.self) { try await live.channelAccess(in: studio) }
+        }
+        #expect(asked.withLock { $0 } == [["chat.install.status", [
+            "profile": "ada", "provider_id": "discord", "workspace": "222", "check_channels": true,
+        ]]])
     }
 
     @Test(arguments: ["installing", "needs_allow", "creating_app", "needs_manual_step", "a_step_from_the_future"])

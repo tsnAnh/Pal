@@ -106,6 +106,7 @@ actor FakeChatInstallClient: ChatInstallClient {
     func revoke(_ scope: ChatInstallScope) async throws { calls.append("revoke") }
     func setIcon(_ scope: ChatInstallScope, png: Data) async throws {}
     func reconnect(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { calls.append("reconnect"); return current }
+    func channelAccess(_ scope: ChatInstallScope) async throws -> [ChatChannelAccessWire] { calls.append("channelAccess"); return [] }
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
         calls.append("updateIdentity")
         if let identityError { throw identityError }

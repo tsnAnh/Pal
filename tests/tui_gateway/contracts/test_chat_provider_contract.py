@@ -202,13 +202,14 @@ def test_abstract_provider_raises_typed_not_implemented():
     assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity",
                                                                                   "accept_config_credential", "has_config_credential", "parse_owner_identity",
                                                                                   "new_install_config", "is_direct_space", "manual_step_action",
-                                                                                  "satisfied_manual_steps", "per_bot_adapter", "needs_public_url", "install_in_place", "apply_owner", "adapter_status"}
+                                                                                  "satisfied_manual_steps", "per_bot_adapter", "needs_public_url", "install_in_place", "apply_owner", "adapter_status", "channel_access"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()
         assert (info.value.provider_id, info.value.operation) == ("bare", operation)
     assert bare.authorizing_identity(install) is None
     assert bare.adapter_status(install) is None
+    assert bare.channel_access(install) is None
 
 
 def test_slack_policy_records_known_limits_and_unverified_defaults():

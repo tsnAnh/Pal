@@ -26,7 +26,32 @@ final class DiscordOwnerE2ETests: BotProfileTestCase {
         let ready = element(app, "stepFlowCalmTitle")
         waitFor(ready, timeout: 60, "the connected page")
         waitUntil(30, "it says Discord is connected") { text(of: ready) == "Discord is connected" }
+        waitFor(element(app, "discordReconnect"), timeout: 10, "Reconnect on the connected page")
+        XCTAssertTrue(element(app, "discordOpen").exists, "Open in Discord is offered")
         shot(app, "discord-page-connected")
+    }
+
+    func testAChannelTheBotCannotUseIsNamedNextToReconnect() throws {
+        let app = signedInApp(extraArguments: ["-hermes-test-discord-wizard", "-hermes-test-discord-muted"])
+        openProfile(app, Self.primarySlug)
+        element(app, "profileDiscordRow").hit()
+        let title = element(app, "stepFlowCalmTitle")
+        waitFor(title, timeout: 30, "the connected page")
+        waitUntil(10, "it says Discord is connected") { text(of: title) == "Discord is connected" }
+        let warning = element(app, "discordChannelWarning")
+        waitFor(warning, timeout: 30, "the channel warning")
+        XCTAssertEqual(
+            text(of: warning), "Pal cannot send messages in #default. Give the Pal role Send Messages there, then reconnect."
+        )
+        let reconnect = element(app, "discordReconnect")
+        waitFor(reconnect, timeout: 10, "Reconnect next to the warning")
+        XCTAssertTrue(element(app, "discordOpen").exists, "Open in Discord is offered")
+        shot(app, "discord-page-channel-warning")
+        reconnect.hit()
+        waitUntil(60, "the warning is gone after reconnecting") { !warning.exists }
+        waitFor(element(app, "discordReconnect"), timeout: 30, "the connected page again")
+        XCTAssertEqual(text(of: title), "Discord is connected")
+        shot(app, "discord-page-channel-fixed")
     }
 
     func testAnUnknownOwnerIsAskedForTheirDiscordUserIdAndTheWizardFinishes() throws {

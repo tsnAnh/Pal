@@ -12,6 +12,10 @@ struct DiscordPageStateTests {
         return (wizard, fake)
     }
 
+    private func access(_ id: String, _ name: String?, _ state: ChatChannelAccessState) -> ChatChannelAccessWire {
+        ChatChannelAccessWire(channelId: id, name: name, access: state)
+    }
+
     private func notConnected(_ wizard: DiscordSetupModel) -> SetupStatus? {
         guard case .notConnected(let status) = wizard.stage else { return nil }
         return status
@@ -98,6 +102,94 @@ struct DiscordPageStateTests {
         await wizard.load()
         await wizard.flow.performPrimary()
         #expect(try #require(notConnected(wizard)).title == "Discord is not connected")
+    }
+
+    private func checkedPage(
+        _ adapter: ChatAdapterStatusWire = ChatAdapterStatusWire(state: .online),
+        _ access: Result<[ChatChannelAccessWire], SetupStatusError>
+    ) async -> (DiscordSetupModel, FakeDiscord) {
+        let fake = FakeDiscord(app: true, lists: [[studio]], existing: studioInstall(adapter))
+        await fake.setAccess(access)
+        let wizard = discordWizard(fake)
+        await wizard.load()
+        await wizard.channelsChecked()
+        return (wizard, fake)
+    }
+
+    @Test func loadingTheConnectedPageChecksThatServerAndSaysNothingWhenEveryChannelWorks() async {
+        let (wizard, fake) = await checkedPage(.init(state: .online), .success([access("900", "ada", .ok)]))
+        #expect(await fake.checks == ["222"])
+        #expect(wizard.channelWarnings.isEmpty)
+        #expect(connectedTitle(wizard) == "Discord is connected")
+    }
+
+    @Test(arguments: [
+        (ChatChannelAccessState.cannotView, "Pal cannot see #ada. Give the Pal role View Channel there, then reconnect."),
+        (
+            ChatChannelAccessState.cannotSend,
+            "Pal cannot send messages in #ada. Give the Pal role Send Messages there, then reconnect."
+        ),
+        (ChatChannelAccessState.unknown, "Pal could not check its permissions in #ada."),
+    ])
+    func aChannelThatDoesNotPassIsNamedInPlainWords(state: ChatChannelAccessState, sentence: String) async {
+        let (wizard, _) = await checkedPage(.init(state: .online), .success([access("900", "ada", state)]))
+        #expect(wizard.channelWarnings == [sentence])
+        #expect(connectedTitle(wizard) == "Discord is connected")
+    }
+
+    @Test func everyChosenChannelThatFailsGetsItsOwnSentence() async {
+        let found = [access("900", "ada", .ok), access("901", "ops", .cannotSend), access("902", nil, .cannotView)]
+        let (wizard, _) = await checkedPage(.init(state: .online), .success(found))
+        #expect(wizard.channelWarnings == [
+            "Pal cannot send messages in #ops. Give the Pal role Send Messages there, then reconnect.",
+            "Pal cannot see its channel. Give the Pal role View Channel there, then reconnect.",
+        ])
+    }
+
+    @Test func aCheckThatFailsReadsAsUncheckedWithoutItsError() async {
+        let refused = SetupStatusError(SetupStatus(code: "provider_failed", subject: "Discord"))
+        let (wizard, _) = await checkedPage(.init(state: .online), .failure(refused))
+        #expect(wizard.channelWarnings == ["Pal could not check its permissions in Discord."])
+        #expect(connectedTitle(wizard) == "Discord is connected")
+    }
+
+    @Test func aSilentCheckNeverHoldsThePageAndEndsUnchecked() async {
+        let fake = FakeDiscord(app: true, lists: [[studio]], existing: wizardInstalled)
+        await fake.silence(["channelAccess"])
+        let wizard = discordWizard(fake)
+        await wizard.load()
+        #expect(connectedTitle(wizard) == "Discord is connected")
+        #expect(wizard.channelWarnings.isEmpty)
+        await wizard.channelsChecked()
+        #expect(wizard.channelWarnings == ["Pal could not check its permissions in Discord."])
+    }
+
+    @Test func theNotConnectedPageDoesNotRepeatItsOwnSentence() async {
+        let hidden = ChatAdapterStatusWire(state: .failed, reason: .missingPermission)
+        let found = [access("900", "ada", .cannotView), access("901", "ops", .cannotSend)]
+        let (wizard, _) = await checkedPage(hidden, .success(found))
+        #expect(wizard.channelWarnings == [
+            "Pal cannot send messages in #ops. Give the Pal role Send Messages there, then reconnect."
+        ])
+    }
+
+    @Test func aGatewayWithoutLiveStateIsNotAskedAboutChannels() async {
+        let fake = FakeDiscord(app: true, lists: [[studio]], existing: studioInstall(nil))
+        let wizard = discordWizard(fake)
+        await wizard.load()
+        await wizard.channelsChecked()
+        #expect(await fake.checks.isEmpty)
+    }
+
+    @Test func reconnectingFromTheConnectedPageChecksTheChannelsAgain() async {
+        let (wizard, fake) = await checkedPage(.init(state: .online), .success([access("900", "ada", .cannotView)]))
+        await fake.setAccess(.success([access("900", "ada", .ok)]))
+        await wizard.reconnect()
+        await wizard.channelsChecked()
+        #expect(await fake.reconnects == ["222"])
+        #expect(await fake.checks == ["222", "222"])
+        #expect(wizard.channelWarnings.isEmpty)
+        #expect(connectedTitle(wizard) == "Discord is connected")
     }
 
     @Test(arguments: [

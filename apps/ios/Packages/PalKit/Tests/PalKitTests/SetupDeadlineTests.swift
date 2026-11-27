@@ -23,6 +23,10 @@ private struct SilencedChatInstallClient: ChatInstallClient {
 
     func providers() async throws -> [ChatCapabilitiesWire] { await hush("providers"); return try await base.providers() }
     func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { await hush("status"); return try await base.status(scope) }
+    func channelAccess(_ scope: ChatInstallScope) async throws -> [ChatChannelAccessWire] {
+        await hush("channelAccess")
+        return try await base.channelAccess(scope)
+    }
     func begin(_ scope: ChatInstallScope) async throws { await hush("begin"); try await base.begin(scope) }
     func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws {
         await hush("advance")

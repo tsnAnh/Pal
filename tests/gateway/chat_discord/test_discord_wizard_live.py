@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.gateway.chat_discord.fake_discord import GUILD_ID
+from tests.gateway.chat_discord.fake_discord import GUILD_ID, SEND_MESSAGES
 from tests.gateway.chat_discord.live_discord import BOT_TOKEN, LiveDiscord
 from tests.gateway.chat_discord.live_gateway import BOT, Multiplexer
 from tests.waiting import wait_until
@@ -46,6 +46,15 @@ def test_wizard_is_done_only_when_the_adapter_is_online_and_answers(tmp_path):
         assert gateway.install_status()["adapter"] == {"state": "online", "reason": None}
 
         channel = gateway.routes()[0]["chat_id"]
+        assert gateway.install_status()["channels"] is None
+        assert [c["access"] for c in gateway.install_status(check_channels=True)["channels"]] == ["ok"]
+        discord.rest.channels[channel]["permission_overwrites"] = [
+            {"id": GUILD_ID, "type": 0, "allow": "0", "deny": str(SEND_MESSAGES)}]
+        checked = gateway.install_status(check_channels=True)
+        assert [(c["channel_id"], c["access"]) for c in checked["channels"]] == [(channel, "cannot_send")]
+        assert checked["adapter"] == {"state": "online", "reason": None}
+        discord.rest.channels[channel]["permission_overwrites"] = []
+
         discord.say(channel, "hello there")
         wait_until(lambda: any("LOCAL_ACK" in str(body) for _, body in discord.webhook_posts), timeout=60,
                    interval=.2, what="a reply through the channel webhook")

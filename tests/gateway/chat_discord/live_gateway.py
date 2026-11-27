@@ -132,8 +132,8 @@ class Multiplexer:
         item = self.call("vault.add", kind="api_key", label="Discord bot token", secret={"api_key": BOT_TOKEN})["id"]
         self.call("connectors.discord.token", item=item)
 
-    def install_status(self) -> dict:
-        return self.call("chat.install.status", provider_id="discord", workspace=GUILD_ID, profile=BOT)
+    def install_status(self, **extra) -> dict:
+        return self.call("chat.install.status", provider_id="discord", workspace=GUILD_ID, profile=BOT, **extra)
 
     def run_wizard(self) -> dict:
         self.paste_token()
