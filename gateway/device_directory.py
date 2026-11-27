@@ -89,7 +89,11 @@ def describe(view: DeviceView, now: float) -> dict:
     return row
 
 
-def _listing(views, now: float) -> str:
+def fold_name(name: str) -> str:
+    return " ".join(name.split()).casefold()
+
+
+def listing(views, now: float) -> str:
     return "; ".join(f"{view.label} ({view.type}, {'online' if view.online else 'offline'}, "
                      f"last seen {last_seen_text(view, now)})" for view in views) or "none"
 
@@ -101,18 +105,18 @@ def resolve(views: list[DeviceView], name: str, now: float) -> Resolution:
     by_id = [view for view in views if view.device_id == wanted]
     if by_id:
         return Resolution(device=by_id[0])
-    matches = [view for view in views if " ".join(view.label.split()).casefold() == wanted.casefold()]
+    matches = [view for view in views if fold_name(view.label) == fold_name(wanted)]
     if len(matches) == 1:
         return Resolution(device=matches[0])
     if matches:
         return Resolution(
             code="ambiguous_device", candidates=tuple(matches),
-            message=f"More than one device is named \"{clean_text(wanted, 100)}\": {_listing(matches, now)}. "
+            message=f"More than one device is named \"{clean_text(wanted, 100)}\": {listing(matches, now)}. "
                     "Ask the user which one they mean, then pass its device_id.")
     return Resolution(
         code="device_not_found", candidates=tuple(views),
         message=f"No logged-in device is named \"{clean_text(wanted, 100)}\". Available devices: "
-                f"{_listing(views, now)}. Ask the user which device they mean.")
+                f"{listing(views, now)}. Ask the user which device they mean.")
 
 
 def capability_title(connector: str) -> str:

@@ -9,9 +9,11 @@ from agent.surface_switch import identity_line_value
 
 logger = logging.getLogger("run_agent")
 
-_NOTE_PREFIX = "[System: The user is now writing from "
+_NOTE_OPENING = "[System: The user is "
+_NOTE_PREFIX = _NOTE_OPENING + "reading on "
 _SAME_HOST = "It is the machine your tools run on."
-_OTHER_HOST = "It is not the machine your tools run on: files you create are not on that device."
+_ROUTING = ("Tasks run on whichever of the user's devices is online and fits, whatever device the message "
+            "came from.")
 _NOTE_SCAN_TAIL = 200
 _LABEL_NOISE = re.compile(r"[\[\]]")
 
@@ -33,15 +35,22 @@ _CAVEATS = {
     "cli": "This is a terminal: Markdown does not render and files are given as plain paths.",
     "web": "Assume plain Markdown; no desktop-app-only widgets or panes.",
 }
+_DEVICE_PATTERN = r"(?P<label>[^\[\]]*?) \((?P<app>" + "|".join(map(re.escape, _APP_NAMES.values())) + r")\)\. "
 _NOTE_RE = re.compile(
-    re.escape(_NOTE_PREFIX) + r"(?P<label>[^\[\]]*?) \((?P<app>" + "|".join(map(re.escape, _APP_NAMES.values())) + r")\)\. "
-    r"(?P<host>" + re.escape(_SAME_HOST) + "|" + re.escape(_OTHER_HOST) + ")")
+    re.escape(_NOTE_PREFIX) + _DEVICE_PATTERN + "(?P<host>" + re.escape(_SAME_HOST + " ") + ")?"
+    + re.escape(_ROUTING + "]"))
+_LEGACY_NOTE_RE = re.compile(
+    re.escape(_NOTE_OPENING + "now writing from ") + _DEVICE_PATTERN + "(?:" + re.escape(_SAME_HOST) + "|"
+    + re.escape("It is not the machine your tools run on: files you create are not on that device.") + r")\]")
 
 
 class OriginSignature(NamedTuple):
     kind: str
     label: str
     same_host: bool
+
+
+_OUTDATED_ANNOUNCEMENT = OriginSignature("", "", False)
 
 
 def _clean_label(label: str) -> str:
@@ -58,20 +67,20 @@ def _signature(origin: Any) -> Optional[OriginSignature]:
 
 
 def render_note(signature: OriginSignature) -> str:
-    host = _SAME_HOST if signature.same_host else _OTHER_HOST
-    return (f"{_NOTE_PREFIX}{signature.label} ({_APP_NAMES[signature.kind]}). {host}] "
+    host = f"{_SAME_HOST} " if signature.same_host else ""
+    return (f"{_NOTE_PREFIX}{signature.label} ({_APP_NAMES[signature.kind]}). {host}{_ROUTING}] "
             f"{_CAVEATS[signature.kind]}")
 
 
 def _parse(text: str) -> Optional[OriginSignature]:
-    matches = list(_NOTE_RE.finditer(text))
+    matches = [*_NOTE_RE.finditer(text), *_LEGACY_NOTE_RE.finditer(text)]
     if not matches:
         return None
-    last = matches[-1]
-    kind = next((kind for kind, app in _APP_NAMES.items() if app == last["app"]), None)
-    if kind is None:
-        return None
-    return OriginSignature(kind, last["label"], last["host"] == _SAME_HOST)
+    last = max(matches, key=re.Match.start)
+    if last.re is _LEGACY_NOTE_RE:
+        return _OUTDATED_ANNOUNCEMENT
+    kind = next(kind for kind, app in _APP_NAMES.items() if app == last["app"])
+    return OriginSignature(kind, last["label"], last["host"] is not None)
 
 
 def _last_announced(conversation_history: Any) -> Optional[OriginSignature]:
@@ -80,7 +89,7 @@ def _last_announced(conversation_history: Any) -> Optional[OriginSignature]:
             continue
         sidecar = msg.get("api_content")
         text = (sidecar if isinstance(sidecar, str) else "") + "\n" + flatten_message_text(msg.get("content"))
-        if _NOTE_PREFIX in text and (found := _parse(text)) is not None:
+        if _NOTE_OPENING in text and (found := _parse(text)) is not None:
             return found
     return None
 

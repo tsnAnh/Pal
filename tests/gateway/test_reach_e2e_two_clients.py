@@ -428,7 +428,7 @@ def check_origin_notes(stack: ReachStack, report: Report, marks: dict, session_i
     report.check(step, "the desktop note rides turns 1 and 4 only (an unrelated host is never the baseline)",
                  [n for n, r in requests.items() if desktop_note in last_user_content(r)] == [1, 4])
     report.check(step, "turn 3 repeats nothing already announced",
-                 "The user is now writing from" not in last_user_content(requests[3]))
+                 "The user is reading on" not in last_user_content(requests[3]))
     final_hash = stored_prompt_hash(stack, session_id)
     report.check(step, "state.db keeps the one frozen system prompt, and it is what the model was sent",
                  bool(first_hash) and final_hash == first_hash == next(iter(shas.values())),
@@ -447,7 +447,7 @@ async def check_second_profile(stack, report, nonce, plain, beta_ios, alpha_peer
     request = turn_request(stack, marker)
     report.requests.append({"turn": "beta", "marker": marker, "system_sha256": system_sha(request)})
     report.check(step, "the other profile's request carries no origin note",
-                 "The user is now writing from" not in last_user_content(request))
+                 "The user is reading on" not in last_user_content(request))
     beta_rows = stack.offer_rows(OTHER_PROFILE)
     report.offers["beta"] = beta_rows
     report.check(step, "the other profile logged no offers", beta_rows == [] and stack.db_path(OTHER_PROFILE).exists())
