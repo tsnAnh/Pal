@@ -8,6 +8,8 @@ from gateway.proactive_scorecard.rubric import Criterion
 _TRAILING_NOISE = re.compile(r"[\s\*_`~\)\]\"'”’»>☀-➿\U0001f000-\U0001faff️]+$")
 _OPTION_LINE = re.compile(r"^\s*(?:[-*•]|\d{1,2}[.)]|[A-Da-d][.)])\s+\S")
 _LAST_PARAGRAPH_CHARS = 600
+_CODE_FENCE = re.compile(r"^[ \t]*(```|~~~)[^\n]*\n.*?^[ \t]*\1[ \t]*$", re.MULTILINE | re.DOTALL)
+_BLOCKER = re.compile(r"\b(blocked|blockers?|i need you|waiting (on|for) you|(dang cho|can) (anh|chi|ban|sep))\b")
 
 
 def fold(text: str) -> str:
@@ -139,6 +141,13 @@ def matched_criteria(text: str) -> frozenset[Criterion]:
         criterion for criterion, patterns in CRITERIA_PATTERNS.items()
         if any(pattern.search(folded) for pattern in patterns)
     )
+
+
+def asks_owner(text: str) -> bool:
+    prose = _CODE_FENCE.sub("", text or "")
+    return (any(question_text(line) is not None for line in prose.splitlines())
+            or Criterion.APPROVAL_GATE in matched_criteria(prose)
+            or _BLOCKER.search(fold(prose)) is not None)
 
 
 def correction_classes(text: str) -> frozenset[str]:
