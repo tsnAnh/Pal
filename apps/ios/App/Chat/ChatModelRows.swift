@@ -26,7 +26,7 @@ extension ChatModel {
         return .sameSender
     }
 
-    static func dependsOnConnection(_ item: TranscriptItem) -> Bool {
+    static func dependsOnOutbox(_ item: TranscriptItem) -> Bool {
         if case .user(_, .sending) = item.content { return true }
         return false
     }

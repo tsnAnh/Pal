@@ -6,7 +6,6 @@ import PalProtocol
 enum BubbleDelivery: Equatable {
     case sent
     case sending
-    case waitingForConnection
     case failed(submissionID: String)
 }
 

@@ -47,8 +47,8 @@ struct ChatModelRebuildGuardTests {
         #expect(fired.values.reduce(0, +) == 0, "\(fired)")
     }
 
-    @Test("phase updates that keep the connection never rebuild the rows")
-    func phaseUpdatesRebuildOnlyWhenTheConnectionChanges() throws {
+    @Test("phase updates never rebuild the rows")
+    func phaseUpdatesNeverRebuildTheRows() throws {
         let harness = try RebuildHarness(world: rebuildConversation())
         harness.push()
         harness.push()
@@ -58,11 +58,10 @@ struct ChatModelRebuildGuardTests {
         #expect(harness.model.rebuilds == settled)
         #expect(harness.model.connection == .live)
         harness.phase(.resyncing)
-        #expect(harness.model.rebuilds.full == settled.full + 1)
+        #expect(harness.model.connection == .reconnecting)
         for _ in 0..<50 { harness.model.applyPhase(.attaching) }
-        #expect(harness.model.rebuilds.full == settled.full + 1)
         harness.phase(.live(lastSequence: 300, replayEpoch: "e"))
-        #expect(harness.model.rebuilds.full == settled.full + 2)
+        #expect(harness.model.rebuilds == settled)
     }
 
     @Test("an unconfirmed bubble reads the same offline and the rows still match a full rebuild")

@@ -70,7 +70,6 @@ final class ChatModel {
     @ObservationIgnored private var reaping: Set<String> = []
     var built: [String: BuiltRow] = [:]
     var hasBaseline = false
-    @ObservationIgnored var builtOffline = true
     @ObservationIgnored var builtWithBaseline = false
     @ObservationIgnored var generatedImageIDs: Set<String> = []
     @ObservationIgnored private(set) var rebuilds = RebuildCounts()
@@ -557,7 +556,6 @@ final class ChatModel {
 
     func applyPhase(_ phase: ChatPhase) {
         if case .live = phase { noteLive() } else { noteDisconnected() }
-        if builtOffline != isOffline { rebuild() }
     }
 
     private func consumeTimeline(_ session: ChatSession) async {
@@ -684,7 +682,6 @@ final class ChatModel {
             publish(builtRows())
             reapAdmitted()
         }
-        builtOffline = isOffline
         publishActivity()
     }
 
@@ -761,7 +758,7 @@ final class ChatModel {
     }
 
     func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
-        if let reuse, reuse.item == item, !Self.dependsOnConnection(item), !hasStaleClarify(item, reuse) {
+        if let reuse, reuse.item == item, !Self.dependsOnOutbox(item), !hasStaleClarify(item, reuse) {
             if case .assistant = item.content, !generated.isEmpty {
                 return BuiltRow(item: item, kind: reuse.kind, images: reuse.images.filter { !generated.contains($0.id) }, files: reuse.files)
             }
@@ -780,7 +777,7 @@ final class ChatModel {
             case .person:
                 var state: BubbleDelivery = switch delivery {
                 case .sent, .queued: .sent
-                case .sending: .awaitingReceipt(offline: isOffline, outbox: entry)
+                case .sending: .awaitingReceipt(outbox: entry)
                 }
                 if let entry, case .failed = entry.state { state = .failed(submissionID: entry.submissionID) }
                 var content = MessageImages.extract(from: text, role: .user)

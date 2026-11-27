@@ -77,25 +77,3 @@ struct FindMark {
     var fill: Color { (surfaceText ?? ink).opacity(isCurrent ? 0.5 : 0.22) }
     var text: Color? { isCurrent && surfaceText == nil ? PalTokens.textPrimary : nil }
 }
-
-struct SendRise: ViewModifier {
-    let isFresh: Bool
-
-    @State private var settled = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var lifted: Bool { isFresh && !settled && !reduceMotion }
-
-    func body(content: Content) -> some View {
-        content
-            .offset(y: lifted ? Self.rise : 0)
-            .opacity(lifted ? 0 : 1)
-            .onAppear {
-                guard lifted else { return }
-                withAnimation(.easeOut(duration: Self.duration)) { settled = true }
-            }
-    }
-
-    private static let rise: CGFloat = 8
-    private static let duration = 0.18
-}

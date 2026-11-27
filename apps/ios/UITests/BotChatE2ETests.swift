@@ -57,9 +57,7 @@ final class BotChatE2ETests: E2ETestCase {
         let followUps = ["first while working", "second while working", "third while working"]
         for text in followUps { send(app, text) }
         for text in followUps { waitFor(bubbles(app, "userBubble", containing: text).firstMatch, timeout: 10, "\(text) shown") }
-        for label in ["deliveryWaitingForConnection", "deliveryFailed"] {
-            XCTAssertFalse(app.descendants(matching: .any)[label].exists, "an online send shows no status label (\(label))")
-        }
+        XCTAssertFalse(app.descendants(matching: .any)["deliveryFailed"].exists, "an online send shows no status label")
         XCTAssertTrue(working.exists, "the turn is still running when the follow-ups count as sent")
         for text in followUps { XCTAssertEqual(bubbles(app, "userBubble", containing: text).count, 1, text) }
     }
@@ -140,12 +138,11 @@ final class BotChatE2ETests: E2ETestCase {
         try control("kill-gateway")
         waitFor(app.descendants(matching: .any)["reconnectingIndicator"], timeout: 30, "reconnecting indicator")
         send(app, "OFFLINE-PING-7731")
-        let waiting = app.descendants(matching: .any)["deliveryWaitingForConnection"]
-        waitFor(waiting, timeout: 15, "waiting for connection state")
-        shot(app, "chat-waiting-for-connection")
+        waitFor(bubbles(app, "userBubble", containing: "OFFLINE-PING-7731").firstMatch, timeout: 15, "the offline message shows at once")
+        XCTAssertFalse(app.descendants(matching: .any)["deliveryFailed"].exists, "an offline send shows no status label")
+        shot(app, "chat-offline-send")
         try control("start-gateway")
-        waitGone(waiting, timeout: 90, "waiting state clears after reconnect")
-        waitFor(bubbles(app, "assistantBubble", containing: "stub-").firstMatch, timeout: 60)
+        waitFor(bubbles(app, "assistantBubble", containing: "stub-").firstMatch, timeout: 150, "the message is delivered after reconnect")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "OFFLINE-PING-7731").count, 1)
         XCTAssertFalse(app.descendants(matching: .any)["reconnectingIndicator"].exists)
         try control("count-offline-ping")

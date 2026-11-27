@@ -44,7 +44,7 @@ extension ChatRowView {
         switch delivery {
         case .sent: messageActions(for: text)
         case .failed(let submission): messageActions(for: text, failedSubmission: submission)
-        case .sending, .waitingForConnection: nil
+        case .sending: nil
         }
     }
 }

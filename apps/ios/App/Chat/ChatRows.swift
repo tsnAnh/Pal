@@ -160,7 +160,6 @@ struct UserBubble: View {
                         }
                         .bubbleTextSelection()
                     }
-                    .opacity(delivery == .sent || delivery == .sending ? 1 : 0.75)
                     .bubbleAccessibility(text: message.spoken, identifier: "userBubble")
                     .messageActions(side: .user)
                 }
@@ -169,36 +168,12 @@ struct UserBubble: View {
             failedStatus
         }
         .chatRowFrame(for: .user)
-        .overlay(alignment: .bottomTrailing) { pendingStatus }
-        .modifier(SendRise(isFresh: delivery == .sending))
     }
-
-    @ViewBuilder
-    private var pendingStatus: some View {
-        switch delivery {
-        case .waitingForConnection:
-            pendingLabel("Waiting for connection", symbol: "clock", identifier: "deliveryWaitingForConnection")
-        case .sent, .sending, .failed:
-            EmptyView()
-        }
-    }
-
-    private func pendingLabel(_ title: LocalizedStringKey, symbol: String, identifier: String) -> some View {
-        Label(title, palIcon: symbol, ink: .secondary)
-            .font(.caption)
-            .foregroundStyle(Color(theme.palette.textSecondary))
-            .fixedSize()
-            .alignmentGuide(.bottom) { $0[.top] - Self.pendingStatusGap }
-            .allowsHitTesting(false)
-            .accessibilityIdentifier(identifier)
-    }
-
-    private static let pendingStatusGap: CGFloat = 2
 
     @ViewBuilder
     private var failedStatus: some View {
         switch delivery {
-        case .sent, .sending, .waitingForConnection:
+        case .sent, .sending:
             EmptyView()
         case .failed(let id):
             Button { retry(id) } label: {
