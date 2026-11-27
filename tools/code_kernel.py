@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from agent import deadline as agent_deadline
+from hermes_cli.profile_admin_guard import CREATE_GRANT_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,8 @@ def run_cell(request, execution_count):
     # An imported module keeps the code it was loaded with: name the ones edited on disk since
     # the last cell, so a fix that "still fails" is not mistaken for a wrong fix.
     stale_modules = _scan_edited_modules(True)
+    cell_env = request.get("env", {})
+    os.environ.update(cell_env)
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             exec(compile(request["code"], "<cell>", "exec"), GLOBALS)
@@ -116,6 +119,9 @@ def run_cell(request, execution_count):
         status, trace = "exit", "SystemExit: " + repr(exc.code)
     except BaseException:
         status, trace = "error", traceback.format_exc()
+    finally:
+        for name in cell_env:
+            os.environ.pop(name, None)
     _scan_edited_modules(False)  # modules this cell imported are watched from now on
     stdout_text, stdout_clipped = _clip(out.getvalue())
     stderr_text, stderr_clipped = _clip(err.getvalue())
@@ -1043,6 +1049,12 @@ def execute_in_session_kernel(
             kernel.teardown()
 
 
+def _cell_env() -> dict[str, str]:
+    from gateway.session_context import get_session_env
+    grant = get_session_env(CREATE_GRANT_ENV, "")
+    return {CREATE_GRANT_ENV: grant} if grant else {}
+
+
 def _run_cell(kernel: SessionKernel, key: tuple, code: str, *, task_id: str, child_python: str,
               child_cwd: str, sandbox_tools: frozenset, timeout: int, max_tool_calls: int,
               is_interrupted, exec_start: float, state_reset: bool,
@@ -1063,7 +1075,7 @@ def _run_cell(kernel: SessionKernel, key: tuple, code: str, *, task_id: str, chi
             kernel.cell_log_start = len(kernel.tool_call_log)
             kernel.raw.drain(), kernel.stderr.drain()  # raw output leaked between cells belongs to no cell
             kernel.cell_authority = authority
-            request = {"id": uuid.uuid4().hex, "code": code}
+            request = {"id": uuid.uuid4().hex, "code": code, "env": _cell_env()}
             kernel.proc.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
             kernel.proc.stdin.flush()
             status, payload = _await_cell(kernel, timeout, is_interrupted)

@@ -69,11 +69,13 @@ _CRON_AUTO_DELIVER_PLATFORM = ContextVar("HERMES_CRON_AUTO_DELIVER_PLATFORM", de
 _CRON_AUTO_DELIVER_CHAT_ID = ContextVar("HERMES_CRON_AUTO_DELIVER_CHAT_ID", default=_UNSET)
 _CRON_AUTO_DELIVER_THREAD_ID = ContextVar("HERMES_CRON_AUTO_DELIVER_THREAD_ID", default=_UNSET)
 
+_PROFILE_CREATE_GRANT = ContextVar("HERMES_SESSION_CREATE_GRANT", default=_UNSET)
+
 # Legacy env-var name -> ContextVar for get_session_env (_SESSION_ASYNC_DELIVERY deliberately
 # absent: it is a bool capability, read via async_delivery_supported).
 _VAR_MAP = {var.name: var for var in (
     *_SESSION_VARS, _CRON_AUTO_DELIVER_PLATFORM, _CRON_AUTO_DELIVER_CHAT_ID,
-    _CRON_AUTO_DELIVER_THREAD_ID,
+    _CRON_AUTO_DELIVER_THREAD_ID, _PROFILE_CREATE_GRANT,
 )}
 
 
@@ -129,6 +131,15 @@ def scoped_turn_actor(event: Any, turn: Any) -> Iterator[None]:
     finally:
         for var, token in reversed(tokens):
             var.reset(token)
+
+
+@contextmanager
+def scoped_create_grant(grant: str) -> Iterator[None]:
+    token = _PROFILE_CREATE_GRANT.set(grant)
+    try:
+        yield
+    finally:
+        _PROFILE_CREATE_GRANT.reset(token)
 
 
 @contextmanager

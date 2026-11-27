@@ -7,10 +7,16 @@ from gateway.session_busy_controls import authorize_profile
 from gateway.session_legacy_bridge import Verb, administers_install, bridged
 from hermes_state_runtime import RuntimeStoreError
 
+
+def _owner_turn_create(params):
+    from hermes_cli.profile_admin_guard import spend_create_grant
+    return spend_create_grant(params.get('owner_grant'))
+
+
 VERBS = {
     'profiles.get_asset': Verb('session:read', named=('name',)),
     'profiles.template.export': Verb('session:read', named=('name',)),
-    'profiles.create': Verb('session:control', install_wide=True),
+    'profiles.create': Verb('session:control', install_wide=True, admits=_owner_turn_create),
     'profiles.configure': Verb('session:control', named=('name',)),
     'profiles.set_asset': Verb('session:control', named=('name',)),
     'profiles.rename': Verb('session:control', install_wide=True),

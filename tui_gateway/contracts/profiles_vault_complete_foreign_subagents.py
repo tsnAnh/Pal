@@ -269,6 +269,7 @@ class ProfilesCreateParams(ProfileParams):
     clone_config: bool | str | None = None
     sync_imports: bool | str | None = None
     report: bool | str | None = None
+    owner_grant: str | None = None
 
 
 class ProfileMirrored(Result):

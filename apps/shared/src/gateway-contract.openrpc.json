@@ -47134,6 +47134,18 @@
             ],
             "default": null,
             "title": "Report"
+          },
+          "owner_grant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Grant"
           }
         },
         "required": [

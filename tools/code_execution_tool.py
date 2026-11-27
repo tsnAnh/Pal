@@ -775,7 +775,7 @@ def execute_code(
     # script before either dispatch path spawns it — in this (tool-executor) thread, which holds
     # the session context. A Docker sandbox with host bind mounts gets no container fast-path.
     # See #30882.
-    from tools.approval import check_execute_code_guard
+    from tools.approval import check_execute_code_guard, owner_create_grant
     _guard = check_execute_code_guard(code, env_type, has_host_access=_docker_has_host_access(_env_config))
     if not _guard.get("approved", False):
         return _error_result(_guard.get("message") or "execute_code blocked by approval guard.",
@@ -793,15 +793,17 @@ def execute_code(
     from tools.code_kernel import execute_in_session_kernel
     _cfg = _load_config()
     _mode = _get_execution_mode()
-    return record_execution_backend("code", "local", execute_in_session_kernel(
-        code, task_id=task_id or "", mode=_mode, child_python=_resolve_child_python(_mode),
-        child_cwd=_resolve_child_cwd(_mode, "", task_id=task_id or ""),
-        sandbox_tools=frozenset(_sandbox_tools_for(enabled_tools)),
-        timeout=_cfg.get("timeout", DEFAULT_TIMEOUT),
-        max_tool_calls=_cfg.get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS),
-        reset=bool(reset), is_interrupted=_is_interrupted,
-        session_id=session_id, turn_id=turn_id, conversation_id=conversation_id,
-    ))
+    with owner_create_grant(code, is_code=True):
+        cell = execute_in_session_kernel(
+            code, task_id=task_id or "", mode=_mode, child_python=_resolve_child_python(_mode),
+            child_cwd=_resolve_child_cwd(_mode, "", task_id=task_id or ""),
+            sandbox_tools=frozenset(_sandbox_tools_for(enabled_tools)),
+            timeout=_cfg.get("timeout", DEFAULT_TIMEOUT),
+            max_tool_calls=_cfg.get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS),
+            reset=bool(reset), is_interrupted=_is_interrupted,
+            session_id=session_id, turn_id=turn_id, conversation_id=conversation_id,
+        )
+    return record_execution_backend("code", "local", cell)
 
 
 def _load_config() -> dict:
