@@ -74,7 +74,7 @@ def _make_staging_dir(root: Path, name: str = "src", *, manifest: DistributionMa
     )
     from cron.jobs import create_job, use_cron_store
     with use_cron_store(staged):
-        create_job("daily task", "0 9 * * *", name="daily")
+        create_job("daily task", "0 9 * * *", name="Daily")
 
     mf = manifest or DistributionManifest(name=name, version="0.1.0")
     write_manifest(staged, mf)
@@ -565,7 +565,7 @@ class TestUpdate:
         data = json.loads(store.read_text(encoding="utf-8"))
         data["jobs"][0]["schedule"] = {"kind": "once", "run_at": "2020-01-01T00:00:00+00:00", "display": "once"}
         store.write_text(json.dumps(data), encoding="utf-8")
-        with pytest.raises(DistributionError, match="cron job 'daily'"):
+        with pytest.raises(DistributionError, match="cron job 'Daily'"):
             update_distribution("cron_merge")
         assert (plan.target_dir / "SOUL.md").read_text() != "upstream v3\n"
         with use_cron_store(plan.target_dir):

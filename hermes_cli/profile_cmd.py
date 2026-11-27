@@ -221,7 +221,16 @@ def _print_skill_seed_result(name: str, result: Optional[dict]) -> None:
         print(f"{len(result.get('copied', []))} bundled skills synced.")
 
 
+def _finish_form_bot(name: str, made_path: str) -> None:
+    from hermes_cli.app_bot import finish_form_bot
+    try:
+        finish_form_bot(name, made_path)
+    except OSError as e:
+        print(f"⚠ The bot was created, but the app's bot settings were not saved: {e}")
+
+
 def _profile_create(args):
+    from hermes_cli.app_bot import form_request, run_by_agent_tool
     from hermes_cli.profile_provision import CREATE_REFUSALS, ProfileCreateReceipt, ProfileCreateRequest, provision_profile
     from hermes_cli.profile_provision_gateway import GatewayCreateError, create_through_gateway
     from hermes_cli.profiles import _get_wrapper_dir, _is_wrapper_dir_in_path
@@ -233,8 +242,8 @@ def _profile_create(args):
     clone_channels = getattr(args, "clone_channels", False)
     sync_imports = getattr(args, "sync_imports", False)
     clone_config = clone or clone_from is not None
-    cloned = clone_config or clone_all
-    _refuse_create_args(args, clone_from, cloned)
+    _refuse_create_args(args, clone_from, clone_config or clone_all)
+    form_bot = run_by_agent_tool()
     request = ProfileCreateRequest(
         name=name, clone_from=clone_from, clone_all=clone_all, clone_config=clone_config,
         no_skills=getattr(args, "no_skills", False), description=getattr(args, "description", None),
@@ -243,11 +252,16 @@ def _profile_create(args):
         mirror_credentials=not getattr(args, "no_credentials", False),
         share_auth=not getattr(args, "isolated_auth", False))
     try:
+        if form_bot:
+            request = form_request(request)
         # A gateway serving this terminal makes the profile (one HERMES_TUI_GATEWAY_URL names always
         # does); with none it is made here. Either way the receipt below is read where it was made.
         made = create_through_gateway(request) or ProfileCreateReceipt.of(request, provision_profile(request))
     except (*CREATE_REFUSALS, GatewayCreateError) as e:
         _die(f"Error: {e}")
+    if form_bot:
+        _finish_form_bot(name, made.path)
+    cloned = request.clone_config or request.clone_all
     print(f"\nProfile '{name}' created at {made.path}")
     source_label = made.source_label
     if cloned:

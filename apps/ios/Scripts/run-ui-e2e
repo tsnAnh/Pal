@@ -95,6 +95,27 @@ kill_gateway() {
   return 1
 }
 
+hard_kill_gateway() {
+  local pid
+  pid="$(gateway_listener)"
+  [ -n "$pid" ] || return 1
+  kill -9 "$pid" 2>/dev/null || return 1
+  for _ in $(seq 40); do [ -z "$(gateway_listener)" ] && return 0; sleep 0.25; done
+  return 1
+}
+
+lost_turn_resolved() {
+  local db rows found=1
+  for db in "$HERMES_IOS_E2E_HOME"/profiles/*/state.db; do
+    [ -f "$db" ] || continue
+    rows="$(sqlite3 "file:$db?mode=ro" "SELECT status || ':' || coalesce(outcome,'') FROM session_admissions WHERE payload_json LIKE '%LOST-TURN-4410%';")"
+    [ -n "$rows" ] || continue
+    echo "$db lost_turn=$rows" >>"$ART/lost-turn.txt"
+    [ "$rows" = "terminal:interrupted" ] && found=0
+  done
+  return $found
+}
+
 start_gateway() {
   [ -z "$(gateway_listener)" ] || return 1
   ( cd "$REPO" && HERMES_HOME="$HERMES_IOS_E2E_HOME" exec "$PYTHON" -m hermes_cli.main gateway run >>"$ART/gateway-restart.log" 2>&1 ) &
@@ -164,6 +185,8 @@ control_loop() {
       local status=ok
       case "$command" in
         kill-gateway) kill_gateway || status=fail ;;
+        hard-kill-gateway) hard_kill_gateway || status=fail ;;
+        lost-turn-resolved) lost_turn_resolved || status=fail ;;
         start-gateway) start_gateway || status=fail ;;
         count-offline-ping) probe_count || status=fail ;;
         external-slow-alpha) external_turn bot-alpha "SLOW external turn" || status=fail ;;

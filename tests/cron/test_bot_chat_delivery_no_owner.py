@@ -25,7 +25,7 @@ def test_bot_chat_target_without_live_owner_is_parked_and_admitted_later(tmp_pat
 
     admitted = []
 
-    def deliver(home, owner, message, *, delivery_id, notification_category="result", routine=None):
+    def deliver(home, owner, message, *, delivery_id, notification_category="result", cron_delivery=None):
         admitted.append((delivery_id, message))
         return {"status": "queued", "message": message, "delivery_id": delivery_id}
 

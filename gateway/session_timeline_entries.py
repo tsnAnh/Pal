@@ -1,7 +1,7 @@
 from collections import Counter
 
 RENDERED_TOOLS = frozenset({'image_generate', 'clarify', 'manage_connections'})
-_COPIED_KEYS = ('timestamp', 'row_id', 'display_kind', 'display_metadata')
+_COPIED_KEYS = ('timestamp', 'row_id', 'display_kind', 'display_metadata', 'file_refs')
 
 
 def _row_key(row, row_id):

@@ -301,7 +301,8 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
     so a remote client's history read stays kilobytes instead of re-transmitting every stored attachment."""
     from agent.history_commentary import project_history_commentary
     from session_rules.turns import withheld_prompt_text
-    from gateway.display_markers import display_text
+    from gateway.display_markers import display_text, legacy_routine_row
+    from tui_gateway.workspace_files import annotate_file_refs
 
     messages = []
     tool_call_args = {}
@@ -311,6 +312,7 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
         m = project_compaction_message_for_display(m)
         if m is None:
             continue
+        m = legacy_routine_row(m)
         role = m.get("role")
         if role not in _HISTORY_ROLES:
             continue
@@ -375,7 +377,7 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
         if m.get("display_metadata"):
             msg["display_metadata"] = m["display_metadata"]
         messages.append(msg)
-    return project_history_commentary(messages, home=profile_home)
+    return annotate_file_refs(project_history_commentary(messages, home=profile_home), profile_home)
 
 
 def _coerce_seed_history(value: Any) -> list[dict]:

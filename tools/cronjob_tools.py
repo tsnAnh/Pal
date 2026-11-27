@@ -28,6 +28,7 @@ _CRON_RUN_HEARTBEAT_INTERVAL = 10.0
 # mask the gateway watchdog forever — pre-#76502 the parent was at least reaped at ~1800s.
 _CRON_RUN_HEARTBEAT_CEILING = 6 * 3600.0
 
+from cron.job_provenance import AGENT_EDITED_FIELDS, OWNER_TEXT_FIELDS, TARGET_FIELDS, with_agent_edits
 from cron.jobs import (
     AmbiguousJobReference,
     claim_job_for_fire,
@@ -42,6 +43,7 @@ from cron.jobs import (
     resume_job,
     trigger_job,
     update_job)
+from cron.job_title import job_title
 from cron.prompt_scan import _scan_cron_prompt
 from cron.job_args import (
     _apply_continuity,
@@ -377,7 +379,7 @@ def _run_claimed_job(job: dict[str, Any], extra_prompt: Optional[str] = None) ->
         try:
             # run_one_job records last_run_at/last_status via mark_job_run; `job` is the
             # owner-bearing claimed snapshot, so terminal writes stay fenced by that owner.
-            with _run_heartbeat(str(job.get("name") or job_id)):
+            with _run_heartbeat(job_title(job)):
                 processed = run_one_job(job, adapters=adapters, loop=gateway_loop, extra_prompt=extra_prompt)
         finally:
             _registered = False
@@ -626,7 +628,7 @@ def _try_dispatch_background_run(
     False}`` on a lost claim; ``{"claimed": True, "dispatched": True, "delegation_id"}``; or
     ``{"claimed": True, "dispatched": False, ...}`` when the pool was full and it ran inline."""
     job_id = job["id"]
-    job_name = str(job.get("name") or job_id)
+    job_name = job_title(job)
     # Reap BEFORE the async/sync branch: the one-shot `hermes cron run` path returns early
     # below, and this is the only moment it heals a stale claim left by a killed prior run (#113923).
     _reap_stale_executions(job_name)
@@ -769,6 +771,8 @@ def _action_create(a: dict[str, Any]) -> str:
     context_from = a["context_from"]
     if a["continuity"] is not None:
         context_from = _apply_continuity(context_from, a["continuity"])
+    written = {**a, "skills": canonical_skills, "context_from": context_from}
+    agent_edits = with_agent_edits({}, {"prompt", *TARGET_FIELDS, *(f for f in OWNER_TEXT_FIELDS if written.get(f))})
 
     from cron.scheduler import CronSchedulerRegistrationError, create_job_with_scheduler_registration
     try:
@@ -793,7 +797,7 @@ def _action_create(a: dict[str, Any]) -> str:
             pinned=bool(a["pinned"]),
             failure_deliver=_resolve_cron_context_deliver(_normalize_deliver_param(a["failure_deliver"])),
             catch_up=a["catch_up"], wrap_response=_wrap_response_override(a["wrap_response"]),
-            created_by=a["created_by"] or "user",
+            created_by=a["created_by"] or "user", agent_edited_fields=agent_edits if a["edited_by_agent"] else None,
             **({"paused": a["paused"], "paused_reason": a["paused_reason"]}
                if a["paused"] is not False or a["paused_reason"] is not None else {}))
     except CronSchedulerRegistrationError as exc:
@@ -829,10 +833,11 @@ def _action_remove(job: dict[str, Any], a: dict[str, Any]) -> str:
     if not remove_job(job_id):
         return tool_error(f"Failed to remove job '{job_id}'", success=False)
     _notify_provider_jobs_changed_safe()
+    name = job_title(job)
     return _dumps({
         "success": True,
-        "message": f"Cron job '{job['name']}' removed.",
-        "removed_job": {"id": job_id, "name": job["name"], "schedule": job.get("schedule_display")},
+        "message": f"Cron job '{name}' removed.",
+        "removed_job": {"id": job_id, "name": name, "schedule": job.get("schedule_display")},
     })
 
 
@@ -1071,6 +1076,8 @@ def _action_update(job: dict[str, Any], a: dict[str, Any]) -> str:
             return tool_error(error, success=False)
     if not updates:
         return tool_error("No updates provided.", success=False)
+    if a["edited_by_agent"] and OWNER_TEXT_FIELDS & updates.keys():
+        updates[AGENT_EDITED_FIELDS] = with_agent_edits(job, updates)
     updated = update_job(job["id"], updates)
     _notify_provider_jobs_changed_safe()
     # An update can switch modes or delivery — echo the same guidance as create.
@@ -1107,7 +1114,8 @@ def _resolve_job_or_error(job_id: str):
             "success": False,
             "error": str(exc),
             "matches": [
-                {"id": m["id"], "name": m.get("name"), "schedule": m.get("schedule_display"), "next_run_at": m.get("next_run_at")}
+                {"id": m["id"], "name": job_title(m), "schedule": m.get("schedule_display"),
+                 "next_run_at": m.get("next_run_at")}
                 for m in exc.matches
             ],
         })
@@ -1153,7 +1161,7 @@ def cronjob(
     interpreter: Optional[str] = None,
     timezone: Optional[str] = None,
     grace_minutes: Optional[int | str] = None,
-    created_by: Optional[str] = None) -> str:
+    created_by: Optional[str] = None, edited_by_agent: bool = False) -> str:
     """Unified cron job management tool."""
     a = dict(locals())
     try:
@@ -1224,7 +1232,7 @@ Jobs run in a fresh session with no current-chat context, so prompts must be sel
             },
             "name": {
                 "type": "string",
-                "description": "Optional human-friendly name"
+                "description": "Short natural-language name in the user's language, as a person would say it; never an id, slug or snake_case. Omit to derive one from the prompt."
             },
             "repeat": {
                 "type": "integer",
@@ -1232,7 +1240,7 @@ Jobs run in a fresh session with no current-chat context, so prompts must be sel
             },
             "deliver": {
                 "type": "string",
-                "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (inject into a Bot Chat as a real message), 'room:<room_id>' (post into a Bot Mode Group Chat; it starts a round only for members the output @mentions), 'active' (lands in the originating local chat and alerts the device the user is on, else their recent messaging chat or home channel; alerts for jobs you create need the user's proactive setting on), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'. From a local chat (CLI, TUI or Desktop) the default writes the result into that chat's history as a note, seen when the chat is reopened and by its next turn, not as a live message."
+                "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (post into a Bot Chat as that bot's own message; the bot does not reply to it), 'room:<room_id>' (post into a Bot Mode Group Chat; it starts a round only for members the output @mentions), 'active' (lands in the originating local chat and alerts the device the user is on, else their recent messaging chat or home channel; alerts for jobs you create need the user's proactive setting on), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'. From a local chat (CLI, TUI or Desktop) the default posts the result into that chat as one assistant message."
             },
             "failure_deliver": {
                 "type": "string",
@@ -1328,6 +1336,16 @@ def _tool_created_by() -> str:
     return "agent" if is_truthy_value(get_session_env("HERMES_CRON_SESSION", "")) else "user"
 
 
+def _outside_owner_turn() -> bool:
+    from agent.turn_author import is_owner_turn
+    from gateway.audience import Audience, audience_of_key
+    from gateway.session_context import bound_session_key, current_turn_event
+    event = current_turn_event()
+    # Goal and heartbeat prompts run as non-internal turns; only the missing message id tells them apart.
+    unsent = event is not None and (event.internal or not event.message_id)
+    return not is_owner_turn() or unsent or audience_of_key(bound_session_key()) is Audience.MEMBER
+
+
 def _cronjob_handler(args, **kw):
     """Model-tool dispatch: resolves the one model-facing ``monitor`` field into the stored
     ``monitor_script``/``monitor_url`` pair (legacy field names still accepted)."""
@@ -1340,6 +1358,7 @@ def _cronjob_handler(args, **kw):
         session_id=kw.get("session_id"),
         paused=args.get("paused", False),
         created_by=_tool_created_by(),
+        edited_by_agent=_outside_owner_turn(),
         **{key: args.get(key) for key in _HANDLER_FORWARDED_ARGS},
     )
 

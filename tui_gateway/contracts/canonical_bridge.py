@@ -12,7 +12,7 @@ from .registry import METHODS, canonical_method
 
 BRIDGED = (
     "account.subscriptions", "auth.revoke_self",
-    "library.list", "library.asset",
+    "library.list", "library.asset", "workspace.file",
     "cron.manage",
     "capabilities.status", "messaging.slack.status", "messaging.slack.manifest", "messaging.slack.connect", "messaging.slack.disconnect",
     "messaging.telegram.status", "messaging.telegram.connect", "messaging.telegram.disconnect",

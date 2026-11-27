@@ -107,6 +107,36 @@ def test_append_completion_note_refuses_a_new_note_under_a_live_turn(backend, sc
     assert len(repo.read_transcript(S)) == 7
 
 
+def test_append_cron_delivery_is_one_reply_per_run_over_the_lineage(backend, scope_a):
+    store_a = backend.open(scope_a)
+    dialogue(backend, scope_a)
+    repo = backend.open(scope_a).messages
+    marker = {"cron_delivery": {"job_id": "j", "execution_id": "e"}}
+    before = len(repo.read_transcript(S))
+    written = repo.append_cron_delivery(S, "anchor", "report", marker)
+    assert repo.append_cron_delivery(S, "anchor", "other words", marker) is None
+    anchor, reply = repo.read_transcript(S)[before:]
+    assert (anchor.role, anchor.content, anchor.display_kind) == ("user", "anchor", "hidden")
+    assert (reply.id, reply.role, reply.content, reply.display_kind) == (written.row_id, "assistant", "report", None)
+    assert reply.display_metadata == marker and written.message_uid
+    store_a.sessions.end(S, END_REASON_COMPRESSION)
+    store_a.sessions.create(NewSession(session_id=CHILD, source="cli", parent_session_id=S))
+    assert repo.append_cron_delivery(CHILD, "anchor", "replay", marker) is None
+    assert repo.append_cron_delivery(CHILD, "anchor", "next", {"cron_delivery": {"job_id": "j", "execution_id": "e2"}})
+
+
+def test_append_cron_delivery_refuses_under_a_live_turn(backend, scope_a):
+    store_a = backend.open(scope_a)
+    require_capability(backend, "transactional_claims")
+    dialogue(backend, scope_a)
+    repo = backend.open(scope_a).messages
+    before = repo.read_transcript(S)
+    assert store_a.coordination.try_acquire_turn_lease(session_id=S, holder="turn", ttl_seconds=300.0) is True
+    with pytest.raises(TurnLeaseLost):
+        repo.append_cron_delivery(S, "anchor", "new", {"cron_delivery": {"job_id": "j", "execution_id": "e"}})
+    assert repo.read_transcript(S) == before
+
+
 def test_deactivate_messages_by_display_kind_rewinds_only_live_rows_of_the_kind(backend, scope_a):
     dialogue(backend, scope_a)
     repo = backend.open(scope_a).messages

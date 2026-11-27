@@ -1,12 +1,12 @@
-"""Idempotent detached-result appends: delegation deliveries and completion notes."""
+"""Idempotent detached-result appends: delegation deliveries, completion notes and cron deliveries."""
 
 
 from __future__ import annotations
 import time
-from typing import Any
+from typing import Any, Optional
 from persistence.sqlite._holder import StoreHolder
 from persistence.sqlite.conversation._store.messages import _bump_session_counters, _check_transcript_write_guards, _message_row_params
-from persistence.sqlite.conversation._store.rules import stamp_message_uid
+from persistence.sqlite.conversation._store.rules import MESSAGE_UID, stamp_message_uid
 
 
 _LINEAGE_MATCH_SQL = """WITH RECURSIVE lineage(id) AS (SELECT ? UNION
@@ -37,23 +37,44 @@ def append_completion_note(holder: StoreHolder, session_id: str, admission_id: s
         "json_extract(m.display_metadata, '$.completion_admission') = ?", (admission_id,))
 
 
+_CRON_DELIVERY_MATCH = ("m.role = 'assistant' AND json_extract(m.display_metadata, '$.cron_delivery.job_id') = ? "
+                        "AND json_extract(m.display_metadata, '$.cron_delivery.execution_id') = ?")
+
+
+def append_cron_delivery(holder: StoreHolder, session_id: str, anchor: str, content: str,
+                         metadata: dict[str, Any]) -> Optional[tuple[int, str]]:
+    marker = metadata["cron_delivery"]
+    reply = {"content": content, "display_metadata": metadata}
+    row_id, created = _append_detached_rows(
+        holder, session_id, (("user", {"content": anchor, "display_kind": "hidden"}), ("assistant", reply)),
+        _CRON_DELIVERY_MATCH, (marker["job_id"], marker["execution_id"]))
+    return (row_id, reply[MESSAGE_UID]) if created else None
+
+
 def _append_detached_result(holder: StoreHolder, session_id: str, content: str, display_kind: str, metadata: dict[str, Any],
                             match_sql: str, params: tuple) -> int:
-    """Record a result that arrived between turns as a user row once, including replay after rotation: a row
-    ``match_sql`` (a condition on ``m``) finds in the compression lineage is returned instead. Check and insert
-    share the writer transaction, so independent gateway processes cannot duplicate it; a live turn refuses it."""
-    from persistence.sqlite.conversation._store.messages_sql import _INSERT_MESSAGE_SQL
     msg = {"content": content, "display_kind": display_kind, "display_metadata": metadata}
-    stamp_message_uid(msg)  # a fresh occurrence: mint its durable id
-    row = _message_row_params(holder, session_id, "user", msg, None, time.time(), keep_reasoning=True)
+    return _append_detached_rows(holder, session_id, (("user", msg),), match_sql, params)[0]
+
+
+def _append_detached_rows(holder: StoreHolder, session_id: str, messages: tuple, match_sql: str,
+                          params: tuple) -> tuple[int, bool]:
+    """``(row id, created)``: a row ``match_sql`` (a condition on ``m``) finds in the compression lineage is
+    returned instead of inserting. Check and insert share the writer transaction, so independent gateway
+    processes cannot duplicate it; a live turn refuses it."""
+    from persistence.sqlite.conversation._store.messages_sql import _INSERT_MESSAGE_SQL
+    rows = []
+    for role, msg in messages:
+        stamp_message_uid(msg)  # a fresh occurrence: mint its durable id
+        rows.append(_message_row_params(holder, session_id, role, msg, None, time.time(), keep_reasoning=True))
 
     def _do(conn):
         existing = conn.execute(_LINEAGE_MATCH_SQL + match_sql + " LIMIT 1", (session_id, *params)).fetchone()
         if existing is not None:
-            return existing[0]
+            return existing[0], False
         _check_transcript_write_guards(holder, conn, session_id, None, reject_active_turn_lease=True)
-        msg_id = conn.execute(_INSERT_MESSAGE_SQL, row).lastrowid
-        _bump_session_counters(conn, session_id, 1, 0, unit=True)
-        return msg_id
+        ids = [conn.execute(_INSERT_MESSAGE_SQL, row).lastrowid for row in rows]
+        _bump_session_counters(conn, session_id, len(ids), 0, unit=len(ids) == 1)
+        return ids[-1], True
 
     return holder._execute_write(_do, patience_s=holder._TRANSCRIPT_WRITE_PATIENCE_S)

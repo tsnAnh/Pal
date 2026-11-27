@@ -432,7 +432,7 @@ def is_host_excluded_by_no_proxy(hostname: str, no_proxy_value: str | None = Non
 import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Optional, Any, Callable, Awaitable, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Any, Callable, Awaitable, Iterator, Tuple, Union
 
 if (_checkout_root := str(Path(__file__).resolve().parents[2])) not in sys.path:
     sys.path.append(_checkout_root)  # append, never prepend: never shadow same-named installed packages
@@ -861,19 +861,17 @@ def _resolve_path(path: Path, *, strict: bool = False, expand: bool = False) -> 
         return None
 
 
-def _path_under_denied_prefix(resolved: Path) -> bool:
-    """True if ``resolved`` lives under a deny-listed system path — except a denied prefix that
-    IS the running user's own home: ``/root`` is listed so a non-root gateway can't deliver
-    another user's home, but a root-run gateway's own deliverables live under ``$HOME=/root``.
-    Credential sub-dirs (``~/.ssh``, ``~/.hermes/.env``) stay blocked (more-specific entries)."""
+def delivery_denied_paths() -> Iterator[Path]:
+    """The resolved denylist. A denied prefix that IS the user's own home is left out (a root-run
+    gateway delivers from ``/root``); ``~/.ssh``, ``~/.hermes/.env`` and the like stay listed."""
     home = _resolve_path(Path(os.path.expanduser("~")))
     for denied in _media_delivery_denied_paths():
-        resolved_denied = _resolve_path(denied, expand=True)
-        if resolved_denied is None:
-            continue
-        if deny_path_under(resolved, resolved_denied) and resolved_denied != home:
-            return True
-    return False
+        if (resolved := _resolve_path(denied, expand=True)) is not None and resolved != home:
+            yield resolved
+
+
+def _path_under_denied_prefix(resolved: Path) -> bool:
+    return any(deny_path_under(resolved, denied) for denied in delivery_denied_paths())
 
 
 def _file_is_recently_produced(resolved: Path, window_seconds: float) -> bool:

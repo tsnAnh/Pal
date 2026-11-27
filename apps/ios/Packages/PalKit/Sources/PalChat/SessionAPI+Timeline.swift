@@ -15,7 +15,9 @@ extension SessionAPI {
             params["omit_messages"] = .bool(true)
         }
         let result = try await call("session.resume", params)
-        return try decode(TimelineResume.self, result, "session.resume")
+        let resumed = try decode(TimelineResume.self, result, "session.resume")
+        releaseStuck(resumed.snapshot.pending, sessionID: resumed.snapshot.sessionID)
+        return resumed
     }
 
     public func timelinePage(sessionID: String, before: String?, limit: Int) async throws -> TimelinePageWire {

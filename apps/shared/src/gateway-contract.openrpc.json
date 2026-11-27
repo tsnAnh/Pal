@@ -6863,6 +6863,24 @@
           "$ref": "#/components/schemas/WebhookRouteRemoveResult"
         }
       }
+    },
+    {
+      "name": "workspace.file",
+      "summary": "Bytes, a preview image or one range of a file under the bot's workspace that one of its messages mentions, named by the `ref` of that message's `file_refs`. The payload, caps and range rules are `library.asset`'s; `thumbnail` is off unless asked. A ref lives until the gateway restarts; reading the transcript again issues it again. Errors: 4151 unknown ref or file gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 the file is no longer servable, 5151 temporary internal failure.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WorkspaceFileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/LibraryAssetResult"
+        }
+      }
     }
   ],
   "components": {
@@ -12580,7 +12598,7 @@
             "default": null,
             "title": "Notification Category"
           },
-          "routine": {
+          "cron_delivery": {
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -12591,7 +12609,7 @@
               }
             ],
             "default": null,
-            "title": "Routine"
+            "title": "Cron Delivery"
           }
         },
         "required": [
@@ -16667,6 +16685,21 @@
             ],
             "default": null,
             "title": "Tools"
+          },
+          "file_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceFileRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "File Refs"
           }
         },
         "required": [
@@ -35169,10 +35202,6 @@
             "default": null,
             "title": "Profile"
           },
-          "asset_ref": {
-            "title": "Asset Ref",
-            "type": "string"
-          },
           "max_bytes": {
             "anyOf": [
               {
@@ -35220,6 +35249,10 @@
             ],
             "default": null,
             "title": "Length"
+          },
+          "asset_ref": {
+            "title": "Asset Ref",
+            "type": "string"
           }
         },
         "required": [
@@ -62022,6 +62055,21 @@
             "default": null,
             "title": "Reasoning"
           },
+          "file_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceFileRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "File Refs"
+          },
           "row_kind": {
             "enum": [
               "message",
@@ -65083,6 +65131,21 @@
             ],
             "default": null,
             "title": "Reasoning"
+          },
+          "file_refs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/WorkspaceFileRef"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "File Refs"
           }
         },
         "required": [
@@ -68420,6 +68483,109 @@
         "title": "WorkerScopeParams",
         "type": "object"
       },
+      "WorkspaceFileParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "max_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Max Bytes"
+          },
+          "thumbnail": {
+            "default": false,
+            "title": "Thumbnail",
+            "type": "boolean"
+          },
+          "preview": {
+            "default": false,
+            "title": "Preview",
+            "type": "boolean"
+          },
+          "offset": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Offset"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Length"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "title": "WorkspaceFileParams",
+        "type": "object"
+      },
+      "WorkspaceFileRef": {
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "mime": {
+            "title": "Mime",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ref",
+          "name",
+          "mime",
+          "size"
+        ],
+        "title": "WorkspaceFileRef",
+        "type": "object"
+      },
       "_SessionScoped": {
         "additionalProperties": false,
         "description": "Handlers that look a live session up with ``_sessions.get(params.get(\"session_id\"))``: an\nabsent / unknown id falls back to the launch profile's config, so it is never required.",
@@ -71572,6 +71738,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/WorkerExecution"
+        }
+      }
+    },
+    {
+      "name": "workspace.file",
+      "summary": "Bytes, a preview image or one range of a file under the bot's workspace that one of its messages mentions, named by the `ref` of that message's `file_refs`. The payload, caps and range rules are `library.asset`'s; `thumbnail` is off unless asked. A ref lives until the gateway restarts; reading the transcript again issues it again. Errors: 4151 unknown ref or file gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 the file is no longer servable, 5151 temporary internal failure.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WorkspaceFileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/LibraryAssetResult"
         }
       }
     }

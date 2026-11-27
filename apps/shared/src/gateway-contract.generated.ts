@@ -3229,12 +3229,12 @@ export type LibraryItemKind = 'link' | 'media' | 'file'
 /** Three call shapes. Whole file (old apps, unchanged): ``max_bytes`` defaults to 8 MB (max 16 MB); images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false. ``preview`` returns a JPEG or PNG of at most 512 px (video poster frame, first PDF page, still image) capped by ``max_bytes``, or an empty ``data_base64`` with ``preview_reason``; sources up to 200 MB for video and 32 MB for images and PDF. ``offset`` and/or ``length`` read one range of the file, up to 2 MB per call, for files up to 200 MB. ``preview`` and ranges do not combine. */
 export interface LibraryAssetParams {
   profile?: string | null
-  asset_ref: string
   max_bytes?: number | null
   thumbnail?: boolean
   preview?: boolean
   offset?: number | null
   length?: number | null
+  asset_ref: string
 }
 /** ``size`` is always the bytes in ``data_base64``; ``total`` is the file's true size. ``kind``, ``sniffed_mime`` and ``previewable`` come from the file's first 4 KB, not its name: ``previewable`` is false for HTML, SVG, archives, executables, scripts and anything unrecognised. ``mime`` stays the name-based type (the preview's own type when a preview image is returned). ``offset`` and ``length`` echo the range served; ``length`` can be below the request, and 0 past the end. */
 export interface LibraryAssetResult {
@@ -4768,6 +4768,7 @@ export interface TranscriptMessage {
   args?: Record<string, unknown> | null
   labels?: ToolLabel[] | null
   reasoning?: string | null
+  file_refs?: WorkspaceFileRef[] | null
   [key: string]: unknown
 }
 /** ``tools.tool_labels.ToolLabel`` — what one call executed through the tool_search bridge is, in words. Clients render ``text`` (or ``app``/``action`` in their own columns) and never parse the tool name themselves. */
@@ -4782,6 +4783,12 @@ export interface ToolLabel {
 }
 /** Which surface one inner call of a bridged ``tool_call`` runs on. */
 export type ToolLabelKind = 'connector' | 'mcp' | 'tool'
+export interface WorkspaceFileRef {
+  ref: string
+  name: string
+  mime: string
+  size: number
+}
 export interface SessionBranchStoredParams {
   profile?: string | null
   parent_session_id: string
@@ -6442,6 +6449,15 @@ export interface AccountSubscriptionSpend {
   input_tokens: number
   output_tokens: number
 }
+export interface WorkspaceFileParams {
+  profile?: string | null
+  max_bytes?: number | null
+  thumbnail?: boolean
+  preview?: boolean
+  offset?: number | null
+  length?: number | null
+  ref: string
+}
 export interface GroupsAttachmentUploadParams {
   profile?: string | null
   room_id: string
@@ -6971,6 +6987,7 @@ export interface CanonicalTimelineEntry {
   display_metadata?: unknown
   reasoning?: string | null
   tools?: CanonicalTimelineTool[] | null
+  file_refs?: WorkspaceFileRef[] | null
 }
 export interface CanonicalTimelineTool {
   call_id: string
@@ -7338,7 +7355,7 @@ export interface CanonicalBotDeliverParams {
   session_id?: string | null
   author?: Record<string, unknown> | null
   notification_category?: string | null
-  routine?: Record<string, unknown> | null
+  cron_delivery?: Record<string, unknown> | null
 }
 /** A delivery's receipt. It names its admission, unless ``refused``: the FIFO refused the delivery before anything was committed (``gateway/session_bot.py``), a terminal ``failed`` receipt with no admission that the relay settles as the sender's answer. */
 export interface CanonicalBotDeliverResult {
@@ -7410,6 +7427,7 @@ export interface StoredTranscriptRow {
   args?: Record<string, unknown> | null
   labels?: ToolLabel[] | null
   reasoning?: string | null
+  file_refs?: WorkspaceFileRef[] | null
   row_kind: 'message' | 'compaction'
   compacted_messages?: number | null
   truncated?: boolean | null
@@ -9431,6 +9449,8 @@ export interface RpcMethods {
   'webhook.routes.probe': { params: WebhookRouteNameParams; result: WebhookProbeResult }
   /** Remove a route created through this API or the CLI. 4404 unknown route. 4403 secondary profile. */
   'webhook.routes.remove': { params: WebhookRouteNameParams; result: WebhookRouteRemoveResult }
+  /** Bytes, a preview image or one range of a file under the bot's workspace that one of its messages mentions, named by the `ref` of that message's `file_refs`. The payload, caps and range rules are `library.asset`'s; `thumbnail` is off unless asked. A ref lives until the gateway restarts; reading the transcript again issues it again. Errors: 4151 unknown ref or file gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 the file is no longer servable, 5151 temporary internal failure. */
+  'workspace.file': { params: WorkspaceFileParams; result: LibraryAssetResult }
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
@@ -9814,7 +9834,8 @@ export const RPC_METHODS = [
   'webhook.routes.add',
   'webhook.routes.list',
   'webhook.routes.probe',
-  'webhook.routes.remove'
+  'webhook.routes.remove',
+  'workspace.file'
 ] as const satisfies readonly RpcMethod[]
 
 // ── Canonical (hermes-gateway-v1) methods only the session authority serves ──
@@ -10142,6 +10163,8 @@ export interface CanonicalRpcMethods {
   'worker.persist': { params: WorkerPersistParams; result: WorkerPersistResult }
   /** Register a compute worker execution on an idle session. */
   'worker.register': { params: WorkerRegisterParams; result: WorkerExecution }
+  /** Bytes, a preview image or one range of a file under the bot's workspace that one of its messages mentions, named by the `ref` of that message's `file_refs`. The payload, caps and range rules are `library.asset`'s; `thumbnail` is off unless asked. A ref lives until the gateway restarts; reading the transcript again issues it again. Errors: 4151 unknown ref or file gone, 4152 larger than the limit (data: size, limit), 4153 invalid request, 4154 the file is no longer servable, 5151 temporary internal failure. */
+  'workspace.file': { params: WorkspaceFileParams; result: LibraryAssetResult }
 }
 export type CanonicalRpcMethod = keyof CanonicalRpcMethods
 export const CANONICAL_RPC_METHODS = [
@@ -10316,7 +10339,8 @@ export const CANONICAL_RPC_METHODS = [
   'webapp.public_url.set',
   'worker.adopt',
   'worker.persist',
-  'worker.register'
+  'worker.register',
+  'workspace.file'
 ] as const satisfies readonly CanonicalRpcMethod[]
 
 // ── Canonical method namespaces: member names exist only at runtime (gate on `capability`) ──

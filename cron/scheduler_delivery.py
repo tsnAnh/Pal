@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from typing import Any, List, Optional
 
 from cron.constants import BOT_CHAT_TURN_PREFIX
+from cron.job_title import job_title
+from cron.scheduler_delivery_routine import cron_delivery, delivery_run_id
 from gateway.inbound_reply_context import record_cron_delivery, recording_cron_delivery
 
 
@@ -200,10 +202,10 @@ def _redact_cron_payload(text: str, what: str) -> str:
 
 
 def _cron_display_name(job: dict) -> str:
-    """Job name/id as it appears in outward-facing text. The mirror sinks and the thread title
+    """Job title as it appears in outward-facing text. The mirror sinks and the thread title
     splice the job *name* around the redacted payload, and the name is user-controlled config — a
     name embedding a credential would re-leak it next to the scrubbed body."""
-    return _redact_cron_payload(job.get("name") or job.get("id", "cron"), "job name")
+    return _redact_cron_payload(job_title(job), "job name")
 
 
 def _cron_mirror_message(job: dict, text: str) -> str:
@@ -735,7 +737,7 @@ def bot_chat_message(job: dict, content: str) -> str:
 
 def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
                          for_failure: bool = False) -> Optional[str]:
-    """Admit job output to the target profile's authority as a real inbound Bot Chat turn.
+    """Admit job output to the target profile's authority as one Bot Chat assistant message.
 
     None means the target's durable receipt is settled (or a failure notice was recorded as
     ``suppressed`` — a durable disposition, never a send — and flagged on the job); anything
@@ -746,8 +748,6 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
     """
     import hashlib
     import json
-    import time
-    import uuid
     from hermes_constants import get_hermes_home
     from hermes_cli.profiles import get_profile_dir
     from tools.bot_live_delivery import (
@@ -757,9 +757,6 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
     job_id = job.get("id", "?")
     profile_label = profile or "(own)"
     message = bot_chat_message(job, content)
-    from cron.scheduler_delivery_routine import bot_chat_routine
-    routine = bot_chat_routine(
-        job, content, for_failure=for_failure, finished_at=job.setdefault("_bot_chat_finished_at", time.time()))
     try:
         source_home = get_hermes_home().resolve()
         home = (get_profile_dir(profile) if profile else source_home).resolve()
@@ -767,14 +764,8 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
         from hermes_cli.config_effective import load_user_config_effective
         suppress_notification = for_failure and not warning_notifications_enabled(
             BOT_CHAT_POLICY_PLATFORM, load_user_config_effective(home / "config.yaml"))
-        # run_one_job/claim_fire attach the durable execution id before delivery. The
-        # transient fallback supports direct helper callers, never deduping recurring
-        # runs by their (potentially identical) output or previous last_run timestamp.
-        run_id = job.get("execution_id")
-        if not run_id:
-            run_id = job.setdefault("_bot_chat_run_id", uuid.uuid4().hex)
         key = hashlib.sha256(json.dumps(
-            [str(source_home), job_id, str(run_id), str(home)],
+            [str(source_home), job_id, delivery_run_id(job), str(home)],
             ensure_ascii=False, separators=(",", ":"),
         ).encode("utf-8")).hexdigest()
         # Read BEFORE discovery: the previous owner may have exited after accepting.
@@ -798,8 +789,8 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
                 return f"{target} queued (receipt {key}): target profile not running; admitted once it is"
             if owner is None:
                 return f"bot-chat delivery to profile '{profile_label}' unverified: no canonical Bot Chat"
-            # A failure notice rides as ``diagnostic`` so the target's reply stays muted.
-            receipt = deliver_to_live_owner(home, owner, message, delivery_id=key, routine=routine,
+            receipt = deliver_to_live_owner(
+                home, owner, message, delivery_id=key, cron_delivery=cron_delivery(job, content),
                 **({"notification_category": "diagnostic"} if for_failure else {}))
         if (receipt["message"] != message
                 or receipt.get("notification_category", "result") != ("diagnostic" if for_failure else "result")):
@@ -831,10 +822,10 @@ def _normalize_deliver_value(deliver) -> str:
 
 
 # Routing tokens resolve at fire time (a job outlives platform wiring). ``all`` = platforms with a
-# configured home chat_id (_expand_routing_tokens); ``bot-chat`` is NOT in ``all`` (costs a turn).
+# configured home chat_id (_expand_routing_tokens); ``bot-chat`` is NOT in ``all``.
 _ROUTING_TOKENS = frozenset({"all"})
 
-# Pseudo-platform: deliver output as a real inbound turn into a profile's "Bot Chat" (not a mirror).
+# Pseudo-platform: deliver output as a profile's "Bot Chat" assistant message (not a mirror).
 # ``bot-chat`` = own profile; ``bot-chat:<name>`` = named profile on THIS machine.
 BOT_CHAT_PLATFORM = "bot-chat"
 # Bot Chat is the TUI/Desktop transcript, so its warning policy is display.platforms.tui.
@@ -1762,7 +1753,7 @@ def _deliver_result(
     # persisted as ``last_delivery_unverified`` so `hermes cron list` shows it.
     unverified_targets: list = []
     if wrap_response:
-        task_name = job.get("name", job["id"])
+        task_name = job_title(job)
         delivery_content = (
             f"Cronjob Response: {task_name}\n"
             f"(job_id: {job.get('id', '')})\n"
@@ -1829,7 +1820,7 @@ def _deliver_result(
             continue
         if target["platform"] == _reach.REACH_PLATFORM:
             reach_error = _reach.deliver_active(
-                job, content, lane_text=cleaned_delivery_content, alert_text=mirror_text, for_failure=for_failure)
+                job, content, alert_text=mirror_text, for_failure=for_failure)
             if reach_error:
                 delivery_errors.append(reach_error)
             continue
@@ -1849,8 +1840,9 @@ def _deliver_result(
         if target["platform"] == "local":
             from gateway.session_cron import deliver_to_local_chat
             from hermes_constants import get_hermes_home
-            local_error = deliver_to_local_chat(get_hermes_home(), target["chat_id"],
-                                                cleaned_delivery_content, diagnostic=for_failure)
+            local_error = deliver_to_local_chat(
+                get_hermes_home(), target["chat_id"], cleaned_delivery_content, diagnostic=for_failure,
+                cron_delivery=cron_delivery(job, content))
             if local_error:
                 delivery_errors.append(local_error)
             reached += not local_error

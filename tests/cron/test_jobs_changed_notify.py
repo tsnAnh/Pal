@@ -88,7 +88,7 @@ def test_create_failure_preserves_job_and_hides_provider_details(
     assert "private callback URL and token" not in str(error)
     # Human-facing variant hides the exception class name and names the job.
     assert "RuntimeError" not in error.user_message()
-    assert "'w'" in error.user_message()
+    assert "'Echo hi'" in error.user_message()
 
 
 def test_tool_create_registers_provider_before_reporting_success(

@@ -35,7 +35,8 @@ from hermes_constants import get_hermes_home
 from cron.constants import CLAIM_TTL_INACTIVITY_HEADROOM, FIRE_CLAIM_SKEW_SECONDS, FIRE_CLAIM_TTL_SECONDS
 from cron.env_settings import cron_env_setting
 from cron.jobs_invariants import _validate_job_mode_invariants, validate_schedule_knobs
-from cron.job_provenance import normalize_created_by
+from cron.job_provenance import AGENT_EDITED_FIELDS, merged_update, normalize_created_by
+from cron.job_title import job_labels, job_title, readable_job_name
 from cron.jobs_tristate import normalize_catch_up as _normalize_catch_up, normalize_wrap_response
 from cron.jobs_model_pin import _main_model_pin
 from cron.jobs_normalize import (
@@ -513,19 +514,9 @@ def _normalize_job_record(job: dict[str, Any]) -> dict[str, Any]:
     """Read-safe job shape: legacy/hand-edited records may have nullable ``prompt``, ``name``,
     ``schedule_display``. Storage is untouched; consumers never crash on formatting."""
     normalized = _apply_skill_fields(job)
-    job_id = normalized["id"] = _coerce_job_text(normalized.get("id"), "unknown")
-    prompt = normalized["prompt"] = _coerce_job_text(normalized.get("prompt"))
-    name = _coerce_job_text(normalized.get("name")).strip()
-    if not name:
-        label_source = (
-            prompt
-            or (normalized["skills"][0] if normalized.get("skills") else "")
-            or _coerce_job_text(normalized.get("script")).strip()
-            or job_id
-            or "cron job"
-        )
-        name = label_source[:50].strip() or "cron job"
-    normalized["name"] = name
+    normalized["id"] = _coerce_job_text(normalized.get("id"), "unknown")
+    normalized["prompt"] = _coerce_job_text(normalized.get("prompt"))
+    normalized["name"] = _coerce_job_text(normalized.get("name")).strip() or job_title({**normalized, "name": ""})
     normalized["schedule_display"] = _schedule_display_for_job(normalized)
     # Derived from the scheduler-honoured ``enabled`` flag so a half-paused record cannot render
     # "paused" while still firing. See effective_job_state().
@@ -1802,7 +1793,7 @@ def create_job(
     interpreter: Optional[str] = None,
     timezone: Optional[str] = None,
     grace_minutes: Optional[int] = None,
-    created_by: Optional[str] = None,
+    created_by: Optional[str] = None, agent_edited_fields: Optional[list[str]] = None,
     wrap_response: Optional[bool] = None,
 ) -> dict[str, Any]:
     """Create a new cron job and return the stored record.
@@ -1850,13 +1841,8 @@ def create_job(
     from cron.lifecycle_guard import check_gateway_lifecycle
     check_gateway_lifecycle(prompt_text, f["script"])
 
-    label_source = (
-        prompt_text
-        or (normalized_skills[0] if normalized_skills else None)
-        or (f["script"] if f["no_agent"] else None)
-        or "cron job"
-    )
-    name = name or label_source[:50].strip()
+    name = readable_job_name(
+        str(name or ""), prompt_text, job_labels(normalized_skills, f["script"]), creating=True)
     if pinned and not f["model"]:
         f["provider"], f["model"] = _main_model_pin()
     next_run_at = _next_run_or_reject_past_oneshot(
@@ -1908,7 +1894,7 @@ def create_job(
         ("failure_deliver", f["failure_deliver"]), ("interpreter", f["interpreter"]),
         ("timezone", f["timezone"]), ("grace_minutes", f["grace_minutes"]),
         ("catch_up", f["catch_up"]), ("wrap_response", f["wrap_response"]),
-        ("created_by", normalize_created_by(created_by)),
+        ("created_by", normalize_created_by(created_by)), (AGENT_EDITED_FIELDS, agent_edited_fields or None),
     ):
         if value is not None:
             job[key] = value
@@ -1937,8 +1923,8 @@ class AmbiguousJobReference(LookupError):
 
 
 def resolve_job_ref(ref: str) -> Optional[dict[str, Any]]:
-    """Resolve an ID or name to a job record. Exact ID wins, then case-insensitive name; an
-    ambiguous name raises AmbiguousJobReference rather than silently picking one."""
+    """Resolve an ID or name to a job record. Exact ID wins, then case-insensitive stored name,
+    then displayed title; an ambiguous name raises AmbiguousJobReference rather than silently picking one."""
     if not ref:
         return None
     jobs = load_jobs()
@@ -1946,7 +1932,8 @@ def resolve_job_ref(ref: str) -> Optional[dict[str, Any]]:
     if by_id is not None:
         return _normalize_job_record(by_id)
     ref_lower = ref.lower()
-    name_matches = [j for j in jobs if (j.get("name") or "").lower() == ref_lower]
+    name_matches = ([j for j in jobs if (j.get("name") or "").lower() == ref_lower]
+                    or [j for j in jobs if job_title(j).lower() == ref_lower])
     if not name_matches:
         return None
     if len(name_matches) > 1:
@@ -2097,7 +2084,7 @@ def update_job(job_id: str, updates: dict[str, Any]) -> Optional[dict[str, Any]]
         _rederive_repeat_for_schedule_change(job, updates)
         _normalize_job_updates(job, updates)
         _apply_pin_update(job, updates)
-        updated = _apply_skill_fields({**job, **updates})
+        updated = _apply_skill_fields(merged_update(job, updates))
         _reject_terminal_activation(job, updated, job_id)
         # Re-check on the MERGED record; scoped to changed fields so legacy records keep loading.
         if {"monitor_script", "monitor_url", "no_agent", "script"}.intersection(updates):

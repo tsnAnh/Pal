@@ -93,7 +93,7 @@ class TestRewriteSkillRefsConsolidation:
             prompt="",
             schedule="every 1h",
             skills=["a", "b"],
-            name="my-job",
+            name="My job",
         )
         report = rewrite_skill_refs(
             consolidated={"a": "umbrella-a", "b": "umbrella-b"},
@@ -103,7 +103,7 @@ class TestRewriteSkillRefsConsolidation:
         assert len(report["rewrites"]) == 1
         entry = report["rewrites"][0]
         assert entry["job_id"] == job["id"]
-        assert entry["job_name"] == "my-job"
+        assert entry["job_name"] == "My job"
         assert entry["before"] == ["a", "b"]
         assert entry["after"] == ["umbrella-a", "umbrella-b"]
         assert entry["mapped"] == {"a": "umbrella-a", "b": "umbrella-b"}

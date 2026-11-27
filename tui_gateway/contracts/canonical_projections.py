@@ -74,9 +74,7 @@ class CanonicalBotDeliverParams(Params):
     session_id: str | None = None
     author: dict[str, JsonValue] | None = None
     notification_category: str | None = None
-    #: A cron job's output as the chat row's card: ``job_name``, ``status`` (``ok`` | ``failed``),
-    #: ``finished_at`` (Unix seconds) and the whole output ``text``. Presentation only.
-    routine: dict[str, JsonValue] | None = None
+    cron_delivery: dict[str, JsonValue] | None = None
 
 
 class CanonicalBotStopParams(Params):

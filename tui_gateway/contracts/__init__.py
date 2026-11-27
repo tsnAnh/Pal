@@ -40,6 +40,7 @@ from . import (
     tools_commands,
     tools_mcp_plugins,
     account,
+    workspace,
 )
 from . import canonical, canonical_bot_threads, canonical_bridge, canonical_auth, canonical_device, canonical_devices, canonical_kanban, canonical_mcp_actions, canonical_reach, canonical_search
 from .base import JsonValue, Params, Payload, Result, WireEnum

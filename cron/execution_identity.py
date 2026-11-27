@@ -13,6 +13,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
+from cron.job_provenance import AGENT_EDITED_FIELDS, with_agent_edits
+
 
 @dataclass(frozen=True)
 class CronExecution:
@@ -25,14 +27,19 @@ class CronExecution:
     profile: str
 
 
-_CURRENT: ContextVar[Optional[CronExecution]] = ContextVar("hermes_cron_execution", default=None)
+_CURRENT: ContextVar[Optional[tuple[CronExecution, Mapping[str, Any]]]] = ContextVar(
+    "hermes_cron_execution", default=None)
 
 
-def enter_cron_execution(job: Mapping[str, Any], execution_id: str, record: Mapping[str, Any]) -> Token:
+def enter_cron_execution(job: Mapping[str, Any], execution_id: str, record: Mapping[str, Any], *,
+                         transient_prompt: bool = False) -> Token:
     """Bind this fire's identity from *record*, the ledger row of the running transition."""
     from hermes_cli.profiles import current_profile_name
 
-    return _CURRENT.set(CronExecution(
+    authored = dict(job)
+    if transient_prompt:
+        authored[AGENT_EDITED_FIELDS] = with_agent_edits(job, ("prompt",))
+    return _CURRENT.set((CronExecution(
         job_id=str(job["id"]),
         job_name=str(job.get("name") or job["id"]),
         execution_id=str(execution_id),
@@ -40,7 +47,7 @@ def enter_cron_execution(job: Mapping[str, Any], execution_id: str, record: Mapp
         scheduled_instant=record.get("scheduled_instant"),
         started_at=record.get("started_at"),
         profile=current_profile_name("default") or "default",
-    ))
+    ), authored))
 
 
 def exit_cron_execution(token: Optional[Token]) -> None:
@@ -48,7 +55,17 @@ def exit_cron_execution(token: Optional[Token]) -> None:
         _CURRENT.reset(token)
 
 
-def current_cron_execution() -> Optional[CronExecution]:
+def _bound() -> Optional[tuple[CronExecution, Mapping[str, Any]]]:
     from agent.delegation_context import is_delegated_child_context
 
     return None if is_delegated_child_context() else _CURRENT.get()
+
+
+def current_cron_execution() -> Optional[CronExecution]:
+    bound = _bound()
+    return None if bound is None else bound[0]
+
+
+def current_cron_job() -> Optional[Mapping[str, Any]]:
+    bound = _bound()
+    return None if bound is None else bound[1]
