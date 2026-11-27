@@ -31,7 +31,7 @@ func chatState(
     )
 }
 
-private func changed(
+func chatInstallChanged(
     _ step: String, _ revision: Int, action: [String: Any?] = [:], bot: String = "pal"
 ) throws -> ChatInstallChangedPayload {
     try decode(ChatInstallChangedPayload.self, ["state": stateJSON(step, revision, action: action, bot: bot)])
@@ -213,17 +213,17 @@ struct ChatInstallModelTests {
 
     @Test func eventsApplyByRevisionDroppingStaleAndDuplicateAndRereadingOnGap() async throws {
         let (model, client) = try await model(try chatState("creating_app", 2))
-        await model.receive(try changed("needs_credential", 1))
-        await model.receive(try changed("needs_allow", 2))
+        await model.receive(try chatInstallChanged("needs_credential", 1))
+        await model.receive(try chatInstallChanged("needs_allow", 2))
         #expect(model.state?.step == .creatingApp)
-        await model.receive(try changed("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]))
+        await model.receive(try chatInstallChanged("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]))
         #expect(model.screen == .setup(task: .setIcon))
         let statusReads = await client.calls.filter { $0 == "status" }.count
         await client.set(try chatState("needs_allow", 6, action: ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]))
-        await model.receive(try changed("installing", 7))
+        await model.receive(try chatInstallChanged("installing", 7))
         #expect(await client.calls.filter { $0 == "status" }.count == statusReads + 1)
         #expect(model.state?.revision == 6)
-        await model.receive(try changed("ready", 4, bot: "other"))
+        await model.receive(try chatInstallChanged("ready", 4, bot: "other"))
         #expect(model.state?.revision == 6)
     }
 

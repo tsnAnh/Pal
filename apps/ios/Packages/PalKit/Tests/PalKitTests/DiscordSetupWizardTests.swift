@@ -13,6 +13,7 @@ private actor FakeDiscord: DiscordSetupGateway {
     private(set) var savedTokens: [String] = []
     private(set) var installs: [String] = []
     private(set) var confirmedOwners: [[String]] = []
+    private var silent: Set<String> = []
     private var polls = 0
 
     init(
@@ -31,7 +32,16 @@ private actor FakeDiscord: DiscordSetupGateway {
 
     func setToken(_ result: Result<Void, SetupStatusError>) { tokenResult = result }
 
-    func appExists() -> Bool { app }
+    func silence(_ calls: Set<String>) { silent = calls }
+
+    private func hush(_ call: String) async {
+        if silent.contains(call) { await neverAnswers() }
+    }
+
+    func appExists() async -> Bool {
+        await hush("appExists")
+        return app
+    }
 
     func saveToken(_ token: String) throws {
         try tokenResult.get()
@@ -48,8 +58,9 @@ private actor FakeDiscord: DiscordSetupGateway {
 
     func existingInstall(in guilds: [DiscordGuild]) -> DiscordInstalled? { existing }
 
-    func install(in guild: DiscordGuild) throws -> DiscordInstallOutcome {
+    func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
         installs.append(guild.id)
+        await hush("install")
         return try installResult.get()
     }
 
@@ -70,7 +81,7 @@ private func missingWebhooks() -> SetupStatusError {
 
 @MainActor
 private func model(_ fake: FakeDiscord, attempts: Int = 4) -> DiscordSetupModel {
-    DiscordSetupModel(displayName: "Ada", gateway: fake, timing: .init(interval: .milliseconds(1), attempts: attempts))
+    DiscordSetupModel(displayName: "Ada", gateway: fake, timing: .init(interval: .milliseconds(1), attempts: attempts, limits: quickLimits))
 }
 
 @Suite("Discord setup wizard")
@@ -338,5 +349,32 @@ struct DiscordSetupWizardTests {
         #expect(error.reason == "missing_permission" && error.permissions == ["Manage Webhooks"] && error.retryAfterSeconds == 3)
         let legacy = try JSONDecoder().decode(ChatSetupErrorWire.self, from: Data(#"{"code":"install_failed","fix":"retry"}"#.utf8))
         #expect(legacy.reason == nil && legacy.permissions.isEmpty)
+    }
+}
+
+extension DiscordSetupWizardTests {
+    @Test func aSilentGatewayEndsTheFirstLoadInAPlainError() async {
+        let fake = FakeDiscord(app: true, lists: [[studio]])
+        await fake.silence(["appExists"])
+        let wizard = model(fake)
+        await wizard.load()
+        #expect(wizard.stage == .status(.tookTooLong))
+        await fake.silence([])
+        await wizard.load()
+        #expect(wizard.stage == .flow)
+    }
+
+    @Test func aSilentInstallFailsInPlainWordsAndRetryFinishes() async throws {
+        let fake = FakeDiscord(app: true, lists: [[studio]])
+        await fake.silence(["install"])
+        let wizard = model(fake)
+        await wizard.load()
+        await wizard.flow.performPrimary()
+        let failure = try #require(wizard.flow.engine.failure)
+        #expect(failure == .tookTooLong)
+        #expect(!wizard.flow.engine.isFinished)
+        await fake.silence([])
+        await wizard.flow.recover(from: failure)
+        #expect(wizard.flow.engine.isFinished)
     }
 }
