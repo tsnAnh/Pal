@@ -25,6 +25,7 @@ class _Role(Enum):
     DESTINATION = "destination"
     THREAD = "thread"
     CONTENT = "content"
+    ATTACHMENT = "attachment"
 
 
 _ARG_ROLES: dict[str, _Role] = {
@@ -34,9 +35,10 @@ _ARG_ROLES: dict[str, _Role] = {
     **dict.fromkeys(("thread", "threadid", "threadts", "messagethreadid"), _Role.THREAD),
     **dict.fromkeys((
         "body", "message", "text", "content", "markdowntext", "htmlbody", "plaintext", "html", "subject", "title",
-        "blocks", "mrkdwn", "parsemode", "unfurllinks", "unfurlmedia", "action", "attachment", "attachments",
-        "file", "files", "filepath", "filepaths", "fileattachments", "media", "mediafiles", "image", "images",
-        "document", "documents"), _Role.CONTENT),
+        "blocks", "mrkdwn", "parsemode", "unfurllinks", "unfurlmedia", "action"), _Role.CONTENT),
+    **dict.fromkeys((
+        "attachment", "attachments", "file", "files", "filepath", "filepaths", "fileattachments", "media",
+        "mediafiles", "image", "images", "document", "documents"), _Role.ATTACHMENT),
 }
 
 
@@ -60,14 +62,26 @@ def _values(value: Any) -> Optional[list[str]]:
     return [part.strip() for item in items for part in _LIST_SEPARATORS.split(str(item)) if part.strip()]
 
 
+def _role(key: object) -> Optional[_Role]:
+    return _ARG_ROLES.get(str(key).lower().replace("_", "").replace("-", ""))
+
+
+def is_text_arg(key: object) -> bool:
+    return _role(key) is _Role.CONTENT
+
+
+def is_attachment_arg(key: object) -> bool:
+    return _role(key) is _Role.ATTACHMENT
+
+
 def _addresses(args: Mapping) -> Optional[tuple[list[str], list[str]]]:
     destinations: list[str] = []
     threads: list[str] = []
     for key, value in args.items():
         if value is None or value == "" or value == []:
             continue
-        role = _ARG_ROLES.get(str(key).lower().replace("_", "").replace("-", ""))
-        if role is _Role.CONTENT:
+        role = _role(key)
+        if role is _Role.CONTENT or role is _Role.ATTACHMENT:
             continue
         values = _values(value)
         if role is None or values is None:

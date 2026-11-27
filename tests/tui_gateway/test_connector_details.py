@@ -289,7 +289,7 @@ class Approvals:
         monkeypatch.setattr(mcp_action_gate, "_approve", self._approve)
         self.answer = answer
 
-    def _approve(self, server_name, tool_name, args):
+    def _approve(self, server_name, tool_name, args, *_send_rule):
         self.cards.append((server_name, tool_name, dict(args)))
         return self.answer
 

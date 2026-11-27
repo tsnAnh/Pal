@@ -32,11 +32,12 @@ CREDENTIAL_STORE_DIRS = (
 # credential and its grants to native apps) hold credential material. skills/ and memories/ are
 # deliberately NOT here: they are user-editable content, and write approval for them (memory/skills
 # ``write_approval``) is enforced by the memory/skill subsystem tools, not the generic write path
-# (#60440 tracks closing that gap for write_file/patch). Control files (auth.json,
+# (#60440 tracks closing that gap for write_file/patch). bot_mode/send_rules.json is the owner's record of sends
+# that need no ask, written only by their answer to an approval card. Control files (auth.json,
 # config.yaml, webhook_subscriptions.json) are deliberately NOT here (#45947): read-denied, but the
 # user may ask to edit them.
 HERMES_PROTECTED_SUBPATHS = (
-    "state.db", "sessions", "browser-profile", "webapp", *CREDENTIAL_STORE_DIRS)
+    "state.db", "sessions", "browser-profile", "webapp", "bot_mode/send_rules.json", *CREDENTIAL_STORE_DIRS)
 
 # The WhatsApp bridge log and its rotated generation, as path parts relative to a home: troubleshooting
 # output that records chat ids and the Signal library's console lines, never needed for a restore (#149860).

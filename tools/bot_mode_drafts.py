@@ -392,16 +392,19 @@ def card_description(outbound: Outbound) -> str:
     return "\n".join([header, *(f"{name}: {value}" for name, value in outbound.details if name != TECHNICAL_DETAIL)])
 
 
-def _ask_owner(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
-    from tools import approval
+def _ask_owner(outbound: Outbound, args: dict, destination=None) -> tuple[str | None, dict | None]:
+    from tools import approval, send_rules
     result = approval.request_draft_approval(
         text=outbound.text, description=card_description(outbound), pattern_key=outbound.pattern_key,
         draft=_card(outbound), details=details_payload(outbound), subject=outbound.subject,
-        attachments=_attachment_names(outbound))
+        attachments=_attachment_names(outbound),
+        rule=send_rules.offer(outbound.tool, destination, outbound.recipient, outbound.channel))
     if not result.get("approved"):
         if result.get("outcome") == "timeout":
             return NOT_SENT_NOBODY_TO_ASK, None
         return str(result.get("message") or "BLOCKED: the draft was not approved; it was NOT sent."), None
+    if destination:
+        send_rules.answered_on_card(outbound.tool, destination.signature)
     edited = result.get("edited_text")
     if edited is None or edited == outbound.text:
         return None, None
@@ -466,10 +469,13 @@ def _review(outbound: Outbound, args: dict) -> tuple[str | None, dict | None]:
         return None, None
     if not outbound.viewable or not _inline_capable(approval):
         return NOT_SENT_NOBODY_TO_ASK, None
-    from tools import outbound_send_grant
+    from tools import outbound_send_grant, send_rules
     if outbound_send_grant.redeem(outbound.tool, args, gate=outbound_send_grant.DRAFT_GATE):
         return None, None
-    return _ask_owner(outbound, args)
+    destination = send_rules.owner_turn_destination(outbound.tool, args)
+    if destination and send_rules.allows(outbound.tool, destination.signature, gate=outbound_send_grant.DRAFT_GATE):
+        return None, None
+    return _ask_owner(outbound, args, destination)
 
 
 _REVIEW_FAILED = "BLOCKED: The outbound draft review failed, so the message was NOT sent. Do NOT retry it."

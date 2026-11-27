@@ -3,7 +3,8 @@
 A tool is READ only when its exact name is on the server's read list, REFUSED when it names a step the
 policy never allows (money), and an ACTION otherwise, so an unknown tool asks. An ACTION runs only after
 the owner approves the exact call on a card in their own app, and the approval is bound to a digest of the
-arguments it was shown for. Nothing here consults tool output, yolo, or any remembered answer.
+arguments it was shown for. Nothing here consults tool output or yolo. The one remembered answer is the owner's
+send rule (``tools.send_rules``), which only a text send to one destination can use.
 """
 
 from __future__ import annotations
@@ -15,10 +16,13 @@ import re
 import threading
 import unicodedata
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional
 
 from tools.mcp_accounts import display_name
 from tools.registry import tool_error
+
+if TYPE_CHECKING:
+    from tools.send_rules import Destination
 
 logger = logging.getLogger("tools.mcp_action_gate")
 
@@ -225,12 +229,15 @@ def build_card(server_name: str, tool_name: str, args: Mapping) -> dict:
             "description": f"Send via {channel}" + (f" to {recipient}" if recipient else "")}
 
 
-def _approve(server_name: str, tool_name: str, args: Mapping) -> Optional[str]:
-    from tools import approval
+def _approve(server_name: str, tool_name: str, args: Mapping, prefixed: str,
+             destination: Optional[Destination]) -> Optional[str]:
+    from tools import approval, send_rules
     card = build_card(server_name, tool_name, args)
+    draft = card["draft"]
     result = approval.request_draft_approval(
         text=card["text"], description=card["description"], pattern_key=f"mcp_action:{server_name}/{tool_name}",
-        draft=card["draft"], details=card["details"], attachments=card["attachments"])
+        draft=draft, details=card["details"], attachments=card["attachments"],
+        rule=send_rules.offer(prefixed, destination, draft["recipient"], draft["channel"]))
     if result.get("approved") is True:
         return None
     logger.info("MCP action not approved: server=%s tool=%s outcome=%s", server_name, tool_name,
@@ -249,7 +256,8 @@ def approver_present() -> bool:
 
 
 def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional[Mapping],
-          allow_auto_approve: bool, reads_ask: Optional[Callable[[], bool]]) -> tuple[Optional[str], Optional[ActionGrant]]:
+          allow_auto_approve: bool, reads_ask: Optional[Callable[[], bool]],
+          identity: Optional[Mapping]) -> tuple[Optional[str], Optional[ActionGrant]]:
     kind = policy.classify(tool_name)
     if kind == READ and reads_ask is not None and reads_ask():
         kind = ACTION
@@ -283,18 +291,23 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional
     if outbound_send_grant.redeem(prefixed, args, gate=outbound_send_grant.MCP_GATE):
         logger.info("MCP action approved by the owner's pick on a clarify form: server=%s tool=%s", server_name, tool_name)
         return None, grant
-    refusal = _approve(server_name, tool_name, args)
+    from tools import send_rules
+    destination = send_rules.owner_turn_destination(prefixed, args, identity)
+    if destination and send_rules.allows(prefixed, destination.signature, gate=outbound_send_grant.MCP_GATE):
+        return None, grant
+    refusal = _approve(server_name, tool_name, args, prefixed, destination)
     return (refusal, None) if refusal else (None, grant)
 
 
 def gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional[Mapping], *,
-         allow_auto_approve: bool = True,
-         reads_ask: Optional[Callable[[], bool]] = None) -> tuple[Optional[str], Optional[ActionGrant]]:
+         allow_auto_approve: bool = True, reads_ask: Optional[Callable[[], bool]] = None,
+         identity: Optional[Mapping] = None) -> tuple[Optional[str], Optional[ActionGrant]]:
     """``(error, None)`` blocks the call, ``(None, grant)`` lets one exact call through once, ``(None, None)``
     is a read. ``reads_ask`` answers live whether the owner made this connector's reads ask like an action.
+    ``identity`` holds the stable ids behind a destination ``args`` shows by name, for the owner's send rules.
     Any failure blocks."""
     try:
-        return _gate(policy, server_name, tool_name, args, allow_auto_approve, reads_ask)
+        return _gate(policy, server_name, tool_name, args, allow_auto_approve, reads_ask, identity)
     except Exception as exc:  # health: allow BLE001 -- fail closed on any error; only the exception type is logged so call arguments never reach a log
         logger.error("MCP action gate failed for %s/%s (%s); call blocked", server_name, tool_name,
                      type(exc).__name__)

@@ -1397,12 +1397,12 @@ def _(rid, params: dict) -> dict:
         if session is None:
             return err
     choice = params.get("choice", "deny")
-    if choice not in _APPROVAL_CHOICES:
+    if choice not in _APPROVAL_CHOICES and not _answers_send_rule_card(session["session_key"], choice, params):
         return _err(rid, 4133, "an approval is answered once or deny")
     edited = params.get("edited_text")
     if isinstance(edited, str) and not params.get("request_id"):
         return _err(rid, 4135, "an edit applies to one draft; name it with request_id")
-    if isinstance(edited, str) and choice != "once":
+    if isinstance(edited, str) and choice == "deny":
         return _err(rid, 4135, "an edit applies only when the draft is sent")
     extra = {"edited_text": edited} if isinstance(edited, str) else {}
     return _approval_reply(
@@ -1574,6 +1574,35 @@ _PREVIEW_RESTART_HISTORY_NOTE = (
 # ── approvals ───────────────────────────────────────────────────────────────
 
 _APPROVAL_CHOICES = ("once", "deny")
+
+
+def _answers_send_rule_card(session_key, choice, params):
+    if choice != "always" or params.get("all"):
+        return False
+    from tools.approval import choices_for_request
+    return choice in choices_for_request(session_key, str(params.get("request_id") or ""))
+
+
+def _send_rules_reply(rid, call):
+    try:
+        from tools import send_rules
+        return _ok(rid, call(send_rules))
+    except Exception as e:  # health: allow BLE001 -- the client gets a fixed message: an error text could carry a path
+        logger.warning("send rules call failed (%s)", type(e).__name__)
+        return _err(rid, 5004, "the send rules could not be read")
+
+
+@method("approval.rules.list")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    return _send_rules_reply(rid, lambda rules: {"rules": [rule.public() for rule in rules.list_rules()]})
+
+
+@method("approval.rules.revoke")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    rule_id = str(params.get("id") or "")
+    return _send_rules_reply(rid, lambda rules: {"ok": rules.revoke(rule_id)})
 
 
 def _approval_reply(rid, result_key, call):

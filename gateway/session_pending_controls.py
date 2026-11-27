@@ -6,7 +6,7 @@ Secret/sudo prompts remain native; no response is published or journaled here.
 from copy import deepcopy
 
 from persistence.core.errors import AuthorityRefusal
-from tools.approval import list_gateway_approvals, resolve_gateway_approval
+from tools.approval import list_gateway_approvals, offered_choices, resolve_gateway_approval
 
 
 class PendingControls:
@@ -23,7 +23,7 @@ class PendingControls:
                       'execution_generation': generation,
                       'command': _redact_approval_command(data.get('command', '')),
                       'description': _redact_approval_command(data.get('description', '')),
-                      'choices': ['once', 'deny']}
+                      'choices': offered_choices(data)}
             if isinstance(data.get('question'), str):
                 prompt['question'] = _redact_approval_command(data['question'])
             for key in ('edit', 'draft', 'details', 'language', 'labels'):
