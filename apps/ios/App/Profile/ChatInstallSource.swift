@@ -89,6 +89,14 @@ struct GatewayChatInstallClient: ChatInstallClient {
         try decode(ChatInstallStatusResult.self, await perform("chat.install.status", scope), "chat.install.status")
     }
 
+    func channelAccess(_ scope: ChatInstallScope) async throws -> [ChatChannelAccessWire] {
+        let reply = try await perform("chat.install.status", scope, ["check_channels": true])
+        guard let channels = try decode(ChatInstallStatusResult.self, reply, "chat.install.status").channels else {
+            throw ChatInstallClientError.unsupported
+        }
+        return channels
+    }
+
     func begin(_ scope: ChatInstallScope) async throws {
         _ = try await perform("chat.install.begin", scope, urlScheme.wireParameters)
     }

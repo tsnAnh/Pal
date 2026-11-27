@@ -178,6 +178,27 @@ struct StepFlowCalmView: View {
     }
 }
 
+struct StepFlowCalmScreen<Accessory: View>: View {
+    let copy: StepFlowCalmCopy
+    @ViewBuilder let accessory: () -> Accessory
+
+    var body: some View {
+        if copy.mark == .success {
+            MacOverflowScroll {
+                VStack(spacing: 0) {
+                    StepFlowCalmView(copy: copy)
+                    VStack(spacing: PalMetrics.captionToCardGap) { accessory() }
+                        .frame(maxWidth: 420)
+                        .padding(.horizontal, PalMetrics.screenMargin)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        } else {
+            StepFlowCalmView(copy: copy)
+        }
+    }
+}
+
 struct SetupChrome<Content: View>: View {
     let title: String
     let app: ConnectApp?

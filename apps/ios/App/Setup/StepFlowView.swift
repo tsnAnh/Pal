@@ -75,7 +75,7 @@ struct StepFlowView<Accessory: View>: View {
         if let failure = engine.failure, inlineRefusal == nil {
             StatusBlock(status: failure, identifierPrefix: "stepFlowStatus") { perform(after: failure) }
         } else if let calm = calmCopy {
-            StepFlowCalmView(copy: calm)
+            StepFlowCalmScreen(copy: calm) { accessory(engine.current) }
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {

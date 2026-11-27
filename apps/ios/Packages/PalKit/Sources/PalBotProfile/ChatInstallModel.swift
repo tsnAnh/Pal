@@ -37,6 +37,7 @@ public struct ChatInstallScope: Sendable, Hashable {
 public protocol ChatInstallClient: Sendable {
     func providers() async throws -> [ChatCapabilitiesWire]
     func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult
+    func channelAccess(_ scope: ChatInstallScope) async throws -> [ChatChannelAccessWire]
     func begin(_ scope: ChatInstallScope) async throws
     func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws
     func spaces(_ scope: ChatInstallScope) async throws -> [ChatSpaceRefWire]

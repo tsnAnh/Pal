@@ -29,6 +29,10 @@ struct TimeLimitedChatInstallClient: ChatInstallClient {
 
     func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { try await bounded { try await $0.status(scope) } }
 
+    func channelAccess(_ scope: ChatInstallScope) async throws -> [ChatChannelAccessWire] {
+        try await bounded { try await $0.channelAccess(scope) }
+    }
+
     func begin(_ scope: ChatInstallScope) async throws { try await bounded { try await $0.begin(scope) } }
 
     func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws {

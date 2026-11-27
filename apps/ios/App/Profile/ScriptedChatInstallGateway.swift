@@ -208,6 +208,8 @@ actor ScriptedChatInstallGateway: ChatInstallClient, ChatMemberClient {
 
     func reconnect(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { throw ChatInstallClientError.unsupported }
 
+    func channelAccess(_ scope: ChatInstallScope) async throws -> [ChatChannelAccessWire] { throw ChatInstallClientError.unsupported }
+
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
         try decode(ChatIdentityUpdateResult.self, [
             "outcome": "updated",

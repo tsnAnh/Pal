@@ -7,6 +7,7 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
     static let appReadyArgument = "-hermes-test-discord-app-ready"
     static let needsOwnerArgument = "-hermes-test-discord-needs-owner"
     static let offlineArgument = "-hermes-test-discord-offline"
+    static let mutedArgument = "-hermes-test-discord-muted"
     static let timing = DiscordSetupModel.Timing(interval: .milliseconds(300), attempts: 30)
 
     private static let studio = DiscordGuild(id: "222", name: "Studio")
@@ -20,13 +21,16 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
     private let listed: [DiscordGuild]
     private let needsOwner: Bool
     private let offline: Bool
+    private var muted: Bool
 
-    init(appReady: Bool, needsOwner: Bool, offline: Bool, channel: String) {
-        app = appReady || offline
+    init(appReady: Bool, needsOwner: Bool, offline: Bool, muted: Bool, channel: String) {
+        let ready = appReady || offline || muted
+        app = ready
         self.offline = offline
+        self.muted = muted
         self.needsOwner = needsOwner
         self.channel = channel
-        listed = appReady || offline ? [Self.studio] : [Self.studio, Self.garage]
+        listed = ready ? [Self.studio] : [Self.studio, Self.garage]
     }
 
     func appExists() -> Bool { app }
@@ -45,12 +49,18 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
     }
 
     func existingInstall(in guilds: [DiscordGuild]) -> DiscordInstalled? {
-        offline ? installed(Self.studio, adapter: ChatAdapterStatusWire(state: .notStarted)) : nil
+        if offline { return installed(Self.studio, adapter: ChatAdapterStatusWire(state: .notStarted)) }
+        return muted ? installed(Self.studio) : nil
     }
 
     func reconnect(in guild: DiscordGuild) async throws -> DiscordInstalled {
         try await Task.sleep(for: .milliseconds(600))
+        muted = false
         return installed(guild)
+    }
+
+    func channelAccess(in guild: DiscordGuild) -> [ChatChannelAccessWire] {
+        [ChatChannelAccessWire(channelId: "900", name: channel, access: muted ? .cannotSend : .ok)]
     }
 
     func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {

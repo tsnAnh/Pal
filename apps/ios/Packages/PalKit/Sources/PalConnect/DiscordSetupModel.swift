@@ -33,6 +33,7 @@ public protocol DiscordSetupGateway: Sendable {
     func inviteURL() async throws -> URL
     func existingInstall(in guilds: [DiscordGuild]) async throws -> DiscordInstalled?
     func reconnect(in guild: DiscordGuild) async throws -> DiscordInstalled
+    func channelAccess(in guild: DiscordGuild) async throws -> [ChatChannelAccessWire]
     func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome
     func confirmOwner(_ userID: String, in guild: DiscordGuild) async throws -> DiscordInstallOutcome
 }
@@ -78,6 +79,8 @@ public final class DiscordSetupModel {
     public private(set) var stage = Stage.loading
     public private(set) var installed: DiscordInstalled?
     public private(set) var isReconnecting = false
+    private var checkedWarnings: [String] = []
+    @ObservationIgnored private var channelCheck: Task<Void, Never>?
     @ObservationIgnored private var inputs = DiscordSetupPlan.Inputs()
     @ObservationIgnored private let gateway: any DiscordSetupGateway
     @ObservationIgnored private let timing: Timing
@@ -113,6 +116,29 @@ public final class DiscordSetupModel {
     nonisolated static func status(for error: any Error) -> SetupStatus {
         if error is DeadlineExceeded { return .tookTooLong }
         return (error as? SetupStatusError)?.status ?? SetupStatus(error: error, subject: "Discord", valueName: "token")
+    }
+
+    public var channelWarnings: [String] {
+        guard case .notConnected(let status) = stage else { return checkedWarnings }
+        return checkedWarnings.filter { $0 != status.reason }
+    }
+
+    public func channelsChecked() async {
+        await channelCheck?.value
+    }
+
+    private func checkChannels(of done: DiscordInstalled) {
+        channelCheck?.cancel()
+        checkedWarnings = []
+        guard done.adapter != nil else { return }
+        let gateway = gateway
+        let limit = timing.limits.call
+        let guild = DiscordGuild(id: done.guildID, name: done.guildName)
+        channelCheck = Task { [weak self] in
+            let found = try? await Deadline.run(limit) { try await gateway.channelAccess(in: guild) }
+            guard !Task.isCancelled else { return }
+            self?.checkedWarnings = DiscordSetupPlan.channelWarnings(found)
+        }
     }
 
     public func load() async {
@@ -157,6 +183,7 @@ public final class DiscordSetupModel {
     private func finish(_ done: DiscordInstalled) {
         installed = done
         inputs.installed = done
+        checkChannels(of: done)
         if let problem = DiscordSetupPlan.notConnected(done) {
             stage = .notConnected(problem)
             return

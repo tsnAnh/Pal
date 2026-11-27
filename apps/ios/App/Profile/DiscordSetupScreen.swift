@@ -25,7 +25,8 @@ struct DiscordEntryView: View {
             gateway: ScriptedDiscordSetup(
                 appReady: arguments.contains(ScriptedDiscordSetup.appReadyArgument),
                 needsOwner: arguments.contains(ScriptedDiscordSetup.needsOwnerArgument),
-                offline: arguments.contains(ScriptedDiscordSetup.offlineArgument), channel: botName
+                offline: arguments.contains(ScriptedDiscordSetup.offlineArgument),
+                muted: arguments.contains(ScriptedDiscordSetup.mutedArgument), channel: botName
             ),
             timing: ScriptedDiscordSetup.timing
         )
@@ -71,17 +72,24 @@ struct DiscordSetupScreen: View {
         case .status(let status):
             statusPage(status, identifierPrefix: "discordSetupStatus") { Task { await model.load() } }
         case .notConnected(let status):
-            statusPage(status, identifierPrefix: "discordOffline", isBusy: model.isReconnecting) { Task { await model.reconnect() } }
+            statusPage(
+                status, identifierPrefix: "discordOffline", isBusy: model.isReconnecting, warnings: model.channelWarnings
+            ) { Task { await model.reconnect() } }
         }
     }
 
     private func statusPage(
-        _ status: SetupStatus, identifierPrefix: String, isBusy: Bool = false, perform: @escaping () -> Void
+        _ status: SetupStatus, identifierPrefix: String, isBusy: Bool = false, warnings: [String] = [], perform: @escaping () -> Void
     ) -> some View {
         SetupChrome(title: title, accessibilityIdentifier: "discordSetupFrame", close: close) {
             VStack(spacing: 0) {
                 Spacer(minLength: 0)
                 StatusBlock(status: status, isBusy: isBusy, identifierPrefix: identifierPrefix, perform: perform)
+                if !warnings.isEmpty {
+                    DiscordChannelWarnings(sentences: warnings)
+                        .padding(.top, PalMetrics.captionToCardGap)
+                        .padding(.horizontal, PalMetrics.screenMargin)
+                }
                 Spacer(minLength: 0)
             }
         }
@@ -89,8 +97,34 @@ struct DiscordSetupScreen: View {
 
     @ViewBuilder
     private func accessory(_ step: FlowStep) -> some View {
-        if step.id == DiscordSetupPlan.doneID, let url = model.installed.flatMap(DiscordSetupPlan.channelURL) {
-            SetupButton(title: String(localized: "Open in Discord"), identifier: "discordOpen") { ExternalLink.open(url) }
+        if step.id == DiscordSetupPlan.doneID {
+            DiscordChannelWarnings(sentences: model.channelWarnings)
+            SetupButton(title: String(localized: "Reconnect"), isBusy: model.isReconnecting, identifier: "discordReconnect") {
+                Task { await model.reconnect() }
+            }
+            if let url = model.installed.flatMap(DiscordSetupPlan.channelURL) {
+                SetupButton(title: String(localized: "Open in Discord"), identifier: "discordOpen") { ExternalLink.open(url) }
+            }
+        }
+    }
+}
+
+private struct DiscordChannelWarnings: View {
+    let sentences: [String]
+
+    var body: some View {
+        if !sentences.isEmpty {
+            VStack(spacing: PalMetrics.rowTextSpacing) {
+                ForEach(Array(sentences.enumerated()), id: \.offset) { _, sentence in
+                    Text(sentence)
+                        .hermesText(.rowSubtitle)
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("discordChannelWarning")
+                }
+            }
+            .frame(maxWidth: 420)
         }
     }
 }

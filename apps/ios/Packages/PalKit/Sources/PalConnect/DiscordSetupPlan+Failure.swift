@@ -24,7 +24,6 @@ extension DiscordSetupPlan {
         )
         status.title = String(localized: "Discord is not connected")
         status.actionTitle = String(localized: "Reconnect")
-        let channel = installed.channelName.map { "#\($0)" } ?? String(localized: "its channel")
         switch adapter.reason {
         case .invalidToken:
             status.reason = String(
@@ -40,7 +39,7 @@ extension DiscordSetupPlan {
             )
             status.link = SetupLink(label: String(localized: "Open the developer portal"), url: portalURL)
         case .missingPermission:
-            status.reason = String(localized: "Pal cannot see \(channel). Give the Pal role View Channel there, then reconnect.")
+            status.reason = cannotView(channelLabel(installed.channelName))
             status.link = channelURL(installed).map { SetupLink(label: String(localized: "Open in Discord"), url: $0) }
         case .restartNeeded:
             status.reason = String(localized: "Restart Pal on your computer, then reconnect.")
@@ -50,6 +49,28 @@ extension DiscordSetupPlan {
                 : String(localized: "Your Pal is not connected to Discord right now. Reconnect to try again.")
         }
         return status
+    }
+
+    public static func channelWarnings(_ found: [ChatChannelAccessWire]?) -> [String] {
+        guard let found else { return [String(localized: "Pal could not check its permissions in Discord.")] }
+        return found.compactMap { channel in
+            let label = channelLabel(channel.name)
+            return switch channel.access {
+            case .ok: nil
+            case .cannotView: cannotView(label)
+            case .cannotSend:
+                String(localized: "Pal cannot send messages in \(label). Give the Pal role Send Messages there, then reconnect.")
+            case .unknown: String(localized: "Pal could not check its permissions in \(label).")
+            }
+        }
+    }
+
+    private static func channelLabel(_ name: String?) -> String {
+        name.map { "#\($0)" } ?? String(localized: "its channel")
+    }
+
+    private static func cannotView(_ channel: String) -> String {
+        String(localized: "Pal cannot see \(channel). Give the Pal role View Channel there, then reconnect.")
     }
 
     public static func inviteTimeout(server: String?, invite: URL?) -> SetupStatus {

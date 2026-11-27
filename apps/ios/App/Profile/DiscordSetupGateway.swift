@@ -78,6 +78,14 @@ struct DiscordSetupLiveGateway: DiscordSetupGateway {
         }
     }
 
+    func channelAccess(in guild: DiscordGuild) async throws -> [ChatChannelAccessWire] {
+        do {
+            return try await client.channelAccess(scope(guild))
+        } catch {
+            throw Self.chatFailure(error)
+        }
+    }
+
     func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
         do {
             if let spec { await ChatIconPusher(client: client, providerID: Self.provider).push(spec, onlyWhenInstalled: false) }
