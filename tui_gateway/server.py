@@ -192,7 +192,7 @@ _LONG_HANDLERS = frozenset({
     "browser.manage", "cli.exec", "complete.path", "complete.slash", "llm.oneshot", "model.options",
     "pet.cells", "pet.gallery", "pet.generate", "pet.hatch", "pet.info", "pet.select", "pet.thumb",
     "image.render", "learning.frames", "plugins.manage", "plugins.catalog.lookup", "reload.mcp", "mcp.servers.test",
-    "mcp.servers.oauth.start", "chat.install.begin", "chat.install.advance", "chat.install.reconnect",
+    "mcp.servers.oauth.start", "chat.install.status", "chat.install.begin", "chat.install.advance", "chat.install.reconnect",
     "process.list", "profiles.configure", "profiles.create", "profiles.describe", "profiles.get_asset",
     "profiles.identity.undo", "profiles.list", "profiles.onboard", "profiles.set_asset", "profiles.template.export", "profiles.template.import",
     "bot_relay.roster.sync", "bot_relay.outbox.drain",

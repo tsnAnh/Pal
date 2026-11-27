@@ -50,6 +50,7 @@
     },
     "ChatInstallStatusResult": {
       "adapter": null,
+      "channels": null,
       "installation": {
         "bot": "pal",
         "created_at": 1700000000.0,
@@ -196,6 +197,7 @@
     },
     "ChatInstallStatusResult": {
       "adapter": null,
+      "channels": null,
       "installation": {
         "bot": "pal",
         "created_at": 1700000000.0,

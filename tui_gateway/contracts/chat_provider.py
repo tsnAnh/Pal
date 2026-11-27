@@ -136,6 +136,19 @@ class AdapterStatus(Result):
     reason: AdapterFailure | None = None
 
 
+class ChannelAccessState(WireEnum):
+    ok = "ok"
+    cannot_view = "cannot_view"
+    cannot_send = "cannot_send"
+    unknown = "unknown"
+
+
+class ChannelAccess(Result):
+    channel_id: str
+    name: str | None = None
+    access: ChannelAccessState
+
+
 class SetupError(Result):
     code: SetupErrorCode
     fix: FixAction
@@ -217,6 +230,10 @@ class ChatProviderParams(ProfileParams):
 
 class ChatInstallParams(ChatProviderParams):
     workspace: str = ""
+
+
+class ChatInstallStatusParams(ChatInstallParams):
+    check_channels: bool = False
 
 
 class ChatInstallBeginParams(ChatInstallParams):
@@ -422,6 +439,7 @@ class ChatInstallStatusResult(Result):
     state: SetupState
     installation: Installation | None = None
     adapter: AdapterStatus | None = None
+    channels: list[ChannelAccess] | None = None
 
 
 class ChatIdentityUpdateResult(Result):
@@ -449,9 +467,11 @@ class ChatInstallChangedPayload(Payload):
 
 method("chat.provider.list", params=ProfileParams, result=ChatProviderListResult,
        doc="Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.")
-method("chat.install.status", params=ChatInstallParams, result=ChatInstallStatusResult,
+method("chat.install.status", params=ChatInstallStatusParams, result=ChatInstallStatusResult,
        doc="Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. "
-           "Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record.")
+           "Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record. "
+           "check_channels=true also answers channels: for each chosen channel whether the bot can view and send, read from Discord "
+           "within a few seconds; unknown when that read fails or takes longer. Without it channels is null.")
 method("chat.install.reconnect", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Rebuild the chat adapter behind a ready install in the running gateway, with no process restart, and wait up to 45 s. "
            "adapter says whether it is online or why not. no_installation unless the install is ready; not_implemented for "
@@ -521,4 +541,5 @@ WIRE_MODELS: tuple[type[Params | Result | Payload], ...] = (
     ChatDeskListParams, ChatDeskDecideParams, ChatSpaceLeaveResult, ChatInstallSetIconResult, ChatAudienceResult,
     ChatPeopleListResult, ChatReportResult, ChatDeskListResult, ChatDeskDecideResult, ChatDeskChangedPayload,
     Person, AudienceMember, ReportDestination, DeskPerson, DeskPlace, DeskRecipient, DeskItemWire,
+    ChatInstallStatusParams, ChannelAccess,
 )

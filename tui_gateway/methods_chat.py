@@ -51,10 +51,11 @@ def _chat_owner_refusal(rid):
     return None
 
 
-def _chat_status_body(state, installation, adapter=None) -> dict:
+def _chat_status_body(state, installation, adapter=None, channels=None) -> dict:
     return {"state": state.model_dump(mode="json"),
             "installation": installation.model_dump(mode="json") if installation is not None else None,
-            "adapter": adapter.model_dump(mode="json") if adapter is not None else None}
+            "adapter": adapter.model_dump(mode="json") if adapter is not None else None,
+            "channels": [c.model_dump(mode="json") for c in channels] if channels is not None else None}
 
 
 def _chat_run(rid, params: dict, call):
@@ -88,7 +89,8 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     def call(service, bot):
         state, installation = service.status(bot, *_chat_target(params))
-        return _chat_status_body(state, installation, service.live_adapter(installation))
+        channels = service.live_channels(installation) if params.get("check_channels") is True else None
+        return _chat_status_body(state, installation, service.live_adapter(installation), channels)
     return _chat_run(rid, params, call)
 
 

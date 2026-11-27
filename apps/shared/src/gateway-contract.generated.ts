@@ -830,15 +830,17 @@ export interface IdentityPolicy {
   avatar_max_bytes: number
   avatar_min_px: number
 }
-export interface ChatInstallParams {
+export interface ChatInstallStatusParams {
   profile?: string | null
   provider_id: string
   workspace?: string
+  check_channels?: boolean
 }
 export interface ChatInstallStatusResult {
   state: SetupState
   installation?: Installation | null
   adapter?: AdapterStatus | null
+  channels?: ChannelAccess[] | null
 }
 export interface SetupState {
   bot: string
@@ -890,6 +892,17 @@ export interface AdapterStatus {
 }
 export type AdapterState = 'online' | 'connecting' | 'failed' | 'not_started'
 export type AdapterFailure = 'invalid_token' | 'missing_intent' | 'missing_permission' | 'restart_needed' | 'adapter_offline'
+export interface ChannelAccess {
+  channel_id: string
+  name?: string | null
+  access: ChannelAccessState
+}
+export type ChannelAccessState = 'ok' | 'cannot_view' | 'cannot_send' | 'unknown'
+export interface ChatInstallParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+}
 export interface ChatInstallBeginParams {
   profile?: string | null
   provider_id: string
@@ -8807,8 +8820,8 @@ export interface RpcMethods {
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
   'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }
-  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record. */
-  'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record. check_channels=true also answers channels: for each chosen channel whether the bot can view and send, read from Discord within a few seconds; unknown when that read fails or takes longer. Without it channels is null. */
+  'chat.install.status': { params: ChatInstallStatusParams; result: ChatInstallStatusResult }
   /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
   'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
   /** People in the bot's workspace who can be allowed to talk to it, with an optional name filter and a cursor. Bots, removed accounts and people from other organizations are left out. */
@@ -9942,8 +9955,8 @@ export interface CanonicalRpcMethods {
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
   'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }
-  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record. */
-  'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record. check_channels=true also answers channels: for each chosen channel whether the bot can view and send, read from Discord within a few seconds; unknown when that read fails or takes longer. Without it channels is null. */
+  'chat.install.status': { params: ChatInstallStatusParams; result: ChatInstallStatusResult }
   /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
   'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
   /** People in the bot's workspace who can be allowed to talk to it, with an optional name filter and a cursor. Bots, removed accounts and people from other organizations are left out. */

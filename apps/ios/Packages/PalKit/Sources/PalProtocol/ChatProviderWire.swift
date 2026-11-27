@@ -54,6 +54,11 @@ public enum ChatAdapterFailure: String, ChatWireEnum {
     case restartNeeded = "restart_needed", adapterOffline = "adapter_offline", unknown
 }
 
+public enum ChatChannelAccessState: String, ChatWireEnum {
+    case ok = "ok", cannotView = "cannot_view", cannotSend = "cannot_send"
+    case unknown = "unknown"
+}
+
 public enum ChatFixAction: String, ChatWireEnum {
     case reenterCredential = "reenter_credential", retry = "retry", restartAllow = "restart_allow", unknown
 }
@@ -268,10 +273,28 @@ public struct ChatAdapterStatusWire: Decodable, Sendable, Hashable {
     }
 }
 
+public struct ChatChannelAccessWire: Decodable, Sendable, Hashable {
+    public var channelId: String
+    public var name: String?
+    public var access: ChatChannelAccessState
+
+    public init(channelId: String, name: String? = nil, access: ChatChannelAccessState) {
+        self.channelId = channelId
+        self.name = name
+        self.access = access
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, access
+        case channelId = "channel_id"
+    }
+}
+
 public struct ChatInstallStatusResult: Decodable, Sendable, Hashable {
     public var state: ChatSetupStateWire
     public var installation: ChatInstallationWire?
     public var adapter: ChatAdapterStatusWire?
+    public var channels: [ChatChannelAccessWire]?
 }
 
 public struct ChatSpacesListResult: Decodable, Sendable, Hashable {

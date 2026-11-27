@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import contextvars
 import logging
 import re
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,8 @@ from tui_gateway.contracts.chat_provider import (
     AdapterState,
     AdapterStatus,
     Capabilities,
+    ChannelAccess,
+    ChannelAccessState,
     IdentityProjection,
     IdentityUpdateOutcome,
     Installation,
@@ -58,6 +62,7 @@ _NEEDS_ACCESS = NextAction(kind=NextActionKind.button, action_id="grant_channel_
 
 
 HOME_CHANNEL_ENV = "DISCORD_HOME_CHANNEL"
+CHANNEL_CHECK_TIMEOUT_S = 6.0
 
 
 _ADAPTER_ERRORS = {
@@ -67,6 +72,14 @@ _ADAPTER_ERRORS = {
     AdapterFailure.restart_needed: SetupErrorCode.install_failed,
     AdapterFailure.adapter_offline: SetupErrorCode.provider_unreachable,
 }
+
+
+def _within(seconds: float, call: Callable[[], list[ChannelAccess]]) -> list[ChannelAccess]:
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="discord-channel-check")
+    try:
+        return pool.submit(contextvars.copy_context().run, call).result(timeout=seconds)
+    finally:
+        pool.shutdown(wait=False)
 
 
 def adapter_error(failure: AdapterFailure) -> DiscordSetupError:
@@ -98,7 +111,8 @@ class DiscordProvider(ChatProvider):
                  identity: Callable[[str], BotIdentitySource] = profile_identity,
                  token_source: Callable[[], str | None] = saved_app_token,
                  has_home_channel: Callable[[str], bool] = profile_has_home_channel,
-                 clock: Callable[[], float] = time.time):
+                 clock: Callable[[], float] = time.time,
+                 channel_check_timeout_s: float = CHANNEL_CHECK_TIMEOUT_S):
         self.vault = vault or VaultStore(get_default_hermes_root() / "vault")
         self.api = api or DiscordApi()
         self.records = records or DiscordRecords()
@@ -107,6 +121,7 @@ class DiscordProvider(ChatProvider):
         self.adapter = adapter or SharedAdapter()
         self._identity, self._token_source, self._clock = identity, token_source, clock
         self._has_home_channel = has_home_channel
+        self.channel_check_timeout_s = channel_check_timeout_s
 
     def capabilities(self, workspace: str | None = None) -> Capabilities:
         return DISCORD_CAPABILITIES
@@ -152,6 +167,16 @@ class DiscordProvider(ChatProvider):
 
     def adapter_status(self, installation: Installation) -> AdapterStatus:
         return self.adapter.status()
+
+    def channel_access(self, installation: Installation) -> list[ChannelAccess]:
+        guild_id, record = self._record_for(installation)
+        chosen = [str(c) for c in (record["channel_id"], *record.get("extra_channel_ids", []))]
+        try:
+            rest = DiscordRest(self.api, self._token())
+            return _within(self.channel_check_timeout_s, lambda: rest.channel_access(guild_id, chosen))
+        except (DiscordSetupError, DiscordGone, TimeoutError) as exc:
+            logger.warning("discord channel check failed: %s", type(exc).__name__)
+            return [ChannelAccess(channel_id=c, access=ChannelAccessState.unknown) for c in chosen]
 
     def reconnect_adapter(self, installation: Installation) -> AdapterStatus:
         if not (token := self._token_source()):

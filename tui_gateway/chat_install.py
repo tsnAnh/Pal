@@ -9,6 +9,7 @@ from tui_gateway.contracts.chat_provider import (
     Capabilities,
     CapabilityEntry,
     CapabilityMode,
+    ChannelAccess,
     FixAction,
     IdentityPolicy,
     IdentityUpdateOutcome,
@@ -106,6 +107,9 @@ class ChatProvider(abc.ABC):
         return None
 
     def adapter_status(self, installation: Installation) -> AdapterStatus | None:
+        return None
+
+    def channel_access(self, installation: Installation) -> list[ChannelAccess] | None:
         return None
 
     def reconnect_adapter(self, installation: Installation) -> AdapterStatus:

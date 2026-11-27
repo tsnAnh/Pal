@@ -39,6 +39,7 @@ from tui_gateway.contracts.chat_provider import (
     AdapterStatus,
     Binding,
     Capabilities,
+    ChannelAccess,
     ChatRpcErrorReason,
     Installation,
     NextAction,
@@ -292,6 +293,16 @@ class ChatInstallService:
         except Exception as exc:  # health: allow BLE001 -- adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat adapter status failed provider=%s error=%s", installation.provider_id, type(exc).__name__)
             return AdapterStatus(state=AdapterState.failed, reason=AdapterFailure.adapter_offline)
+
+    def live_channels(self, installation: Installation | None) -> list[ChannelAccess] | None:
+        if installation is None:
+            return None
+        provider = self._provider(installation.provider_id)
+        try:
+            return provider.channel_access(installation)
+        except Exception as exc:  # health: allow BLE001 -- adapter errors carry provider text, so only the exception type is logged
+            logger.warning("chat channel check failed provider=%s error=%s", installation.provider_id, type(exc).__name__)
+            return None
 
     def reconnect(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation, AdapterStatus]:
         provider, state, installation = self._installed(bot, provider_id, workspace)
