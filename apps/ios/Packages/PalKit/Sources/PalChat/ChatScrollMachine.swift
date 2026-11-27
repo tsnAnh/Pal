@@ -82,6 +82,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         case send(animated: Bool)
         case revealRow(String)
         case revealRetry
+        case layoutMoving(Bool)
 
         public var name: String {
             switch self {
@@ -94,6 +95,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
             case .send: "send"
             case .revealRow: "revealRow"
             case .revealRetry: "revealRetry"
+            case .layoutMoving: "layoutMoving"
             }
         }
     }
@@ -126,6 +128,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
 
     private var userScrolling = false
     private var repairInFlight = false
+    private var layoutIsMoving = false
     private var clampPending = false
     private var attempts = 0
     private var pendingRestore: ChatRowAnchor?
@@ -159,6 +162,7 @@ public struct ChatScrollMachine: Sendable, Equatable {
         case .jumpToNewest(let animated), .send(let animated): return jump(animated: animated)
         case .revealRow(let id): return revealRow(id)
         case .revealRetry: return revealRetry()
+        case .layoutMoving(let moving): layoutIsMoving = moving; return .none
         }
     }
 
@@ -198,7 +202,8 @@ public struct ChatScrollMachine: Sendable, Equatable {
             return nil
         }
         let shrank = previous.map { geometry.contentHeight < $0.contentHeight - Self.atBottomTolerance } ?? false
-        guard shrank || clampPending else { return nil }
+        let tall = state == .pinnedToBottom && geometry.contentHeight > geometry.containerHeight + geometry.insetTop
+        guard shrank || clampPending || tall else { return nil }
         clampPending = true
         return .clampToContent
     }
@@ -214,8 +219,8 @@ public struct ChatScrollMachine: Sendable, Equatable {
             repairInFlight = false
             return .none
         }
-        if sizeChanged { return repair() }
-        guard isAway(geometry) else { return .none }
+        if sizeChanged || layoutIsMoving { return repair() }
+        guard isAway(geometry) else { return repair() }
         if repairInFlight {
             repairInFlight = false
             return .none

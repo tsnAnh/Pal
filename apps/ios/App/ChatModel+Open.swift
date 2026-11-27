@@ -9,12 +9,49 @@ extension ChatModel {
     }
 
     func acceptsSnapshot(_ next: TimelineSnapshot) -> Bool {
-        if next.rows.isEmpty, next.sessionID == nil, !rows.isEmpty { return false }
+        if next.rows.isEmpty, !rows.isEmpty, !next.provesEmptyConversation { return false }
         guard let snapshot, !snapshotFromEarlierRun else { return true }
         return next.version > snapshot.version
     }
 
+    func beginOpen() {
+        isActive = true
+        openCount += 1
+        let reopened = openCount > 1
+        if reopened { resetForReopen() }
+        openStats.source = reopened ? (rows.isEmpty ? .none : .model) : (rows.isEmpty ? .none : .snapshot)
+        openStats.rowsAtStart = rows.count
+        if !rows.isEmpty { reportOpen(rows: rows.count, zeroRows: .zero) }
+    }
+
+    private func resetForReopen() {
+        opening.reset()
+        openStats = ChatOpenStats()
+        openStats.heights = links.heights.remembered(for: openedBot.name)
+        snapshotFromEarlierRun = snapshot != nil
+        isOpening = rows.isEmpty
+        hasBeenLive = false
+        assignIfChanged(\.connection, .connecting)
+        lastSeenAtOpen = lastSeenStore.lastSeen(for: bot.name)
+        endFinding()
+        cancelReply()
+        sendError = nil
+        imageViewer = nil
+        documentViewer = nil
+        filePreview = nil
+        localImages = [:]
+    }
+
+    var persistedHeights: ChatRowHeightFile? { openStats.heights }
+
+    func restoreSession(_ session: ChatSession) async {
+        async let heights = links.heights.load(for: openedBot.name)
+        await session.restore()
+        openStats.heights = await heights
+    }
+
     func seedFromMemory() {
+        openStats.heights = links.heights.remembered(for: openedBot.name)
         guard let remembered = links.snapshots.snapshot(for: openedBot.name) else { return }
         apply(remembered)
         snapshotFromEarlierRun = true
@@ -28,12 +65,22 @@ extension ChatModel {
         opening.hold(version: cached.version) { [weak self] in self?.apply($0) }
     }
 
+    func reportOpen(rows count: Int, zeroRows: Duration) {
+        guard openStats.counters == nil else { return }
+        let counters = ChatOpenCounters(
+            source: openStats.source, rowsAtFirstPublish: count, zeroRowsMilliseconds: Int(zeroRows / .milliseconds(1))
+        )
+        openStats.counters = counters
+        diagnostics.notice("chat", "model \(openedBot.name) \(counters.message)")
+    }
+
     func noteRows(_ count: Int) {
         let elapsed = Int(openStats.openedAt.duration(to: .now) / .milliseconds(1))
         if count > 0, !openStats.hasShownRows {
             openStats.hasShownRows = true
             PalPerf.event("chat.open.firstrows", label: openedBot.name, since: openStats.openedAt)
             LaunchClock.mark("chat \(openedBot.name) first rows (\(count)) after \(elapsed) ms", on: .osLog())
+            if isActive { reportOpen(rows: count, zeroRows: openStats.openedAt.duration(to: .now)) }
         } else if count == 0, !rows.isEmpty {
             openStats.clearedAfterData = true
             PalPerf.event("chat.open.rows.cleared")
@@ -47,6 +94,7 @@ extension ChatModel {
     }
 
     func closeOpening() {
+        if openStats.counters == nil { reportOpen(rows: 0, zeroRows: openStats.openedAt.duration(to: .now)) }
         if let snapshot { links.snapshots.remember(snapshot, for: openedBot.name) }
         openingDeadline?.cancel()
         openingDeadline = nil
@@ -88,4 +136,8 @@ extension ChatModel {
         ChatOpenTrace.mark(openedBot.name, "open.stalled", rows: rows.count, detail: reason)
         LaunchClock.mark("chat \(openedBot.name) open stalled: \(reason) (\(detail))", on: .osLog())
     }
+}
+
+private extension TimelineSnapshot {
+    var provesEmptyConversation: Bool { sessionID != nil && older == .start }
 }

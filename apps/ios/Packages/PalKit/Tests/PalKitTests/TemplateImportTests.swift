@@ -78,6 +78,17 @@ struct TemplateImportTests {
         #expect(bots.calls.count == 2)
     }
 
+    @Test("routine names in a template review read as natural language")
+    func reviewedRoutineNames() async throws {
+        let bots = ScriptedBots()
+        let slug: JSONValue = ["name": "weekly_news_digest"]
+        let id: JSONValue = ["name": "3f9a2c1d4e5b6a7f"]
+        bots.script("profiles.template.import", review(extra: ["routines": .array([slug, id])]))
+        let importer = model(bots)
+        await importer.begin(templateBytes)
+        #expect(try #require(importer.review).routines == ["Weekly news digest", "Untitled routine"])
+    }
+
     @Test("an edited name is sent as name and display_name")
     func editedName() async {
         let bots = ScriptedBots()

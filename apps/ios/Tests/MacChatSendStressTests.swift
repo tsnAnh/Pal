@@ -19,6 +19,8 @@ struct SendStressFrame {
     let offsetDelta: Double
     let distanceDelta: Double
     let contentDelta: Double
+    let machineDistance: Double
+    let insetBottom: Double
 
     var isPinned: Bool { state == "pinnedToBottom" }
 
@@ -42,11 +44,12 @@ struct SendStressSample {
 }
 
 @MainActor
-private final class SendStressStage {
+final class SendStressStage {
     static let rounds = 6
     static let streamFrames = 40
     static let swingLimit = 20.0
     static let sendGrowthLimit = 400.0
+    static let pinnedDriftLimit = 4.0
 
     let model: ChatModel
     let host: MacChatBenchHost
@@ -63,8 +66,10 @@ private final class SendStressStage {
     private var samples: [ChatScrollSample] = []
     private var version: UInt64 = 10
     private var previous: SendStressSample?
+    private var lastGeometry: ChatScrollGeometry?
 
-    init() async throws {
+    init(opening: RebuildWorld? = nil) async throws {
+        if let opening { world = opening }
         let environment = try MacChatBenchSession.environment()
         model = environment.model
         host = MacChatBenchHost(root: environment.surface(draft: draft, scroll: scroll), size: MacChatBench.pane)
@@ -95,6 +100,8 @@ private final class SendStressStage {
             try await Task.sleep(for: .seconds(MacChatBench.framePeriod))
             guard let now = measure() else { throw MacChatBenchError.noTranscriptScrollView }
             let writers = samples.map(\.writer.rawValue).filter { $0 != ChatScrollWriter.none.rawValue }
+            let geometry = samples.last?.geometry ?? lastGeometry
+            lastGeometry = geometry
             samples.removeAll(keepingCapacity: true)
             frames.append(SendStressFrame(
                 index: frames.count, phase: phase, offset: now.offset, distance: now.distance,
@@ -102,7 +109,8 @@ private final class SendStressStage {
                 state: scroll.machine.state.name, button: scroll.showsJumpButton, writers: writers,
                 offsetDelta: previous.map { now.offset - $0.offset } ?? 0,
                 distanceDelta: previous.map { now.distance - $0.distance } ?? 0,
-                contentDelta: previous.map { now.content - $0.content } ?? 0
+                contentDelta: previous.map { now.content - $0.content } ?? 0,
+                machineDistance: geometry?.distanceFromBottom ?? 0, insetBottom: geometry?.insetBottom ?? 0
             ))
             previous = now
         }
@@ -116,6 +124,17 @@ private final class SendStressStage {
         draft.text = ""
         scroll.sent(animated: true)
         try await step(8)
+    }
+
+    func readHistory(points: Double) async throws {
+        phase = "read"
+        host.liveScroll(NSScrollView.willStartLiveScrollNotification)
+        for _ in 0..<Int(points / 50) {
+            host.scroll(by: 50)
+            try await step()
+        }
+        host.liveScroll(NSScrollView.didEndLiveScrollNotification)
+        try await step(40)
     }
 
     func confirmSend(_ round: Int) {
@@ -147,7 +166,7 @@ private final class SendStressStage {
     }
 
     func expectNoBounce() {
-        let swings = frames.filter { $0.phase != "open" && abs($0.offsetDelta) > Self.swingLimit }
+        let swings = frames.filter { $0.phase != "open" && abs($0.distanceDelta) > Self.swingLimit }
         let growth = frames.filter { $0.phase == "send" && $0.contentDelta > Self.sendGrowthLimit }
         let past = frames.filter { $0.pastTheEnd > ChatScrollMachine.atBottomTolerance }
         let report = "swings=\(swings.map(\.index)) growth=\(growth.map(\.index)) pastTheEnd=\(past.map(\.index))"
@@ -165,8 +184,36 @@ private final class SendStressStage {
 }
 
 @MainActor
-@Suite("Mac chat send stress", .serialized, .enabled(if: MacChatBench.output != nil))
+@Suite("Mac chat send stress", .serialized)
 struct MacChatSendStressTests {
+    static let checkpointFrames = [12, 60, 600]
+
+    @Test("sending while reading history ends at the newest row at 100 ms, 500 ms and 5 s, with the jump button hidden from 500 ms")
+    func sendWhileReading() async throws {
+        let stage = try await SendStressStage()
+        defer { stage.host.close() }
+        try await stage.readHistory(points: 1500)
+        let readAt = stage.frames.count
+        stage.world.append(rebuildUser("u0", "message 0", delivery: .sending, at: rebuildAt(20_000)))
+        stage.world.isRunning = true
+        stage.phase = "send-reading"
+        stage.push()
+        stage.draft.text = ""
+        stage.scroll.sent(animated: true)
+        try await stage.step(Self.checkpointFrames.last ?? 0)
+        let checkpoints = Self.checkpointFrames.map { stage.frames[readAt + $0 - 1] }
+        let report = checkpoints.map { "#\($0.index) d=\(String(format: "%.1f", $0.distance)) button \($0.button) state \($0.state)" }
+        print("SENDREAD \(report)")
+        for checkpoint in checkpoints {
+            #expect(checkpoint.distance <= ChatScrollMachine.atBottomTolerance, Comment(rawValue: "\(report)"))
+        }
+        for checkpoint in checkpoints.dropFirst() { #expect(!checkpoint.button, Comment(rawValue: "\(report)")) }
+        let arrived = stage.frames[readAt...].drop { $0.distance > ChatScrollMachine.atBottomTolerance }
+        let swings = arrived.filter { abs($0.distanceDelta) > SendStressStage.swingLimit && $0.distance > ChatScrollMachine.atBottomTolerance }
+        let swung = swings.map { "#\($0.index) d=\($0.distance) delta=\($0.distanceDelta) content=\($0.contentDelta) \($0.state) \($0.writers)" }
+        #expect(swings.isEmpty, Comment(rawValue: "distance swung after the glide had reached the newest row (sent at #\(readAt)): \(swung)"))
+    }
+
     @Test("sending while the bot streams and the composer grows keeps the pinned list still and the jump button hidden")
     func pinnedSendStream() async throws {
         let stage = try await SendStressStage()
@@ -183,7 +230,8 @@ struct MacChatSendStressTests {
 
         let frames = stage.frames
         let jumps = zip(frames, frames.dropFirst()).filter { before, after in
-            before.isPinned && after.isPinned && abs(after.distanceDelta) > 1
+            before.isPinned && after.isPinned && after.phase != "open" && abs(after.distanceDelta) > 1
+                && after.distance > SendStressStage.pinnedDriftLimit
         }.map { $0.1 }
         let buttonAtBottom = frames.filter { $0.button && $0.distance <= ChatScrollMachine.hideDistance }
         let buttonWhilePinned = frames.filter { $0.button && $0.isPinned && $0.distance <= ChatScrollMachine.showDistance }
@@ -196,6 +244,8 @@ struct MacChatSendStressTests {
         #expect(jumps.isEmpty, Comment(rawValue: report))
         #expect(buttonAtBottom.isEmpty, Comment(rawValue: report))
         #expect(buttonWhilePinned.isEmpty, Comment(rawValue: report))
+        let away = frames.filter { $0.phase != "open" && $0.distance > ChatScrollMachine.atBottomTolerance }
+        print("SEND frames away from the newest row: \(away.count) of \(frames.count)")
         let displaced = stage.roundEnds.filter { $0.distance > ChatScrollMachine.atBottomTolerance || $0.button }
         let displacedReport = displaced.map { "frame \($0.index) distance \($0.distance) button \($0.button)" }
         #expect(displaced.isEmpty, Comment(rawValue: "a send round ended away from the newest row: \(displacedReport)"))

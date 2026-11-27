@@ -19,7 +19,8 @@ public enum TranscriptVisibility {
         switch inbound {
         case .internalNotice: true
         case .person: botChat && text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(cronjobTurnPrefix)
-        case .botMessage, .routineOutput: false
+        case .routineOutput(let body): body == silentReply
+        case .botMessage: false
         }
     }
 

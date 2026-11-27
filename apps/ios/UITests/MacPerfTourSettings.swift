@@ -178,6 +178,14 @@ extension MacPerfTourTests {
         }
     }
 
+    func sidebarDragLongChat() throws {
+        guard seed == "perf" else { throw TourSkip(reason: "the long Bot Chats need --seed perf") }
+        guard button("botRow-bot-beta").waitForExistence(timeout: 10) else { throw TourSkip(reason: "bot-beta is not in the roster") }
+        try openChat(slug: "bot-beta")
+        idle(2)
+        try sidebarDrag()
+    }
+
     func windowResize() throws {
         let initial = window.frame
         let origin = initial.origin

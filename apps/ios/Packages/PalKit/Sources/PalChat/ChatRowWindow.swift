@@ -12,7 +12,7 @@ public struct ChatRowWindow: Sendable, Equatable {
 
     public mutating func resolve(_ ids: [String]) -> Range<Int> {
         defer { firstID = ids.first }
-        if let head = ids.first, startID == firstID, startID != head, ids.count <= Self.ceiling { startID = head }
+        if let head = ids.first, startID != nil, startID == firstID, startID != head, ids.count <= Self.ceiling { startID = head }
         let window = range(in: ids)
         startID = window.isEmpty ? nil : ids[window.lowerBound]
         return window

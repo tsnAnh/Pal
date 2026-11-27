@@ -97,12 +97,24 @@ struct ChatModelSwitchTests {
         #expect(!reopened.openStats.clearedAfterData)
     }
 
+    @Test("a resolved session with older history to load never empties a chat that has rows")
+    func emptyWithOlderHistoryKeepsRows() throws {
+        let world = try SwitchWorld()
+        world.visited("chief", rows: 30)
+        let reopened = world.model("chief")
+        reopened.apply(world.transcript(rows: 0, version: 2))
+        #expect(reopened.rows.count == 30)
+        #expect(!reopened.openStats.clearedAfterData)
+    }
+
     @Test("a resolved session that really is empty still clears, and the clear is counted")
     func resolvedEmptyClearsAndCounts() throws {
         let world = try SwitchWorld()
         world.visited("chief", rows: 30)
         let reopened = world.model("chief")
-        reopened.apply(world.transcript(rows: 0, version: 2))
+        var empty = world.transcript(rows: 0, version: 2)
+        empty.older = .start
+        reopened.apply(empty)
         #expect(reopened.rows.isEmpty)
         #expect(reopened.openStats.clearedAfterData)
     }

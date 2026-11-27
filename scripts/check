@@ -135,6 +135,7 @@ _GUARDS = {
     "swift-icon-tint": ["scripts/ci/check_swift_icon_tint.py"],
     "swift-connect-palette": ["scripts/ci/check_swift_connect_palette.py"],
     "swift-glass-input": ["scripts/ci/check_swift_glass_input.py"],
+    "swift-input-writes": ["scripts/ci/check_swift_input_writes.py"],
     "swift-image-viewer": ["scripts/ci/check_swift_image_viewer.py"],
     "swift-media-preview": ["scripts/ci/check_swift_media_preview.py"],
     "swift-force-binding": ["scripts/ci/check_swift_force_binding.py"],

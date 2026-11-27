@@ -31,7 +31,7 @@ struct ChatScrollMachineClampTests {
         #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_500))) == .clampToContent)
         #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_500))) == .clampToContent)
         #expect(machine.handle(.geometry(settled(content: 19_500))) == .none)
-        #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_723))) == .none)
+        #expect(machine.handle(.geometry(geo(offset: 18_900, content: 19_723))) == .scrollToBottom(animated: false))
     }
 
     @Test func contentShrinkingBelowTheOffsetClampsToTheEndWhileReadingHistory() {
@@ -54,5 +54,20 @@ struct ChatScrollMachineClampTests {
         var machine = ChatScrollMachine()
         #expect(machine.handle(.geometry(geo(offset: -insetTop, content: 300))) == .none)
         #expect(machine.handle(.geometry(geo(offset: -insetTop, content: 300))) == .none)
+    }
+
+    @Test func aListTallerThanTheViewportThatIsPastTheEndWithoutShrinkingIsClampedWhilePinned() {
+        var machine = ChatScrollMachine()
+        let content = 33_189.0
+        _ = machine.handle(.geometry(geo(offset: content - container - insetTop + 92, content: content)))
+        #expect(machine.handle(.geometry(geo(offset: content - container - insetTop + 92, content: content))) == .clampToContent)
+        #expect(machine.handle(.geometry(settled(content: content))) == .none)
+    }
+
+    @Test func aListTallerThanTheViewportThatIsPastTheEndWithoutShrinkingIsNotClampedWhileTheUserScrolls() {
+        var machine = ChatScrollMachine()
+        let content = 33_189.0
+        _ = machine.handle(.userScrollBegan)
+        #expect(machine.handle(.geometry(geo(offset: content - container - insetTop + 92, content: content))) == .none)
     }
 }

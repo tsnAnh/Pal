@@ -24,21 +24,50 @@ final class BotLinks {
     private var links: [String: BotLink] = [:]
     private let warm = WarmSessionPool()
     let snapshots = ChatSnapshotMemory()
+    let drafts: DraftStore
+    private let draftFlush: DraftFlushTriggers
+    private let timelineStore: @MainActor (String) -> any TimelineStore
+    private(set) lazy var heights = ChatRowHeightStore(cache: connection.cache) { [unowned connection] in connection.accountKey }
 
-    init(connection: ConnectionModel) {
+    init(
+        connection: ConnectionModel,
+        drafts: DraftStore = DraftStore(directory: BotLinks.draftsDirectory, diagnostics: .osLog()),
+        timelineStore: (@MainActor (String) -> any TimelineStore)? = nil
+    ) {
         self.connection = connection
+        self.drafts = drafts
+        self.timelineStore = timelineStore ?? { [unowned connection] bot in
+            ConversationTimelineStore(bot: bot) { (connection.cache, connection.accountKey) }
+        }
+        draftFlush = DraftFlushTriggers(store: drafts)
+    }
+
+    static var draftsDirectory: URL {
+        URL.applicationSupportDirectory.appending(path: "drafts", directoryHint: .isDirectory)
     }
 
     func link(for bot: String) throws -> BotLink {
         if let existing = links[bot] { return existing }
         let connection = self.connection
-        let store = ConversationTimelineStore(bot: bot) { (connection.cache, connection.accountKey) }
+        let store = timelineStore(bot)
         let hub = SessionHub(
             profile: bot, connector: LiveChatConnector(connection: connection), store: store, pool: warm, diagnostics: .osLog()
         )
         let link = BotLink(outbox: try Outbox(directory: Self.outboxDirectory(for: bot), submitter: hub), sessions: hub)
         links[bot] = link
         return link
+    }
+
+    func preload(_ bots: [String]) async {
+        for name in bots where snapshots.snapshot(for: name) == nil {
+            guard let link = try? link(for: name) else { continue }
+            async let heights = self.heights.load(for: name)
+            let session = await link.sessions.acquire()
+            await session.restore()
+            snapshots.remember(await session.timelineSnapshot, for: name)
+            await link.sessions.release(session)
+            _ = await heights
+        }
     }
 
     private static func outboxDirectory(for name: String) -> URL {

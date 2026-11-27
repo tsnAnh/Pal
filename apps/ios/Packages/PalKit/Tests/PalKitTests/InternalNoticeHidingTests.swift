@@ -77,6 +77,6 @@ struct InternalNoticeHidingTests {
 
     @Test func routineOutputKeepsItsRowWithoutTheWakeHeader() {
         let entry = Self.fixture[9]
-        #expect(InboundKind.classify(text: entry.text, of: entry) == .routineOutput(jobName: "digest", body: "3 pull requests are open.", failed: false))
+        #expect(InboundKind.classify(text: entry.text, of: entry) == .routineOutput(body: "3 pull requests are open."))
     }
 }

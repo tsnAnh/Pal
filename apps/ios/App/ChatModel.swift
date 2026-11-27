@@ -6,106 +6,6 @@ import PalProtocol
 import PalRoster
 import Observation
 
-enum BubbleDelivery: Equatable {
-    case sent
-    case sending
-    case waitingForConnection
-    case failed(submissionID: String)
-}
-
-struct ReplyTarget: Equatable {
-    enum Author: Equatable {
-        case you
-        case bot
-    }
-
-    let rowID: String
-    let author: Author
-    let quote: String
-}
-
-struct ParsedMarkdown: Equatable {
-    let source: String
-    let deferred: DeferredMarkdown
-    var document: MarkdownDocument { deferred.document }
-
-    init(source: String, document: MarkdownDocument) {
-        self.source = source
-        deferred = DeferredMarkdown(source, parsed: document)
-    }
-
-    init(deferring source: String) {
-        self.source = source
-        deferred = DeferredMarkdown(source)
-    }
-
-    static func == (lhs: ParsedMarkdown, rhs: ParsedMarkdown) -> Bool { lhs.source == rhs.source }
-}
-
-struct ChatRow: Identifiable, Equatable {
-    enum Kind: Equatable {
-        case user(text: String, delivery: BubbleDelivery)
-        case assistant(ParsedMarkdown)
-        case clarifyAnswered([ClarifyRecord])
-        case clarify(PendingPrompt)
-        case connection(ConnectionCard), noProvider
-        case notice(ChatNotice)
-        case routine(RoutineMessage)
-        case botThread(BotThreadLink)
-        case imageGeneration(ImageGeneration)
-    }
-
-    let id: String
-    let kind: Kind
-    var separator: Date?
-    var showsUnreadDivider = false
-    var gap: ChatRowGap = .none
-    var images: [ImageReference] = []
-    var files: [FileReference] = []
-    var isStreaming = false
-    var storedRowID: Int?
-
-    var searchableText: String? {
-        switch kind {
-        case .user(let text, _): text
-        case .assistant(let parsed): parsed.source
-        case .notice(.botMessage(_, let body)): body
-        case .routine(let routine): routine.text
-        default: nil
-        }
-    }
-}
-
-enum ChatConnectionState: Equatable {
-    case connecting
-    case live
-    case reconnecting
-}
-
-struct VoiceReply: Equatable {
-    var text: String
-    var isComplete: Bool
-    var turn: Int
-}
-
-enum OlderHistory: Equatable {
-    case idle
-    case loading
-    case failed
-    case complete
-
-    init(_ state: OlderState) {
-        switch state {
-        case .more, .unknown: self = .idle
-        case .loading: self = .loading
-        case .failed: self = .failed
-        case .start: self = .complete
-        }
-    }
-
-    var canLoad: Bool { self != .complete }
-}
-
 @MainActor
 @Observable
 final class ChatModel {
@@ -114,7 +14,8 @@ final class ChatModel {
     private(set) var rowIDs: [String] = []
     private(set) var windowRange: Range<Int> = 0..<0
     @ObservationIgnored var window = ChatRowWindow()
-    private(set) var connection: ChatConnectionState = .connecting
+    @ObservationIgnored let diagnostics = Diagnostics.osLog()
+    var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
     private(set) var workingStatus: String?
     private(set) var hasPendingClarify = false
@@ -125,9 +26,11 @@ final class ChatModel {
     var isOpening = true
     var sendError: String?
     private(set) var answeringConnections: Set<String> = []
-    private var pending = PendingAttachments()
+    var pending = PendingAttachments()
+    var restoredDraft: String?
+    @ObservationIgnored var draftWork: Task<Void, Never>?
     var attachments: [PendingAttachment] { pending.items }
-    private var localImages: [String: Data] = [:]
+    var localImages: [String: Data] = [:]
     private(set) var slashItems: [SlashItem] = []
     private(set) var fileRefResult: FileRefResult?
     private var fileRefTask: Task<Void, Never>?
@@ -151,8 +54,8 @@ final class ChatModel {
 
     let links: BotLinks
     let roster: RosterModel
-    private let lastSeenStore: ChatLastSeenStore
-    private let lastSeenAtOpen: Date?
+    let lastSeenStore: ChatLastSeenStore
+    var lastSeenAtOpen: Date?
     private var link: BotLink?
     var session: ChatSession?
     private var outbox: Outbox?
@@ -172,7 +75,7 @@ final class ChatModel {
     @ObservationIgnored var generatedImageIDs: Set<String> = []
     @ObservationIgnored private(set) var rebuilds = RebuildCounts()
     let streamPacer = StreamingCommitPacer()
-    private var hasBeenLive = false
+    var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var running: Task<Void, Never>?
     @ObservationIgnored var openingDeadline: Task<Void, Never>?
@@ -181,6 +84,9 @@ final class ChatModel {
     private var absorbedEchoes = AbsorbedEchoLedger()
 
     let opening = ChatOpenCoordinator()
+    let layout = ChatLayoutMemory()
+    var isActive = false
+    var openCount = 0
     private var findSearch: Task<Void, Never>?
     private var pendingReveal: RowKey?
 
@@ -225,6 +131,7 @@ final class ChatModel {
     func start() {
         roster.markRead(bot.name)
         guard running == nil else { return }
+        beginOpen()
         ChatOpenTrace.begin(bot: bot.name)
         armOpeningDeadline()
         let link: BotLink
@@ -240,6 +147,8 @@ final class ChatModel {
     }
 
     func stop() {
+        isActive = false
+        flushDraft()
         markViewed()
         ChatOpenTrace.finish(bot: bot.name)
         running?.cancel()
@@ -288,7 +197,7 @@ final class ChatModel {
             case .file(let reference): body = body.isEmpty ? reference : body + "\n" + reference
             }
         }
-        pending.removeAll()
+        let sentAttachments = pending.removeAll()
         let provisional = OutboxEntry(
             submissionID: UUID().uuidString, botID: bot.name, text: body, attachments: images,
             createdAt: Date(), state: .pending, attempts: 0
@@ -302,12 +211,14 @@ final class ChatModel {
                     botID: bot.name, text: body, attachments: images, submissionID: provisional.submissionID
                 )
                 unsaved.removeAll { $0.submissionID == entry.submissionID }
+                forgetInDraft(sentAttachments.map(\.id))
                 await refreshOutbox()
                 _ = await outbox.deliver(entry.submissionID)
                 await refreshOutbox()
             } catch {
                 unsaved.removeAll { $0.submissionID == provisional.submissionID }
                 await refreshOutbox()
+                keepDraft(text: text, attachments: sentAttachments)
                 sendError = String(localized: "Your message could not be saved.")
             }
         }
@@ -386,16 +297,20 @@ final class ChatModel {
         sendError = nil
     }
 
-    func attachPhoto(_ upload: PreparedUpload) {
-        stage(PendingAttachment(kind: .image, name: upload.filename, thumbnail: upload.thumbnail)) { [weak self] session in
+    func attachPhoto(_ upload: PreparedUpload, id: UUID = UUID(), remember: Bool = true) {
+        let attachment = PendingAttachment(id: id, kind: .image, name: upload.filename, thumbnail: upload.thumbnail)
+        if remember { rememberInDraft(attachment, data: upload.data, mime: Self.imageMime(of: upload.filename)) }
+        stage(attachment) { [weak self] session in
             let staged = try await session.attachImage(upload.data, filename: upload.filename)
             await self?.keepLocalImage(upload.data, forHostPath: staged.path)
             return .image(staged.promptAttachment)
         }
     }
 
-    func attachFile(_ upload: PreparedUpload, mime: String) {
-        stage(PendingAttachment(kind: .file, name: upload.filename, thumbnail: nil)) { session in
+    func attachFile(_ upload: PreparedUpload, mime: String, id: UUID = UUID(), remember: Bool = true) {
+        let attachment = PendingAttachment(id: id, kind: .file, name: upload.filename, thumbnail: nil)
+        if remember { rememberInDraft(attachment, data: upload.data, mime: mime) }
+        stage(attachment) { session in
             let staged = try await session.attachFile(upload.data, name: upload.filename, mime: mime)
             return .file(referenceText: staged.refText)
         }
@@ -403,6 +318,7 @@ final class ChatModel {
 
     func removeAttachment(_ id: UUID) {
         pending.remove(id)
+        forgetInDraft([id])
     }
 
     var imageLoader: ChatImageLoader {
@@ -582,7 +498,8 @@ final class ChatModel {
             noteLive()
         }
         let before = await session.timelineSnapshot
-        await session.restore()
+        await restoreSession(session)
+        await restoreDraft()
         let current = await session.timelineSnapshot
         if before.rows.isEmpty, !current.rows.isEmpty {
             showCacheFrame(current)
@@ -648,10 +565,14 @@ final class ChatModel {
             guard let ready = opening.admit(next) else { return }
             apply(ready)
         })
+        diagnostics.notice("chat", "model \(openedBot.name) timeline.ended cancelled=\(Task.isCancelled)")
     }
 
     func apply(_ next: TimelineSnapshot) {
-        guard acceptsSnapshot(next) else { return }
+        guard acceptsSnapshot(next) else {
+            diagnostics.notice("chat", "model \(openedBot.name) snapshot.dropped version=\(next.version) rows=\(next.rows.count)")
+            return
+        }
         let previous = takePreviousSnapshot()
         snapshot = next
         assignIfChanged(\.olderHistory, OlderHistory(next.older))
@@ -853,7 +774,7 @@ final class ChatModel {
     }
 
     private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, previous: BuiltRow?) -> (ChatRow.Kind, [ImageReference], [FileReference])? {
-        switch item.content {
+        switch item.shownContent {
         case .user(let text, let delivery):
             switch item.inbound {
             case .person:
@@ -872,9 +793,7 @@ final class ChatModel {
                 return (.user(text: content.text, delivery: state), content.images, [])
             case .botMessage(let sender, let body):
                 return (.notice(.botMessage(senderName: sender.name, body: body)), [], [])
-            case .routineOutput(_, let body, let failed):
-                return (.routine(RoutineMessage(body: body, failed: failed)), [], [])
-            case .internalNotice: return nil
+            case .internalNotice, .routineOutput: return nil
             }
         case .assistant(let text, _, let streaming):
             let content = MessageImages.extract(from: text, role: .assistant, isStreaming: streaming)
@@ -902,15 +821,16 @@ final class ChatModel {
         findSearch?.cancel()
         findSearch = nil
         pendingReveal = nil
-        if findMatches.isEmpty { searchOlder(excluding: []) }
+        if findMatches.isEmpty { searchOlder(excluding: [], after: .milliseconds(300)) }
     }
 
-    private func searchOlder(excluding known: Set<String>) {
+    private func searchOlder(excluding known: Set<String>, after pause: Duration = .zero) {
         let needle = findQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty, let session, olderHistory.canLoad else { return }
         let knownKeys = Set((snapshot?.rows ?? []).filter { known.contains(rowID(for: $0)) }.map(\.id))
         findSearch?.cancel()
         findSearch = Task { [weak self] in
+            if pause > .zero, (try? await Task.sleep(for: pause)) == nil { return }
             let key = await session.reveal { row in
                 !knownKeys.contains(row.id) && Self.matches(row.item, needle: needle)
             }

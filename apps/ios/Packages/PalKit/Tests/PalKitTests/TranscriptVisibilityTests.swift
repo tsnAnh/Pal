@@ -45,7 +45,11 @@ struct TranscriptVisibilityTests {
     }
 
     @Test func routineOutputKeepsItsRowEvenWhenItsTextOpensWithTheCronWrapper() {
-        let routine = user("[Cronjob \"digest\" output — scheduled job.]\n\nbody", inbound: .routineOutput(jobName: "digest", body: "body", failed: false))
+        let routine = user("[Cronjob \"digest\" output — scheduled job.]\n\nbody", inbound: .routineOutput(body: "body"))
         #expect(entries([routine]) == [routine.id])
+    }
+
+    @Test func aSilentRoutineResultIsHidden() {
+        #expect(entries([user("[SILENT]", inbound: .routineOutput(body: "[SILENT]"))]).isEmpty)
     }
 }

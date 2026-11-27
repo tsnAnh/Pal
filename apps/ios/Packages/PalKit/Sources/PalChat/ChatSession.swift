@@ -78,21 +78,21 @@ struct ChatState: Sendable {
 
 public actor ChatSession: OutboxSubmitter {
     public nonisolated let profile: String
-    public nonisolated let updates: AsyncStream<ChatUpdate>
+    public nonisolated var updates: AsyncStream<ChatUpdate> { updateHub.stream() }
 
     public private(set) var phase: ChatPhase = .detached
     var transcript = Transcript()
     public private(set) var terminalFailure: ChatTerminalFailure?
     public private(set) var botThreadLinks: [BotThreadLink] = []
-    public nonisolated let terminalFailures: AsyncStream<ChatTerminalFailure>
-    public nonisolated let timelineSnapshots: AsyncStream<TimelineSnapshot>
+    public nonisolated var terminalFailures: AsyncStream<ChatTerminalFailure> { failureHub.stream() }
+    public nonisolated var timelineSnapshots: AsyncStream<TimelineSnapshot> { timelineHub.stream() }
     static let unknownOperationCode = 4004
 
     private static let botThreadsChangedEvent = "bot_threads.changed"
     private static let messageCompleteEvent = "message.complete"
 
-    private let continuation: AsyncStream<ChatUpdate>.Continuation
-    private let failureContinuation: AsyncStream<ChatTerminalFailure>.Continuation
+    private nonisolated let updateHub = StreamHub<ChatUpdate>(capacity: 64)
+    private nonisolated let failureHub = StreamHub<ChatTerminalFailure>(capacity: 4)
     private let connector: any ChatConnector
     private let resolver: BotChatResolver
     let diagnostics: Diagnostics
@@ -114,7 +114,7 @@ public actor ChatSession: OutboxSubmitter {
     private var linksStale = false
     private var waiters: [UUID: StateWaiter] = [:]
     private let paging: PagingPolicy
-    private let timelineContinuation: AsyncStream<TimelineSnapshot>.Continuation
+    private nonisolated let timelineHub = StreamHub<TimelineSnapshot>(capacity: 1)
     var timeline = Timeline()
     private var timelineVersion: UInt64 = 0
     private var timelineCapable = false
@@ -155,13 +155,10 @@ public actor ChatSession: OutboxSubmitter {
         self.paging = paging
         watchdogPolicy = watchdog
         self.store = store
-        (timelineSnapshots, timelineContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         self.connector = connector
         self.reconnectPolicy = reconnectPolicy
         self.diagnostics = diagnostics
         resolver = BotChatResolver(diagnostics: diagnostics)
-        (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(64))
-        (terminalFailures, failureContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(4))
     }
 
     @discardableResult
@@ -427,16 +424,16 @@ public actor ChatSession: OutboxSubmitter {
         olderFetch?.cancel()
         olderLoader = nil
         newestRefresh = nil
-        timelineContinuation.finish()
+        timelineHub.finish()
         let connection = self.connection
         let unattached = attaching
         attaching = nil
         self.connection = nil
         api = nil
         phase = .detached
-        continuation.yield(.phase(.detached))
-        continuation.finish()
-        failureContinuation.finish()
+        updateHub.yield(.phase(.detached))
+        updateHub.finish()
+        failureHub.finish()
         for doomed in [connection, unattached].compactMap({ $0 }) { Task { await doomed.close() } }
     }
 
@@ -508,7 +505,7 @@ public actor ChatSession: OutboxSubmitter {
                 guard !closing else { break }
                 if result.links != botThreadLinks {
                     botThreadLinks = result.links
-                    continuation.yield(.botThreadLinks(result.links))
+                    updateHub.yield(.botThreadLinks(result.links))
                     publishTimeline()
                 }
             } catch {
@@ -628,7 +625,7 @@ public actor ChatSession: OutboxSubmitter {
     private func noteTerminal(_ error: any Error) -> Bool {
         guard let failure = Self.terminalFailure(of: error) else { return false }
         terminalFailure = failure
-        failureContinuation.yield(failure)
+        failureHub.yield(failure)
         return true
     }
 
@@ -896,13 +893,13 @@ public actor ChatSession: OutboxSubmitter {
 
     private func publishTimeline() {
         timelineVersion += 1
-        timelineContinuation.yield(makeTimelineSnapshot())
+        timelineHub.yield(makeTimelineSnapshot())
         schedulePersist()
     }
 
     private func setPhase(_ next: ChatPhase) {
         phase = next
-        continuation.yield(.phase(next))
+        updateHub.yield(.phase(next))
         notifyWaiters()
     }
 
@@ -917,7 +914,7 @@ public actor ChatSession: OutboxSubmitter {
         reportIgnoredPrompts()
         if let cursor = transcript.cursor {
             phase = .live(lastSequence: cursor.lastSequence, replayEpoch: cursor.replayEpoch)
-            continuation.yield(.phase(phase))
+            updateHub.yield(.phase(phase))
         }
         publishTimeline()
         notifyWaiters()

@@ -32,6 +32,7 @@ COMPLIANT_LIST = (
 COMPLIANT_CONTROLLER = (
     "final class ChatScrollController {\n"
     "    private(set) var machine = ChatScrollMachine()\n"
+    "    private var edgeIsArmed = true\n"
     "    func observe(_ geometry: ScrollGeometry) {\n"
     "        let y = geometry.contentOffset.y\n"
     "        performNextTurn(machine.handle(.geometry(y)))\n"
@@ -112,13 +113,13 @@ def test_scroll_to_outside_perform_fails_and_inside_passes(tmp_path):
         "        performNextTurn(machine.handle(.geometry(y)))\n", "        position.scrollTo(y: y)\n"
     )
     found = _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=outside))
-    assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:5:") and found[0].endswith(FIX)
+    assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:6:") and found[0].endswith(FIX)
 
 
 def test_a_scroll_write_inside_the_layout_commit_fails(tmp_path):
     inside = COMPLIANT_CONTROLLER.replace("performNextTurn(machine", "perform(machine")
     found = _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=inside))
-    assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:5:") and "layout commit" in found[0] and found[0].endswith(FIX)
+    assert len(found) == 1 and found[0].startswith(f"{CONTROLLER}:6:") and "layout commit" in found[0] and found[0].endswith(FIX)
 
 
 def test_a_direct_perform_outside_the_layout_callbacks_passes(tmp_path):
@@ -130,7 +131,7 @@ def test_the_transcript_loop_over_the_whole_model_fails(tmp_path):
     whole = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(model.rows) { Text($0.id) } }")
     found = _scan(_tree(tmp_path / "a", App__Chat__ChatTranscriptList_swift=whole))
     assert len(found) == 1 and "model.windowRows" in found[0] and found[0].endswith(FIX)
-    windowed = whole.replace("model.rows", "model.windowRows")
+    windowed = whole.replace("ForEach(model.rows)", "ForEach(model.windowRows[plan.start...])")
     assert _scan(_tree(tmp_path / "b", App__Chat__ChatTranscriptList_swift=windowed)) == []
 
 
@@ -273,3 +274,53 @@ def test_a_second_height_cache_outside_the_controller_fails(tmp_path):
     assert len(_scan(_tree(tmp_path / "ctl", App__Chat__ChatScrollController_swift=controller))) == 1
     owner = "final class ChatRowHeights {\n    private var cache = ChatRowHeightCache()\n}\n"
     assert _scan(_tree(tmp_path / "ok", App__Chat__ChatRowHeights_swift=owner)) == []
+
+
+TAIL_FIX = "iterate the planned tail (windowRows[plan.start...]) and give the rows before it to ChatHiddenRowsSpacer"
+SPACER_LIST = COMPLIANT_LIST + (
+    "struct ChatHiddenRowsSpacer: View {\n"
+    "    var body: some View {\n"
+    "        Color.clear.frame(height: height)\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_the_hidden_rows_spacer_may_set_a_frame_height(tmp_path):
+    assert _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=SPACER_LIST)) == []
+
+
+def test_the_transcript_loop_over_the_whole_window_fails(tmp_path):
+    whole = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(model.windowRows) { row in rowView(row) } }")
+    found = _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=whole))
+    assert len(found) == 1 and "the whole window" in found[0] and found[0].endswith(TAIL_FIX)
+
+
+def test_the_transcript_loop_over_the_planned_tail_passes(tmp_path):
+    tail = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { ForEach(windowRows[plan.start...]) { row in rowView(row) } }")
+    assert _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=tail)) == []
+
+
+def test_a_second_default_scroll_anchor_fails_and_the_listed_one_passes(tmp_path):
+    second = COMPLIANT_LIST.replace(
+        "            .defaultScrollAnchor(.bottom)\n",
+        "            .defaultScrollAnchor(.bottom)\n            .defaultScrollAnchor(.bottom, for: .sizeChanges)\n",
+    )
+    found = _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=second))
+    assert len(found) == 1 and f"{LIST}:6:" in found[0] and "defaultScrollAnchor" in found[0]
+    elsewhere = _tree(tmp_path / "b", App__Chat__ChatRow_swift="struct Row { var body: some View { Text(\"a\").defaultScrollAnchor(.top) } }\n")
+    assert any("defaultScrollAnchor" in entry for entry in _scan(elsewhere))
+
+
+def test_an_armed_edge_position_outside_the_controller_lines_fails(tmp_path):
+    armed = COMPLIANT_LIST.replace("ScrollView { rows }", "ScrollView { rows }.scrollPosition(.constant(ScrollPosition(idType: String.self, edge: .bottom)))")
+    found = _scan(_tree(tmp_path, App__Chat__ChatTranscriptList_swift=armed))
+    assert any("armed edge scroll position" in entry for entry in found)
+    other = _tree(tmp_path / "b", App__Chat__ChatView_swift="func jump() { position.scrollTo(edge: .bottom) }\n")
+    assert any("armed edge scroll position" in entry for entry in _scan(other))
+
+
+def test_the_controller_keeps_the_edge_release_while_it_arms_an_edge(tmp_path):
+    unreleased = COMPLIANT_CONTROLLER.replace("    private var edgeIsArmed = true\n", "")
+    found = _scan(_tree(tmp_path, App__Chat__ChatScrollController_swift=unreleased))
+    assert found == [f"{CONTROLLER}:1: {writer.RELEASE_FIX}"]

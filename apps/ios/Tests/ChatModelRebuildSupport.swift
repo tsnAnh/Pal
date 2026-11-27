@@ -53,17 +53,20 @@ func rebuildRoster() throws -> RosterModel {
 let rebuildBotName = "scout"
 
 @MainActor
-func rebuildChatModel(lastSeen: Date? = nil, streamInterval: Duration = .zero) throws -> ChatModel {
+func rebuildChatModel(
+    lastSeen: Date? = nil, streamInterval: Duration = .zero, drafts: DraftStore? = nil, botName: String = rebuildBotName
+) throws -> ChatModel {
     let roster = try rebuildRoster()
     let row = BotRow(
-        name: rebuildBotName, isDefault: false, isPrimary: false, isPinned: false, displayName: "Scout", conversationID: nil,
+        name: botName, isDefault: false, isPrimary: false, isPinned: false, displayName: "Scout", conversationID: nil,
         preview: ClassifiedPreview(kind: .plain, text: ""), lastActive: nil,
-        spec: BotAvatarSpec(name: rebuildBotName, uiMeta: nil, photo: nil), accent: nil, usesPrimaryLook: false, sessionIDs: []
+        spec: BotAvatarSpec(name: botName, uiMeta: nil, photo: nil), accent: nil, usesPrimaryLook: false, sessionIDs: []
     )
     let defaults = try #require(UserDefaults(suiteName: "chat-model-rebuild-\(UUID().uuidString)"))
     let store = ChatLastSeenStore(defaults: defaults)
-    if let lastSeen { store.record(lastSeen, for: rebuildBotName) }
-    let model = ChatModel(bot: row, links: BotLinks(connection: roster.connection), roster: roster, lastSeenStore: store)
+    if let lastSeen { store.record(lastSeen, for: botName) }
+    let links = drafts.map { BotLinks(connection: roster.connection, drafts: $0) } ?? BotLinks(connection: roster.connection)
+    let model = ChatModel(bot: row, links: links, roster: roster, lastSeenStore: store)
     model.streamPacer.interval = streamInterval
     return model
 }

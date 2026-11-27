@@ -79,11 +79,6 @@ struct ChatRowView: View {
             }
         case .noProvider:
             NoProviderCard(connect: openModelProviders)
-        case .routine(let routine):
-            let actions = messageActions(for: routine.text)
-            RoutineOutputRow(routine: routine, highlight: findQuery, isCurrentMatch: isCurrentMatch)
-                .environment(\.messageActions, actions)
-                .rowHoverWiring(actions)
         case .notice(let notice):
             NoticeRow(notice: notice, highlight: findQuery, isCurrentMatch: isCurrentMatch)
         case .botThread(let link):
