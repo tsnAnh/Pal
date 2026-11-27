@@ -3,6 +3,7 @@ import Foundation
 import ImageIO
 import Observation
 import PalChat
+import SwiftUI
 
 private final class FaviconRedirectGuard: NSObject, URLSessionTaskDelegate {
     func urlSession(
@@ -37,8 +38,10 @@ actor FaviconFetcher {
     private var misses: [String: Date] = [:]
     private var inflight: [String: Task<Data?, Never>] = [:]
 
-    init() {
-        let configuration = URLSessionConfiguration.ephemeral
+    init(
+        configuration: URLSessionConfiguration = .ephemeral,
+        directory: URL = URL.cachesDirectory.appending(path: "favicons", directoryHint: .isDirectory)
+    ) {
         configuration.timeoutIntervalForRequest = 6
         configuration.timeoutIntervalForResource = 12
         configuration.httpCookieStorage = nil
@@ -46,7 +49,7 @@ actor FaviconFetcher {
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         session = URLSession(configuration: configuration)
-        directory = URL.cachesDirectory.appending(path: "favicons", directoryHint: .isDirectory)
+        self.directory = directory
     }
 
     func iconData(forHost host: String) async -> Data? {
@@ -140,7 +143,11 @@ actor FaviconFetcher {
 
 @MainActor
 final class FaviconCache {
-    static let shared = FaviconCache()
+    static let shared = FaviconCache(load: fetched)
+
+    private nonisolated static func fetched(host: String) async -> Data? {
+        await FaviconFetcher.shared.iconData(forHost: host)
+    }
 
     @MainActor @Observable
     final class Slot {
@@ -149,6 +156,11 @@ final class FaviconCache {
     }
 
     private var slots: [String: Slot] = [:]
+    private let load: @Sendable (String) async -> Data?
+
+    init(load: @escaping @Sendable (String) async -> Data?) {
+        self.load = load
+    }
 
     func image(for url: URL, pointSize: CGFloat) -> PlatformImage? {
         guard let host = FaviconOrigin.host(of: url) else { return nil }
@@ -164,10 +176,14 @@ final class FaviconCache {
         if let existing = slots[host] { return existing }
         let slot = Slot()
         slots[host] = slot
-        Task {
-            guard let data = await FaviconFetcher.shared.iconData(forHost: host), let image = PlatformImage(data: data) else { return }
+        Task { [load] in
+            guard let data = await load(host), let image = PlatformImage(data: data) else { return }
             slot.image = image
         }
         return slot
     }
+}
+
+extension EnvironmentValues {
+    @Entry var faviconCache: FaviconCache?
 }
