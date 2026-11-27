@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PalProtocol
+import PalTransport
 
 public struct ChatInstallAdvance: Sendable, Hashable {
     public var event: ChatSetupEventKind
@@ -131,10 +132,10 @@ public final class ChatInstallModel {
     private let preferredProvider: String?
     let client: any ChatInstallClient
 
-    public init(botName: String, preferredProvider: String?, client: any ChatInstallClient) {
+    public init(botName: String, preferredProvider: String?, client: any ChatInstallClient, limits: SetupLimits = SetupLimits()) {
         self.botName = botName
         self.preferredProvider = preferredProvider
-        self.client = client
+        self.client = TimeLimitedChatInstallClient(base: client, limit: limits.call)
     }
 
     public var state: ChatSetupStateWire? { snapshot?.state }
@@ -234,9 +235,8 @@ public final class ChatInstallModel {
         guard incoming.bot == botName, incoming.providerId == provider?.providerId else { return }
         guard let current = state else { return await refresh() }
         guard incoming.revision > current.revision else { return }
-        guard incoming.revision == current.revision + 1 else { return await refresh() }
+        guard incoming.revision == current.revision + 1, incoming.step != .ready else { return await refresh() }
         snapshot?.state = incoming
-        if incoming.step == .ready { await refreshSpaces() }
     }
 
     public func begin() async {

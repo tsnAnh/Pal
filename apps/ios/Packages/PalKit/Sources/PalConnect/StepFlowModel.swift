@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import PalTransport
 
 @MainActor
 @Observable
@@ -21,12 +22,15 @@ public final class StepFlowModel {
     @ObservationIgnored private let advancesAfterWork: Bool
     @ObservationIgnored private var work: Task<Void, Never>?
     @ObservationIgnored private var preparedStep: String?
+    @ObservationIgnored private let limits: SetupLimits?
+    @ObservationIgnored private var waitingWatch: Task<Void, Never>?
+    @ObservationIgnored private var watchedStep: String?
 
     public init(
         engine: StepFlowEngine, store: any StepFlowProgressStore = InMemoryStepFlowProgressStore(),
         advancesAfterWork: Bool = true, runner: @escaping Runner = { _, _ in },
         classify: @escaping Classifier = { _ in SetupStatus(code: SetupStatusClass.internalFault.rawValue) },
-        prepare: Preparer? = nil
+        prepare: Preparer? = nil, limits: SetupLimits? = nil
     ) {
         self.engine = engine
         self.store = store
@@ -34,10 +38,12 @@ public final class StepFlowModel {
         self.runner = runner
         self.classify = classify
         self.prepare = prepare
+        self.limits = limits
     }
 
     public func follow(steps: [FlowStep], at stepID: String, failure: SetupStatus?) {
         if let next = engine.following(steps: steps, at: stepID, failure: failure) { engine = next }
+        watchWaitingStep()
     }
 
     public func recover(from failure: SetupStatus) async {
@@ -102,6 +108,7 @@ public final class StepFlowModel {
         guard engine.canGoBack, let target = engine.previousStep else { return }
         if let rewind, !(await rewind(engine.current, target)) { return }
         guard engine.back(to: target.id) else { return }
+        watchWaitingStep()
         await persist()
         await prepareCurrentStep()
     }
@@ -123,6 +130,7 @@ public final class StepFlowModel {
         } else {
             await performPrimary()
         }
+        watchWaitingStep()
     }
 
     public func cancelWork() {
@@ -139,14 +147,15 @@ public final class StepFlowModel {
         let step = engine.current
         let values = engine.workValues
         let runner = runner
+        let limit = limits?.step
         let task = Task { @MainActor in
             do {
-                try await runner(step, values)
+                try await Self.bounded(limit) { try await runner(step, values) }
                 if Task.isCancelled { engine.cancelWork() } else { engine.finishWork(advance: advancesAfterWork) }
             } catch is CancellationError {
                 engine.cancelWork()
             } catch {
-                engine.fail(classify(error))
+                engine.fail(status(for: error))
             }
         }
         work = task
@@ -171,15 +180,43 @@ public final class StepFlowModel {
         preparedStep = nil
         guard engine.beginPreparing() else { return }
         do {
-            let kind = try await prepare(step)
+            let kind = try await Self.bounded(limits?.call) { try await prepare(step) }
             guard engine.current.id == step.id, engine.phase == .preparing else { return }
             if let kind { engine.replaceKind(of: step.id, with: kind) }
             preparedStep = step.id
             engine.finishPreparing()
         } catch {
             guard engine.current.id == step.id, engine.phase == .preparing else { return }
-            if error is CancellationError { engine.finishPreparing() } else { engine.fail(classify(error)) }
+            if error is CancellationError { engine.finishPreparing() } else { engine.fail(status(for: error)) }
         }
+    }
+
+    private nonisolated static func bounded<Value: Sendable>(
+        _ limit: Duration?, _ operation: @escaping @Sendable () async throws -> Value
+    ) async throws -> Value {
+        guard let limit else { return try await operation() }
+        return try await Deadline.run(limit, operation)
+    }
+
+    private func status(for error: any Error) -> SetupStatus {
+        error is DeadlineExceeded ? .tookTooLong : classify(error)
+    }
+
+    private func watchWaitingStep() {
+        let waiting: String? = if case .waiting = engine.current.kind, engine.phase == .ready { engine.current.id } else { nil }
+        guard waiting != watchedStep else { return }
+        waitingWatch?.cancel()
+        watchedStep = waiting
+        guard let waiting, let limit = limits?.step else { return }
+        waitingWatch = Task { [weak self] in
+            do { try await Task.sleep(for: limit) } catch { return }
+            self?.expireWait(on: waiting)
+        }
+    }
+
+    private func expireWait(on stepID: String) {
+        guard engine.current.id == stepID, engine.phase == .ready else { return }
+        follow(steps: engine.steps, at: stepID, failure: .tookTooLong)
     }
 
     private func persist() async {

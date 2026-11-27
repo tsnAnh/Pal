@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import PalTransport
 
 public struct DiscordInstalled: Sendable, Equatable {
     public var guildID: String
@@ -15,13 +16,19 @@ public struct DiscordInstalled: Sendable, Equatable {
     }
 }
 
+public enum DiscordInstallOutcome: Sendable, Equatable {
+    case installed(DiscordInstalled)
+    case needsOwner
+}
+
 public protocol DiscordSetupGateway: Sendable {
     func appExists() async throws -> Bool
     func saveToken(_ token: String) async throws
     func servers() async throws -> [DiscordGuild]
     func inviteURL() async throws -> URL
     func existingInstall(in guilds: [DiscordGuild]) async throws -> DiscordInstalled?
-    func install(in guild: DiscordGuild) async throws -> DiscordInstalled
+    func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome
+    func confirmOwner(_ userID: String, in guild: DiscordGuild) async throws -> DiscordInstallOutcome
 }
 
 @MainActor
@@ -50,10 +57,12 @@ public final class DiscordSetupModel {
     public struct Timing: Sendable {
         public var interval: Duration
         public var attempts: Int
+        public var limits: SetupLimits
 
-        public init(interval: Duration = .seconds(2), attempts: Int = 30) {
+        public init(interval: Duration = .seconds(2), attempts: Int = 30, limits: SetupLimits = SetupLimits()) {
             self.interval = interval
             self.attempts = max(attempts, 1)
+            self.limits = limits
         }
     }
 
@@ -73,16 +82,17 @@ public final class DiscordSetupModel {
         guard let engine = DiscordSetupPlan(displayName: displayName).engine() else {
             preconditionFailure("The Discord steps are always a valid flow")
         }
-        flow = Self.makeFlow(engine, bridge: bridge)
+        flow = Self.makeFlow(engine, bridge: bridge, limits: timing.limits)
         wire(flow)
     }
 
-    private static func makeFlow(_ engine: StepFlowEngine, bridge: DiscordRunnerBridge) -> StepFlowModel {
+    private static func makeFlow(_ engine: StepFlowEngine, bridge: DiscordRunnerBridge, limits: SetupLimits) -> StepFlowModel {
         StepFlowModel(
             engine: engine, advancesAfterWork: false,
             runner: { step, values in try await bridge.run(step, values) },
             classify: { Self.status(for: $0) },
-            prepare: { step in try await bridge.prepare(step) }
+            prepare: { step in try await bridge.prepare(step) },
+            limits: limits
         )
     }
 
@@ -93,16 +103,19 @@ public final class DiscordSetupModel {
     }
 
     nonisolated static func status(for error: any Error) -> SetupStatus {
-        (error as? SetupStatusError)?.status ?? SetupStatus(error: error, subject: "Discord", valueName: "token")
+        if error is DeadlineExceeded { return .tookTooLong }
+        return (error as? SetupStatusError)?.status ?? SetupStatus(error: error, subject: "Discord", valueName: "token")
     }
 
     public func load() async {
         stage = .loading
         do {
-            let exists = try await gateway.appExists()
-            var guilds: [DiscordGuild] = []
-            if exists { guilds = try await gateway.servers() }
-            if exists, let done = try await gateway.existingInstall(in: guilds) {
+            let gateway = gateway
+            let limits = timing.limits
+            let exists = try await Deadline.run(limits.call) { try await gateway.appExists() }
+            let guilds = exists ? try await Deadline.run(limits.call) { try await gateway.servers() } : []
+            let known = guilds
+            if exists, let done = try await Deadline.run(limits.step, { try await gateway.existingInstall(in: known) }) {
                 finish(done)
                 return
             }
@@ -124,7 +137,7 @@ public final class DiscordSetupModel {
         installed = done
         inputs.installed = done
         guard let engine = DiscordSetupPlan(displayName: displayName, inputs).engine(finished: true) else { return }
-        flow = Self.makeFlow(engine, bridge: bridge)
+        flow = Self.makeFlow(engine, bridge: bridge, limits: timing.limits)
         wire(flow)
         stage = .flow
     }
@@ -156,13 +169,34 @@ public final class DiscordSetupModel {
             inputs.creatingStartsItself = true
             go(DiscordSetupPlan.creatingID)
         case DiscordSetupPlan.creatingID:
-            guard let guild = inputs.guilds.first(where: { $0.id == inputs.pickedGuildID }) else {
+            guard let guild = pickedGuild else {
                 go(DiscordSetupPlan.serverID)
                 return
             }
-            finish(try await gateway.install(in: guild))
+            settle(try await gateway.install(in: guild))
+        case DiscordSetupPlan.ownerID:
+            guard let guild = pickedGuild else {
+                go(DiscordSetupPlan.serverID)
+                return
+            }
+            let userID = (values[DiscordSetupPlan.ownerField] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            settle(try await gateway.confirmOwner(userID, in: guild))
         default:
             break
+        }
+    }
+
+    private var pickedGuild: DiscordGuild? {
+        inputs.guilds.first { $0.id == inputs.pickedGuildID }
+    }
+
+    private func settle(_ outcome: DiscordInstallOutcome) {
+        switch outcome {
+        case .installed(let done):
+            finish(done)
+        case .needsOwner:
+            inputs.asksOwner = true
+            go(DiscordSetupPlan.ownerID)
         }
     }
 

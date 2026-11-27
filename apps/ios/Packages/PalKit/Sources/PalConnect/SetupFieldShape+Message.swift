@@ -20,6 +20,8 @@ extension SetupFieldShape {
         case .wrongParts(let count):
             let spelled = Self.spelledOut(count)
             return String(localized: "That is not a \(name). A \(name) is \(spelled) parts joined by dots. Copy it again.")
+        case .wrongDigits(let count):
+            return String(localized: "That is not a user id. It has \(count.lowerBound) to \(count.upperBound) digits. Copy it again.")
         }
     }
 }

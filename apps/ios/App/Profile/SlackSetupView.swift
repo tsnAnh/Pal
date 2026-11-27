@@ -58,6 +58,8 @@ struct SlackSetupScreen<Advanced: View>: View {
             ).padding(PalMetrics.screenMargin))
         case .settings:
             SlackSettingsView(model: model, close: close)
+        case .linked:
+            advanced()
         case .status(let status):
             statusScreen(status)
         }

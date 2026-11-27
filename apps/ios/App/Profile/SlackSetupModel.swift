@@ -4,6 +4,7 @@ import PalBotProfile
 import PalConnect
 import PalDesign
 import PalProtocol
+import PalTransport
 
 struct SlackSetupError: Error, Sendable {
     let status: SetupStatus
@@ -41,6 +42,7 @@ final class SlackSetupModel {
         case loading
         case flow
         case settings
+        case linked
         case status(SetupStatus)
     }
 
@@ -55,11 +57,14 @@ final class SlackSetupModel {
     @ObservationIgnored private var gatewayFailureShown = false
     @ObservationIgnored private var backRefusedAtRevision: Int?
 
-    init(botName: String, displayName: String, spec: BotAvatarSpec?, client: any ChatInstallClient, members: any ChatMemberClient) {
+    init(
+        botName: String, displayName: String, spec: BotAvatarSpec?, client: any ChatInstallClient, members: any ChatMemberClient,
+        limits: SetupLimits = SetupLimits()
+    ) {
         self.displayName = displayName
         self.spec = spec
         iconPusher = ChatIconPusher(client: client)
-        chat = ChatInstallModel(botName: botName, preferredProvider: "slack", client: client)
+        chat = ChatInstallModel(botName: botName, preferredProvider: "slack", client: client, limits: limits)
         self.members = ChatMembersModel(client: members)
         let plan = SlackSetupPlan(displayName: displayName, provider: nil, state: nil)
         guard let engine = StepFlowEngine(flowID: SlackSetupPlan.flowID, steps: plan.steps) else {
@@ -69,7 +74,8 @@ final class SlackSetupModel {
         flow = StepFlowModel(
             engine: engine, store: GatewayOwnedProgressStore(), advancesAfterWork: false,
             runner: { step, values in try await bridge.run(step, values) },
-            classify: { ($0 as? SlackSetupError)?.status ?? SetupStatus(code: SetupStatusClass.internalFault.rawValue) }
+            classify: { ($0 as? SlackSetupError)?.status ?? SetupStatus(code: SetupStatusClass.internalFault.rawValue) },
+            limits: limits
         )
         bridge.perform = { [weak self] step, values in try await self?.run(step, values) }
         flow.recovery = { [weak self] failure in await self?.recover(failure) }
@@ -84,7 +90,9 @@ final class SlackSetupModel {
         case .providers: return .status(SetupStatus(code: "unsupported", subject: "Slack"))
         case .unavailable:
             return .status(chat.loadError.map(SetupStatus.init(chatError:)) ?? SetupStatus(code: SetupStatusClass.internalFault.rawValue))
-        case .ready: return finished ? .settings : .flow
+        case .ready:
+            if chat.snapshot?.installation == nil { return .linked }
+            return finished ? .settings : .flow
         default: return .flow
         }
     }
@@ -140,7 +148,8 @@ final class SlackSetupModel {
         var target = plan.currentID
         let keepsBotToken = flow.engine.current.id == SlackSetupPlan.botTokenID && target == SlackSetupPlan.allowID
         if keepsBotToken, plan.steps.contains(where: { $0.id == SlackSetupPlan.botTokenID }) { target = SlackSetupPlan.botTokenID }
-        let local = gatewayFailureShown ? nil : flow.engine.failure
+        let outdated = flow.engine.failure == .tookTooLong && target != flow.engine.current.id
+        let local = gatewayFailureShown || outdated ? nil : flow.engine.failure
         gatewayFailureShown = plan.failure != nil
         flow.follow(steps: plan.steps, at: target, failure: plan.failure ?? extraFailure ?? local)
     }
@@ -157,13 +166,23 @@ final class SlackSetupModel {
     private func recover(_ failure: SetupStatus) async {
         flow.dismissFailure()
         gatewayFailureShown = false
+        if failure == .tookTooLong {
+            let stalled = flow.engine.current.id
+            await chat.refresh()
+            sync()
+            guard flow.engine.current.id == stalled else { return await resumeAutomatic() }
+        }
         guard chat.state?.step == .error else {
             if failure.kind != .vendorRefusedValue { await flow.performPrimary() }
             return
         }
         await chat.fix()
         sync(extraFailure: takeNoticeStatus())
-        if flow.engine.current.isAutomatic { await flow.performPrimary() }
+        await resumeAutomatic()
+    }
+
+    private func resumeAutomatic() async {
+        if flow.engine.current.isAutomatic, flow.engine.phase == .ready { await flow.performPrimary() }
     }
 
     private func takeNoticeStatus() -> SetupStatus? {
@@ -183,7 +202,7 @@ final class SlackSetupModel {
             let refresh = value(SlackSetupPlan.refreshField)
             await chat.saveCredential(access: value(SlackSetupPlan.accessField), refresh: refresh.isEmpty ? nil : refresh)
         case SlackSetupPlan.creatingID:
-            try await wait(attempts: 90, failsOnTimeout: true) { $0 == .creatingApp }
+            try await wait { $0 == .creatingApp }
         case SlackSetupPlan.allowID:
             try await openAllowAndWait()
         case SlackSetupPlan.botTokenID:
@@ -205,16 +224,14 @@ final class SlackSetupModel {
             ChatInstallReturn.remember(bot: chat.botName)
             ExternalLink.open(url)
         }
-        try await wait(attempts: 300, failsOnTimeout: false) { $0 == .needsAllow }
+        try await wait { $0 == .needsAllow }
     }
 
-    private func wait(attempts: Int, failsOnTimeout: Bool, while holds: (ChatSetupStep) -> Bool) async throws {
-        for _ in 0..<attempts {
-            guard let step = chat.state?.step, holds(step) else { return }
+    private func wait(while holds: (ChatSetupStep) -> Bool) async throws {
+        while let step = chat.state?.step, holds(step) {
             try await Task.sleep(for: .seconds(2))
             await chat.refresh()
             sync()
         }
-        if failsOnTimeout { throw SlackSetupError(status: SetupStatus(code: "timed_out")) }
     }
 }

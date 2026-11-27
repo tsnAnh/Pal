@@ -4,6 +4,7 @@ import PalConnect
 actor ScriptedDiscordSetup: DiscordSetupGateway {
     static let argument = "-hermes-test-discord-wizard"
     static let appReadyArgument = "-hermes-test-discord-app-ready"
+    static let needsOwnerArgument = "-hermes-test-discord-needs-owner"
     static let timing = DiscordSetupModel.Timing(interval: .milliseconds(300), attempts: 30)
 
     private static let studio = DiscordGuild(id: "222", name: "Studio")
@@ -15,9 +16,11 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
     private var polls = 0
     private let channel: String
     private let listed: [DiscordGuild]
+    private let needsOwner: Bool
 
-    init(appReady: Bool, channel: String) {
+    init(appReady: Bool, needsOwner: Bool, channel: String) {
         app = appReady
+        self.needsOwner = needsOwner
         self.channel = channel
         listed = appReady ? [Self.studio] : [Self.studio, Self.garage]
     }
@@ -39,8 +42,17 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
 
     func existingInstall(in guilds: [DiscordGuild]) -> DiscordInstalled? { nil }
 
-    func install(in guild: DiscordGuild) async throws -> DiscordInstalled {
+    func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
         try await Task.sleep(for: .milliseconds(600))
-        return DiscordInstalled(guildID: guild.id, guildName: guild.name, channelID: "900", channelName: channel)
+        return needsOwner ? .needsOwner : .installed(installed(guild))
+    }
+
+    func confirmOwner(_ userID: String, in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
+        try await Task.sleep(for: .milliseconds(600))
+        return .installed(installed(guild))
+    }
+
+    private func installed(_ guild: DiscordGuild) -> DiscordInstalled {
+        DiscordInstalled(guildID: guild.id, guildName: guild.name, channelID: "900", channelName: channel)
     }
 }

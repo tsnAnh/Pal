@@ -70,30 +70,59 @@ struct DiscordSetupLiveGateway: DiscordSetupGateway {
         }
     }
 
-    func install(in guild: DiscordGuild) async throws -> DiscordInstalled {
+    func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
         do {
             if let spec { await ChatIconPusher(client: client, providerID: Self.provider).push(spec, onlyWhenInstalled: false) }
             let scope = scope(guild)
-            let before = try await client.status(scope).state
-            switch before.step {
-            case .ready: break
-            case .error: try await client.advance(scope, ChatInstallAdvance(event: .retry, expectedRevision: before.revision))
-            default: try await client.begin(scope)
-            }
-            let after = try await client.status(scope)
-            switch after.state.step {
-            case .ready:
-                return await installed(guild, after)
-            case .error:
-                let error = after.state.error ?? ChatSetupErrorWire(code: .installFailed, fix: .retry)
-                let invite = try? await inviteURL()
-                throw SetupStatusError(DiscordSetupPlan.failure(error, server: guild, invite: invite))
-            default:
-                let stopped = ChatSetupErrorWire(code: .installFailed, fix: .retry, reason: after.state.step.rawValue)
-                throw SetupStatusError(DiscordSetupPlan.failure(stopped, server: guild, invite: nil))
-            }
+            try await resume(scope, from: client.status(scope).state)
+            return try await outcome(of: client.status(scope), in: guild)
         } catch {
             throw Self.chatFailure(error)
+        }
+    }
+
+    func confirmOwner(_ userID: String, in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
+        do {
+            let scope = scope(guild)
+            var current = try await client.status(scope)
+            if current.state.step != .needsOwner {
+                try await resume(scope, from: current.state)
+                current = try await client.status(scope)
+            }
+            if current.state.step == .needsOwner {
+                try await client.advance(
+                    scope, ChatInstallAdvance(event: .ownerConfirmed, expectedRevision: current.state.revision, ownerMemberId: userID)
+                )
+                current = try await client.status(scope)
+            }
+            return try await outcome(of: current, in: guild)
+        } catch {
+            throw Self.chatFailure(error)
+        }
+    }
+
+    private func resume(_ scope: ChatInstallScope, from state: ChatSetupStateWire) async throws {
+        switch state.step {
+        case .ready: break
+        case .error: try await client.advance(scope, ChatInstallAdvance(event: .retry, expectedRevision: state.revision))
+        default: try await client.begin(scope)
+        }
+    }
+
+    private func outcome(of result: ChatInstallStatusResult, in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
+        switch result.state.step {
+        case .ready:
+            return .installed(await installed(guild, result))
+        case .needsOwner:
+            return .needsOwner
+        case .error:
+            let error = result.state.error ?? ChatSetupErrorWire(code: .installFailed, fix: .retry)
+            let invite = try? await inviteURL()
+            throw SetupStatusError(DiscordSetupPlan.failure(error, server: guild, invite: invite))
+        default:
+            throw SetupStatusError(DiscordSetupPlan.failure(
+                ChatSetupErrorWire(code: .installFailed, fix: .retry), server: guild, invite: nil
+            ))
         }
     }
 
