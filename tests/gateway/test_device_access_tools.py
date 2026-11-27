@@ -247,17 +247,6 @@ async def test_a_missing_device_fails_and_lists_the_available_names(authorities,
 
 
 @pytest.mark.asyncio
-async def test_an_action_with_no_device_never_goes_to_a_device(authorities, monkeypatch):
-    authority = await authorities()
-    work = await mac_with(authority, 'Work Mac', shell_answer)
-    result = await call_device(authority, None, 'shell.run', {'command': 'uname'})
-    assert result['code'] == 'invalid_args' and 'own tools' in result['error'] and work.requests() == []
-    blank = await call_device(authority, '   ', 'shell.run', {'command': 'uname'})
-    assert blank['code'] == 'invalid_args' and work.requests() == []
-    await work.connection.close()
-
-
-@pytest.mark.asyncio
 async def test_an_iphone_asked_to_run_a_shell_command_or_read_files_is_unsupported(authorities, monkeypatch):
     authority = await authorities()
     pocket = await connect_phone(authority, 'Sam iPhone', responder=shell_answer, model='iPhone15,2')
@@ -481,7 +470,7 @@ async def test_the_device_tools_are_in_the_toolset_and_their_text_tells_the_bot_
     finally:
         reset_hermes_home_override(token)
     text = defs['device']['description']
-    assert 'only when the user\'s message names a device' in text and 'ask which one' in text
+    assert 'Omit `device`' in text and 'ask the user once' in text
     assert 'shell.run' in text and 'files.read' in text and 'nothing is queued' in text
     assert 'shell.run' not in defs['iphone']['description']
     await work.connection.close()
