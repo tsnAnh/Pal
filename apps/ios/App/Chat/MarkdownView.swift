@@ -225,6 +225,8 @@ struct InlineText: View {
 
     @Environment(\.hermesTheme) private var theme
     @Environment(\.chatInk) private var chatInk
+    @Environment(\.faviconCache) private var faviconCache
+    @Environment(\.displayScale) private var displayScale
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 17
     @ScaledMetric(relativeTo: .body) private var textScale: CGFloat = 1
 
@@ -245,8 +247,8 @@ struct InlineText: View {
         let line = ChatLineBox(fontSize: style.size * textScale)
         let iconOffset = InlineIconMetrics.baselineOffset(iconHeight: iconSize, line: line)
         return InlineTextComposer.compose(highlighted) { link in
-            if let icon = FaviconCache.shared.image(for: link, pointSize: iconSize) {
-                return Text(Image(platformImage: icon)).baselineOffset(iconOffset)
+            if let icon = (faviconCache ?? .shared).image(for: link, pointSize: iconSize, scale: displayScale) {
+                return Text(Image(platformImage: icon).interpolation(.none)).baselineOffset(iconOffset)
             }
             return Text(Image(systemName: "globe"))
                 .foregroundStyle(Color(theme.palette.textSecondary))

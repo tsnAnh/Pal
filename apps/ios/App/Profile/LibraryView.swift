@@ -191,7 +191,7 @@ private struct MacLibraryChips: View {
     }
 }
 
-private struct LibraryRow: View {
+struct LibraryRow: View {
     let entry: LibraryEntry
     let model: LibraryModel
 
@@ -245,6 +245,8 @@ struct LibraryIcon: View {
     var glyph: CGFloat = 20
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.faviconCache) private var faviconCache
+    @Environment(\.displayScale) private var displayScale
     @State private var thumbnail: PlatformImage?
 
     var body: some View {
@@ -260,8 +262,8 @@ struct LibraryIcon: View {
 
     @ViewBuilder
     private var linkIcon: some View {
-        if let url = entry.url, let image = FaviconCache.shared.image(for: url, pointSize: size) {
-            Image(platformImage: image)
+        if let url = entry.url, let image = (faviconCache ?? .shared).image(for: url, pointSize: size, scale: displayScale) {
+            Image(platformImage: image).interpolation(.none)
         } else {
             symbol("globe")
         }
