@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import PalProtocol
 import PalTransport
 
 public struct DiscordInstalled: Sendable, Equatable {
@@ -7,12 +8,16 @@ public struct DiscordInstalled: Sendable, Equatable {
     public var guildName: String
     public var channelID: String?
     public var channelName: String?
+    public var adapter: ChatAdapterStatusWire?
 
-    public init(guildID: String, guildName: String, channelID: String? = nil, channelName: String? = nil) {
+    public init(
+        guildID: String, guildName: String, channelID: String? = nil, channelName: String? = nil, adapter: ChatAdapterStatusWire? = nil
+    ) {
         self.guildID = guildID
         self.guildName = guildName
         self.channelID = channelID
         self.channelName = channelName
+        self.adapter = adapter
     }
 }
 
@@ -27,6 +32,7 @@ public protocol DiscordSetupGateway: Sendable {
     func servers() async throws -> [DiscordGuild]
     func inviteURL() async throws -> URL
     func existingInstall(in guilds: [DiscordGuild]) async throws -> DiscordInstalled?
+    func reconnect(in guild: DiscordGuild) async throws -> DiscordInstalled
     func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome
     func confirmOwner(_ userID: String, in guild: DiscordGuild) async throws -> DiscordInstallOutcome
 }
@@ -52,6 +58,7 @@ public final class DiscordSetupModel {
         case loading
         case flow
         case status(SetupStatus)
+        case notConnected(SetupStatus)
     }
 
     public struct Timing: Sendable {
@@ -70,6 +77,7 @@ public final class DiscordSetupModel {
     public private(set) var flow: StepFlowModel
     public private(set) var stage = Stage.loading
     public private(set) var installed: DiscordInstalled?
+    public private(set) var isReconnecting = false
     @ObservationIgnored private var inputs = DiscordSetupPlan.Inputs()
     @ObservationIgnored private let gateway: any DiscordSetupGateway
     @ObservationIgnored private let timing: Timing
@@ -133,9 +141,26 @@ public final class DiscordSetupModel {
         flow.follow(steps: plan.steps, at: target, failure: nil)
     }
 
+    public func reconnect() async {
+        guard let installed, !isReconnecting else { return }
+        isReconnecting = true
+        defer { isReconnecting = false }
+        let gateway = gateway
+        let guild = DiscordGuild(id: installed.guildID, name: installed.guildName)
+        do {
+            finish(try await Deadline.run(timing.limits.step) { try await gateway.reconnect(in: guild) })
+        } catch {
+            stage = .notConnected(DiscordSetupPlan.reconnectFailed(Self.status(for: error)))
+        }
+    }
+
     private func finish(_ done: DiscordInstalled) {
         installed = done
         inputs.installed = done
+        if let problem = DiscordSetupPlan.notConnected(done) {
+            stage = .notConnected(problem)
+            return
+        }
         guard let engine = DiscordSetupPlan(displayName: displayName, inputs).engine(finished: true) else { return }
         flow = Self.makeFlow(engine, bridge: bridge, limits: timing.limits)
         wire(flow)

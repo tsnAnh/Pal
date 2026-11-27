@@ -1,10 +1,12 @@
 import Foundation
 import PalConnect
+import PalProtocol
 
 actor ScriptedDiscordSetup: DiscordSetupGateway {
     static let argument = "-hermes-test-discord-wizard"
     static let appReadyArgument = "-hermes-test-discord-app-ready"
     static let needsOwnerArgument = "-hermes-test-discord-needs-owner"
+    static let offlineArgument = "-hermes-test-discord-offline"
     static let timing = DiscordSetupModel.Timing(interval: .milliseconds(300), attempts: 30)
 
     private static let studio = DiscordGuild(id: "222", name: "Studio")
@@ -17,12 +19,14 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
     private let channel: String
     private let listed: [DiscordGuild]
     private let needsOwner: Bool
+    private let offline: Bool
 
-    init(appReady: Bool, needsOwner: Bool, channel: String) {
-        app = appReady
+    init(appReady: Bool, needsOwner: Bool, offline: Bool, channel: String) {
+        app = appReady || offline
+        self.offline = offline
         self.needsOwner = needsOwner
         self.channel = channel
-        listed = appReady ? [Self.studio] : [Self.studio, Self.garage]
+        listed = appReady || offline ? [Self.studio] : [Self.studio, Self.garage]
     }
 
     func appExists() -> Bool { app }
@@ -40,7 +44,14 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
         DiscordSetupPlan.inviteURL(clientID: "101010") ?? URL(string: "https://discord.com")!
     }
 
-    func existingInstall(in guilds: [DiscordGuild]) -> DiscordInstalled? { nil }
+    func existingInstall(in guilds: [DiscordGuild]) -> DiscordInstalled? {
+        offline ? installed(Self.studio, adapter: ChatAdapterStatusWire(state: .notStarted)) : nil
+    }
+
+    func reconnect(in guild: DiscordGuild) async throws -> DiscordInstalled {
+        try await Task.sleep(for: .milliseconds(600))
+        return installed(guild)
+    }
 
     func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
         try await Task.sleep(for: .milliseconds(600))
@@ -52,7 +63,9 @@ actor ScriptedDiscordSetup: DiscordSetupGateway {
         return .installed(installed(guild))
     }
 
-    private func installed(_ guild: DiscordGuild) -> DiscordInstalled {
-        DiscordInstalled(guildID: guild.id, guildName: guild.name, channelID: "900", channelName: channel)
+    private func installed(
+        _ guild: DiscordGuild, adapter: ChatAdapterStatusWire = ChatAdapterStatusWire(state: .online)
+    ) -> DiscordInstalled {
+        DiscordInstalled(guildID: guild.id, guildName: guild.name, channelID: "900", channelName: channel, adapter: adapter)
     }
 }

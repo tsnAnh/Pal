@@ -31,7 +31,7 @@ BRIDGED = (
     "mcp.servers.oauth.start", "mcp.servers.oauth.poll", "mcp.servers.oauth.cancel", "mcp.servers.oauth.callback",
     "vault.list", "vault.sources", "vault.add", "vault.update", "vault.remove", "vault.unlock", "vault.lock",
     "skills.manage",
-    "chat.provider.list", "chat.install.status", "chat.install.begin", "chat.install.advance",
+    "chat.provider.list", "chat.install.status", "chat.install.begin", "chat.install.advance", "chat.install.reconnect",
     "chat.spaces.list", "chat.space.join", "chat.binding.list", "chat.install.revoke", "chat.install.update_identity",
     "chat.install.set_icon", "chat.space.leave", "chat.audience.get", "chat.audience.set", "chat.people.list",
     "chat.report.get", "chat.report.set", "chat.desk.list", "chat.desk.decide",

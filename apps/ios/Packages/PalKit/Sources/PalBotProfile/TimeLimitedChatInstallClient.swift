@@ -2,6 +2,14 @@ import Foundation
 import PalProtocol
 import PalTransport
 
+public enum ChatInstallTimeout {
+    private static let adapterWaits: Set = ["chat.install.begin", "chat.install.advance", "chat.install.reconnect"]
+
+    public static func rpc(_ method: String) -> Duration? {
+        adapterWaits.contains(method) ? .seconds(90) : nil
+    }
+}
+
 struct TimeLimitedChatInstallClient: ChatInstallClient {
     let base: any ChatInstallClient
     let limit: Duration
@@ -36,6 +44,10 @@ struct TimeLimitedChatInstallClient: ChatInstallClient {
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire] { try await bounded { try await $0.bindings(scope) } }
 
     func revoke(_ scope: ChatInstallScope) async throws { try await bounded { try await $0.revoke(scope) } }
+
+    func reconnect(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult {
+        try await bounded { try await $0.reconnect(scope) }
+    }
 
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
         try await bounded { try await $0.updateIdentity(scope) }

@@ -87,10 +87,7 @@ actor FakeChatInstallClient: ChatInstallClient {
         if let providersError { throw providersError }
         return capabilities
     }
-    func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult {
-        calls.append("status")
-        return current
-    }
+    func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { calls.append("status"); return current }
     func begin(_ scope: ChatInstallScope) async throws { calls.append("begin") }
     func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws {
         calls.append("advance")
@@ -108,6 +105,7 @@ actor FakeChatInstallClient: ChatInstallClient {
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire] { calls.append("bindings"); return bound }
     func revoke(_ scope: ChatInstallScope) async throws { calls.append("revoke") }
     func setIcon(_ scope: ChatInstallScope, png: Data) async throws {}
+    func reconnect(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { calls.append("reconnect"); return current }
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
         calls.append("updateIdentity")
         if let identityError { throw identityError }

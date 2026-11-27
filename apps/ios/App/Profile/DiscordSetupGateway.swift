@@ -70,6 +70,14 @@ struct DiscordSetupLiveGateway: DiscordSetupGateway {
         }
     }
 
+    func reconnect(in guild: DiscordGuild) async throws -> DiscordInstalled {
+        do {
+            return await installed(guild, try await client.reconnect(scope(guild)))
+        } catch {
+            throw Self.chatFailure(error)
+        }
+    }
+
     func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome {
         do {
             if let spec { await ChatIconPusher(client: client, providerID: Self.provider).push(spec, onlyWhenInstalled: false) }
@@ -129,7 +137,8 @@ struct DiscordSetupLiveGateway: DiscordSetupGateway {
     private func installed(_ guild: DiscordGuild, _ result: ChatInstallStatusResult) async -> DiscordInstalled {
         let space = try? await client.spaces(scope(guild)).first { $0.joined }
         return DiscordInstalled(
-            guildID: guild.id, guildName: result.installation?.workspaceName ?? guild.name, channelID: space?.id, channelName: space?.name
+            guildID: guild.id, guildName: result.installation?.workspaceName ?? guild.name, channelID: space?.id, channelName: space?.name,
+            adapter: result.adapter
         )
     }
 }

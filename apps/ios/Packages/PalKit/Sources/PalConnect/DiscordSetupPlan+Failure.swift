@@ -8,6 +8,50 @@ extension DiscordSetupPlan {
     static let method = "chat.install.advance"
     private static let portalURL = URL(string: "https://discord.com/developers/applications")!
 
+    public static func reconnectFailed(_ status: SetupStatus) -> SetupStatus {
+        var status = status
+        status.actionTitle = String(localized: "Reconnect")
+        return status
+    }
+
+    public static func notConnected(_ installed: DiscordInstalled) -> SetupStatus? {
+        guard let adapter = installed.adapter else {
+            return reconnectFailed(SetupStatus(code: "gateway_outdated", method: "chat.install.status", subject: "Discord"))
+        }
+        guard adapter.state != .online else { return nil }
+        var status = SetupStatus(
+            code: adapter.reason?.rawValue ?? adapter.state.rawValue, method: "chat.install.status", subject: "Discord", valueName: "token"
+        )
+        status.title = String(localized: "Discord is not connected")
+        status.actionTitle = String(localized: "Reconnect")
+        let channel = installed.channelName.map { "#\($0)" } ?? String(localized: "its channel")
+        switch adapter.reason {
+        case .invalidToken:
+            status.reason = String(
+                localized: """
+                Discord did not accept the Pal app token. Reset it on the Bot page of the Pal app, \
+                paste the new one under Discord in Connected apps, then reconnect.
+                """
+            )
+            status.link = SetupLink(label: String(localized: "Open the developer portal"), url: portalURL)
+        case .missingIntent:
+            status.reason = String(
+                localized: "Message Content is switched off on the Bot page of the Pal app. Switch it on and save, then reconnect."
+            )
+            status.link = SetupLink(label: String(localized: "Open the developer portal"), url: portalURL)
+        case .missingPermission:
+            status.reason = String(localized: "Pal cannot see \(channel). Give the Pal role View Channel there, then reconnect.")
+            status.link = channelURL(installed).map { SetupLink(label: String(localized: "Open in Discord"), url: $0) }
+        case .restartNeeded:
+            status.reason = String(localized: "Restart Pal on your computer, then reconnect.")
+        case .adapterOffline, .unknown, nil:
+            status.reason = adapter.state == .connecting
+                ? String(localized: "Your Pal is still connecting to Discord. Reconnect to try again.")
+                : String(localized: "Your Pal is not connected to Discord right now. Reconnect to try again.")
+        }
+        return status
+    }
+
     public static func inviteTimeout(server: String?, invite: URL?) -> SetupStatus {
         var status = SetupStatus(code: inviteTimeoutCode, method: "connectors.discord.guilds", subject: "Discord")
         status.title = String(localized: "Pal is not in the server yet")
@@ -47,6 +91,12 @@ extension DiscordSetupPlan {
                 """
             )
             status.link = SetupLink(label: String(localized: "Open the developer portal"), url: portalURL)
+        case "restart_needed":
+            status.title = String(localized: "Your Pal needs a restart")
+            status.reason = String(localized: "Restart Pal on your computer, then retry.")
+        case "adapter_offline":
+            status.title = String(localized: "Discord did not connect")
+            status.reason = String(localized: "Your Pal could not connect to Discord in time. Retry in a moment.")
         case "rate_limited":
             status.title = String(localized: "Discord asked Pal to wait")
             status.reason = error.retryAfterSeconds.map { String(localized: "Discord is limiting requests. Retry in \($0) s.") }

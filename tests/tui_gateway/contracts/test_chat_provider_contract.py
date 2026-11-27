@@ -197,16 +197,18 @@ def test_abstract_provider_raises_typed_not_implemented():
         "list_people": lambda: bare.list_people(install, "", ""),
         "people_names": lambda: bare.people_names(install, []),
         "leave_space": lambda: bare.leave_space(install, "s"),
+        "reconnect_adapter": lambda: bare.reconnect_adapter(install),
     }
     assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity",
                                                                                   "accept_config_credential", "has_config_credential", "parse_owner_identity",
                                                                                   "new_install_config", "is_direct_space", "manual_step_action",
-                                                                                  "satisfied_manual_steps", "per_bot_adapter", "needs_public_url", "install_in_place", "apply_owner"}
+                                                                                  "satisfied_manual_steps", "per_bot_adapter", "needs_public_url", "install_in_place", "apply_owner", "adapter_status"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()
         assert (info.value.provider_id, info.value.operation) == ("bare", operation)
     assert bare.authorizing_identity(install) is None
+    assert bare.adapter_status(install) is None
 
 
 def test_slack_policy_records_known_limits_and_unverified_defaults():

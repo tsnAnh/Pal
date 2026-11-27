@@ -40,6 +40,10 @@ private struct SilencedChatInstallClient: ChatInstallClient {
         return try await base.updateIdentity(scope)
     }
     func setIcon(_ scope: ChatInstallScope, png: Data) async throws { await hush("setIcon") }
+    func reconnect(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult {
+        await hush("reconnect")
+        return try await base.reconnect(scope)
+    }
     func storeSecret(label: String, value: String) async throws -> String {
         await hush("storeSecret")
         return try await base.storeSecret(label: label, value: value)

@@ -45,6 +45,15 @@ public enum ChatSetupErrorCode: String, ChatWireEnum {
     case providerUnreachable = "provider_unreachable", unknown
 }
 
+public enum ChatAdapterState: String, ChatWireEnum {
+    case online = "online", connecting = "connecting", failed = "failed", notStarted = "not_started", unknown
+}
+
+public enum ChatAdapterFailure: String, ChatWireEnum {
+    case invalidToken = "invalid_token", missingIntent = "missing_intent", missingPermission = "missing_permission"
+    case restartNeeded = "restart_needed", adapterOffline = "adapter_offline", unknown
+}
+
 public enum ChatFixAction: String, ChatWireEnum {
     case reenterCredential = "reenter_credential", retry = "retry", restartAllow = "restart_allow", unknown
 }
@@ -249,9 +258,20 @@ public struct ChatProviderListResult: Decodable, Sendable, Hashable {
     public var providers: [ChatCapabilitiesWire]
 }
 
+public struct ChatAdapterStatusWire: Decodable, Sendable, Hashable {
+    public var state: ChatAdapterState
+    public var reason: ChatAdapterFailure?
+
+    public init(state: ChatAdapterState, reason: ChatAdapterFailure? = nil) {
+        self.state = state
+        self.reason = reason
+    }
+}
+
 public struct ChatInstallStatusResult: Decodable, Sendable, Hashable {
     public var state: ChatSetupStateWire
     public var installation: ChatInstallationWire?
+    public var adapter: ChatAdapterStatusWire?
 }
 
 public struct ChatSpacesListResult: Decodable, Sendable, Hashable {

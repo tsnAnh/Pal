@@ -116,6 +116,26 @@ class FixAction(WireEnum):
     restart_allow = "restart_allow"
 
 
+class AdapterState(WireEnum):
+    online = "online"
+    connecting = "connecting"
+    failed = "failed"
+    not_started = "not_started"
+
+
+class AdapterFailure(WireEnum):
+    invalid_token = "invalid_token"
+    missing_intent = "missing_intent"
+    missing_permission = "missing_permission"
+    restart_needed = "restart_needed"
+    adapter_offline = "adapter_offline"
+
+
+class AdapterStatus(Result):
+    state: AdapterState
+    reason: AdapterFailure | None = None
+
+
 class SetupError(Result):
     code: SetupErrorCode
     fix: FixAction
@@ -401,6 +421,7 @@ class ChatProviderListResult(Result):
 class ChatInstallStatusResult(Result):
     state: SetupState
     installation: Installation | None = None
+    adapter: AdapterStatus | None = None
 
 
 class ChatIdentityUpdateResult(Result):
@@ -429,7 +450,12 @@ class ChatInstallChangedPayload(Payload):
 method("chat.provider.list", params=ProfileParams, result=ChatProviderListResult,
        doc="Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.")
 method("chat.install.status", params=ChatInstallParams, result=ChatInstallStatusResult,
-       doc="Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it.")
+       doc="Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. "
+           "Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record.")
+method("chat.install.reconnect", params=ChatInstallParams, result=ChatInstallStatusResult,
+       doc="Rebuild the chat adapter behind a ready install in the running gateway, with no process restart, and wait up to 45 s. "
+           "adapter says whether it is online or why not. no_installation unless the install is ready; not_implemented for "
+           "providers without a shared adapter. Owner connections only.")
 method("chat.install.begin", params=ChatInstallBeginParams, result=ChatInstallStatusResult,
        doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL "
            "and the provider installs through a redirect (Discord does not). "

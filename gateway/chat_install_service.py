@@ -34,6 +34,9 @@ from tui_gateway.chat_install import (
 )
 from tui_gateway.chat_providers import UnknownProvider, registered_provider_ids
 from tui_gateway.contracts.chat_provider import (
+    AdapterFailure,
+    AdapterState,
+    AdapterStatus,
     Binding,
     Capabilities,
     ChatRpcErrorReason,
@@ -155,6 +158,13 @@ class ChatInstallService:
             kind=SetupEventKind.failed, error=code, error_reason=reason, error_permissions=permissions,
             retry_after_seconds=retry_after_seconds))
 
+    def _fail_from(self, provider: ChatProvider, state: SetupState, exc: Exception) -> SetupState:
+        code = exc.code if isinstance(getattr(exc, "code", None), SetupErrorCode) else SetupErrorCode.install_failed
+        retry_after = getattr(exc, "retry_after_seconds", None)
+        return self._fail(provider, state, code, reason=getattr(exc, "reason", None),
+                          permissions=tuple(getattr(exc, "permissions", ())),
+                          retry_after_seconds=retry_after if isinstance(retry_after, int) else None)
+
     def _install_in_place(self, provider: ChatProvider, state: SetupState) -> SetupState | None:
         try:
             installation = provider.install_in_place(state)
@@ -162,11 +172,7 @@ class ChatInstallService:
             raise
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat install in place failed provider=%s error=%s", state.provider_id, type(exc).__name__)
-            code = exc.code if isinstance(getattr(exc, "code", None), SetupErrorCode) else SetupErrorCode.install_failed
-            retry_after = getattr(exc, "retry_after_seconds", None)
-            return self._fail(provider, state, code, reason=getattr(exc, "reason", None),
-                              permissions=tuple(getattr(exc, "permissions", ())),
-                              retry_after_seconds=retry_after if isinstance(retry_after, int) else None)
+            return self._fail_from(provider, state, exc)
         if installation is None:
             return None
         return self._complete(provider, state, installation, owner_optional=True)
@@ -276,6 +282,20 @@ class ChatInstallService:
         if state.installation_id is None or state.step is not SetupStep.ready:
             return None
         return self.store.installation(state.installation_id)
+
+    def live_adapter(self, installation: Installation | None) -> AdapterStatus | None:
+        if installation is None:
+            return None
+        provider = self._provider(installation.provider_id)
+        try:
+            return provider.adapter_status(installation)
+        except Exception as exc:  # health: allow BLE001 -- adapter errors carry provider text, so only the exception type is logged
+            logger.warning("chat adapter status failed provider=%s error=%s", installation.provider_id, type(exc).__name__)
+            return AdapterStatus(state=AdapterState.failed, reason=AdapterFailure.adapter_offline)
+
+    def reconnect(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation, AdapterStatus]:
+        provider, state, installation = self._installed(bot, provider_id, workspace)
+        return state, installation, self._call(state, lambda: provider.reconnect_adapter(installation))
 
     def begin(self, bot: str, provider_id: str, workspace: str,
               app_scheme: AppScheme = AppScheme.release) -> tuple[SetupState, Installation | None]:
@@ -444,7 +464,7 @@ class ChatInstallService:
             outcome = self._start_adapter(provider, state, installation, owner)
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat install adapter start failed provider=%s error=%s", state.provider_id, type(exc).__name__)
-            return self._fail(provider, state, SetupErrorCode.install_failed)
+            return self._fail_from(provider, state, exc)
         if outcome is ReloadOutcome.not_started:
             logger.warning("chat install adapter not started provider=%s", state.provider_id)
             return self._fail(provider, state, SetupErrorCode.install_failed)

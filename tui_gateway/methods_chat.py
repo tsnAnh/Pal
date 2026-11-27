@@ -51,9 +51,10 @@ def _chat_owner_refusal(rid):
     return None
 
 
-def _chat_status_body(state, installation) -> dict:
+def _chat_status_body(state, installation, adapter=None) -> dict:
     return {"state": state.model_dump(mode="json"),
-            "installation": installation.model_dump(mode="json") if installation is not None else None}
+            "installation": installation.model_dump(mode="json") if installation is not None else None,
+            "adapter": adapter.model_dump(mode="json") if adapter is not None else None}
 
 
 def _chat_run(rid, params: dict, call):
@@ -85,7 +86,16 @@ def _(rid, params: dict) -> dict:
 @method("chat.install.status")
 @_profile_scoped
 def _(rid, params: dict) -> dict:
-    return _chat_run(rid, params, lambda service, bot: _chat_status_body(*service.status(bot, *_chat_target(params))))
+    def call(service, bot):
+        state, installation = service.status(bot, *_chat_target(params))
+        return _chat_status_body(state, installation, service.live_adapter(installation))
+    return _chat_run(rid, params, call)
+
+
+@method("chat.install.reconnect")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    return _chat_run(rid, params, lambda service, bot: _chat_status_body(*service.reconnect(bot, *_chat_target(params))))
 
 
 @method("chat.install.begin")

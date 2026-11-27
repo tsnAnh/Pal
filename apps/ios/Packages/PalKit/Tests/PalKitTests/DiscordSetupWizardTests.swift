@@ -3,13 +3,15 @@ import PalConnect
 import PalProtocol
 import Testing
 
-private actor FakeDiscord: DiscordSetupGateway {
+actor FakeDiscord: DiscordSetupGateway {
     var app: Bool
     var lists: [[DiscordGuild]]
     var existing: DiscordInstalled?
     var installResult: Result<DiscordInstallOutcome, SetupStatusError>
     var ownerResult: Result<DiscordInstallOutcome, SetupStatusError> = .success(.installed(wizardInstalled))
     var tokenResult: Result<Void, SetupStatusError> = .success(())
+    var reconnectResult: Result<DiscordInstalled, SetupStatusError> = .success(wizardInstalled)
+    private(set) var reconnects: [String] = []
     private(set) var savedTokens: [String] = []
     private(set) var installs: [String] = []
     private(set) var confirmedOwners: [[String]] = []
@@ -31,6 +33,13 @@ private actor FakeDiscord: DiscordSetupGateway {
     func setOwner(_ result: Result<DiscordInstallOutcome, SetupStatusError>) { ownerResult = result }
 
     func setToken(_ result: Result<Void, SetupStatusError>) { tokenResult = result }
+
+    func setReconnect(_ result: Result<DiscordInstalled, SetupStatusError>) { reconnectResult = result }
+
+    func reconnect(in guild: DiscordGuild) throws -> DiscordInstalled {
+        reconnects.append(guild.id)
+        return try reconnectResult.get()
+    }
 
     func silence(_ calls: Set<String>) { silent = calls }
 
@@ -70,9 +79,13 @@ private actor FakeDiscord: DiscordSetupGateway {
     }
 }
 
-private let studio = DiscordGuild(id: "222", name: "Studio")
+let studio = DiscordGuild(id: "222", name: "Studio")
 private let garage = DiscordGuild(id: "333", name: "Garage")
-private let wizardInstalled = DiscordInstalled(guildID: "222", guildName: "Studio", channelID: "900", channelName: "ada")
+let wizardInstalled = studioInstall(ChatAdapterStatusWire(state: .online))
+
+func studioInstall(_ adapter: ChatAdapterStatusWire?) -> DiscordInstalled {
+    DiscordInstalled(guildID: "222", guildName: "Studio", channelID: "900", channelName: "ada", adapter: adapter)
+}
 
 private func missingWebhooks() -> SetupStatusError {
     let error = ChatSetupErrorWire(code: .installFailed, fix: .retry, reason: "missing_permission", permissions: ["Manage Webhooks"])
@@ -80,7 +93,7 @@ private func missingWebhooks() -> SetupStatusError {
 }
 
 @MainActor
-private func model(_ fake: FakeDiscord, attempts: Int = 4) -> DiscordSetupModel {
+func discordWizard(_ fake: FakeDiscord, attempts: Int = 4) -> DiscordSetupModel {
     DiscordSetupModel(displayName: "Ada", gateway: fake, timing: .init(interval: .milliseconds(1), attempts: attempts, limits: quickLimits))
 }
 
@@ -88,7 +101,7 @@ private func model(_ fake: FakeDiscord, attempts: Int = 4) -> DiscordSetupModel 
 @MainActor
 struct DiscordSetupWizardTests {
     @Test func theFiveStepListAndTheFirstScreenForTheFirstBot() async throws {
-        let wizard = model(FakeDiscord(app: false))
+        let wizard = discordWizard(FakeDiscord(app: false))
         await wizard.load()
         await wizard.flow.start()
         #expect(wizard.stage == .flow)
@@ -102,7 +115,7 @@ struct DiscordSetupWizardTests {
 
     @Test func aGoodTokenMovesToTheServerListAndIsSavedOnce() async throws {
         let fake = FakeDiscord(app: false, lists: [[studio, garage]])
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         await wizard.flow.performPrimary()
         #expect(wizard.flow.engine.current.id == DiscordSetupPlan.tokenID)
@@ -122,7 +135,7 @@ struct DiscordSetupWizardTests {
     @Test func aRefusedTokenStaysOnTheStepWithTheRefusal() async throws {
         let fake = FakeDiscord(app: false)
         await fake.setToken(.failure(SetupStatusError(SetupStatus(code: "invalid_token", subject: "Discord", valueName: "token"))))
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         await wizard.flow.performPrimary()
         wizard.flow.setValue(discordFlowToken, for: "token")
@@ -134,7 +147,7 @@ struct DiscordSetupWizardTests {
 
     @Test func pickingAServerPalIsAlreadyInCreatesTheChannelAndEndsOnTheReadyScreen() async throws {
         let fake = FakeDiscord(app: true, lists: [[studio, garage]])
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         #expect(wizard.flow.engine.current.id == DiscordSetupPlan.serverID)
         wizard.flow.setSwitch("guild.222", true)
@@ -148,14 +161,14 @@ struct DiscordSetupWizardTests {
             Issue.record("not the ready screen")
             return
         }
-        #expect(title == "Ada is in Discord")
-        #expect(body == "Write in #ada in Studio. Send /pal in a direct message to talk to any bot.")
+        #expect(title == "Discord is connected")
+        #expect(body == "Ada answers in #ada in Studio. Send /pal in a direct message to talk to any bot.")
         #expect(DiscordSetupPlan.channelURL(wizardInstalled)?.absoluteString == "https://discord.com/channels/222/900")
     }
 
     @Test func theInvitePollFindsTheNewServerAndCreatesTheChannelWithoutAnotherTap() async throws {
         let fake = FakeDiscord(app: true, lists: [[], [], [], [studio]])
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         #expect(wizard.flow.engine.isOn("new"))
         var opened: [URL] = []
@@ -171,7 +184,7 @@ struct DiscordSetupWizardTests {
 
     @Test func theInvitePollGivesUpAndOffersRetryAndTheInviteLink() async throws {
         let fake = FakeDiscord(app: true, lists: [[]])
-        let wizard = model(fake, attempts: 3)
+        let wizard = discordWizard(fake, attempts: 3)
         await wizard.load()
         wizard.flow.openPage = { _ in }
         await wizard.flow.performPrimary()
@@ -186,7 +199,7 @@ struct DiscordSetupWizardTests {
 
     @Test func missingManageWebhooksShowsItsOwnReasonAndRetrySucceedsAfterTheFix() async throws {
         let fake = FakeDiscord(app: true, lists: [[studio]], installResult: .failure(missingWebhooks()))
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         #expect(wizard.flow.engine.current.id == DiscordSetupPlan.creatingID)
         await wizard.flow.performPrimary()
@@ -220,7 +233,7 @@ struct DiscordSetupWizardTests {
     }
 
     private func waitingForTheOwner(_ fake: FakeDiscord) async -> DiscordSetupModel {
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         await wizard.flow.performPrimary()
         return wizard
@@ -261,7 +274,7 @@ struct DiscordSetupWizardTests {
 
     @Test func continueSendsTheTrimmedIdForThePickedServerAndFinishes() async throws {
         let fake = FakeDiscord(app: true, lists: [[studio, garage]], installResult: .success(.needsOwner))
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         wizard.flow.setSwitch("guild.333", true)
         await wizard.flow.performPrimary()
@@ -298,7 +311,7 @@ struct DiscordSetupWizardTests {
 
     @Test func theSecondBotGoesStraightToTheChannelStepAndOneTapFinishes() async throws {
         let fake = FakeDiscord(app: true, lists: [[studio]])
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         await wizard.flow.start()
         #expect(wizard.flow.engine.current.id == DiscordSetupPlan.creatingID)
@@ -311,15 +324,15 @@ struct DiscordSetupWizardTests {
     }
 
     @Test func resumeFollowsWhatTheGatewayAlreadyHolds() async throws {
-        let done = model(FakeDiscord(app: true, lists: [[studio]], existing: wizardInstalled))
+        let done = discordWizard(FakeDiscord(app: true, lists: [[studio]], existing: wizardInstalled))
         await done.load()
         #expect(done.flow.engine.isFinished && done.installed == wizardInstalled)
 
-        let many = model(FakeDiscord(app: true, lists: [[studio, garage]]))
+        let many = discordWizard(FakeDiscord(app: true, lists: [[studio, garage]]))
         await many.load()
         #expect(many.flow.engine.current.id == DiscordSetupPlan.serverID)
 
-        let fresh = model(FakeDiscord(app: false))
+        let fresh = discordWizard(FakeDiscord(app: false))
         await fresh.load()
         #expect(fresh.flow.engine.current.id == DiscordSetupPlan.startID)
     }
@@ -331,6 +344,7 @@ struct DiscordSetupWizardTests {
             func servers() async throws -> [DiscordGuild] { [] }
             func inviteURL() async throws -> URL { URL(string: "https://discord.com")! }
             func existingInstall(in guilds: [DiscordGuild]) async throws -> DiscordInstalled? { nil }
+            func reconnect(in guild: DiscordGuild) async throws -> DiscordInstalled { wizardInstalled }
             func install(in guild: DiscordGuild) async throws -> DiscordInstallOutcome { .installed(wizardInstalled) }
             func confirmOwner(_ userID: String, in guild: DiscordGuild) async throws -> DiscordInstallOutcome { .needsOwner }
         }
@@ -356,7 +370,7 @@ extension DiscordSetupWizardTests {
     @Test func aSilentGatewayEndsTheFirstLoadInAPlainError() async {
         let fake = FakeDiscord(app: true, lists: [[studio]])
         await fake.silence(["appExists"])
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         #expect(wizard.stage == .status(.tookTooLong))
         await fake.silence([])
@@ -367,7 +381,7 @@ extension DiscordSetupWizardTests {
     @Test func aSilentInstallFailsInPlainWordsAndRetryFinishes() async throws {
         let fake = FakeDiscord(app: true, lists: [[studio]])
         await fake.silence(["install"])
-        let wizard = model(fake)
+        let wizard = discordWizard(fake)
         await wizard.load()
         await wizard.flow.performPrimary()
         let failure = try #require(wizard.flow.engine.failure)

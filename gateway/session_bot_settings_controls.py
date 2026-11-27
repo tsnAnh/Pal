@@ -23,6 +23,7 @@ VERBS = {
     'chat.binding.list': Verb('session:read', owner_scoped=True),
     'chat.install.begin': Verb('session:control', owner_scoped=True),
     'chat.install.advance': Verb('session:control', owner_scoped=True),
+    'chat.install.reconnect': Verb('session:control', owner_scoped=True),
     'chat.space.join': Verb('session:control', owner_scoped=True),
     'chat.install.revoke': Verb('session:control', owner_scoped=True),
     'chat.install.update_identity': Verb('session:control', owner_scoped=True),

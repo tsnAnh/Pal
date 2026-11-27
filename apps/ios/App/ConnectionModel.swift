@@ -147,10 +147,10 @@ final class ConnectionModel {
         client.map(PalClientConnector.init(client:))
     }
 
-    func rpc(_ method: String, _ params: JSONValue? = nil) async throws -> JSONValue {
+    func rpc(_ method: String, _ params: JSONValue? = nil, timeout: Duration? = nil) async throws -> JSONValue {
         if let connection {
             do {
-                return try await connection.call(method, params: params)
+                return try await connection.call(method, params: params, timeout: timeout)
             } catch let error as GatewayTransportError {
                 if case .rpc = error { throw error }
             } catch is CancellationError {
@@ -158,7 +158,7 @@ final class ConnectionModel {
             } catch {}
         }
         let fresh = try await reopen()
-        return try await fresh.call(method, params: params)
+        return try await fresh.call(method, params: params, timeout: timeout)
     }
 
     private func reopen() async throws -> GatewayConnection {

@@ -86,7 +86,7 @@ def test_confirming_the_owner_puts_them_on_the_allowlist(kit):
     waiting, _ = service.begin(BOT, "discord", GUILD_ID)
     service.advance(BOT, "discord", GUILD_ID, EVENT.owner_confirmed, waiting.revision, owner_member_id=f"<@{OWNER_ID}>")
     assert kit.provider.allowlist.users() == [OWNER_ID]
-    assert [keys for _, _, keys in kit.platform_reloads] == [["DISCORD_ALLOWED_USERS"]]
+    assert kit.runtime.reloads == 1
 
 
 def test_a_malformed_owner_keeps_waiting(kit):
