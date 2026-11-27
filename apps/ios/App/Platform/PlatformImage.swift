@@ -17,13 +17,12 @@ extension PlatformImage {
         await UIImage(data: data)?.byPreparingThumbnail(ofSize: CGSize(width: side, height: side))
     }
 
-    func roundedIcon(points: CGFloat) -> PlatformImage {
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: points, height: points), format: .preferred())
-        return renderer.image { _ in
-            let rect = CGRect(x: 0, y: 0, width: points, height: points)
-            UIBezierPath(roundedRect: rect, cornerRadius: points * 0.22).addClip()
-            draw(in: rect)
-        }
+    static func icon(_ image: CGImage, scale: CGFloat) -> UIImage {
+        UIImage(cgImage: image, scale: scale, orientation: .up)
+    }
+
+    static func iconMask(_ rect: CGRect, radius: CGFloat) -> CGPath {
+        UIBezierPath(roundedRect: rect, cornerRadius: radius).cgPath
     }
 }
 #elseif os(macOS)
@@ -69,13 +68,30 @@ extension NSImage {
         }.value
     }
 
-    func roundedIcon(points: CGFloat) -> NSImage {
-        let size = NSSize(width: points, height: points)
-        return NSImage(size: size, flipped: false) { rect in
-            NSBezierPath(roundedRect: rect, xRadius: points * 0.22, yRadius: points * 0.22).addClip()
-            self.draw(in: rect)
-            return true
-        }
+    static func icon(_ image: CGImage, scale: CGFloat) -> NSImage {
+        NSImage(cgImage: image, size: NSSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale))
+    }
+
+    static func iconMask(_ rect: CGRect, radius: CGFloat) -> CGPath {
+        CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil)
     }
 }
 #endif
+
+extension CGImage {
+    func roundedIcon(points: CGFloat, scale: CGFloat) -> PlatformImage? {
+        let side = Int((points * scale).rounded())
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let context = CGContext(
+                  data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+              )
+        else { return nil }
+        let rect = CGRect(x: 0, y: 0, width: side, height: side)
+        context.addPath(PlatformImage.iconMask(rect, radius: CGFloat(side) * 0.22))
+        context.clip()
+        context.interpolationQuality = .high
+        context.draw(self, in: rect)
+        return context.makeImage().map { PlatformImage.icon($0, scale: scale) }
+    }
+}

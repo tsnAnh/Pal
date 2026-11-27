@@ -10,6 +10,20 @@ import UniformTypeIdentifiers
 
 @testable import Pal
 
+private struct Pixel {
+    let r: Int
+    let g: Int
+    let b: Int
+
+    var spread: Int { max(r, g, b) - min(r, g, b) }
+}
+
+private struct Measurement {
+    let icon: PixelBox
+    let text: PixelBox
+    let bitmap: Bitmap
+}
+
 private struct Bitmap {
     let width: Int
     let height: Int
@@ -29,14 +43,14 @@ private struct Bitmap {
         bytes = data
     }
 
-    func pixel(_ x: Int, _ y: Int) -> (r: Int, g: Int, b: Int) {
+    func pixel(_ x: Int, _ y: Int) -> Pixel {
         let index = (y * width + x) * 4
-        return (Int(bytes[index]), Int(bytes[index + 1]), Int(bytes[index + 2]))
+        return Pixel(r: Int(bytes[index]), g: Int(bytes[index + 1]), b: Int(bytes[index + 2]))
     }
 
-    func bounds(in columns: Range<Int>? = nil, rows: Range<Int>? = nil, where matches: ((r: Int, g: Int, b: Int)) -> Bool) -> PixelBox? {
+    func bounds(in columns: Range<Int>? = nil, where matches: (Pixel) -> Bool) -> PixelBox? {
         var box: PixelBox?
-        for y in rows ?? 0..<height {
+        for y in 0..<height {
             for x in columns ?? 0..<width where matches(pixel(x, y)) {
                 box = box?.including(x, y) ?? PixelBox(minX: x, maxX: x + 1, minY: y, maxY: y + 1)
             }
@@ -61,12 +75,11 @@ private struct PixelBox {
 }
 
 private enum Ink {
-    static func isIcon(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.g < 90 && (p.r > 120 || p.b > 120) && abs(p.r - p.b) > 40 || isMix(p) }
-    static func isMix(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.g < 60 && p.r > 70 && p.b > 70 }
-    static func isPure(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.g < 40 && ((p.r > 225 && p.b < 40) || (p.b > 225 && p.r < 40)) }
-    static func isText(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.g > 90 && p.g - p.r > 60 && p.g - p.b > 60 }
-    static func isDark(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.r < 140 && p.g < 140 && p.b < 140 && max(p.r, p.g, p.b) - min(p.r, p.g, p.b) < 30 }
-    static func isGray(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.r < 210 && max(p.r, p.g, p.b) - min(p.r, p.g, p.b) < 24 }
+    static func isIcon(_ p: Pixel) -> Bool { p.g < 90 && (p.r > 120 || p.b > 120) && abs(p.r - p.b) > 40 || isMix(p) }
+    static func isMix(_ p: Pixel) -> Bool { p.g < 60 && p.r > 70 && p.b > 70 }
+    static func isPure(_ p: Pixel) -> Bool { p.g < 40 && ((p.r > 225 && p.b < 40) || (p.b > 225 && p.r < 40)) }
+    static func isText(_ p: Pixel) -> Bool { p.g > 90 && p.g - p.r > 60 && p.g - p.b > 60 }
+    static func isDark(_ p: Pixel) -> Bool { p.r < 140 && p.g < 140 && p.b < 140 && p.spread < 30 }
 }
 
 private func checkerboard(side: Int) -> Data {
@@ -148,14 +161,14 @@ struct LinkIconRenderingTests {
         .environment(\.faviconCache, cache)
     }
 
-    private func measureInline(_ style: InlineStyleCase, scale: CGFloat, source: Int) async -> (icon: PixelBox, capitals: PixelBox, bitmap: Bitmap)? {
+    private func measureInline(_ style: InlineStyleCase, scale: CGFloat, source: Int) async -> Measurement? {
         let data = checkerboard(side: source)
         let cache = FaviconCache { _ in data }
         let bitmap = await settled(inline(style, cache: cache), scale: scale) { $0.bounds(where: Ink.isIcon) != nil }
         guard let icon = bitmap.bounds(where: Ink.isIcon),
               let capitals = bitmap.bounds(in: 0..<icon.minX, where: Ink.isText)
         else { return nil }
-        return (icon, capitals, bitmap)
+        return Measurement(icon: icon, text: capitals, bitmap: bitmap)
     }
 
     private func oneToOneShare(_ bitmap: Bitmap, _ box: PixelBox) -> Double {
@@ -176,8 +189,11 @@ struct LinkIconRenderingTests {
     @Test("the inline icon sits on the centre of the capitals", arguments: InlineStyleCase.all, scales)
     func inlineCentred(style: InlineStyleCase, scale: CGFloat) async throws {
         let measured = try #require(await measureInline(style, scale: scale, source: 96))
-        let offset = (measured.icon.midY - measured.capitals.midY) / scale
-        print("MEASURE inline \(style.testDescription) @\(Int(scale))x icon \(measured.icon.width)x\(measured.icon.height)px capitals \(measured.capitals.height)px offset \(offset)pt")
+        let offset = (measured.icon.midY - measured.text.midY) / scale
+        print(
+            "MEASURE inline \(style.testDescription) @\(Int(scale))x icon \(measured.icon.width)x\(measured.icon.height)px",
+            "capitals \(measured.text.height)px offset \(offset)pt"
+        )
         #expect(abs(offset) <= 1 / scale + 0.01)
     }
 
@@ -218,7 +234,7 @@ struct LinkIconRenderingTests {
         LibraryEntry(id: "link", kind: .link, title: "HHHH", kindLabel: "Link", url: linkURL, occurredAt: Date(timeIntervalSince1970: 0))
     }
 
-    private func measureRow(_ row: some View, scale: CGFloat, source: Int) async -> (icon: PixelBox, text: PixelBox, bitmap: Bitmap)? {
+    private func measureRow(_ row: some View, scale: CGFloat, source: Int) async -> Measurement? {
         let data = checkerboard(side: source)
         let cache = FaviconCache { _ in data }
         let view = row.frame(width: 320, alignment: .leading).environment(\.faviconCache, cache)
@@ -226,7 +242,7 @@ struct LinkIconRenderingTests {
         guard let icon = bitmap.bounds(where: Ink.isIcon),
               let text = bitmap.bounds(in: icon.maxX..<bitmap.width, where: Ink.isDark)
         else { return nil }
-        return (icon, text, bitmap)
+        return Measurement(icon: icon, text: text, bitmap: bitmap)
     }
 
     #if os(macOS)

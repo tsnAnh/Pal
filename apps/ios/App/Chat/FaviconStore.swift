@@ -30,6 +30,8 @@ actor FaviconFetcher {
 
     private static let htmlLimit = 96 * 1024
     private static let iconLimit = 256 * 1024
+    private static let storedPixels = 96
+    private static let sharpPixels = 48
     private static let diskTimeToLive: TimeInterval = 7 * 24 * 3600
     private static let missTimeToLive: TimeInterval = 3600
 
@@ -70,21 +72,21 @@ actor FaviconFetcher {
 
     private func fetch(_ host: String) async -> Data? {
         guard let root = URL(string: "https://\(host)/") else { return nil }
-        var candidates: [URL] = []
-        if let html = await body(of: root, limit: Self.htmlLimit).flatMap({ String(data: $0, encoding: .utf8) ?? String(data: $0, encoding: .isoLatin1) }),
-           let href = FaviconOrigin.iconHref(inHTML: html, rootURL: root),
-           href.scheme?.lowercased() == "https",
-           let hrefHost = href.host(percentEncoded: false)?.lowercased(),
-           FaviconOrigin.isPublicHostname(hrefHost),
-           FaviconOrigin.isSameSite(hrefHost, as: host)
-        {
-            candidates.append(href)
+        let html = await body(of: root, limit: Self.htmlLimit).flatMap { String(data: $0, encoding: .utf8) ?? String(data: $0, encoding: .isoLatin1) }
+        var best: (data: Data, pixels: Int)?
+        for candidate in FaviconOrigin.iconCandidates(inHTML: html, rootURL: root) where Self.isAllowed(candidate, for: host) {
+            guard let data = await body(of: candidate, limit: Self.iconLimit), let icon = Self.normalized(data),
+                  icon.pixels > best?.pixels ?? 0
+            else { continue }
+            best = icon
+            if icon.pixels >= Self.sharpPixels { break }
         }
-        if let conventional = URL(string: "https://\(host)/favicon.ico") { candidates.append(conventional) }
-        for candidate in candidates {
-            if let data = await body(of: candidate, limit: Self.iconLimit), let normalized = Self.normalized(data) { return normalized }
-        }
-        return nil
+        return best?.data
+    }
+
+    private static func isAllowed(_ url: URL, for host: String) -> Bool {
+        guard url.scheme?.lowercased() == "https", let target = url.host(percentEncoded: false)?.lowercased() else { return false }
+        return FaviconOrigin.isPublicHostname(target) && FaviconOrigin.isSameSite(target, as: host)
     }
 
     private func body(of url: URL, limit: Int) async -> Data? {
@@ -110,20 +112,26 @@ actor FaviconFetcher {
         }
     }
 
-    private static func normalized(_ data: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else { return nil }
+    private static func normalized(_ data: Data) -> (data: Data, pixels: Int)? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let widths = (0..<CGImageSourceGetCount(source)).map { index in
+            (CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [CFString: Any])?[kCGImagePropertyPixelWidth] as? Int ?? 0
+        }
+        guard let largest = widths.indices.max(by: { widths[$0] < widths[$1] }) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 96,
+            kCGImageSourceThumbnailMaxPixelSize: storedPixels,
         ]
-        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, CGImageSourceGetCount(source) - 1, options as CFDictionary) else { return nil }
-        return PlatformImage(cgImage: thumbnail).pngData()
+        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, largest, options as CFDictionary),
+              let png = PlatformImage(cgImage: thumbnail).pngData()
+        else { return nil }
+        return (png, max(thumbnail.width, thumbnail.height))
     }
 
     private func path(_ host: String) -> URL {
         let digest = SHA256.hash(data: Data(host.utf8)).map { String(format: "%02x", $0) }.joined()
-        return directory.appending(path: "\(digest).png")
+        return directory.appending(path: "\(digest)-\(Self.storedPixels).png")
     }
 
     private func readDisk(_ host: String) -> Data? {
@@ -145,14 +153,21 @@ actor FaviconFetcher {
 final class FaviconCache {
     static let shared = FaviconCache(load: fetched)
 
+    private static let maxUpscale: CGFloat = 1.6
+
     private nonisolated static func fetched(host: String) async -> Data? {
         await FaviconFetcher.shared.iconData(forHost: host)
     }
 
+    fileprivate struct Rendering: Hashable {
+        let points: CGFloat
+        let scale: CGFloat
+    }
+
     @MainActor @Observable
     final class Slot {
-        fileprivate(set) var image: PlatformImage?
-        @ObservationIgnored fileprivate var rounded: [CGFloat: PlatformImage] = [:]
+        fileprivate(set) var source: CGImage? // perf-lint: ok set once per host when its icon arrives, never per frame
+        @ObservationIgnored fileprivate var rounded: [Rendering: PlatformImage] = [:]
     }
 
     private var slots: [String: Slot] = [:]
@@ -162,13 +177,15 @@ final class FaviconCache {
         self.load = load
     }
 
-    func image(for url: URL, pointSize: CGFloat) -> PlatformImage? {
+    func image(for url: URL, pointSize: CGFloat, scale: CGFloat) -> PlatformImage? {
         guard let host = FaviconOrigin.host(of: url) else { return nil }
         let slot = entry(for: host)
-        guard let image = slot.image else { return nil }
-        if let cached = slot.rounded[pointSize] { return cached }
-        let icon = image.roundedIcon(points: pointSize) // perf-lint: ok drawn once per host and size, then cached
-        slot.rounded[pointSize] = icon
+        guard let source = slot.source else { return nil }
+        let rendering = Rendering(points: pointSize, scale: scale)
+        if let cached = slot.rounded[rendering] { return cached }
+        guard CGFloat(max(source.width, source.height)) * Self.maxUpscale >= (pointSize * scale).rounded() else { return nil }
+        let icon = source.roundedIcon(points: pointSize, scale: scale) // perf-lint: ok drawn once per host, size and scale, then cached
+        slot.rounded[rendering] = icon
         return icon
     }
 
@@ -177,8 +194,8 @@ final class FaviconCache {
         let slot = Slot()
         slots[host] = slot
         Task { [load] in
-            guard let data = await load(host), let image = PlatformImage(data: data) else { return }
-            slot.image = image
+            guard let data = await load(host), let source = CGImageSourceCreateWithData(data as CFData, nil) else { return }
+            slot.source = CGImageSourceCreateImageAtIndex(source, 0, nil)
         }
         return slot
     }
