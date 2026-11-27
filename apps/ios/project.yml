@@ -258,6 +258,8 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - Tests
+      - Packages/PalKit/Tests/PalKitTests/FakeGateway.swift
+      - Packages/PalKit/Tests/PalKitTests/TimelineSupport.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.pal.tests
