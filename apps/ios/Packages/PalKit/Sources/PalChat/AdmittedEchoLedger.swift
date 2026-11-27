@@ -42,7 +42,9 @@ public struct AdmittedEchoLedger: Sendable, Equatable {
     }
 
     private mutating func echo(of entry: OutboxEntry, text: String, items: [TranscriptItem], recent: Set<String>) -> Echo {
-        if let persisted = items.first(where: { $0.submissionID == entry.submissionID }) { return .confirmed(persisted.id) }
+        let covers = { (admission: String) in entry.state == .admitted(admissionID: admission) }
+        let stored = items.first { $0.submissionID == entry.submissionID || $0.admissionIDs.contains(where: covers) }
+        if let stored { return .confirmed(stored.id) }
         let own = Self.rowID(of: entry)
         if let item = items.first(where: { $0.id == own }) {
             if case .user(_, let delivery) = item.content, delivery != .sending { return .confirmed(own) }

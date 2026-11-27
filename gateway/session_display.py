@@ -62,12 +62,13 @@ def display_turn_scope(admission_id, committed):
 
 
 @contextmanager
-def submission_turn_scope(admission_id, submission_id):
+def submission_turn_scope(admission_id, submission_id, batch_metadata=None):
     """Bind the client's ``submission_id`` (the admission's ``request_id``) to the admission's own event.
 
     The user row this turn persists carries it, so a client whose window closed before the submit ack
     came back can read the stored transcript and tell a send that landed from one that never did."""
-    token = _submission_turn.set((admission_id, submission_id) if submission_id else None)
+    metadata = {'submission_id': submission_id, **(batch_metadata or {})}
+    token = _submission_turn.set((admission_id, metadata) if submission_id else None)
     try:
         yield
     finally:
@@ -79,7 +80,7 @@ def admission_submission(event):
     bound = _submission_turn.get()
     if bound is None or event is None or getattr(event, 'message_id', None) != bound[0]:
         return {}
-    return {'submission_id': bound[1]}
+    return dict(bound[1])
 
 
 def admission_display(event):
