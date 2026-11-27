@@ -926,13 +926,8 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
         # connect() returning True does not mean the receive path is confirmed -- Telegram's degraded
         # reconnect returns True so the gateway stays up while its own ladder retries. Stamping "connected"
         # here would undo the adapter's accurate status.
-        _degraded = adapter.send_path_degraded
-        self._update_platform_runtime_status(
-            platform.value, platform_state="retrying" if _degraded else "connected", error_code=None,
-            error_message=adapter.DEGRADED_STATUS_MESSAGE if _degraded else None,
-            needs_attention=False, retrying_since=None,
-        )
-        if _degraded:
+        self._record_platform_connected(platform.value, adapter)
+        if adapter.send_path_degraded:
             logger.info("⚠ %s reconnected in degraded mode (receive path not yet confirmed)", platform.value)
         else:
             logger.info("✓ %s reconnected successfully", platform.value)
@@ -1374,6 +1369,7 @@ class GatewayAdapterLifecycleMixin(GatewaySecondaryReconnectMixin):
             # Restore persisted /voice state for this bot (primary startup and reconnects do too).
             # See #84872.
             self._sync_voice_mode_state_to_adapter(adapter)
+            self._record_platform_connected(f"{profile_name}:{platform.value}", adapter)
             for claim in claims:
                 if claim is not None:
                     claimed[claim] = profile_name
