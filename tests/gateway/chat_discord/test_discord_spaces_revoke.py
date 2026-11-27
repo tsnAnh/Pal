@@ -43,11 +43,11 @@ def test_ensure_keeps_existing_ids_in_order(kit):
     assert kit.provider.allowlist.users() == ["111111111111111111", OWNER_ID]
 
 
-def test_apply_owner_reloads_discord_live_only_when_the_list_changed(kit):
+def test_apply_owner_leaves_an_online_adapter_alone_when_nothing_changed(kit):
     installation = kit.install()
     kit.provider.apply_owner(installation, OWNER_ID)
     kit.provider.apply_owner(installation, OWNER_ID)
-    assert [(platform, keys) for _, platform, keys in kit.platform_reloads] == [("discord", [ENV_KEY])]
+    assert kit.runtime.reloads == 1
 
 
 def test_apply_owner_never_restarts_the_gateway(kit):

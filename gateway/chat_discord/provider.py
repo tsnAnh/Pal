@@ -20,6 +20,9 @@ from tui_gateway.chat_install import (
     SpaceJoin,
 )
 from tui_gateway.contracts.chat_provider import (
+    AdapterFailure,
+    AdapterState,
+    AdapterStatus,
     Capabilities,
     IdentityProjection,
     IdentityUpdateOutcome,
@@ -36,12 +39,14 @@ from tui_gateway.contracts.chat_provider import (
 )
 
 from .api import (
-    BOT_NOT_IN_SERVER, MISSING_INTENT, MISSING_PERMISSION, NO_TOKEN, DiscordApi, DiscordGone, DiscordSetupError,
+    BOT_NOT_IN_SERVER, MISSING_ACCESS, MISSING_INTENT, MISSING_PERMISSION, MISSING_PERMISSIONS, NO_TOKEN, DiscordApi,
+    DiscordGone, DiscordSetupError,
 )
 from .default_profile import OwnerAllowlist, ProfileRoutes, RouteConflict
 from .naming import CATEGORY_NAME, avatar_data_uri, unique_channel_name, webhook_name
 from .records import DiscordRecords
 from .rest import GUILD_CATEGORY, GUILD_TEXT, DiscordRest, webhook_avatar_url, webhook_url
+from .shared_adapter import SharedAdapter, failed
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +58,20 @@ _NEEDS_ACCESS = NextAction(kind=NextActionKind.button, action_id="grant_channel_
 
 
 HOME_CHANNEL_ENV = "DISCORD_HOME_CHANNEL"
+
+
+_ADAPTER_ERRORS = {
+    AdapterFailure.invalid_token: SetupErrorCode.credential_rejected,
+    AdapterFailure.missing_intent: SetupErrorCode.install_failed,
+    AdapterFailure.missing_permission: SetupErrorCode.install_failed,
+    AdapterFailure.restart_needed: SetupErrorCode.install_failed,
+    AdapterFailure.adapter_offline: SetupErrorCode.provider_unreachable,
+}
+
+
+def adapter_error(failure: AdapterFailure) -> DiscordSetupError:
+    permissions = ("View Channel",) if failure is AdapterFailure.missing_permission else ()
+    return DiscordSetupError(_ADAPTER_ERRORS[failure], failure.value, permissions=permissions)
 
 
 def saved_app_token() -> str | None:
@@ -75,7 +94,7 @@ class DiscordProvider(ChatProvider):
 
     def __init__(self, *, vault: VaultStore | None = None, api: DiscordApi | None = None,
                  records: DiscordRecords | None = None, routes: ProfileRoutes | None = None,
-                 allowlist: OwnerAllowlist | None = None,
+                 allowlist: OwnerAllowlist | None = None, adapter: SharedAdapter | None = None,
                  identity: Callable[[str], BotIdentitySource] = profile_identity,
                  token_source: Callable[[], str | None] = saved_app_token,
                  has_home_channel: Callable[[str], bool] = profile_has_home_channel,
@@ -85,6 +104,7 @@ class DiscordProvider(ChatProvider):
         self.records = records or DiscordRecords()
         self.routes = routes or ProfileRoutes()
         self.allowlist = allowlist or OwnerAllowlist()
+        self.adapter = adapter or SharedAdapter()
         self._identity, self._token_source, self._clock = identity, token_source, clock
         self._has_home_channel = has_home_channel
 
@@ -124,8 +144,32 @@ class DiscordProvider(ChatProvider):
 
     def apply_owner(self, installation: Installation, owner: str) -> None:
         self.records.update_app(installation.bot, installation.workspace_id, owner_id=owner)
-        if self.allowlist.ensure(owner):
-            self.allowlist.apply_live()
+        added = self.allowlist.ensure(owner)
+        configured = self.adapter.configure(self._token())
+        status = self._with_channel(installation, self.adapter.connect(changed=added or configured))
+        if status.state is not AdapterState.online:
+            raise adapter_error(status.reason or AdapterFailure.adapter_offline)
+
+    def adapter_status(self, installation: Installation) -> AdapterStatus:
+        return self.adapter.status()
+
+    def reconnect_adapter(self, installation: Installation) -> AdapterStatus:
+        if not (token := self._token_source()):
+            return failed(AdapterFailure.invalid_token)
+        self.adapter.configure(token)
+        return self._with_channel(installation, self.adapter.connect(changed=True))
+
+    def _with_channel(self, installation: Installation, status: AdapterStatus) -> AdapterStatus:
+        if status.state is not AdapterState.online:
+            return status
+        channel_id = str(self._record_for(installation)[1]["channel_id"])
+        try:
+            DiscordRest(self.api, self._token()).channel(channel_id)
+        except DiscordSetupError as exc:
+            if exc.discord_code not in (MISSING_ACCESS, MISSING_PERMISSIONS):
+                raise
+            return failed(AdapterFailure.missing_permission)
+        return status
 
     def install_in_place(self, state: SetupState) -> Installation:
         token = self._token()

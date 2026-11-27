@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import functools
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import hermes_yaml as yaml
@@ -15,6 +16,7 @@ from gateway.chat_discord.api import DiscordApi
 from gateway.chat_discord.default_profile import OwnerAllowlist, ProfileRoutes
 from gateway.chat_discord.provider import DiscordProvider, profile_has_home_channel
 from gateway.chat_discord.records import DiscordRecords
+from gateway.chat_discord.shared_adapter import Reading, SharedAdapter
 from tests.gateway.chat_install_harness import RecordingControl
 from tests.gateway.chat_discord.fake_discord import GUILD_ID, OWNER_ID, TOKEN, FakeDiscord
 from tui_gateway import chat_install as ci
@@ -39,6 +41,34 @@ class SeedingControl(RecordingControl):
         seed_missing(defaults)
 
 
+class FakeGatewayRuntime:
+    def __init__(self) -> None:
+        self.answers = True
+        self.after_reload: tuple[str, str | None] = ("connected", None)
+        self.reading = Reading("not_configured", False, None, None)
+        self.stamp: str | None = None
+        self.reloads = 0
+        self.seconds = 0.0
+
+    def read(self) -> Reading:
+        return self.reading
+
+    def reload(self) -> bool:
+        self.reloads += 1
+        if not self.answers:
+            return False
+        state, code = self.after_reload
+        written = self.stamp or datetime.now(UTC).isoformat()
+        self.reading = Reading(state, True, code, written)
+        return True
+
+    def clock(self) -> float:
+        return self.seconds
+
+    def pause(self, seconds: float) -> None:
+        self.seconds += seconds
+
+
 class Kit:
     def __init__(self, tmp_path: Path, monkeypatch, *, with_avatar: bool = False):
         self.home = tmp_path / ".hermes"
@@ -54,9 +84,11 @@ class Kit:
         self.vault = VaultStore(tmp_path / "vault")
         self.records_path = tmp_path / "records.json"
         self.route_reloads: list[Path] = []
-        self.platform_reloads: list[tuple[Path, str, list[str]]] = []
+        self.runtime = FakeGatewayRuntime()
+        adapter = SharedAdapter(scope=contextlib.nullcontext, read=self.runtime.read, reload=self.runtime.reload,
+                                clock=self.runtime.clock, pause=self.runtime.pause)
         self.provider = DiscordProvider(
-            vault=self.vault, api=DiscordApi(self.fake.transport, sleep=self.sleeps.append),
+            adapter=adapter, vault=self.vault, api=DiscordApi(self.fake.transport, sleep=self.sleeps.append),
             records=DiscordRecords(self.records_path), routes=ProfileRoutes(scope=contextlib.nullcontext),
             allowlist=OwnerAllowlist(scope=contextlib.nullcontext), identity=self.identity,
             token_source=lambda: self.token, clock=lambda: 1_700_000_000.0,
@@ -76,10 +108,6 @@ class Kit:
             self.route_reloads.append(Path(home))
             return {"reloaded": True}
 
-        def reload_platform(home, platform_id, env_keys):
-            self.platform_reloads.append((Path(home), platform_id, list(env_keys)))
-            return True
-
         def restart(*args, **kwargs):
             self.restarts.append("restart")
             return {"restart_started": True}
@@ -87,7 +115,6 @@ class Kit:
         monkeypatch.setattr("hermes_cli.web_routers.messaging._restart_gateway_after", restart)
         monkeypatch.setattr("tui_gateway.methods_messaging_slack._slack_reload", restart)
         monkeypatch.setattr("gateway.control_socket.reload_gateway_routes", reload_routes)
-        monkeypatch.setattr("hermes_cli.gateway_multiplex_served.reload_platform_live", reload_platform)
 
     def service(self) -> ChatInstallService:
         return ChatInstallService(

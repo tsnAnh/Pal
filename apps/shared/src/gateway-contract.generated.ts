@@ -838,6 +838,7 @@ export interface ChatInstallParams {
 export interface ChatInstallStatusResult {
   state: SetupState
   installation?: Installation | null
+  adapter?: AdapterStatus | null
 }
 export interface SetupState {
   bot: string
@@ -883,6 +884,12 @@ export interface Installation {
   vault_item_ids: string[]
 }
 export type InstallationStatus = 'active' | 'needs_reauth' | 'revoked'
+export interface AdapterStatus {
+  state: AdapterState
+  reason?: AdapterFailure | null
+}
+export type AdapterState = 'online' | 'connecting' | 'failed' | 'not_started'
+export type AdapterFailure = 'invalid_token' | 'missing_intent' | 'missing_permission' | 'restart_needed' | 'adapter_offline'
 export interface ChatInstallBeginParams {
   profile?: string | null
   provider_id: string
@@ -8794,11 +8801,13 @@ export interface RpcMethods {
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL and the provider installs through a redirect (Discord does not). app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first. */
   'chat.install.begin': { params: ChatInstallBeginParams; result: ChatInstallStatusResult }
+  /** Rebuild the chat adapter behind a ready install in the running gateway, with no process restart, and wait up to 45 s. adapter says whether it is online or why not. no_installation unless the install is ready; not_implemented for providers without a shared adapter. Owner connections only. */
+  'chat.install.reconnect': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
   'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }
-  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
+  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
   'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
@@ -9523,6 +9532,7 @@ export const RPC_METHODS = [
   'chat.desk.list',
   'chat.install.advance',
   'chat.install.begin',
+  'chat.install.reconnect',
   'chat.install.revoke',
   'chat.install.set_icon',
   'chat.install.status',
@@ -9926,11 +9936,13 @@ export interface CanonicalRpcMethods {
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL and the provider installs through a redirect (Discord does not). app_scheme is the URL scheme of the Pal build that asked, so the page after Allow returns to it; only dev.tsnanh.hermes.bot and dev.tsnanh.hermes.bot.dev are used, anything else or absent means the first. */
   'chat.install.begin': { params: ChatInstallBeginParams; result: ChatInstallStatusResult }
+  /** Rebuild the chat adapter behind a ready install in the running gateway, with no process restart, and wait up to 45 s. adapter says whether it is online or why not. no_installation unless the install is ready; not_implemented for providers without a shared adapter. Owner connections only. */
+  'chat.install.reconnect': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Deletes the chat app, so a reinstall starts from a fresh one and the revoked state carries no app id. Discord has no app per bot: it deletes the bot's webhook and routes and keeps the bot's channel, so its history stays. */
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Store the bot's own picture (a PNG data URL) for the chat app and push the bot's name and picture to every active install of that bot. The push runs after the answer; a failed push is retried on the next connect or identity change. Owner connections only. */
   'chat.install.set_icon': { params: ChatInstallSetIconParams; result: ChatInstallSetIconResult }
-  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
+  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. Discord also answers adapter: the live state of the shared connection in the running gateway, never the install record. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
   'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
@@ -10232,6 +10244,7 @@ export const CANONICAL_RPC_METHODS = [
   'chat.desk.list',
   'chat.install.advance',
   'chat.install.begin',
+  'chat.install.reconnect',
   'chat.install.revoke',
   'chat.install.set_icon',
   'chat.install.status',

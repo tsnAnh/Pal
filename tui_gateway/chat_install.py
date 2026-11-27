@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from tui_gateway.contracts.chat_provider import (
+    AdapterStatus,
     Capabilities,
     CapabilityEntry,
     CapabilityMode,
@@ -103,6 +104,12 @@ class ChatProvider(abc.ABC):
 
     def apply_owner(self, installation: Installation, owner: str) -> None:
         return None
+
+    def adapter_status(self, installation: Installation) -> AdapterStatus | None:
+        return None
+
+    def reconnect_adapter(self, installation: Installation) -> AdapterStatus:
+        raise self._missing("reconnect_adapter")
 
     def identity_projection(self, source: BotIdentitySource) -> IdentityProjection:
         raise self._missing("identity_projection")

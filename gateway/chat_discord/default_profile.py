@@ -139,7 +139,3 @@ class OwnerAllowlist:
         with self._scope():
             save_env_value(ALLOWED_USERS_ENV, ",".join([*users, owner]))
         return True
-
-    def apply_live(self) -> bool:
-        from hermes_cli.gateway_multiplex_served import reload_platform_live
-        return reload_platform_live(get_default_hermes_root(), PLATFORM, [ALLOWED_USERS_ENV])

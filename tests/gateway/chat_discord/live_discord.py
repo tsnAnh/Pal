@@ -17,14 +17,22 @@ AUTHENTICATION_FAILED, DISALLOWED_INTENTS = 4004, 4014
 LIBRARY_AGENT_MARK = "Rapptz/discord.py"
 
 
+def _reply(payload, status: int = 200) -> web.Response:
+    return web.Response(status=status, body=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+
+
 def _user(user_id: str, name: str, *, bot: bool) -> dict:
     return {"id": user_id, "username": name, "discriminator": "0", "avatar": None, "global_name": name, "bot": bot}
 
 
+APPLICATION = {"name": "Pal", "description": "", "icon": None, "bot_public": True, "bot_require_code_grant": False,
+               "verify_key": "0" * 64,
+               "owner": {"id": OWNER_ID, "username": "owner", "discriminator": "0", "avatar": None}}
+
+
 @dataclass
 class LiveDiscord:
-    rest: FakeDiscord = field(default_factory=lambda: FakeDiscord(
-        application_extra={"owner": {"id": OWNER_ID}, "name": "Pal", "verify_key": "0" * 64}))
+    rest: FakeDiscord = field(default_factory=lambda: FakeDiscord(application_extra=APPLICATION))
     refuse_login: bool = False
     refuse_intents: bool = False
     stall_ready: bool = False
@@ -78,25 +86,28 @@ class LiveDiscord:
         if request.method == "POST" and path.startswith("/webhooks/"):
             return self._webhook_post(path, request.content_type, raw)
         if library and self.refuse_login:
-            return web.json_response({"code": 0, "message": "401: Unauthorized"}, status=401)
+            return _reply({"code": 0, "message": "401: Unauthorized"}, 401)
+        if library and path == "/users/@me":
+            return _reply(_user(BOT_ID, "Pal", bot=True))
         if path == "/oauth2/applications/@me":
             path = "/applications/@me"
         if self.hidden_channels and request.method == "GET" and path.startswith("/channels/"):
-            return web.json_response({"code": 50001, "message": "Missing Access"}, status=403)
+            return _reply({"code": 50001, "message": "Missing Access"}, 403)
         reply = self.rest.handler(httpx.Request(
             request.method, f"https://discord.com{API_PREFIX}{path}", content=raw or None,
             headers={"Authorization": request.headers.get("Authorization", "")}))
         if reply.status_code == 404 and library:
-            return web.json_response([] if request.method in ("GET", "PUT") else {})
-        return web.Response(status=reply.status_code, body=reply.content or None, content_type="application/json")
+            return _reply([] if request.method in ("GET", "PUT") else {})
+        return web.Response(status=reply.status_code, body=reply.content or None,
+                            headers={"Content-Type": "application/json"})
 
     def _webhook_post(self, path: str, content_type: str, raw: bytes) -> web.Response:
         body = json.loads(raw) if content_type == "application/json" and raw else {"raw": raw.decode("utf-8", "replace")}
         webhook_id = path.split("/")[2]
         self.webhook_posts.append((webhook_id, body))
         channel = self.rest.webhooks.get(webhook_id, {}).get("channel_id", "0")
-        return web.json_response(self._message(self.rest.next_id(6), channel, body.get("content", ""),
-                                               _user(webhook_id, "Pal", bot=True)))
+        return _reply(self._message(self.rest.next_id(6), channel, body.get("content", ""),
+                                    _user(webhook_id, "Pal", bot=True)))
 
     @staticmethod
     def _message(message_id: str, channel_id: str, content: str, author: dict) -> dict:

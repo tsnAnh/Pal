@@ -1,8 +1,3 @@
-"""The Discord wizard against a real ``gateway run`` multiplexer, a real ``serve`` backend and a fake Discord.
-
-"Done" must mean the shared Discord adapter logged in and answers in the bot's channel; every failure ends in one
-fixed reason, and Reconnect rebuilds that adapter without restarting the gateway.
-"""
 from __future__ import annotations
 
 import pytest
