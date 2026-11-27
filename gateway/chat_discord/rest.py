@@ -42,6 +42,18 @@ class DiscordRest:
     def message_content_enabled(self) -> bool:
         return bool(int(self._call("GET", "/applications/@me").get("flags") or 0) & MESSAGE_CONTENT_FLAGS)
 
+    def application_owner_id(self) -> str | None:
+        application = self._call("GET", "/applications/@me")
+        if not isinstance(application, dict):
+            return None
+        team = application.get("team")
+        if team is not None:
+            owner = team.get("owner_user_id") if isinstance(team, dict) else None
+        else:
+            user = application.get("owner")
+            owner = user.get("id") if isinstance(user, dict) else None
+        return owner if isinstance(owner, str) else None
+
     def missing_permissions(self, guild_id: str, bot_id: str) -> list[str]:
         member = self._call("GET", f"/guilds/{guild_id}/members/{bot_id}")
         roles = self._call("GET", f"/guilds/{guild_id}/roles")

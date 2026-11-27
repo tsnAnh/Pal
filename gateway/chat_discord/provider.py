@@ -109,12 +109,21 @@ class DiscordProvider(ChatProvider):
         return user if SNOWFLAKE.fullmatch(user) else None
 
     def authorizing_identity(self, installation: Installation) -> str | None:
-        return self._record_for(installation)[1].get("owner_id") or None
+        return self._owner(self._record_for(installation)[1]) or self._application_owner()
+
+    def _application_owner(self) -> str | None:
+        try:
+            owner = DiscordRest(self.api, self._token()).application_owner_id()
+        except (DiscordSetupError, DiscordGone) as exc:
+            logger.warning("discord application owner unavailable: %s", type(exc).__name__)
+            return None
+        return owner if owner and SNOWFLAKE.fullmatch(owner) else None
 
     def adapter_env(self, installation: Installation) -> dict[str, str]:
         return {}
 
     def apply_owner(self, installation: Installation, owner: str) -> None:
+        self.records.update_app(installation.bot, installation.workspace_id, owner_id=owner)
         if self.allowlist.ensure(owner):
             self.allowlist.apply_live()
 

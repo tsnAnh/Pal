@@ -235,6 +235,8 @@ class ChatInstallService:
             return placed
         if state.step is SetupStep.needs_allow and (state.next_action.link is None or state.next_action.kind is not NextActionKind.open_link):
             state = self._issue_link(provider, state, app_scheme)
+        if state.step is SetupStep.needs_owner:
+            state = self._confirm_known_owner(provider, state)
         if state.step is SetupStep.installing:
             state = self._finish(provider, state)
         return state
@@ -376,6 +378,17 @@ class ChatInstallService:
         self.store.set_owner(state.installation_id, owner)
         state = self._apply(provider, state, SetupEvent(kind=SetupEventKind.owner_confirmed))
         return self._finish(provider, state)
+
+    def _confirm_known_owner(self, provider: ChatProvider, state: SetupState) -> SetupState:
+        installation = self.store.installation(state.installation_id) if state.installation_id else None
+        if installation is None:
+            return state
+        try:
+            owner = provider.authorizing_identity(installation)
+        except Exception as exc:  # health: allow BLE001 -- provider errors carry provider text, so only the exception type is logged
+            logger.warning("chat install owner lookup failed provider=%s error=%s", state.provider_id, type(exc).__name__)
+            return state
+        return self._confirm_owner(provider, state, owner)
 
     def _complete(self, provider: ChatProvider, state: SetupState, installation: Installation,
                   owner_optional: bool = False) -> SetupState:
