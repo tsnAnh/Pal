@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlsplit
 
+from hermes_cli.profile_admin_guard import CREATE_GRANT_ENV
 from hermes_cli.profile_provision import (
     ProfileCreateReceipt, ProfileCreateRequest, message_from, redact_create_text, refusal_from,
 )
@@ -34,6 +35,7 @@ _OLDER_OR_RETIRING = (4000, 5035)
 _PROFILE_REFUSED = ((4001, "profile_mismatch"), (4064, "profile_unavailable"))
 #: The authority socket's refusal of a draining owner, before routing: like a retiring gateway.
 _DRAINING = (4001, "runtime_draining")
+_NOT_ALLOWED = (4001, "permission_denied")
 
 
 def _refusal_key(exc) -> tuple:
@@ -44,7 +46,7 @@ class GatewayCreateError(RuntimeError):
     """The named gateway cannot take the create, or took it and its outcome is unknown."""
 
 
-def _wire(request: ProfileCreateRequest, profile: Optional[str]) -> dict[str, Any]:
+def _wire(request: ProfileCreateRequest, profile: Optional[str], owner_grant: str) -> dict[str, Any]:
     # ``no_alias`` always: the wrapper belongs to the terminal's machine, PATH and ``hermes``
     # (written here when the profile landed in this machine's profiles directory). ``profile``: a URL's
     # connection carries no profile-bound ticket, so the terminal's profile is named (Desktop's routing).
@@ -55,6 +57,8 @@ def _wire(request: ProfileCreateRequest, profile: Optional[str]) -> dict[str, An
             "mirror_credentials": request.mirror_credentials, "share_auth": request.share_auth, "report": True}
     if request.soul is not None:
         wire["soul"] = request.soul
+    if owner_grant:
+        wire["owner_grant"] = owner_grant
     return {**wire, "profile": profile} if profile else wire
 
 
@@ -150,6 +154,7 @@ def create_through_gateway(request: ProfileCreateRequest) -> Optional[ProfileCre
     # instance this home's discovery names: path equality is no proof (another machine with the same home
     # layout reports the same path while a local create of the name runs), nor is a loopback URL.
     ours = not remote
+    owner_grant = "" if remote else os.environ.get(CREATE_GRANT_ENV, "")
     owner_here = endpoint.instance_id if remote and endpoint is not None else None
     attached = False
 
@@ -159,7 +164,8 @@ def create_through_gateway(request: ProfileCreateRequest) -> Optional[ProfileCre
             attached = True
             if owner_here is not None:
                 ours = await _described_instance(client) == owner_here
-            return await client.rpc("profiles.create", _timeout=CREATE_RPC_TIMEOUT, **_wire(request, profile))
+            return await client.rpc("profiles.create", _timeout=CREATE_RPC_TIMEOUT,
+                                    **_wire(request, profile, owner_grant))
 
     try:
         answer = asyncio.run(_run())
@@ -182,6 +188,9 @@ def create_through_gateway(request: ProfileCreateRequest) -> Optional[ProfileCre
         if _refusal_key(exc) in _PROFILE_REFUSED:
             raise GatewayCreateError(f"{where} cannot serve this terminal's profile "
                                      f"({profile or 'its profile'}); nothing was created") from exc
+        if _refusal_key(exc) == _NOT_ALLOWED:
+            raise GatewayCreateError(f"{where} does not let this terminal's profile create profiles; "
+                                     "nothing was created") from exc
         # Not a refusal of the request: the handler failed, possibly after the profile was made.
         reason = message_from(exc.data) or redact_create_text(exc)
         raise GatewayCreateError(f"{where} did not finish the create ({reason}); {unknown}") from exc

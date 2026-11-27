@@ -34,6 +34,7 @@ class Verb:
     named: tuple[str, ...] = ()
     guard: Callable[[dict], None] | None = None
     owner_scoped: bool = False
+    admits: Callable[[dict], bool] | None = None
 
 
 def administers_install(connection) -> bool:
@@ -45,6 +46,8 @@ def _require_reach(connection, verb, params):
     if administers_install(connection):
         return
     if verb.install_wide:
+        if verb.admits is not None and verb.admits(params):
+            return
         raise RuntimeStoreError('permission_denied', field='profile', detail='this bot cannot manage the install')
     from hermes_cli.profiles import profile_matches_home
     home = Path(connection.authority.profile_id)

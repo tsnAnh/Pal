@@ -17,7 +17,8 @@ dangerous-pattern detection), ``approval_context`` (contextvars, config readers)
 state (``_lock``, queues) back through ``tools.approval`` at call time.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 import importlib
 import logging
@@ -651,11 +652,22 @@ def request_draft_approval(*, text: str, description: str, pattern_key: str, dra
 
 # --- Guards ---------------------------------------------------------------------------------------------------------
 
+def _owner_turn_may_create() -> bool:
+    return approver_present() and not is_background_review()
+
+
+def owner_create_grant(source: str, *, is_code: bool = False) -> AbstractContextManager[Callable[[], None]]:
+    from hermes_cli.profile_admin_guard import create_grant
+    if _owner_turn_may_create() and creates_bot_or_profile(source, code=is_code):
+        return create_grant()
+    return nullcontext(lambda: None)
+
+
 def _profile_creation_refusal(source: str, *, is_code: bool = False) -> dict | None:
     from hermes_cli.profile_admin_guard import CREATE_REFUSED_MESSAGE
     if not creates_bot_or_profile(source, code=is_code):
         return None
-    if approver_present() and not is_background_review():
+    if _owner_turn_may_create():
         logger.info("bot creation approved by the owner turn")
         return None
     logger.warning("Refused an agent-run bot or profile creation")

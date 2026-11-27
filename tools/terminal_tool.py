@@ -139,6 +139,7 @@ def _container_profile() -> str:
 
 from tools.approval import (
     check_all_command_guards as _check_all_guards_impl,
+    owner_create_grant,
 )
 
 
@@ -1396,12 +1397,15 @@ def _run_foreground(
             # internal env.execute() consumers stay unbounded.
             # Only the session's inherited cwd may fall back (the result tells the model); a
             # ``workdir`` the model named is refused, or a typo would run ``rm -f ./*`` a level up.
-            result = env.execute(
-                command, timeout=effective_timeout, cwd=command_cwd, bounded_capture=True,
-                allow_cwd_fallback=not workdir,
-                **_yield_kwargs(command, env_type=env_type, cwd=command_cwd, effective_task_id=eff,
-                                task_id=task_id, session_key=session_key),
-            )
+            with owner_create_grant(command) as keep_create_grant:
+                result = env.execute(
+                    command, timeout=effective_timeout, cwd=command_cwd, bounded_capture=True,
+                    allow_cwd_fallback=not workdir,
+                    **_yield_kwargs(command, env_type=env_type, cwd=command_cwd, effective_task_id=eff,
+                                    task_id=task_id, session_key=session_key),
+                )
+                if result.get("yielded") is not None:
+                    keep_create_grant()
             break
         except Exception as e:
             # A backend exception (e.g. an SSH connect timeout) never reached an exit status, so it
@@ -1624,19 +1628,21 @@ def terminal_tool(
                 # caller could not have meant for a foreground call, and the two are exclusive anyway.
                 background, notify_on_complete, watch_patterns = True, True, None
             if background:
-                result = spawn_background_process(
-                    command=command, env=env, env_type=env_type, effective_task_id=effective_task_id,
-                    task_id=task_id, session_key=session_key, cwd_key=cwd_key, workdir=workdir, cwd=cwd,
-                    mounted_host=getattr(env, "host_cwd", None) or plan.host_cwd,
-                    effective_pty=pty and not pty_disabled, notify_on_complete=notify_on_complete,
-                    watch_patterns=watch_patterns,
-                    pty_disabled_reason=_PTY_DISABLED_REASON if pty_disabled else None,
-                    completion_output_chars=_completion_output_chars,
-                    internal_policy=_internal,
-                    heartbeat_seconds=heartbeat,
-                    persist_on_release=persist_on_release,
-                    auto_backgrounded=auto_bg is not None and plan.promoted_from_foreground_timeout is None,
-                )
+                with owner_create_grant(command) as keep_create_grant:
+                    keep_create_grant()
+                    result = spawn_background_process(
+                        command=command, env=env, env_type=env_type, effective_task_id=effective_task_id,
+                        task_id=task_id, session_key=session_key, cwd_key=cwd_key, workdir=workdir, cwd=cwd,
+                        mounted_host=getattr(env, "host_cwd", None) or plan.host_cwd,
+                        effective_pty=pty and not pty_disabled, notify_on_complete=notify_on_complete,
+                        watch_patterns=watch_patterns,
+                        pty_disabled_reason=_PTY_DISABLED_REASON if pty_disabled else None,
+                        completion_output_chars=_completion_output_chars,
+                        internal_policy=_internal,
+                        heartbeat_seconds=heartbeat,
+                        persist_on_release=persist_on_release,
+                        auto_backgrounded=auto_bg is not None and plan.promoted_from_foreground_timeout is None,
+                    )
                 if plan.promoted_from_foreground_timeout is not None:
                     result = _with_promoted_note(result, plan.promoted_from_foreground_timeout)
                 return _metered(None if _host_local else plan, result)

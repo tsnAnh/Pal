@@ -3525,6 +3525,7 @@ export interface ProfilesCreateParams {
   clone_config?: boolean | string | null
   sync_imports?: boolean | string | null
   report?: boolean | string | null
+  owner_grant?: string | null
 }
 export interface ProfilesCreateResult {
   ok?: boolean
